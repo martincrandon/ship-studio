@@ -28,6 +28,9 @@ import { useAgentBridge } from '../../hooks/useAgentBridge';
 import { AgentActivityOverlay } from './AgentActivityOverlay';
 import { PreviewSizeControl } from './PreviewSizeControl';
 import { usePreviewCapture } from '../../hooks/usePreviewCapture';
+import { Button } from '../primitives/Button';
+import { MenuButton } from '../primitives/MenuButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import {
   usePreviewResize,
   BREAKPOINTS,
@@ -63,8 +66,7 @@ import { VisualEditorPanel } from '../edit/VisualEditorPanel';
 import { ElementTreePanel } from '../edit/ElementTreePanel';
 import { useElementTree } from '../../hooks/useElementTree';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
-import { CompactIcon, ExpandIcon, PanelLeftIcon, ResetIcon, UndoIcon, RedoIcon } from '../icons';
-import { Button } from '../primitives/Button';
+import { CompactIcon, ExpandIcon, ResetIcon, UndoIcon, RedoIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
@@ -236,6 +238,10 @@ interface PreviewProps {
   redoTitle?: string;
   onUndo?: () => void;
   onRedo?: () => void;
+  /** Whether the fullscreen visual editor's element tree is visible. */
+  elementTreeVisible: boolean;
+  /** Reports whether the current preview is actively able to show the element tree. */
+  onElementTreeAvailabilityChange?: (available: boolean) => void;
 }
 
 /**
@@ -310,6 +316,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     redoTitle,
     onUndo,
     onRedo,
+    elementTreeVisible,
+    onElementTreeAvailabilityChange,
   },
   ref
 ) {
@@ -666,6 +674,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       ? 'css'
       : null;
   const activeEditMode = editor.editMode || cssEditor.editMode;
+  useEffect(() => {
+    onElementTreeAvailabilityChange?.(activeEditMode);
+    return () => onElementTreeAvailabilityChange?.(false);
+  }, [activeEditMode, onElementTreeAvailabilityChange]);
   // Inline text editing (double-click copy) is shared by both styling editors —
   // mounted once here, active whenever either editor's edit mode is on, so it
   // works for vanilla-CSS/Astro projects (cssEditor) as well as Tailwind.
@@ -837,19 +849,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     []
   );
 
-  // Element tree (navigator) — left column in fullscreen edit mode, like
-  // Webflow's navigator: read-only, select-only. Toggleable from the toolbar;
-  // the choice persists cross-project like the editor pin.
-  const [treeVisible, setTreeVisible] = useState(
-    () => localStorage.getItem('elementTreeVisible') !== '0'
-  );
-  const toggleTreeVisible = useCallback(() => {
-    setTreeVisible((v) => {
-      localStorage.setItem('elementTreeVisible', v ? '0' : '1');
-      return !v;
-    });
-  }, []);
-  const showTree = isFullscreen && activeEditMode && treeVisible;
+  // Element tree (navigator) — left column in visual edit mode, like
+  // Webflow's navigator: read-only, select-only. The workspace toolbar controls
+  // it in both normal and fullscreen layouts.
+  const showTree = activeEditMode && elementTreeVisible;
   // The Elements panel's Code (markup-edit) view needs a wider column than the
   // navigator; the tree panel reports its view so we can widen the grid track.
   const [treeCodeView, setTreeCodeView] = useState(false);
@@ -1099,12 +1102,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     >
       <div className="preview-toolbar">
         {editorMode ? (
-          <button
+          <ToggleButton
             type="button"
-            className={`preview-edit-toggle${activeEditMode ? ' active' : ''}`}
+            className="preview-edit-control"
             onClick={toggleActiveEditor}
             title="Toggle visual editor"
-            aria-pressed={activeEditMode}
+            pressed={activeEditMode}
           >
             <svg
               width="13"
@@ -1124,14 +1127,14 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
               aria-hidden
             />
-          </button>
+          </ToggleButton>
         ) : (
           // Preview-capable but not editable: show the toggle grayed out with a
           // tooltip explaining what visual editing is and where it works.
-          <span className="preview-edit-toggle-wrap">
-            <button
+          <span className="preview-edit-toggle-wrap preview-edit-control">
+            <Button
               type="button"
-              className="preview-edit-toggle preview-edit-toggle--disabled"
+              className="preview-edit-toggle--disabled"
               aria-disabled="true"
               tabIndex={-1}
             >
@@ -1149,7 +1152,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
               </svg>
               <span className="preview-toolbar-btn-label">Edit</span>
-            </button>
+            </Button>
             <span className="preview-edit-tooltip" role="tooltip">
               <strong>Visual editing</strong>
               <span>
@@ -1162,11 +1165,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         )}
 
         {onToggleLogs && (
-          <button
+          <ToggleButton
             type="button"
-            className={`preview-logs-toggle ${showLogs ? 'active' : ''}`}
+            className="preview-inspect-control"
             onClick={onToggleLogs}
             title={showLogs ? 'Hide inspector' : 'Show inspector'}
+            pressed={showLogs}
           >
             <svg
               width="14"
@@ -1183,7 +1187,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             </svg>
             <span className="preview-toolbar-btn-label">Inspect</span>
             <span className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`} aria-hidden />
-          </button>
+          </ToggleButton>
         )}
 
         {/* Locale Switcher — only for projects with 2+ configured languages */}
@@ -1196,11 +1200,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
         {/* Page Switcher */}
         <div className="page-switcher" ref={conn.dropdownRef} data-education-id="page-switcher">
-          <button
+          <MenuButton
             className="page-switcher-btn"
             onClick={() => conn.setShowPageDropdown(!conn.showPageDropdown)}
+            expanded={conn.showPageDropdown}
           >
             <span className="page-route">{conn.currentPage}</span>
+            {conn.currentPage === '/' && <span className="page-route-context">Home</span>}
             <svg
               width="12"
               height="12"
@@ -1211,7 +1217,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             >
               <polyline points="6 9 12 15 18 9" />
             </svg>
-          </button>
+          </MenuButton>
           {conn.showPageDropdown && (
             <div className="page-dropdown">
               <input
@@ -1301,19 +1307,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           {isFullscreen ? <CompactIcon size={14} /> : <ExpandIcon size={14} />}
         </button>
 
-        {isFullscreen && activeEditMode && (
-          <button
-            type="button"
-            className={`preview-tree-btn${treeVisible ? ' active' : ''}`}
-            onClick={toggleTreeVisible}
-            title={treeVisible ? 'Hide element tree' : 'Show element tree'}
-            aria-pressed={treeVisible}
-          >
-            <PanelLeftIcon size={14} />
-          </button>
-        )}
-
-        {previewPlugins}
+        {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
 
         {iframeSize &&
           iframeSize.w > 0 &&
@@ -1356,7 +1350,14 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           })}
         </div>
 
-        {conn.serverReady && conn.externalUrl && <BrowserDropdown url={conn.externalUrl} />}
+        {conn.serverReady && conn.externalUrl && (
+          <BrowserDropdown
+            url={conn.externalUrl}
+            className="preview-browser-control"
+            buttonClassName="preview-browser-control"
+            iconOnly
+          />
+        )}
       </div>
       <div
         className="preview-viewport"
@@ -1455,13 +1456,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   browser.
                 </p>
                 <div className="preview-iframe-error-actions">
-                  <Button variant="secondary" size="sm" onClick={conn.handleRefresh}>
+                  <Button variant="secondary" onClick={conn.handleRefresh}>
                     Retry
                   </Button>
                   {handleFixWithAgent && (
                     <Button
                       variant="primary"
-                      size="sm"
                       onClick={() => handleFixWithAgent('blank-iframe')}
                     >
                       Fix with agent
@@ -1473,14 +1473,14 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             {/* Branch switching overlay */}
             {isBranchSwitching && (
               <div className="preview-branch-switching-overlay">
-                <Spinner size="lg" style={{ color: 'var(--accent)' }} />
+                <Spinner size="lg" style={{ color: 'var(--accent-active)' }} />
                 <span>Switching branch...</span>
               </div>
             )}
             {/* Dev server restarting overlay */}
             {isDevServerRestarting && (
               <div className="preview-branch-switching-overlay">
-                <Spinner size="lg" style={{ color: 'var(--accent)' }} />
+                <Spinner size="lg" style={{ color: 'var(--accent-active)' }} />
                 <span>Restarting dev server...</span>
               </div>
             )}

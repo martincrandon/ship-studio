@@ -25,6 +25,8 @@ interface SplitPaneProps {
   minRight?: number;
   /** Whether the right pane is collapsed */
   rightCollapsed?: boolean;
+  /** Whether the left pane is collapsed */
+  leftCollapsed?: boolean;
 }
 
 export function SplitPane({
@@ -34,10 +36,12 @@ export function SplitPane({
   minLeft = 20,
   minRight = 20,
   rightCollapsed = false,
+  leftCollapsed = false,
 }: SplitPaneProps) {
   const [split, setSplit] = useState(defaultSplit);
   const savedSplitRef = useRef(defaultSplit);
   const prevCollapsedRef = useRef(rightCollapsed);
+  const prevLeftCollapsedRef = useRef(leftCollapsed);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +78,14 @@ export function SplitPane({
       setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
     }
   }, [rightCollapsed, split]);
+
+  useEffect(() => {
+    if (leftCollapsed !== prevLeftCollapsedRef.current) {
+      prevLeftCollapsedRef.current = leftCollapsed;
+      // Let terminals and preview content fit their newly available width.
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+    }
+  }, [leftCollapsed]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -124,18 +136,34 @@ export function SplitPane({
   );
 
   return (
-    <div ref={containerRef} className={`split-pane ${rightCollapsed ? 'right-collapsed' : ''}`}>
+    <div
+      ref={containerRef}
+      className={`split-pane${rightCollapsed ? ' right-collapsed' : ''}${
+        leftCollapsed ? ' left-collapsed' : ''
+      }`}
+    >
       {/* Overlay to capture mouse events during drag (prevents iframe from stealing events) */}
       {isDragging && <div className="split-pane-overlay" />}
-      <div className="split-pane-left" style={{ width: rightCollapsed ? '100%' : `${split}%` }}>
+      {/* Keep the left pane mounted while collapsed. Agent terminals own live
+          session/UI state that must survive a purely visual hide/show. */}
+      <div
+        className="split-pane-left"
+        style={{ width: leftCollapsed ? 0 : rightCollapsed ? '100%' : `${split}%` }}
+        aria-hidden={leftCollapsed}
+      >
         {left}
       </div>
+      {!leftCollapsed && !rightCollapsed && (
+        <div className="split-pane-handle" onMouseDown={handleMouseDown}>
+          <div className="split-pane-handle-bar" />
+        </div>
+      )}
       {!rightCollapsed && (
         <>
-          <div className="split-pane-handle" onMouseDown={handleMouseDown}>
-            <div className="split-pane-handle-bar" />
-          </div>
-          <div className="split-pane-right" style={{ width: `${100 - split}%` }}>
+          <div
+            className="split-pane-right"
+            style={{ width: leftCollapsed ? '100%' : `${100 - split}%` }}
+          >
             {right}
           </div>
         </>

@@ -22,6 +22,11 @@
   overflow: hidden;
 }
 
+.split-pane.left-collapsed .split-pane-left {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .split-pane-right {
   height: 100%;
   overflow: visible;
@@ -29,9 +34,9 @@
 
 .split-pane-handle {
   width: 8px;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -43,8 +48,8 @@
 }
 
 .split-pane-handle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--border-strong);
 }
 
 .split-pane-handle-bar {
@@ -55,14 +60,15 @@
 }
 
 .split-pane-handle:hover .split-pane-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 .terminal-pane {
+  position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #1e1e1e; /* css-ok: must match xterm theme bg */
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
   /* Container query context for the screenshot footer below — lets
@@ -72,31 +78,51 @@
   container-name: terminal-pane;
 }
 
-/* Sits at the bottom of the terminal pane with the screenshot
-   cluster. Sized to line up with `.workspace-sidebar-add-project`
-   across the workspace. */
+/* One floating control row over the bottom of both the split Agents pane and
+   full-width Terminal view. The transparent, borderless panel lets the controls
+   sit directly over the terminal surface. */
 .terminal-pane-footer {
-  flex-shrink: 0;
+  position: absolute;
+  right: var(--spacing-md);
+  bottom: var(--spacing-sm);
+  left: var(--spacing-md);
+  z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  height: 45px;
-  padding: 0 var(--spacing-md);
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  pointer-events: none;
 }
 
-/* Long labels by default; short labels kick in at the breakpoint. */
-.terminal-pane-footer .capture-label-short {
-  display: none;
+.terminal-pane-footer-left,
+.terminal-pane-footer-center,
+.terminal-pane-footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  pointer-events: auto;
 }
 
-@container terminal-pane (max-width: 350px) {
+.terminal-pane-footer-center {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.terminal-pane-footer-right {
+  flex-shrink: 0;
+}
+
+/* Preserve the actions as the pane narrows: screenshot labels yield first,
+   followed by their shortcut hints, leaving the recognizable icons. */
+@container terminal-pane (max-width: 580px) {
   .terminal-pane-footer .capture-label-full {
     display: none;
   }
-  .terminal-pane-footer .capture-label-short {
-    display: inline;
+}
+
+@container terminal-pane (max-width: 460px) {
+  .terminal-pane-footer .capture-shortcut {
+    display: none;
   }
 }
 
@@ -106,8 +132,8 @@
   justify-content: space-between;
   padding: 9px 10px;
   min-height: 48px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 

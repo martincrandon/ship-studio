@@ -69,6 +69,9 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  /* Keep the content gutter on the same surface as the agent terminal. This
+     must be explicit because the xterm canvas paints its own background and
+     otherwise the gutter can expose the pane's darker fallback surface. */
   background: var(--surface-app);
 }
 

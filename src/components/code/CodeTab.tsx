@@ -12,6 +12,7 @@ import { CodeViewer } from './CodeViewer';
 import { ProjectActionConfirmModal } from '../dashboard/ProjectActionConfirmModal';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
+import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { ResetIcon, SearchIcon, EditIcon } from '../icons';
 import { type FileTreeNode, fileExtensionForAnalytics } from '../../lib/code';
 import { trackEvent, trackSearch } from '../../lib/analytics';
@@ -95,7 +96,6 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
 
   const filteredTree = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -119,32 +119,15 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
     return filterNodes(tree);
   }, [tree, searchQuery]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDragging.current = true;
+  const resizeSidebar = useCallback((clientX: number) => {
+    if (!containerRef.current) return;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const newWidth = clientX - containerRect.left;
+    setSidebarWidth(Math.max(150, Math.min(newWidth, 500)));
+  }, []);
 
-    let rafId: number | null = null;
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current) return;
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (!isDragging.current || !containerRef.current) return;
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const newWidth = e.clientX - containerRect.left;
-        setSidebarWidth(Math.max(150, Math.min(newWidth, 500)));
-      });
-    };
-
-    const handleMouseUp = () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      isDragging.current = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  const resizeSidebarBy = useCallback((delta: number) => {
+    setSidebarWidth((width) => Math.max(150, Math.min(width + delta, 500)));
   }, []);
 
   return (
@@ -200,7 +183,14 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
           )}
         </div>
       </div>
-      <div className="code-tab-divider" onMouseDown={handleMouseDown} />
+      <PanelResizeHandle
+        value={sidebarWidth}
+        min={150}
+        max={500}
+        label="Resize Files panel"
+        onResize={resizeSidebar}
+        onResizeBy={resizeSidebarBy}
+      />
       <div className="code-tab-viewer">
         <CodeViewer
           projectPath={projectPath}

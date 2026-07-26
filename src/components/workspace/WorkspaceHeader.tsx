@@ -14,22 +14,15 @@
  * @module components/WorkspaceHeader
  */
 
-import { useState, useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GitHubButton } from '../branches/GitHubButton';
 import { openInFinder } from '../../lib/ide';
 import { fileManagerName } from '../../lib/setup';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { ImageIcon, SlackIcon, PanelLeftIcon } from '../icons';
-// SupportPanel is hidden for now (the Support button links straight to Slack) but
-// intentionally kept around so we can bring the panel back later.
-import { SupportPanel } from '../support/SupportPanel';
-
-/** Ship Studio community Slack invite — the Support button opens this directly. */
-const SLACK_INVITE_URL =
-  'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g';
+import { ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
+import { Button } from '../primitives/Button';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type { PluginThemeData } from '../../contexts/PluginContext';
@@ -41,13 +34,19 @@ export interface WorkspaceHeaderProps {
   projectPath: string;
   projectName: string;
 
-  // Modal openers — kept here only for Assets (still a toolbar button).
+  // Workspace tools that remain directly accessible from the toolbar.
   // Env editor, backups, plugin manager, learn mode, and IDE launch moved
   // to the Cmd+K palette.
   onOpenAssetsPanel: () => void;
+  assetsPanelVisible: boolean;
+  elementTreeVisible: boolean;
+  elementTreeAvailable: boolean;
+  onToggleElementTree: () => void;
+  agentPanelVisible: boolean;
+  onToggleAgentPanel: () => void;
 
-  // Extra dropdown node rendered at the end of the left cluster (after the
-  // Support button). Currently used for the Plugins dropdown. Provided as a
+  // Extra dropdown node rendered after Assets in the left cluster. Currently
+  // used for the Plugins dropdown. Provided as a
   // pre-composed node because it needs plugin slot data that lives in
   // WorkspaceView. Omit to hide.
   headerExtras?: ReactNode;
@@ -57,16 +56,14 @@ export interface WorkspaceHeaderProps {
   // state. Omit to hide.
   branchIndicator?: ReactNode;
 
-  // Workspace tabs (Preview/Focus/Code/Branches/PRs) rendered at the start of
-  // the right cluster (before the GitHub button). Pre-composed in WorkspaceView
-  // since they drive the right-pane tab state. Omit to hide.
-  tabs?: ReactNode;
+  // Primary workspace modes (Preview/Focus/Code), rendered in their own center
+  // cluster between the workspace tools and repository/publishing actions.
+  // Pre-composed in WorkspaceView since they drive the right-pane state.
+  modes?: ReactNode;
 
-  // Sidebar collapse — lives at the far-left of the header so the health
-  // panel row below stays focused on health/logs. Omit `onToggleSidebar`
-  // to hide the button entirely (e.g. compact mode or pinned layouts).
-  isSidebarHidden?: boolean;
-  onToggleSidebar?: () => void;
+  // Repository views (Branches/PRs), rendered at the start of the right cluster
+  // with the other GitHub-related actions. Omit when GitHub is not connected.
+  repositoryTabs?: ReactNode;
 
   // GitHub
   integrations: IntegrationState;
@@ -116,11 +113,16 @@ export function WorkspaceHeader({
   projectPath,
   projectName,
   onOpenAssetsPanel,
+  assetsPanelVisible,
+  elementTreeVisible,
+  elementTreeAvailable,
+  onToggleElementTree,
+  agentPanelVisible,
+  onToggleAgentPanel,
   headerExtras,
   branchIndicator,
-  tabs,
-  isSidebarHidden,
-  onToggleSidebar,
+  modes,
+  repositoryTabs,
   integrations,
   onGitHubStatusChange,
   onGitHubConnect,
@@ -163,9 +165,6 @@ export function WorkspaceHeader({
     };
   }, [getSlotPlugins]);
 
-  // Support panel state
-  const [isSupportPanelOpen, setIsSupportPanelOpen] = useState(false);
-
   // IDE launch, env editor, backups, plugin manager, and learn-mode toggle
   // now live in the Cmd+K palette. See src/commands/useAppCommands.tsx.
 
@@ -184,48 +183,52 @@ export function WorkspaceHeader({
 
   const toolbar = (
     <header className="workspace-header">
-      {/* Left side — sidebar collapse, Assets, Support. Learn mode, env
-          vars, backups, plugin manager, and IDE launch are reachable via
-          ⌘K. The sidebar toggle used to live in the health-panel row but
-          moved up here so that row can stay focused on health/logs. */}
+      {/* Left side — Elements and Assets. Learn mode, env vars, backups,
+          plugin manager, and IDE launch are reachable via ⌘K. */}
       <div className="workspace-header-left">
-        {onToggleSidebar && (
-          <button
-            className="toolbar-icon-btn"
-            onClick={onToggleSidebar}
-            title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
-            aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
-            data-education-id="toggle-sidebar"
-          >
-            <PanelLeftIcon size={12} />
-            <span className="toolbar-btn-label">{isSidebarHidden ? 'Show' : 'Hide'}</span>
-          </button>
-        )}
-        <button
-          className="toolbar-icon-btn"
+        <Button
+          onClick={onToggleElementTree}
+          disabled={!elementTreeAvailable}
+          title={
+            !elementTreeAvailable
+              ? 'Elements are available in Preview while visual editing is active'
+              : elementTreeVisible
+                ? 'Hide element tree'
+                : 'Show element tree'
+          }
+          aria-pressed={elementTreeVisible}
+        >
+          <PanelLeftIcon size={12} />
+          <span className="toolbar-btn-label">Elements</span>
+        </Button>
+        <Button
+          onClick={onToggleAgentPanel}
+          title={agentPanelVisible ? 'Hide Agent panel' : 'Show Agent panel'}
+          aria-pressed={agentPanelVisible}
+        >
+          <TerminalIcon size={12} />
+          <span className="toolbar-btn-label">Agent</span>
+        </Button>
+        <Button
           onClick={onOpenAssetsPanel}
           title="Assets"
+          aria-pressed={assetsPanelVisible}
           data-education-id="assets-button"
         >
           <ImageIcon size={12} />
           <span className="toolbar-btn-label">Assets</span>
-        </button>
-        <button
-          className="toolbar-icon-btn"
-          onClick={() => void openUrl(SLACK_INVITE_URL)}
-          title="Join the Ship Studio community on Slack"
-          data-education-id="support-button"
-        >
-          <SlackIcon size={12} />
-          <span className="toolbar-btn-label">Support</span>
-        </button>
+        </Button>
         {headerExtras}
         {branchIndicator}
       </div>
 
-      {/* Right side — workspace tabs, GitHub, Publish slot, hosting plugin, Publish */}
+      {/* Center — the primary workspace mode switcher is deliberately isolated
+          from both local workspace tools and publishing/hosting actions. */}
+      <div className="workspace-header-center">{modes}</div>
+
+      {/* Right side — repository views, GitHub, hosting, and publishing */}
       <div className="workspace-header-right">
-        {tabs}
+        {repositoryTabs}
         <span data-education-id="github-button">
           <GitHubButton
             githubState={integrations.github}
@@ -269,14 +272,5 @@ export function WorkspaceHeader({
     </header>
   );
 
-  const supportPanel = (
-    <SupportPanel
-      isOpen={isSupportPanelOpen}
-      onClose={() => setIsSupportPanelOpen(false)}
-      projectPath={projectPath}
-      projectName={projectName}
-    />
-  );
-
-  return { titlebar, toolbar, supportPanel };
+  return { titlebar, toolbar };
 }

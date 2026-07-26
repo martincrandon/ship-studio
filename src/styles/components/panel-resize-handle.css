@@ -1,0 +1,21 @@
+.panel-resize-handle {
+  position: relative;
+  width: var(--stroke-1);
+  align-self: stretch;
+  flex-shrink: 0;
+  background: var(--border-default);
+  cursor: col-resize;
+  outline: none;
+}
+
+.panel-resize-handle::before {
+  content: '';
+  position: absolute;
+  inset: 0 calc(var(--space-2) / -2);
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle:active,
+.panel-resize-handle:focus-visible {
+  background: var(--border-strong);
+}

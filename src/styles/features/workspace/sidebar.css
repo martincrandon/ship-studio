@@ -1,12 +1,13 @@
 /* Workspace process sidebar — projects with nested agents/terminals/commands. */
 
 .workspace-sidebar {
+  position: relative;
+  z-index: var(--z-dropdown);
   display: flex;
   flex-direction: column;
-  width: 240px;
+  width: var(--size-sidebar-project);
   flex-shrink: 0;
   background: var(--surface-panel);
-  border-right: var(--stroke-1) solid var(--border-default);
   min-height: 0;
   overflow: hidden;
   font-family: var(--font-ui);
@@ -43,6 +44,40 @@
   padding: var(--space-2);
   border-bottom: var(--stroke-1) solid var(--border-subtle);
   flex-shrink: 0;
+}
+
+.workspace-sidebar-toggle {
+  flex-shrink: 0;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-top-row {
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-toggle,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-home,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-add-project,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-support,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-settings {
+  width: var(--control-height-standard);
+  min-width: var(--control-height-standard);
+  height: var(--control-height-standard);
+  flex: 0 0 var(--control-height-standard);
+  padding: 0;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-footer-actions {
+  flex-direction: column;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-home {
+  justify-content: center;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-home > span:last-child,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-add-project > span:last-child {
+  display: none;
 }
 
 /* Home row — height matches the workspace header band so the sidebar's top
@@ -163,6 +198,29 @@
   display: none;
   width: 0;
   height: 0;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-scroll {
+  padding-bottom: 0;
+}
+
+.workspace-body.is-sidebar-hidden .sidebar-project {
+  border-bottom: var(--stroke-1) solid var(--border-subtle);
+}
+
+.workspace-body.is-sidebar-hidden .sidebar-project-row {
+  justify-content: center;
+  height: calc(var(--control-height-standard) + (var(--space-2) * 2));
+  padding: var(--space-2);
+}
+
+.sidebar-group-marker {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height-standard);
+  color: var(--text-faint);
+  border-bottom: var(--stroke-1) solid var(--border-subtle);
 }
 
 /* Top-level groups: Pinned / Projects.
@@ -896,6 +954,12 @@
   overflow: hidden;
 }
 
+.workspace-sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 /* Belt-and-suspenders against a horizontal scrollbar appearing inside a
  * project body when a long tab title would otherwise force it. The row
  * labels already ellipsize, but if a future descendant forgets min-width: 0
@@ -913,6 +977,11 @@
 .workspace-sidebar-add-project {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.workspace-sidebar-support,
+.workspace-sidebar-settings {
+  flex: 0 0 var(--control-height-standard);
 }
 
 /* Workspace switcher — same full-bleed ghost button as "Open project",

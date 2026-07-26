@@ -59,7 +59,7 @@
 /* When the dimensions readout precedes the breakpoints, it owns the
    auto-margin push so the two sit together on the right edge. */
 .preview-size-wrap + .preview-breakpoints {
-  margin-left: var(--spacing-xs);
+  margin-left: auto;
 }
 
 /* Exact-size popover under the dimensions readout. */

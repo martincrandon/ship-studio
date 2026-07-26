@@ -1,5 +1,5 @@
 /* Element tree panel — read-only navigator shown as the preview container's
-   left grid column in fullscreen edit mode (see preview.css for the grid). */
+   left grid column in visual edit mode (see preview.css for the grid). */
 
 .ss-tree-panel {
   grid-area: 2 / 1 / -1 / 2;

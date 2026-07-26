@@ -69,9 +69,9 @@
    preview's vertical resize handle, but lives in the outer
    .preview-container grid (not the .preview-frame-grid). */
 .inspect-resize-handle {
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
   cursor: ns-resize;
   display: flex;
   align-items: center;
@@ -82,8 +82,8 @@
 }
 
 .inspect-resize-handle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--accent-active);
 }
 
 .inspect-resize-handle-bar {
@@ -95,7 +95,7 @@
 }
 
 .inspect-resize-handle:hover .inspect-resize-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 /* Full-container overlay during drag — prevents iframes inside the
@@ -108,14 +108,72 @@
 }
 
 .preview-toolbar {
+  position: relative;
+  /* Ordinary chrome must stay below floating editor panels/tooltips and
+     modal overlays. Dropdowns opened from this toolbar still render above
+     its surface inside this stacking context. */
+  z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-1);
   height: var(--preview-toolbar-h);
   padding: 9px 12px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   overflow: visible;
+}
+
+/*
+ * Toolbar layout mirrors the visual hierarchy of the reference:
+ * navigation left, viewport controls centered between flexible gutters,
+ * and preview actions right. `order` changes presentation only — control
+ * behavior and mounting remain untouched.
+ */
+.preview-toolbar > .locale-switcher,
+.preview-toolbar > .page-switcher {
+  order: 1;
+}
+
+.preview-toolbar > .preview-refresh {
+  order: 2;
+}
+
+.preview-toolbar > .preview-breakpoints {
+  order: 10;
+  margin-left: auto;
+}
+
+.preview-toolbar > .preview-size-wrap {
+  order: 11;
+  margin-left: var(--space-1);
+}
+
+.preview-toolbar > .preview-fullscreen-btn {
+  order: 12;
+}
+
+.preview-toolbar > .preview-tree-btn {
+  order: 13;
+}
+
+.preview-toolbar > .preview-edit-control {
+  order: 20;
+  margin-left: auto;
+}
+
+.preview-toolbar > .preview-inspect-control {
+  order: 21;
+}
+
+.preview-toolbar > .preview-toolbar-plugins {
+  order: 22;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.preview-toolbar > .preview-browser-control {
+  order: 23;
 }
 
 /* Page Switcher */
@@ -124,25 +182,7 @@
 }
 
 .page-switcher-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-primary);
-  font-family: monospace;
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.page-switcher-btn:hover {
-  border-color: var(--accent);
+  font-family: var(--font-code);
 }
 
 .page-switcher-btn svg {
@@ -156,6 +196,15 @@
   white-space: nowrap;
 }
 
+.page-route-context {
+  padding-left: var(--space-2);
+  border-left: var(--stroke-1) solid var(--border-default);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-500);
+}
+
 .page-dropdown {
   position: absolute;
   top: 100%;
@@ -163,8 +212,8 @@
   margin-top: 4px;
   min-width: 220px;
   max-width: 300px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: var(--z-dropdown);
@@ -174,9 +223,9 @@
 .page-search {
   width: 100%;
   padding: 10px 12px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-primary);
   font-size: var(--font-size-md);
   outline: none;
@@ -191,7 +240,7 @@
   overflow-y: auto;
   /* Custom, theme-matched scrollbar — never the device's white default. */
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 .page-list::-webkit-scrollbar {
   width: 10px;
@@ -200,9 +249,9 @@
   background: transparent;
 }
 .page-list::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-default);
   border-radius: 999px;
-  border: 2px solid var(--bg-secondary);
+  border: 2px solid var(--surface-panel);
 }
 .page-list::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
@@ -226,7 +275,7 @@
   border: none;
   border-radius: 0;
   color: var(--text-secondary);
-  font-family: monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-md);
   text-align: left;
   cursor: pointer;
@@ -237,7 +286,7 @@
 }
 
 .page-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -253,7 +302,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--accent);
+  background: var(--accent-active);
   border-radius: 0 2px 2px 0;
 }
 
@@ -265,7 +314,7 @@
 }
 
 .preview-url {
-  font-family: monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-muted);
 }
@@ -292,7 +341,7 @@
 .preview-refresh:hover:not(:disabled),
 .preview-fullscreen-btn:hover:not(:disabled),
 .preview-tree-btn:hover:not(:disabled) {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -306,7 +355,7 @@
 }
 
 .preview-tree-btn.active {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 /* Fullscreen: the container covers the window below the workspace header
@@ -317,7 +366,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-preview-fullscreen);
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 /* ===== Visual editor pin-as-sidebar =====
@@ -329,7 +378,7 @@
   grid-template-columns: minmax(0, 1fr) var(--editor-panel-w);
 }
 
-/* Element tree (navigator) on the left in fullscreen edit mode. Composes with
+/* Element tree (navigator) on the left in visual edit mode. Composes with
    the pinned editor: tree | canvas | editor. Panels use negative column lines
    so each works with or without the other. */
 .preview-container--tree {
@@ -387,7 +436,7 @@
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header {
   height: var(--preview-toolbar-h);
   flex-shrink: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header,
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header:active {
@@ -415,11 +464,11 @@
     color var(--transition);
 }
 .ss-edit-panel__pin:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-primary);
 }
 .ss-edit-panel__pin.is-pinned {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .breakpoint-btn {
@@ -459,7 +508,7 @@
   right: 0;
   bottom: -1px;
   height: 2px;
-  background: var(--accent);
+  background: currentColor;
   border-radius: 2px 2px 0 0;
 }
 
@@ -469,7 +518,7 @@
   gap: 6px;
   margin-left: 8px;
   padding-left: 8px;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--border-default);
 }
 
 .preview-zoom button {
@@ -486,15 +535,15 @@
 }
 
 .preview-zoom button:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 .preview-zoom input {
   width: 48px;
   padding: 4px 6px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -503,7 +552,7 @@
 
 .preview-zoom input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 /* Branch Switching Overlay */
@@ -513,7 +562,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -533,7 +582,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -571,7 +620,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   overflow: hidden;
   padding: 0;
   position: relative;
@@ -600,10 +649,10 @@
    bottom-right cell. The handles drop their own outer borders so the grid's
    border is the single outer line. */
 .preview-frame-grid--floating {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .preview-frame-grid--floating .preview-resize-handle {
@@ -626,7 +675,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 /* Preview resize overlay (captures mouse during drag) */
@@ -647,9 +696,9 @@
 /* Preview resize handle (right edge by default; placed by grid). */
 .preview-resize-handle {
   grid-area: right;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
   cursor: ew-resize;
   display: flex;
   align-items: center;
@@ -660,8 +709,8 @@
 }
 
 .preview-resize-handle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--border-strong);
 }
 
 .preview-resize-handle-bar {
@@ -672,7 +721,7 @@
 }
 
 .preview-resize-handle:hover .preview-resize-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 /* Vertical (bottom) resize handle — flips the right-handle layout */
@@ -680,8 +729,8 @@
   grid-area: bottom;
   border-left: none;
   border-right: none;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
   cursor: ns-resize;
 }
 
@@ -694,14 +743,16 @@
 .preview-logs-toggle {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  gap: var(--button-gap);
+  height: var(--button-height);
+  padding: 0 var(--button-padding-inline);
+  background: var(--button-surface-default);
+  border: var(--stroke-1) solid var(--button-border-solid);
+  border-radius: var(--button-radius);
+  color: var(--button-text-default);
+  font-size: var(--button-font-size);
   cursor: pointer;
+  box-shadow: var(--button-shadow);
   transition:
     background var(--transition),
     color var(--transition),
@@ -709,6 +760,7 @@
 }
 
 .preview-logs-toggle:hover {
+  background: var(--button-surface-hover);
   color: var(--text-primary);
 }
 
@@ -721,8 +773,8 @@
   width: 22px;
   height: 12px;
   margin-left: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   transition:
     background var(--transition),
@@ -744,13 +796,13 @@
 }
 
 .preview-logs-toggle-switch.is-on {
-  background: var(--success-light);
-  border-color: var(--success-light);
+  background: var(--accent-success);
+  border-color: var(--accent-success);
 }
 
 .preview-logs-toggle-switch.is-on::after {
   transform: translateX(10px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
 }
 
 /* Collapsible dev server logs panel (bottom of preview) */
@@ -759,8 +811,8 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: #1a1a1a; /* css-ok: must match xterm theme bg */
-  border-top: 1px solid var(--border);
+  background: var(--surface-recessed);
+  border-top: 1px solid var(--border-default);
   /* Isolate the panel's internal layout from ancestors: any Network
      row / DOM tree / console line change inside the panel won't
      trigger re-layout upward. */
@@ -771,8 +823,8 @@
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
   padding-right: var(--spacing-md);
 }
@@ -814,7 +866,7 @@
   right: 0;
   bottom: -1px;
   height: 2px;
-  background: var(--accent);
+  background: currentColor;
   border-radius: 2px 2px 0 0;
 }
 
@@ -841,7 +893,7 @@
 }
 
 .preview-logs-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -891,16 +943,15 @@
 }
 
 /* DevServerLogs layout: optional toolbar above the xterm container.
-   The terminal area keeps its hard-coded 1a1a1a to match xterm's
-   theme background exactly — tokenizing this pulls in a theme-aware
-   value that won't match the renderer. */
+   The terminal area uses the same recessed semantic role as xterm's
+   dark theme background. */
 .dev-server-logs {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: #1a1a1a; /* css-ok: must match xterm theme bg */
+  background: var(--surface-recessed);
 }
 
 .dev-server-logs-toolbar {
@@ -909,8 +960,8 @@
   justify-content: space-between;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 
@@ -925,7 +976,7 @@
 .dev-server-logs-send {
   padding: 4px 10px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
@@ -937,7 +988,7 @@
 
 .dev-server-logs-send:hover:not(:disabled) {
   color: var(--text-primary);
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .dev-server-logs-send:disabled {
@@ -948,7 +999,7 @@
 .dev-server-logs-terminal {
   flex: 1;
   min-height: 0;
-  background: #1a1a1a; /* css-ok: must match xterm theme bg */
+  background: var(--surface-recessed);
 }
 
 /* Crop selection overlay */
@@ -976,7 +1027,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--overlay-80);
-  color: var(--text-bright);
+  color: var(--text-inverse);
   padding: 16px 24px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-lg);
@@ -1001,7 +1052,7 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .preview-loading .hint,
@@ -1018,7 +1069,7 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xl);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   text-align: center;
 }
 
@@ -1036,8 +1087,8 @@
 }
 
 .preview-install-prompt code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  background: var(--bg-tertiary);
+  font-family: var(--font-code);
+  background: var(--surface-control);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-base);
@@ -1058,7 +1109,7 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xl);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   text-align: center;
 }
 .preview-status .hint {
@@ -1077,7 +1128,7 @@
   color: var(--text-muted);
 }
 .preview-status--error .preview-status__icon {
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 .preview-status__attempt {
   font-size: var(--font-size-sm);
@@ -1122,10 +1173,10 @@
   padding: var(--spacing-sm);
   max-height: 160px;
   overflow: auto;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-secondary);
@@ -1140,7 +1191,7 @@
 }
 .preview-status__logs-body--interactive:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .preview-status__logs-hint {
@@ -1159,18 +1210,18 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   cursor: pointer;
   transition: border-color var(--transition);
 }
 
 .locale-switcher-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .locale-switcher-btn svg {
@@ -1183,8 +1234,8 @@
   left: 0;
   margin-top: 4px;
   min-width: 180px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: var(--z-dropdown);
@@ -1208,15 +1259,15 @@
 }
 
 .locale-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .locale-item.active {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 .locale-item-code {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   color: var(--text-muted);
 }

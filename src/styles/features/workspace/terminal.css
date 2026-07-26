@@ -1,30 +1,21 @@
-/* Terminal Tabs Bar */
-.terminal-tabs-bar {
-  display: flex;
+/* Agent identity panel — retains the original terminal toolbar's footprint
+   while keeping all actions in the floating footer. */
+.terminal-agent-header {
   align-items: center;
   height: var(--panel-header-h);
-  padding: 0 10px;
+  padding: 0 var(--spacing-md);
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: var(--stroke-1) solid var(--border-default);
   flex-shrink: 0;
-  gap: var(--spacing-sm);
 }
 
 /* Collapse "Agent Settings" to its gear icon at the SAME window width as the
    header's label collapse (workspace/main.css) so every toolbar label drops to
    icon-only in unison. Keep this breakpoint in sync with that one. */
 @media (max-width: 1600px) {
-  .terminal-tabs-bar .toolbar-btn-label {
+  .terminal-pane-footer .toolbar-btn-label {
     display: none;
   }
-}
-
-/* Right-side cluster — groups feature toggles + the Agent Settings
-   dropdown so they sit together with a consistent gap. */
-.terminal-tabs-bar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .terminal-tabs {
@@ -47,7 +38,7 @@
   align-items: center;
   gap: 6px;
   height: var(--control-height-standard);
-  padding: 0 var(--space-08);
+  padding: 0 var(--space-2);
   max-width: 220px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
@@ -273,9 +264,10 @@
   display: none;
 }
 
-/* Extend the terminal's unfocused overlay into the 12px content gutter so
-   the full Agent pane dims as one surface. Keep the xterm content at its
-   original width so fitting and text metrics do not change. */
+/* The terminal's unfocused overlay is rendered by `.terminal-instance`.
+   Extend that layer into the 12px content gutter so the gutter receives the
+   same focused/unfocused treatment as the xterm surface. Keep the xterm
+   itself at its original width so fitting and text metrics are unchanged. */
 .terminal-tab-content:not([data-agent-id='opencode']) .terminal-instance {
   left: -12px;
   width: calc(100% + 12px) !important;
@@ -295,9 +287,9 @@
    inline `left/width` on `.terminal-tab-content.in-pane`. Reserve vertical
    space at the top for the pane header strip. */
 .terminal-content.split {
-  /* Match `.terminal-tabs-bar`'s shared panel-header height so the pane header
+  /* Match `.terminal-tabs-bar`'s `min-height: 48px` so the pane header
      visually reads as a continuation of the terminal toolbar above. */
-  --split-pane-header-height: var(--panel-header-h);
+  --split-pane-header-height: 48px;
 }
 
 .terminal-split-headers {

@@ -1,5 +1,6 @@
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -10,11 +11,24 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { SearchIcon, ChevronIcon, ResetIcon, LayersIcon, PinIcon, ActivityIcon } from '../icons';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import {
+  SearchIcon,
+  ChevronIcon,
+  ResetIcon,
+  LayersIcon,
+  PinIcon,
+  ActivityIcon,
+  PanelLeftIcon,
+  SettingsIcon,
+  SlackIcon,
+} from '../icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
+import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
 import { useOpenPalette } from '../CommandPalette/paletteContext';
+import { useModal } from '../../contexts/ModalContext';
 import { ALL_AGENTS, TERMINAL, getAgentById, type AgentConfig } from '../../lib/agent';
 import { type WorktreeInfo } from '../../lib/worktrees';
 import {
@@ -71,6 +85,8 @@ interface Props {
   isHomeActive: boolean;
   onGoHome: () => void;
   onOpenProjectPicker: () => void;
+  isSidebarHidden?: boolean;
+  onToggleSidebar?: () => void;
 
   // Projects
   /** Pinned projects (in pin order). Have live registry data. */
@@ -135,6 +151,8 @@ interface Props {
 
 const SECTION_STORAGE_KEY = 'ship-studio:workspace-sidebar:collapsed';
 const PROJECT_EXPAND_STORAGE_KEY = 'ship-studio:workspace-sidebar:expanded-projects';
+const SLACK_INVITE_URL =
+  'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g';
 
 function readCollapsed(): Record<SectionId, boolean> {
   try {
@@ -244,6 +262,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   isHomeActive,
   onGoHome,
   onOpenProjectPicker,
+  isSidebarHidden,
+  onToggleSidebar,
   projects,
   currentProjectPath,
   currentProjectName,
@@ -270,6 +290,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   onAddWorktree,
   onSwitchAccount,
 }: Props) {
+  const appSettingsModal = useModal('settings');
+  const [sidebarWidth, setSidebarWidth] = useState(214);
   const { activeAccount, accounts } = useActiveAccount(currentProjectPath);
   // The Workspaces feature is invisible until you actually have more than one.
   // For the ~80% single-workspace users the footer switcher stays hidden; the
@@ -660,6 +682,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         key={row.projectPath}
         row={row}
         isCurrent={isCurrent}
+        compact={!!isSidebarHidden}
         isExpanded={expanded}
         shortcutNumber={shortcutNumberFor(row)}
         onToggleExpand={() => toggleProjectExpanded(row.projectPath)}
@@ -738,116 +761,188 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     );
   };
 
+  const resizeSidebar = useCallback((clientX: number) => {
+    setSidebarWidth(Math.max(150, Math.min(clientX, 500)));
+  }, []);
+
+  const resizeSidebarBy = useCallback((delta: number) => {
+    setSidebarWidth((width) => Math.max(150, Math.min(width + delta, 500)));
+  }, []);
+
   return (
-    <aside className="workspace-sidebar" aria-label="Processes">
-      <div className="workspace-sidebar-top-row">
-        <Button
-          variant="default"
-          width="fill"
-          className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
-          onClick={onGoHome}
-          aria-current={isHomeActive ? 'page' : undefined}
-          data-selected={isHomeActive ? 'true' : undefined}
-          leftIcon={
-            <span className="workspace-sidebar-home-icon" aria-hidden="true">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </span>
-          }
-        >
-          <span>Home</span>
-        </Button>
-      </div>
-
-      <div className="workspace-sidebar-search-panel">
-        <button
-          type="button"
-          className="workspace-sidebar-filter"
-          onClick={() => openPalette()}
-          title="Open command palette"
-          aria-label="Open command palette"
-        >
-          <SearchIcon size={12} />
-          <span className="workspace-sidebar-filter-placeholder">Search</span>
-          <span className="workspace-sidebar-filter-shortcut">{kbd('mod', 'K')}</span>
-        </button>
-      </div>
-
-      <div className="workspace-sidebar-scroll">
-        <SidebarGroupHeader
-          label="Pinned"
-          count={pinnedRows.length}
-          collapsed={!pinnedOpen}
-          onToggle={() => toggleGroup('pinned')}
-          emptyHint="Pin a project from the Projects list below"
-        />
-        {pinnedOpen &&
-          (visiblePinned.length === 0 && !filterLower ? (
-            <div className="sidebar-group-empty">Nothing pinned yet</div>
-          ) : (
-            visiblePinned.map((row) => renderProjectRow(row))
-          ))}
-
-        <SidebarGroupHeader
-          label="Active"
-          count={activeRows.length + (currentExternalRow ? 1 : 0)}
-          collapsed={!activeOpen}
-          onToggle={() => toggleGroup('projects')}
-        />
-        {activeOpen &&
-          (visibleActive.length === 0 && !filterLower ? (
-            <div className="sidebar-group-empty">No active projects. Open one from Home.</div>
-          ) : (
-            visibleActive.map((row) => renderProjectRow(row))
-          ))}
-      </div>
-
-      <div className="workspace-sidebar-footer">
-        <Button
-          variant="default"
-          width="fill"
-          className="workspace-sidebar-add-project"
-          onClick={onOpenProjectPicker}
-          title="Open a project"
-        >
-          <span className="workspace-sidebar-add-icon">+</span>
-          <span>Open project</span>
-        </Button>
-        {onSwitchAccount && activeAccount && hasMultipleWorkspaces && (
-          <>
-            <div className="workspace-sidebar-footer-divider" />
-            <Button
+    <>
+      <aside className="workspace-sidebar" aria-label="Processes" style={{ width: sidebarWidth }}>
+        <div className="workspace-sidebar-top-row">
+          {onToggleSidebar && (
+            <IconButton
               variant="ghost"
-              block
-              className="workspace-sidebar-ws-switch"
-              onClick={onSwitchAccount}
-              title={`Switch workspace (${activeAccount.name})`}
+              className="workspace-sidebar-toggle"
+              icon={<PanelLeftIcon size={12} />}
+              onClick={onToggleSidebar}
+              title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+              aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+              data-education-id="toggle-sidebar"
+            />
+          )}
+          <Button
+            variant="default"
+            width="fill"
+            className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
+            onClick={onGoHome}
+            aria-current={isHomeActive ? 'page' : undefined}
+            data-selected={isHomeActive ? 'true' : undefined}
+            leftIcon={
+              <span className="workspace-sidebar-home-icon" aria-hidden="true">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              </span>
+            }
+          >
+            <span>Home</span>
+          </Button>
+        </div>
+
+        <div className="workspace-sidebar-search-panel">
+          <button
+            type="button"
+            className="workspace-sidebar-filter"
+            onClick={() => openPalette()}
+            title="Open command palette"
+            aria-label="Open command palette"
+          >
+            <SearchIcon size={12} />
+            <span className="workspace-sidebar-filter-placeholder">Search</span>
+            <span className="workspace-sidebar-filter-shortcut">{kbd('mod', 'K')}</span>
+          </button>
+        </div>
+
+        <div className="workspace-sidebar-scroll">
+          {isSidebarHidden ? (
+            <CompactSidebarGroupMarker label="Pinned" />
+          ) : (
+            <SidebarGroupHeader
+              label="Pinned"
+              count={pinnedRows.length}
+              collapsed={!pinnedOpen}
+              onToggle={() => toggleGroup('pinned')}
+              emptyHint="Pin a project from the Projects list below"
+            />
+          )}
+          {(isSidebarHidden || pinnedOpen) &&
+            (visiblePinned.length === 0 && !filterLower ? (
+              !isSidebarHidden && <div className="sidebar-group-empty">Nothing pinned yet</div>
+            ) : (
+              visiblePinned.map((row) => renderProjectRow(row))
+            ))}
+
+          {isSidebarHidden ? (
+            <CompactSidebarGroupMarker label="Active" />
+          ) : (
+            <SidebarGroupHeader
+              label="Active"
+              count={activeRows.length + (currentExternalRow ? 1 : 0)}
+              collapsed={!activeOpen}
+              onToggle={() => toggleGroup('projects')}
+            />
+          )}
+          {(isSidebarHidden || activeOpen) &&
+            (visibleActive.length === 0 && !filterLower ? (
+              !isSidebarHidden && (
+                <div className="sidebar-group-empty">No active projects. Open one from Home.</div>
+              )
+            ) : (
+              visibleActive.map((row) => renderProjectRow(row))
+            ))}
+        </div>
+
+        <div className="workspace-sidebar-footer">
+          <div className="workspace-sidebar-footer-actions">
+            <Button
+              variant="default"
+              width="fill"
+              className="workspace-sidebar-add-project"
+              onClick={onOpenProjectPicker}
+              title="Open a project"
             >
-              <span
-                className="workspace-switch-account-dot"
-                style={{ background: activeAccount.color }}
-              />
-              <span className="workspace-switch-account-name">{activeAccount.name}</span>
+              <span className="workspace-sidebar-add-icon">+</span>
+              <span>Open project</span>
             </Button>
-          </>
-        )}
-      </div>
-    </aside>
+            <IconButton
+              variant="default"
+              className="workspace-sidebar-support"
+              icon={<SlackIcon size={12} />}
+              onClick={() => void openUrl(SLACK_INVITE_URL)}
+              title="Join the Ship Studio community on Slack"
+              aria-label="Support"
+              data-education-id="support-button"
+            />
+            <IconButton
+              variant="default"
+              className="workspace-sidebar-settings"
+              icon={<SettingsIcon size={12} />}
+              onClick={appSettingsModal.open}
+              title="App settings"
+              aria-label="App settings"
+            />
+          </div>
+          {onSwitchAccount && activeAccount && hasMultipleWorkspaces && (
+            <>
+              <div className="workspace-sidebar-footer-divider" />
+              <Button
+                variant="ghost"
+                block
+                className="workspace-sidebar-ws-switch"
+                onClick={onSwitchAccount}
+                title={`Switch workspace (${activeAccount.name})`}
+              >
+                <span
+                  className="workspace-switch-account-dot"
+                  style={{ background: activeAccount.color }}
+                />
+                <span className="workspace-switch-account-name">{activeAccount.name}</span>
+              </Button>
+            </>
+          )}
+        </div>
+      </aside>
+      <PanelResizeHandle
+        value={sidebarWidth}
+        min={150}
+        max={500}
+        label="Resize Project Sidebar"
+        onResize={resizeSidebar}
+        onResizeBy={resizeSidebarBy}
+      />
+    </>
   );
 });
 
 const AGENT_ADD_OPTIONS: AgentConfig[] = ALL_AGENTS;
+
+function CompactSidebarGroupMarker({ label }: { label: 'Pinned' | 'Active' }) {
+  return (
+    <div
+      className="sidebar-group-marker"
+      role="heading"
+      aria-level={2}
+      aria-label={`${label} projects`}
+      title={`${label} projects`}
+    >
+      {label === 'Pinned' ? <PinIcon size={14} /> : <ActivityIcon size={14} />}
+    </div>
+  );
+}
 
 /**
  * Top-level collapsible group header ("Pinned" / "Projects"). Style-wise
@@ -1008,6 +1103,7 @@ function ProjectRowName({ name }: { name: string }) {
 function ProjectGroup({
   row,
   isCurrent,
+  compact,
   isExpanded,
   shortcutNumber,
   onToggleExpand,
@@ -1017,6 +1113,7 @@ function ProjectGroup({
 }: {
   row: PinnedProjectRow;
   isCurrent: boolean;
+  compact: boolean;
   isExpanded: boolean;
   /** Cmd+N shortcut badge (1..9). Null for rows beyond the shortcut range. */
   shortcutNumber: number | null;
@@ -1054,34 +1151,42 @@ function ProjectGroup({
           }
         }}
       >
-        <IconButton
-          className="sidebar-project-control sidebar-project-chevron"
-          variant="ghost"
-          density="compact"
-          icon={
-            <ChevronIcon
-              size={10}
-              className={isExpanded ? 'chevron-expanded' : 'chevron-collapsed'}
-            />
-          }
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleExpand();
-          }}
-          aria-expanded={isExpanded}
-          title={isExpanded ? 'Collapse project' : 'Expand project'}
-          aria-label={isExpanded ? 'Collapse project' : 'Expand project'}
-        />
+        {!compact && (
+          <IconButton
+            className="sidebar-project-control sidebar-project-chevron"
+            variant="ghost"
+            density="compact"
+            icon={
+              <ChevronIcon
+                size={10}
+                className={isExpanded ? 'chevron-expanded' : 'chevron-collapsed'}
+              />
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
+            aria-expanded={isExpanded}
+            title={isExpanded ? 'Collapse project' : 'Expand project'}
+            aria-label={isExpanded ? 'Collapse project' : 'Expand project'}
+          />
+        )}
         <span
           className={`sidebar-project-initials ${shortcutNumber !== null ? 'is-shortcut' : ''}`}
-          aria-hidden="true"
-          title={shortcutNumber !== null ? kbd('mod', String(shortcutNumber)) : undefined}
+          aria-hidden={!compact}
+          title={
+            compact
+              ? `${row.fallbackName}${shortcutNumber !== null ? ` (${kbd('mod', String(shortcutNumber))})` : ''}`
+              : shortcutNumber !== null
+                ? kbd('mod', String(shortcutNumber))
+                : undefined
+          }
         >
           {shortcutNumber !== null ? kbd('mod', String(shortcutNumber)) : initials}
         </span>
-        <ProjectRowName name={row.fallbackName} />
-        {memoryLabel && <span className="sidebar-project-meta">{memoryLabel}</span>}
-        {onClose && (
+        {!compact && <ProjectRowName name={row.fallbackName} />}
+        {!compact && memoryLabel && <span className="sidebar-project-meta">{memoryLabel}</span>}
+        {!compact && onClose && (
           <IconButton
             className="sidebar-project-control sidebar-project-close"
             variant="ghost"
@@ -1104,9 +1209,9 @@ function ProjectGroup({
             title="Close project (stops dev server)"
           />
         )}
-        <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
+        {!compact && <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />}
       </div>
-      {isExpanded && children && <div className="sidebar-project-body">{children}</div>}
+      {!compact && isExpanded && children && <div className="sidebar-project-body">{children}</div>}
     </div>
   );
 }

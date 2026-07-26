@@ -52,14 +52,23 @@
 
 /* GitHub Integration - Workspace Header */
 .workspace-header-left,
+.workspace-header-center,
 .workspace-header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-xs);
+}
+
+.workspace-header-left {
+  min-width: 0;
+}
+
+.workspace-header-center {
+  align-self: stretch;
 }
 
 .workspace-header-right {
-  margin-left: auto;
+  justify-self: end;
 }
 
 .github-button {

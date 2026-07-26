@@ -42,8 +42,12 @@ import { WorkspaceHeader, HOSTING_PLUGIN_IDS } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { PluginSlot } from '../plugins/PluginSlot';
 import { UpdateBanner } from '../UpdateBanner';
+import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
+import { useCommands } from '../../commands/useCommands';
 import {
   CameraIcon,
   CodeIcon,
@@ -722,6 +726,40 @@ export const WorkspaceView = memo(function WorkspaceView({
   // generic name so future inspect-only telemetry doesn't have to migrate.
   const [showPreviewLogs, setShowPreviewLogs] = useState(false);
   const [inspectTab, setInspectTabRaw] = useState<InspectTab>('logs');
+  const [isAgentPanelHidden, setIsAgentPanelHidden] = useState(false);
+  const [elementTreeEditorAvailable, setElementTreeEditorAvailable] = useState(false);
+  const [elementTreeVisible, setElementTreeVisible] = useState(
+    () => localStorage.getItem('elementTreeVisible') !== '0'
+  );
+  const toggleElementTree = useCallback(() => {
+    setElementTreeVisible((visible) => {
+      localStorage.setItem('elementTreeVisible', visible ? '0' : '1');
+      return !visible;
+    });
+  }, []);
+  const elementTreeAvailable =
+    workspaceTab === 'preview' && !isPreviewHidden && elementTreeEditorAvailable;
+  const elementTreePanelVisible = elementTreeAvailable && elementTreeVisible;
+  const toggleAgentPanel = useCallback(() => {
+    if (!isAgentPanelHidden) {
+      setIsPreviewHidden(false);
+    }
+    setIsAgentPanelHidden(!isAgentPanelHidden);
+  }, [isAgentPanelHidden, setIsPreviewHidden]);
+
+  useCommands(
+    () => [
+      {
+        id: 'workspace.toggleAgentPanel',
+        title: isAgentPanelHidden ? 'Show Agent panel' : 'Hide Agent panel',
+        category: 'action',
+        when: 'project',
+        keywords: ['terminal', 'pane', 'sidebar'],
+        run: toggleAgentPanel,
+      },
+    ],
+    [isAgentPanelHidden, toggleAgentPanel]
+  );
 
   // Wrap setters with click tracking. We read previous state from the closure
   // (not a functional updater) to avoid double-firing under React StrictMode.
@@ -906,9 +944,9 @@ export const WorkspaceView = memo(function WorkspaceView({
     sessionRegistry.setTerminalTabAttention(currentProject.path, activeTerminalTab, false);
   }, [currentProject.path, activeTerminalTab, setAttentionTabs]);
 
-  // Branch chip + workspace tabs live in the single header row (left/right
-  // clusters of WorkspaceHeader). Composed here since they need git/branch +
-  // tab state, then passed in as nodes.
+  // Branch chip + workspace tabs live in the single header row. The primary
+  // Preview/Focus/Code modes occupy their own center cluster, while repository
+  // views stay with the GitHub and publishing actions on the right.
   const branchIndicatorNode =
     integrations.projectGithub?.status === 'connected' && currentBranch ? (
       <BranchIndicator
@@ -934,7 +972,7 @@ export const WorkspaceView = memo(function WorkspaceView({
       />
     ) : null;
 
-  const tabsNode = (
+  const modesNode = (
     <div className="workspace-tabs">
       {hasPreview && (
         <button
@@ -953,7 +991,10 @@ export const WorkspaceView = memo(function WorkspaceView({
           full workspace. Active whenever the preview is hidden. */}
       <button
         className={`workspace-tab ${isPreviewHidden ? 'active' : ''}`}
-        onClick={() => setIsPreviewHidden(!isPreviewHidden)}
+        onClick={() => {
+          if (!isPreviewHidden) setIsAgentPanelHidden(false);
+          setIsPreviewHidden(!isPreviewHidden);
+        }}
         title={isPreviewHidden ? 'Exit focus mode' : 'Hide preview — agent only'}
       >
         <EyeOffIcon size={14} />
@@ -970,43 +1011,52 @@ export const WorkspaceView = memo(function WorkspaceView({
         <CodeIcon size={14} />
         <span>Code</span>
       </button>
-      {integrations.projectGithub?.status === 'connected' && (
-        <>
-          <button
-            className={`workspace-tab ${workspaceTab === 'branches' && !isPreviewHidden ? 'active' : ''}`}
-            onClick={() => {
-              setIsPreviewHidden(false);
-              setWorkspaceTab('branches');
-            }}
-            title="Branches"
-            data-education-id="branches-tab"
-          >
-            <BranchIcon size={14} />
-            <span>Branches</span>
-          </button>
-          <button
-            className={`workspace-tab ${workspaceTab === 'prs' && !isPreviewHidden ? 'active' : ''}`}
-            onClick={() => {
-              setIsPreviewHidden(false);
-              setWorkspaceTab('prs');
-            }}
-            title="PRs"
-            data-education-id="prs-tab"
-          >
-            <PullRequestIcon size={14} />
-            <span>PRs</span>
-          </button>
-        </>
-      )}
     </div>
   );
+
+  const repositoryTabsNode =
+    integrations.projectGithub?.status === 'connected' ? (
+      <div className="workspace-tabs">
+        <button
+          className={`workspace-tab ${workspaceTab === 'branches' && !isPreviewHidden ? 'active' : ''}`}
+          onClick={() => {
+            setIsPreviewHidden(false);
+            setWorkspaceTab('branches');
+          }}
+          title="Branches"
+          data-education-id="branches-tab"
+        >
+          <BranchIcon size={14} />
+          <span>Branches</span>
+        </button>
+        <button
+          className={`workspace-tab ${workspaceTab === 'prs' && !isPreviewHidden ? 'active' : ''}`}
+          onClick={() => {
+            setIsPreviewHidden(false);
+            setWorkspaceTab('prs');
+          }}
+          title="PRs"
+          data-education-id="prs-tab"
+        >
+          <PullRequestIcon size={14} />
+          <span>PRs</span>
+        </button>
+      </div>
+    ) : null;
 
   const header = WorkspaceHeader({
     projectPath: currentProject.path,
     projectName: currentProject.name,
     onOpenAssetsPanel: assetsPanelModal.open,
+    assetsPanelVisible: assetsPanelModal.isOpen,
+    elementTreeVisible: elementTreePanelVisible,
+    elementTreeAvailable,
+    onToggleElementTree: toggleElementTree,
+    agentPanelVisible: !isAgentPanelHidden,
+    onToggleAgentPanel: toggleAgentPanel,
     branchIndicator: branchIndicatorNode,
-    tabs: tabsNode,
+    modes: modesNode,
+    repositoryTabs: repositoryTabsNode,
     headerExtras: (
       <PluginsDropdown
         plugins={loadedPlugins.filter((p) => !HOSTING_PLUGIN_IDS.includes(p.info.manifest.id))}
@@ -1020,11 +1070,6 @@ export const WorkspaceView = memo(function WorkspaceView({
         onOpenPluginManager={pluginManagerModal.open}
       />
     ),
-    isSidebarHidden: effectiveSidebarHidden,
-    onToggleSidebar: () => {
-      void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
-      setIsSidebarHidden(!isSidebarHidden);
-    },
     integrations,
     onGitHubStatusChange: handleGitHubStatusChange,
     onGitHubConnect: handleGitHubConnect,
@@ -1091,6 +1136,11 @@ export const WorkspaceView = memo(function WorkspaceView({
               isHomeActive={false}
               onGoHome={onGoHome}
               onOpenProjectPicker={onOpenProjectPicker}
+              isSidebarHidden={effectiveSidebarHidden}
+              onToggleSidebar={() => {
+                void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
+                setIsSidebarHidden(!isSidebarHidden);
+              }}
               projects={projectRows}
               onCloseProject={onCloseProject}
               currentProjectPath={currentProject.path}
@@ -1154,85 +1204,15 @@ export const WorkspaceView = memo(function WorkspaceView({
                   minLeft={20}
                   minRight={35}
                   rightCollapsed={isPreviewHidden}
+                  leftCollapsed={isAgentPanelHidden}
                   left={
                     <div className="terminal-pane">
                       <div className="workspace-terminal-view">
-                        <div className="terminal-tabs-bar">
-                          {/* Restart-dev-server moved to the sidebar row
-                            (Commands → Dev server). "Edit dev command" and
-                            "Project settings" moved to the ⌘K palette. */}
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              className="toolbar-icon-btn"
-                              onClick={() => void undoSnapshot()}
-                              disabled={!canUndo}
-                              title={undoTitle}
-                              aria-label="Undo"
-                            >
-                              <UndoIcon size={12} />
-                            </button>
-                            <button
-                              className="toolbar-icon-btn"
-                              onClick={() => void redoSnapshot()}
-                              disabled={!canRedo}
-                              title={redoTitle}
-                              aria-label="Redo"
-                            >
-                              <RedoIcon size={12} />
-                            </button>
-                          </div>
-                          <div style={{ flex: 1 }} />
-                          <div className="terminal-tabs-bar-right">
-                            {canSplit && (
-                              <button
-                                type="button"
-                                className="toggle-pill-btn"
-                                onClick={() =>
-                                  isSplitActive ? disableSplitView() : enableSplitView()
-                                }
-                                title={
-                                  isSplitActive
-                                    ? 'Exit side-by-side view'
-                                    : 'View agents side by side'
-                                }
-                                aria-label="Toggle side-by-side view"
-                                aria-pressed={isSplitActive}
-                              >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
-                                >
-                                  <rect x="2" y="3" width="12" height="10" rx="1.2" />
-                                  <line x1="8" y1="3" x2="8" y2="13" />
-                                </svg>
-                                <span>Split</span>
-                                <span
-                                  className={`toggle-pill-switch ${isSplitActive ? 'is-on' : ''}`}
-                                  aria-hidden
-                                />
-                              </button>
-                            )}
-                            <ToolbarDropdown
-                              agent={getActiveTabAgent()}
-                              autoAcceptMode={autoAcceptMode}
-                              onNotificationSettings={() => setShowNotificationSettings(true)}
-                              onSkills={skillsModal.open}
-                              onMcp={mcpModal.open}
-                              onAutoAcceptToggle={handleToolbarAutoAcceptToggle}
-                              onHelp={helpModal.open}
-                              terminalPlugins={getSlotPlugins('terminal')}
-                              pluginProject={pluginProject}
-                              pluginActions={pluginActions}
-                              pluginTheme={pluginTheme}
-                            />
-                          </div>
+                        <div className="terminal-agent-header panel-heading-pair">
+                          <span className="panel-heading-pair-title">Agent</span>
+                          <span className="panel-heading-pair-meta">
+                            {getActiveTabAgent().displayName}
+                          </span>
                         </div>
                         <StaleEnvBanner projectPath={currentProject.path} />
                         <div
@@ -1385,48 +1365,113 @@ export const WorkspaceView = memo(function WorkspaceView({
                         </div>
                       </div>
 
-                      {/* Screenshot cluster. Only rendered when the
-                        Preview tab is the active workspace tab and the
-                        project is a web project (same gate as the
-                        Preview iframe itself) — the shortcuts these
-                        buttons trigger only make sense when there's
-                        something to screenshot. */}
-                      {workspaceTab === 'preview' && isWebProject && (
-                        <div className="terminal-pane-footer">
-                          <button
-                            className="toolbar-icon-btn"
-                            onClick={() => void handleCaptureScreenshot()}
-                            disabled={isCapturing || isCropMode}
-                            title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
-                            data-education-id="screenshot-button"
-                          >
-                            {isCapturing ? (
-                              <Spinner size="sm" style={{ color: 'var(--accent)' }} />
-                            ) : (
-                              <CameraIcon size={14} />
-                            )}
-                            <span className="capture-label-full">Full Screenshot</span>
-                            <span className="capture-label-short">Full</span>
-                            <span className="capture-shortcut">{kbd('mod', 'shift', 'S')}</span>
-                          </button>
-                          <button
-                            className={`toolbar-icon-btn ${isCropMode ? 'is-open' : ''}`}
-                            onClick={() => setIsCropMode(!isCropMode)}
-                            disabled={isCapturing || isCropCapturing}
-                            title={`Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`}
-                            data-education-id="crop-button"
-                          >
-                            {isCropCapturing ? (
-                              <Spinner size="sm" style={{ color: 'var(--accent)' }} />
-                            ) : (
-                              <CropIcon size={14} />
-                            )}
-                            <span className="capture-label-full">Crop Screenshot</span>
-                            <span className="capture-label-short">Crop</span>
-                            <span className="capture-shortcut">{kbd('mod', 'shift', 'C')}</span>
-                          </button>
+                      <div className="terminal-pane-footer">
+                        <div className="terminal-pane-footer-left">
+                          <IconButton
+                            icon={<UndoIcon size={12} />}
+                            onClick={() => void undoSnapshot()}
+                            disabled={!canUndo}
+                            title={undoTitle}
+                            aria-label="Undo"
+                          />
+                          <IconButton
+                            icon={<RedoIcon size={12} />}
+                            onClick={() => void redoSnapshot()}
+                            disabled={!canRedo}
+                            title={redoTitle}
+                            aria-label="Redo"
+                          />
                         </div>
-                      )}
+
+                        <div className="terminal-pane-footer-center">
+                          {/* Screenshot actions only make sense when the Preview
+                            tab has a web preview to capture. */}
+                          {workspaceTab === 'preview' && isWebProject && (
+                            <>
+                              <Button
+                                onClick={() => void handleCaptureScreenshot()}
+                                disabled={isCapturing || isCropMode}
+                                title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
+                                data-education-id="screenshot-button"
+                              >
+                                {isCapturing ? (
+                                  <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
+                                ) : (
+                                  <CameraIcon size={14} />
+                                )}
+                                <span className="capture-label-full">Full Screenshot</span>
+                                <span className="capture-shortcut">{kbd('mod', 'shift', 'S')}</span>
+                              </Button>
+                              <ToggleButton
+                                pressed={isCropMode}
+                                onClick={() => setIsCropMode(!isCropMode)}
+                                disabled={isCapturing || isCropCapturing}
+                                title={`Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`}
+                                data-education-id="crop-button"
+                              >
+                                {isCropCapturing ? (
+                                  <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
+                                ) : (
+                                  <CropIcon size={14} />
+                                )}
+                                <span className="capture-label-full">Crop Screenshot</span>
+                                <span className="capture-shortcut">{kbd('mod', 'shift', 'C')}</span>
+                              </ToggleButton>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="terminal-pane-footer-right">
+                          {canSplit && (
+                            <ToggleButton
+                              type="button"
+                              pressed={isSplitActive}
+                              onClick={() =>
+                                isSplitActive ? disableSplitView() : enableSplitView()
+                              }
+                              title={
+                                isSplitActive
+                                  ? 'Exit side-by-side view'
+                                  : 'View agents side by side'
+                              }
+                              aria-label="Toggle side-by-side view"
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 16 16"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.6"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                              >
+                                <rect x="2" y="3" width="12" height="10" rx="1.2" />
+                                <line x1="8" y1="3" x2="8" y2="13" />
+                              </svg>
+                              <span>Split</span>
+                              <span
+                                className={`toggle-pill-switch ${isSplitActive ? 'is-on' : ''}`}
+                                aria-hidden
+                              />
+                            </ToggleButton>
+                          )}
+                          <ToolbarDropdown
+                            agent={getActiveTabAgent()}
+                            autoAcceptMode={autoAcceptMode}
+                            onNotificationSettings={() => setShowNotificationSettings(true)}
+                            onSkills={skillsModal.open}
+                            onMcp={mcpModal.open}
+                            onAutoAcceptToggle={handleToolbarAutoAcceptToggle}
+                            onHelp={helpModal.open}
+                            terminalPlugins={getSlotPlugins('terminal')}
+                            pluginProject={pluginProject}
+                            pluginActions={pluginActions}
+                            pluginTheme={pluginTheme}
+                          />
+                        </div>
+                      </div>
                     </div>
                   }
                   right={
@@ -1466,7 +1511,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                             isDevServerRestarting={isRestartingDevServer}
                             onSendToClaude={sendToClaude}
                             showLogs={showPreviewLogs}
-                            onToggleLogs={hasDevServer ? togglePreviewLogs : undefined}
+                            onToggleLogs={togglePreviewLogs}
                             devServerOutput={devServerOutput}
                             devServerOutputVersion={devServerOutputVersion}
                             onDevServerInput={onDevServerInput}
@@ -1486,6 +1531,8 @@ export const WorkspaceView = memo(function WorkspaceView({
                             redoTitle={redoTitle}
                             onUndo={() => void undoSnapshot()}
                             onRedo={() => void redoSnapshot()}
+                            elementTreeVisible={elementTreeVisible}
+                            onElementTreeAvailabilityChange={setElementTreeEditorAvailable}
                             previewPlugins={
                               <PluginSlot
                                 name="preview"
@@ -1545,7 +1592,6 @@ export const WorkspaceView = memo(function WorkspaceView({
           </div>
         )}
 
-        {!isCompact && header.supportPanel}
         <WorkspaceModals
           projectPath={currentProject.path}
           currentProjectPath={currentProject.path}
