@@ -40,8 +40,8 @@
 }
 
 .create-modal {
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: 16px;
   width: 90%;
   max-width: 580px;
@@ -99,7 +99,7 @@
 }
 
 .create-modal-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -108,7 +108,7 @@
   display: flex;
   gap: 0;
   margin-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .create-tab {
@@ -169,8 +169,8 @@
   white-space: normal;
   gap: var(--spacing-xs);
   padding: var(--create-card-pad-y) var(--spacing-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--create-card-radius);
   cursor: pointer;
   text-align: left;
@@ -182,11 +182,11 @@
 
 .stack-card:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .stack-card-selected {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 .stack-card-name {
@@ -223,8 +223,8 @@
   width: 20px;
   height: 20px;
   border-radius: var(--radius-full);
-  background: var(--action);
-  color: var(--action-text);
+  background: var(--accent-active);
+  color: var(--text-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -248,8 +248,8 @@
 
 .create-modal-content input {
   padding: 12px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 15px;
@@ -269,7 +269,7 @@
 }
 
 .create-modal-content .error {
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   margin: -8px 0 0 0;
 }
@@ -304,7 +304,7 @@
 /* Layout + tint for the create/import flow's <Spinner size="lg"> */
 .create-spinner {
   margin: 28px 0;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .create-status {
@@ -332,7 +332,7 @@
 }
 
 .checklist-item.done {
-  color: var(--success);
+  color: var(--accent-success);
 }
 
 .checklist-item.active {
@@ -350,8 +350,8 @@
   gap: 14px;
   padding: 16px 20px;
   margin-top: 24px;
-  background: rgba(var(--error-rgb), 0.1);
-  border: 1px solid rgba(var(--error-rgb), 0.3);
+  background: rgba(var(--accent-error-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-error-rgb), 0.3);
   border-radius: var(--radius-md);
   text-align: center;
   width: 100%;
@@ -359,15 +359,15 @@
 }
 
 .create-error p {
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   margin: 0;
 }
 
 .template-default-toggle {
   width: 100%;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: 10px 14px;
   margin-top: 16px;
@@ -416,7 +416,7 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: var(--border);
+  background: var(--border-default);
 }
 
 .template-divider span {
@@ -433,8 +433,8 @@
   justify-content: center;
   gap: 8px;
   padding: 24px 16px;
-  background: var(--bg-secondary);
-  border: 2px dashed var(--border);
+  background: var(--surface-panel);
+  border: 2px dashed var(--border-default);
   border-radius: 10px;
   cursor: pointer;
   transition:
@@ -446,11 +446,11 @@
 
 .template-dropzone:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .template-dropzone.dragging {
-  border-color: var(--accent);
+  border-color: var(--accent-active);
   background: var(--tint-subtle);
 }
 
@@ -476,7 +476,7 @@
   justify-content: space-between;
   padding: 12px 14px;
   background: var(--tint-subtle);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-active);
   border-radius: 10px;
   margin-bottom: 0;
 }
@@ -516,7 +516,7 @@
 }
 
 .template-zip-remove:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -543,8 +543,8 @@
 .create-modal-content input.tg-search-input {
   width: 100%;
   padding: 10px 34px 10px 40px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -584,7 +584,7 @@
 }
 
 .tg-search-clear:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -616,8 +616,8 @@
   height: 28px;
   padding: 0;
   border-radius: var(--radius-full);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
@@ -631,7 +631,7 @@
 }
 
 .tg-scroll-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-color: var(--text-muted);
   color: var(--text-primary);
 }
@@ -648,8 +648,8 @@
 
 .tg-card {
   flex: 0 0 calc((100% - 20px) / 3);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
@@ -664,17 +664,17 @@
 
 .tg-card:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .tg-card-selected {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 .tg-card-thumb {
   width: 100%;
   height: 80px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -730,8 +730,8 @@
   width: 20px;
   height: 20px;
   border-radius: var(--radius-full);
-  background: var(--action);
-  color: var(--action-text);
+  background: var(--accent-active);
+  color: var(--text-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -751,9 +751,9 @@
 .tg-skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    var(--bg-tertiary) 0%,
+    var(--surface-control) 0%,
     rgba(var(--white-rgb), 0.06) 50%,
-    var(--bg-tertiary) 100%
+    var(--surface-control) 100%
   );
   background-size: 200px 100%;
   animation: tg-shimmer 1.5s ease-in-out infinite;

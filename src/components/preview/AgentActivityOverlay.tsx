@@ -40,8 +40,8 @@ export function AgentActivityOverlay() {
           <svg viewBox="0 0 24 24" width="30" height="30">
             <path
               d="m4 4 7.07 17 2.51-7.39L21 11.07z"
-              fill="var(--action)"
-              stroke="var(--action-text)"
+              fill="var(--accent-active)"
+              stroke="var(--text-on-accent)"
               strokeWidth="1.5"
               strokeLinejoin="round"
             />

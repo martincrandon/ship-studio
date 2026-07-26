@@ -10,7 +10,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .device-mirror-toolbar {
@@ -19,7 +19,7 @@
   justify-content: space-between;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-sm);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .device-mirror-label {
@@ -33,9 +33,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .device-mirror-platform-btn {
@@ -59,8 +59,8 @@
 }
 
 .device-mirror-platform-btn.active {
-  background: var(--accent);
-  color: var(--action-text); /* --accent is white in this theme → needs dark text */
+  background: var(--accent-active);
+  color: var(--text-on-accent); /* --accent is white in this theme → needs dark text */
 }
 
 .device-mirror-stage {
@@ -96,8 +96,8 @@
    answerable. Kept mounted while collapsed so the build keeps running. */
 .device-mirror-build {
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  background: var(--bg-primary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
 }
@@ -109,15 +109,15 @@
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   transition: background var(--transition);
 }
 
 /* Hovering anywhere on the bar highlights the whole bar — the toggle/chevron
    suppress their own button-hover background below so it reads as one surface. */
 .device-mirror-build-header:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .device-mirror-build-toggle {
@@ -146,7 +146,7 @@
 }
 
 .device-mirror-build-toggle[data-state='launched'] {
-  color: var(--success);
+  color: var(--accent-success);
 }
 
 .device-mirror-build-title {
@@ -160,7 +160,7 @@
   flex-shrink: 0;
   padding: 4px 10px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
@@ -173,7 +173,7 @@
 
 .device-mirror-build-send:hover {
   color: var(--text-primary);
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .device-mirror-build-chevron {
@@ -206,11 +206,11 @@
   margin: 0;
   padding: var(--spacing-xs) var(--spacing-md);
   font-size: var(--font-size-sm);
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 
 .device-mirror-build-hint code {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-code);
 }
 
 /* Fixed height so xterm has a sized container to fit into. */

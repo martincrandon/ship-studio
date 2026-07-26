@@ -37,8 +37,8 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
   cursor: pointer;
   transition:
@@ -50,11 +50,11 @@
 
 .import-owner-btn:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .import-owner-btn.selected {
-  border-color: var(--accent);
+  border-color: var(--accent-active);
   background: var(--tint-subtle);
 }
 
@@ -72,7 +72,7 @@
   justify-content: center;
   font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--text-bright);
+  color: var(--text-inverse);
   flex-shrink: 0;
 }
 
@@ -119,8 +119,8 @@
 .import-search input {
   width: 100%;
   padding: 10px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-size-lg);
@@ -151,7 +151,7 @@
   margin-bottom: 16px;
   padding-right: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 .import-repo-item {
@@ -159,8 +159,8 @@
   flex-direction: column;
   gap: 4px;
   padding: 10px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition:
@@ -172,11 +172,11 @@
 
 .import-repo-item:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .import-repo-item.selected {
-  border-color: var(--accent);
+  border-color: var(--accent-active);
   background: var(--tint-subtle);
 }
 
@@ -206,7 +206,7 @@
 }
 
 .import-repo-badge.lang {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-muted);
 }
 
@@ -251,7 +251,7 @@
 
 .workspace-picker-header {
   padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .workspace-picker-title {
@@ -288,7 +288,7 @@
   gap: var(--spacing-sm);
   padding: 10px var(--spacing-md);
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   cursor: pointer;
   text-align: left;
@@ -298,12 +298,12 @@
 }
 
 .workspace-picker-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .workspace-picker-item.selected {
-  border-color: var(--accent);
-  background: var(--bg-secondary);
+  border-color: var(--accent-active);
+  background: var(--surface-panel);
 }
 
 .workspace-picker-item.is-root {
@@ -322,7 +322,7 @@
   height: 28px;
   flex-shrink: 0;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
 }
 
@@ -357,7 +357,7 @@
 }
 
 .workspace-picker-item-sub-mono {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 
@@ -371,20 +371,20 @@
 .workspace-picker-item-script {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-code);
 }
 
 .workspace-picker-item-port {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-code);
 }
 
 .workspace-picker-footer {
@@ -392,6 +392,6 @@
   justify-content: flex-end;
   gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
-  border-top: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-control);
 }

@@ -4,15 +4,15 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   min-height: 0;
 }
 
 .browser-tools-tabs {
   display: flex;
   align-items: stretch;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
   padding-right: var(--spacing-md);
 }
@@ -52,7 +52,7 @@
   right: 0;
   bottom: -1px;
   height: 2px;
-  background: var(--accent);
+  background: currentColor;
   border-radius: 2px 2px 0 0;
 }
 
@@ -63,7 +63,7 @@
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
@@ -90,7 +90,7 @@
 .browser-tools-clear {
   padding: 4px 10px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
@@ -103,7 +103,7 @@
 .browser-tools-send:hover:not(:disabled),
 .browser-tools-clear:hover {
   color: var(--text-primary);
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .browser-tools-send:disabled {
@@ -168,7 +168,7 @@
   align-items: flex-start;
   gap: var(--spacing-sm);
   padding: 4px var(--spacing-md);
-  border-bottom: 1px solid rgba(var(--border-rgb), 0.3);
+  border-bottom: 1px solid rgba(var(--border-default-rgb), 0.3);
   line-height: 1.5;
 }
 
@@ -233,8 +233,8 @@
   grid-template-columns: 70px 70px 1fr 80px;
   gap: var(--spacing-md);
   padding: 6px var(--spacing-md);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -254,13 +254,13 @@
   grid-template-columns: 70px 70px 1fr 80px;
   gap: var(--spacing-md);
   padding: 4px var(--spacing-md);
-  border-bottom: 1px solid rgba(var(--border-rgb), 0.3);
+  border-bottom: 1px solid rgba(var(--border-default-rgb), 0.3);
   color: var(--text-primary);
   cursor: default;
 }
 
 .network-row:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .network-col-method {
@@ -309,7 +309,7 @@
   flex-direction: column;
   font-family: 'JetBrainsMono NF', Menlo, Monaco, 'Courier New', monospace;
   font-size: var(--font-size-base);
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 .elements-truncated-banner {
@@ -349,7 +349,7 @@
 }
 
 .el-row.has-children:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .el-row-text {

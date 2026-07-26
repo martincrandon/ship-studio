@@ -102,10 +102,10 @@ export function BuildTerminal({
       scrollback: 5000,
       allowProposedApi: true,
       theme: {
-        background: '#1e1e1e',
-        foreground: '#cccccc',
+        background: '#141414',
+        foreground: '#bcbcbc',
         cursor: '#ffffff',
-        selectionBackground: '#3a3d41',
+        selectionBackground: '#393939',
       },
     });
     const fit = new FitAddon();

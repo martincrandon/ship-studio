@@ -7,9 +7,10 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
-  font-size: var(--font-size-base);
+  background: var(--surface-panel);
+  border-right: var(--stroke-1) solid var(--border-subtle);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-11);
 }
 
 .ss-tree-panel__header {
@@ -19,8 +20,8 @@
   flex-shrink: 0;
   padding: 0 var(--spacing-md);
   /* Same surface as the preview toolbar so the bars read as one row. */
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: var(--stroke-1) solid var(--border-subtle);
 }
 
 .ss-tree-panel__title {
@@ -35,7 +36,7 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-md);
 }
 .ss-tree-panel__mode {
@@ -91,16 +92,16 @@
   gap: var(--spacing-xs);
   flex-shrink: 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 .ss-htmltab__tag {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 .ss-htmltab__cls {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
@@ -129,7 +130,7 @@
   gap: var(--spacing-xs);
   flex-shrink: 0;
   padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .ss-tree-row {
@@ -145,13 +146,13 @@
 }
 
 .ss-tree-row:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .ss-tree-row.selected {
-  background: var(--bg-tertiary);
+  background: var(--surface-selected);
   color: var(--text-primary);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent-active);
 }
 
 .ss-tree-chevron {
@@ -181,14 +182,14 @@
 .ss-tree-tag {
   flex-shrink: 0;
   color: var(--text-primary);
-  font-family: monospace;
+  font-family: var(--font-code);
 }
 
 .ss-tree-class {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-code);
 }
 
 .ss-tree-text {

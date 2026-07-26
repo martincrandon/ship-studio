@@ -47,17 +47,17 @@ export const ssEditorTheme = EditorView.theme(
     '&': {
       height: '100%',
       color: 'var(--text-primary)',
-      backgroundColor: 'var(--bg-tertiary)',
+      backgroundColor: 'var(--surface-control)',
       fontSize: 'var(--font-size-xs)',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
-      fontFamily: 'var(--font-mono, monospace)',
+      fontFamily: 'var(--font-code)',
       lineHeight: '1.6',
       overflow: 'auto',
       // Custom, theme-matched scrollbars (never the device's white default).
       scrollbarWidth: 'thin',
-      scrollbarColor: 'var(--border) transparent',
+      scrollbarColor: 'var(--border-default) transparent',
       // Promote to its own compositing layer so the native caret has a clean
       // backing store and paints inside the panel's fixed, rounded, clipped box
       // (without this, WebKit drops the caret entirely — see .cm-content).
@@ -66,9 +66,9 @@ export const ssEditorTheme = EditorView.theme(
     '.cm-scroller::-webkit-scrollbar': { width: '10px', height: '10px' },
     '.cm-scroller::-webkit-scrollbar-track': { background: 'transparent' },
     '.cm-scroller::-webkit-scrollbar-thumb': {
-      background: 'var(--border)',
+      background: 'var(--border-default)',
       borderRadius: '999px',
-      border: '2px solid var(--bg-tertiary)',
+      border: '2px solid var(--surface-control)',
     },
     '.cm-scroller::-webkit-scrollbar-thumb:hover': { background: 'var(--text-muted)' },
     '.cm-scroller::-webkit-scrollbar-corner': { background: 'transparent' },
@@ -77,18 +77,18 @@ export const ssEditorTheme = EditorView.theme(
     // editor is promoted to its own backing layer — see `.cm-scroller` above.
     '.cm-content': {
       padding: 'var(--spacing-sm) 0',
-      caretColor: 'var(--text-bright, #fff)',
+      caretColor: 'var(--text-inverse, #fff)',
     },
     '.cm-line': { padding: '0 var(--spacing-sm)' },
     '.cm-cursor, .cm-cursor-primary': {
-      borderLeftColor: 'var(--text-bright, #fff)',
+      borderLeftColor: 'var(--text-inverse, #fff)',
       borderLeftWidth: '2px',
     },
     '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--tint)' },
     '&.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--tint-strong)' },
     '.cm-activeLine': { backgroundColor: 'transparent' },
     '.cm-gutters': {
-      backgroundColor: 'var(--bg-tertiary)',
+      backgroundColor: 'var(--surface-control)',
       color: 'var(--text-muted)',
       border: 'none',
     },
@@ -125,7 +125,7 @@ export const codeTabEditorTheme = EditorView.theme({
     backgroundColor: 'transparent',
   },
   '.cm-scroller': {
-    fontFamily: 'var(--font-mono, monospace)',
+    fontFamily: 'var(--font-code)',
     lineHeight: '24px',
   },
   '.cm-content': { paddingTop: '12px' },
@@ -141,9 +141,9 @@ export const codeTabEditorTheme = EditorView.theme({
   // divider, numbers right-aligned 12px from the divider in text-muted — so the
   // code doesn't shift horizontally when toggling Edit on/off.
   '.cm-gutters': {
-    backgroundColor: 'var(--bg-secondary)',
+    backgroundColor: 'var(--surface-panel)',
     color: 'var(--text-muted)',
-    borderRight: '1px solid var(--border)',
+    borderRight: '1px solid var(--border-default)',
   },
   '.cm-lineNumbers .cm-gutterElement': {
     minWidth: '52px',

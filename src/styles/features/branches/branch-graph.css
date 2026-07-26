@@ -1,8 +1,8 @@
 /* Branch graph visual — label gutter + SVG rails, elbows, and PR arrows. */
 
 .branch-graph {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -18,7 +18,7 @@
 /* Header divider only when the body below it is visible — collapsed, it
    doubled up with the card's own bottom border. */
 .branch-graph.is-open .branch-graph-header {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .branch-graph-title {
@@ -52,7 +52,7 @@
 
 .branch-graph-refresh:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .branch-graph-refresh:disabled {
@@ -83,8 +83,8 @@
   appearance: none;
   -webkit-appearance: none;
   padding: 4px 22px 4px 8px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -97,7 +97,7 @@
 }
 
 .branch-graph-default-base-select:focus {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 .branch-graph-select-caret {
@@ -162,7 +162,7 @@
 }
 
 .branch-graph-row-here {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 .branch-graph-row-meta {
@@ -182,7 +182,7 @@
    the branch you're on, and an open PR. A wall of green rails made green
    meaningless (and the graph unreadable) on branch-heavy repos. */
 .branch-graph-rail {
-  stroke: var(--border);
+  stroke: var(--border-default);
   stroke-width: 1.5;
   fill: none;
   stroke-linecap: round;
@@ -195,14 +195,14 @@
 }
 
 .branch-graph-rail.is-current {
-  stroke: var(--action);
+  stroke: var(--accent-active);
   stroke-width: 2.5;
   opacity: 1;
 }
 
 /* Fork elbows */
 .branch-graph-elbow {
-  stroke: var(--border);
+  stroke: var(--border-default);
   stroke-width: 1.5;
   fill: none;
 }
@@ -210,12 +210,12 @@
 /* Nodes */
 .branch-graph-node {
   fill: var(--text-muted);
-  stroke: var(--bg-secondary);
+  stroke: var(--surface-panel);
   stroke-width: 2;
 }
 
 .branch-graph-node.is-current {
-  fill: var(--action);
+  fill: var(--accent-active);
 }
 
 /* PR marker — the one deliberately loud element besides the current branch */
@@ -224,16 +224,16 @@
 }
 
 .branch-graph-pr-chip {
-  fill: var(--action);
+  fill: var(--accent-active);
   stroke: none;
 }
 
 .branch-graph-pr:hover .branch-graph-pr-chip {
-  fill: var(--action-hover);
+  fill: var(--accent-active-hover);
 }
 
 .branch-graph-pr-text {
-  fill: var(--action-text);
+  fill: var(--text-on-accent);
   font-size: var(--font-size-xs);
   font-weight: 700;
   text-anchor: middle;
@@ -281,7 +281,7 @@
 
 .branch-graph-count {
   padding: 1px 7px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
@@ -289,7 +289,7 @@
 
 .branch-graph-trimmed {
   padding: var(--spacing-sm) 14px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   font-size: var(--font-size-sm);
   color: var(--text-muted);
 }

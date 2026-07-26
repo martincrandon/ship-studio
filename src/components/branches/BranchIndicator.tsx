@@ -22,6 +22,7 @@ import { Spinner } from '../primitives/Spinner';
 import { ChangedFile, ChangeStatus } from '../../lib/git';
 import { discardChanges } from '../../lib/branches';
 import { DiffModal } from './DiffModal';
+import { Button } from '../primitives/Button';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 
@@ -195,8 +196,7 @@ export function BranchIndicator({
       </button>
 
       {onPullLatest && (
-        <button
-          className="branch-pull-button"
+        <Button
           title="Pull the latest changes from GitHub"
           aria-label="Pull the latest changes from GitHub"
           disabled={isPulling}
@@ -207,7 +207,7 @@ export function BranchIndicator({
         >
           {isPulling ? <Spinner size="sm" /> : <PullIcon size={13} />}
           <span>Pull</span>
-        </button>
+        </Button>
       )}
 
       {showDropdown && changedFiles.length > 0 && (

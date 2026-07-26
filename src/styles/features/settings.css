@@ -1,7 +1,7 @@
 /* Settings Modal */
 .settings-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   width: 420px;
   max-width: 90vw;
@@ -93,8 +93,8 @@
   width: 100%;
   margin-top: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   text-align: left;
@@ -106,7 +106,7 @@
 }
 
 .settings-folder-field:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--accent-active);
   color: var(--text-primary);
 }
 
@@ -130,7 +130,7 @@
 }
 
 .settings-folder-field:hover:not(:disabled) :last-child {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .settings-folder-reset {
@@ -197,8 +197,8 @@
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   position: relative;
   transition:
     background 0.2s,
@@ -206,8 +206,8 @@
 }
 
 .settings-toggle.on .settings-toggle-track {
-  background: var(--action);
-  border-color: var(--action);
+  background: var(--accent-active);
+  border-color: var(--accent-active);
 }
 
 .settings-toggle-thumb {
@@ -226,6 +226,6 @@
 
 .settings-toggle.on .settings-toggle-thumb {
   transform: translateX(16px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
   box-shadow: 0 1px 3px var(--overlay-30);
 }

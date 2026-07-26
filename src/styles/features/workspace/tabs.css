@@ -54,12 +54,12 @@
   right: 0;
   bottom: -1px;
   height: 2px;
-  background: var(--accent);
+  background: currentColor;
   border-radius: 2px 2px 0 0;
 }
 
 .workspace-tab.attention {
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 
 .workspace-tab svg {
@@ -95,8 +95,8 @@
 
 .open-in-browser-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--surface-control);
+  border-color: var(--border-default);
 }
 
 .open-in-browser-btn svg {
@@ -127,15 +127,15 @@
 
 .hide-preview-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--surface-control);
+  border-color: var(--border-default);
 }
 
 /* Preview Tabs Divider */
 .preview-tabs-divider {
   width: 1px;
   height: 20px;
-  background: var(--border);
+  background: var(--border-default);
   margin: 0 8px;
   flex-shrink: 0;
 }
@@ -153,8 +153,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-base);
@@ -170,7 +170,7 @@
 
 .preview-action-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-control-hover);
 }
 
 .preview-action-btn svg {
@@ -185,8 +185,8 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-muted);
   cursor: pointer;
@@ -200,7 +200,7 @@
 
 .preview-action-btn-icon:hover {
   color: var(--text-secondary);
-  background: var(--border);
+  background: var(--border-default);
   border-color: var(--text-muted);
 }
 
@@ -217,8 +217,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-base);
@@ -235,7 +235,7 @@
 
 .show-preview-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--surface-control-hover);
 }
 
 .show-preview-btn svg {

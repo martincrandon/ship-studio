@@ -3,8 +3,8 @@
 .update-banner {
   position: relative;
   z-index: 10;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   /* Top padding clears the macOS traffic lights (overlay title bar) */
   padding: 40px 16px 12px;
 }
@@ -23,8 +23,8 @@
 }
 
 .update-banner-badge {
-  background: var(--action);
-  color: var(--action-text);
+  background: var(--accent-active);
+  color: var(--text-on-accent);
   font-size: var(--font-size-sm);
   font-weight: 600;
   padding: 3px 8px;
@@ -54,14 +54,14 @@
 .update-banner-progress {
   width: 140px;
   height: 6px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .update-banner-progress-bar {
   height: 100%;
-  background: var(--action);
+  background: var(--accent-active);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -74,9 +74,9 @@
 }
 
 .update-banner-error {
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-base);
-  font-family: 'JetBrainsMono NF', monospace;
+  font-family: var(--font-code);
   max-width: 400px;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,7 +1,25 @@
+/* Geist is the Figma UI/code family. The Nerd Font remains separate because
+ * terminal sessions and symbol-heavy output depend on its glyph coverage. */
+@font-face {
+  font-family: 'Geist';
+  src: url('../../assets/fonts/Geist-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('../../assets/fonts/GeistMono-Variable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* JetBrains Mono Nerd Font for terminal - using WOFF2 format for better web support */
 @font-face {
   font-family: 'JetBrainsMono NF';
-  src: url('../assets/fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+  src: url('../../assets/fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: block;
@@ -9,7 +27,7 @@
 
 @font-face {
   font-family: 'JetBrainsMono NF';
-  src: url('../assets/fonts/JetBrainsMonoNerdFontMono-Bold.woff2') format('woff2');
+  src: url('../../assets/fonts/JetBrainsMonoNerdFontMono-Bold.woff2') format('woff2');
   font-weight: bold;
   font-style: normal;
   font-display: block;
@@ -28,37 +46,213 @@
  * ============================================================================
  */
 :root {
+  /* ========================================================================
+   * Figma primitive tokens
+   * ========================================================================
+   * These are the imported values from the Ship Studio Variables file. They
+   * describe palette, scale, typography, and effect ingredients only. Product
+   * styles should consume the semantic roles below instead of these directly.
+   */
+  --color-gray-950: #141414;
+  --color-gray-900: #1a1a1a;
+  --color-gray-850: #282828;
+  --color-gray-800: #303030;
+  --color-gray-750: #393939;
+  --color-gray-700: #4e4e4e;
+  --color-gray-600: #767676;
+  --color-gray-500: #868686;
+  --color-gray-400: #979797;
+  --color-gray-300: #a9a9a9;
+  --color-gray-200: #bcbcbc;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-white-15: rgba(255, 255, 255, 0.15);
+  --color-black-13: rgba(0, 0, 0, 0.075);
+  --color-black-38: rgba(0, 0, 0, 0.38);
+  --color-black-75: rgba(0, 0, 0, 0.75);
+  --color-red-traffic: #ff5f56;
+  --color-amber-traffic: #f6bf3e;
+  --color-green-traffic: #46e76f;
+  --color-green-500: #46e76f;
+  --color-green-600: #35d35d;
+  --color-green-700: #26bf4f;
+  --color-amber-500: #e89a1c;
+  /* REVIEW: no matching Figma error semantic was observed; these legacy
+   * values remain explicit until the error palette is confirmed. */
+  --color-red-error: #f44747;
+  --color-red-error-light: #ef4444;
+  --color-red-error-deep: #dc2626;
+  --color-purple-variable: #734ce0;
+  --color-purple-variable-hover: #815beb;
+  --color-blue-property: #006acc;
+  --color-blue-border: #007df0;
+  --color-blue-property-text: #6bb5ff;
+  --color-purple-property-text: #b89eff;
+  --color-green-tag: #3fce90;
+  --color-amber-class: #ebab6b;
+  --color-magenta-media: #cc26a8;
+  --color-pink-media-text: #ff6bdf;
+  --color-swatch-blue: #007aff;
+  --color-swatch-green: #34c759;
+  --color-swatch-yellow: #ffcc00;
+  --color-swatch-red: #ff3b30;
+  --color-swatch-sky: #7ac6f5;
+  --color-swatch-purple: #af52de;
+  --color-swatch-indigo: #5856d6;
+  --color-swatch-pink: #ff2e55;
+
+  --space-05: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-6: 6px;
+  --space-9: 9px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --stroke-1: 1px;
+  --stroke-2: 2px;
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-12: 12px;
+  --radius-999: 999px;
+  --font-family-geist: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-family-nerd-mono: 'JetBrainsMono NF', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --font-size-10: 10px;
+  --font-size-11: 11px;
+  --font-size-12: 12px;
+  --font-size-13: 13px;
+  --font-size-16: 16px;
+  --size-control-standard: 30px;
+  --size-control-compact: 20px;
+  --size-sidebar-project-shortcut: 24px;
+  --size-sidebar-project: 214px;
+  --size-sidebar-project-row: 46px;
+  --size-sidebar-section-row: 22px;
+  --size-sidebar-shortcut: 21px;
+  --size-icon-sm: 14px;
+  --size-icon-md: 18px;
+  --size-color-picker-width: 336px;
+  --size-color-picker-surface: 212px;
+  --font-weight-400: 400;
+  --font-weight-500: 500;
+  --font-weight-600: 600;
+  --font-weight-700: 700;
+  --line-height-ui: 1;
+  --line-height-code: 1.3;
+  --tracking-code: -0.44px;
+
+  /* ========================================================================
+   * Figma semantic tokens
+   * ========================================================================
+   * Roles are the application-facing contract. Component tokens below are
+   * also semantic: they describe intent/state and reference these roles.
+   */
+  --surface-app: var(--color-gray-950);
+  --surface-panel: var(--color-gray-900);
+  --surface-control: var(--color-gray-850);
+  --surface-control-hover: var(--color-gray-800);
+  --surface-selected: var(--color-gray-750);
+  --surface-recessed: var(--color-gray-950);
+  --surface-terminal-input: var(--color-gray-750);
+  --surface-canvas: var(--color-white);
+  --surface-warning: rgba(232, 154, 28, 0.15);
+  --text-primary: var(--color-gray-200);
+  --text-secondary: var(--color-gray-400);
+  --text-muted: var(--color-gray-600);
+  --text-faint: var(--color-gray-700);
+  --text-terminal: var(--color-gray-500);
+  --text-terminal-strong: var(--color-gray-300);
+  --text-inverse: var(--color-white);
+  --border-default: var(--color-gray-850);
+  --border-subtle: var(--color-gray-800);
+  --border-strong: var(--color-gray-750);
+  --accent-active: var(--color-green-500);
+  --accent-active-hover: var(--color-green-600);
+  --accent-success: var(--color-green-600);
+  --accent-warning: var(--color-amber-500);
+  --accent-error: var(--color-red-error);
+  --accent-error-light: var(--color-red-error-light);
+  --accent-error-deep: var(--color-red-error-deep);
+  --accent-warning-light: var(--accent-warning);
+  --accent-warning-light-rgb: 232, 154, 28;
+  --text-on-accent: var(--color-gray-950);
+  --radius-control: var(--radius-6);
+  --radius-card: var(--radius-8);
+  --space-control-gap: var(--space-6);
+  --control-height-standard: var(--size-control-standard);
+  --control-height-compact: var(--size-control-compact);
+  --popover-color-picker-width: var(--size-color-picker-width);
+  --color-picker-surface-height: var(--size-color-picker-surface);
+  --font-ui: var(--font-family-geist);
+  --font-code: var(--font-family-geist-mono);
+  --font-symbol: var(--font-family-nerd-mono);
+  --shadow-button: 0 0.5px 1px var(--color-black-75), inset 0 0.5px 0.5px var(--color-white-15);
+  --shadow-window: 0 12px 28px var(--color-black-38);
+  --shadow-input-inset:
+    inset 0 1px 1px var(--color-black-13), inset 0 3px 3px var(--color-black-13),
+    inset 0 4px 4px var(--color-black-13), inset 0 8px 8px var(--color-black-13),
+    inset 0 12px 12px var(--color-black-13), inset 0 16px 16px var(--color-black-13);
+  --accent-active-rgb: 70, 231, 111;
+  --accent-success-rgb: 53, 211, 93;
+  --accent-warning-rgb: 232, 154, 28;
+  --accent-error-rgb: 244, 71, 71;
+  --accent-error-light-rgb: 239, 68, 68;
+  --accent-error-deep-rgb: 220, 38, 38;
+  --button-surface-default: var(--surface-control);
+  --button-surface-hover: var(--surface-control-hover);
+  --button-surface-selected: var(--surface-selected);
+  --button-text-default: var(--text-secondary);
+  --button-text-hover: var(--text-primary);
+  --button-border-solid: transparent;
+  --button-border: var(--border-default);
+  --button-border-outline: var(--border-strong);
+  --button-height: var(--control-height-standard);
+  --button-height-compact: var(--control-height-compact);
+  --button-padding-inline: var(--space-2);
+  --button-gap: var(--space-control-gap);
+  --button-radius: var(--radius-control);
+  --button-font-size: var(--font-size-11);
+  --button-font-weight: var(--font-weight-500);
+  --button-shadow: var(--shadow-button);
+  --button-primary-start: var(--color-green-600);
+  --button-primary-end: var(--color-green-700);
+  --button-variable-surface: var(--color-purple-variable);
+  --button-variable-hover: var(--color-purple-variable-hover);
+  --button-warning-surface: var(--surface-warning);
+  --button-warning-text: var(--accent-warning);
+
   /* Surfaces */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #2d2d2d;
+  --bg-primary: var(--surface-app);
+  --bg-secondary: var(--surface-panel);
+  --bg-tertiary: var(--surface-control);
   /* Recessed wells: terminal panes, log output, code editors */
-  --bg-deep: #1a1a1a;
+  --bg-deep: var(--surface-recessed);
 
   /* Text */
-  --text-primary: #cccccc;
-  --text-secondary: #9d9d9d;
-  --text-muted: #6d6d6d;
+  /* --text-primary/secondary/muted are canonical semantic tokens above. */
   /* Pure white — high-emphasis text/icons on dark surfaces */
-  --text-bright: #ffffff;
+  --text-bright: var(--text-inverse);
 
   /* Brand / interactive */
-  --accent: #ffffff;
-  --accent-hover: #e0e0e0;
-  --action: #54e36e;
-  --action-hover: #45c55d;
-  --action-text: #1e1e1e;
+  --accent: var(--accent-active);
+  --accent-hover: var(--accent-active-hover);
+  --action: var(--accent-active);
+  --action-hover: var(--accent-active-hover);
+  --action-text: var(--text-on-accent);
 
   /* Status colors (light variants for tinted backgrounds / pill states) */
-  --success: #4ecdc4;
-  --success-light: #22c55e;
-  --warning: #f59e0b;
-  --warning-light: #fbbf24;
-  --error: #f44747;
-  --error-light: #ef4444;
+  --success: var(--accent-success);
+  --success-light: var(--accent-success);
+  --warning: var(--accent-warning);
+  --warning-light: var(--accent-warning);
+  --error: var(--accent-error);
+  --error-light: var(--accent-error-light);
 
   /* Deep red — destructive/armed states (delete confirmation, publish errors) */
-  --error-deep: #dc2626;
+  --error-deep: var(--accent-error-deep);
 
   /* Modified-state yellow (git modified badges, needs-attention markers) */
   --modified-yellow: #eab308;
@@ -82,21 +276,21 @@
 
   /* RGB triplets — for alpha tints only: rgba(var(--error-rgb), 0.1).
    * Keep each in sync with its solid token above. */
-  --action-rgb: 84, 227, 110;
-  --success-rgb: 78, 205, 196;
-  --success-light-rgb: 34, 197, 94;
-  --action-rgb: 84, 227, 110;
-  --warning-rgb: 245, 158, 11;
-  --warning-light-rgb: 251, 191, 36;
-  --error-rgb: 244, 71, 71;
-  --error-light-rgb: 239, 68, 68;
-  --error-deep-rgb: 220, 38, 38;
+  --action-rgb: var(--accent-active-rgb);
+  --success-rgb: var(--accent-success-rgb);
+  --success-light-rgb: var(--accent-success-rgb);
+  --warning-rgb: var(--accent-warning-rgb);
+  --warning-light-rgb: var(--accent-warning-rgb);
+  --error-rgb: var(--accent-error-rgb);
+  --error-light-rgb: var(--accent-error-light-rgb);
+  --error-deep-rgb: var(--accent-error-deep-rgb);
   --modified-yellow-rgb: 234, 179, 8;
   --info-rgb: 59, 130, 246;
   --info-light-rgb: 96, 165, 250;
   --purple-rgb: 168, 85, 247;
   --purple-light-rgb: 167, 139, 250;
-  --border-rgb: 60, 60, 60;
+  --border-rgb: 40, 40, 40;
+  --border-default-rgb: 40, 40, 40;
   --white-rgb: 255, 255, 255;
   --black-rgb: 0, 0, 0;
 
@@ -133,30 +327,30 @@
   --code-comment: #6a9955;
 
   /* Structure */
-  --border: #3c3c3c;
+  --border: var(--border-default);
   /* Hover states for list rows / tabs / bordered cards. These names were
    * referenced (undefined) for months — hovers silently rendered transparent.
    * Defined conservatively as aliases; tune freely. */
-  --bg-hover: var(--bg-tertiary);
-  --border-hover: var(--text-muted);
+  --bg-hover: var(--surface-control-hover);
+  --border-hover: var(--border-strong);
 
   /* Spacing scale (use for padding, margin, gap) */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 12px;
-  --spacing-lg: 16px;
-  --spacing-xl: 24px;
-  --spacing-2xl: 32px;
+  --spacing-xs: var(--space-1);
+  --spacing-sm: var(--space-2);
+  --spacing-md: var(--space-12);
+  --spacing-lg: var(--space-16);
+  --spacing-xl: var(--space-24);
+  --spacing-2xl: var(--space-32);
 
   /* Border radius scale */
-  --radius-sm: 4px;
-  --radius: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: var(--radius-4);
+  --radius: var(--radius-control);
+  --radius-md: var(--radius-card);
+  --radius-lg: var(--radius-12);
   /* Pill shape for wide elements (chips, badges). --radius-full is 50% and
      only correct for square elements (circles) — on a wide chip it draws an
      ellipse. */
-  --radius-pill: 999px;
+  --radius-pill: var(--radius-999);
   --radius-full: 50%;
 
   /* Z-index scale (use these — never raw numbers)
@@ -175,9 +369,10 @@
      and the preview grid column that hosts it when pinned (preview.css).
      MUST match PANEL_WIDTH in VisualEditorPanel.tsx. */
   --editor-panel-w: 264px;
-  /* Preview toolbar height — also sizes the pinned editor panel's header so
-     the two bars line up. */
-  --preview-toolbar-h: 47px;
+  /* Standard fixed panel-header height. Preview chrome and pinned editor
+     headers share it so adjacent panels remain aligned. */
+  --panel-header-h: 47px;
+  --preview-toolbar-h: var(--panel-header-h);
   /* Element tree (navigator) panel width — the preview's left grid column in
      fullscreen edit mode. The Code (markup-edit) view widens to --tree-code-w
      so hand-editing HTML isn't cramped. */
@@ -210,7 +405,9 @@
   --transition-slow: 0.3s ease;
 
   /* Typography */
-  --font-mono: 'JetBrainsMono NF', 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* Legacy --font-mono is now Geist Mono. Terminal instances that need Nerd
+   * glyphs keep using --font-symbol or their explicit loaded font. */
+  --font-mono: var(--font-code);
 
   /* Type scale — dense desktop UI, hence 1px steps at the small end.
    * Off-scale sizes (9px, 15px, 17px…) are migration debt: round to the
@@ -230,6 +427,35 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Reusable panel heading with lighter inline context, e.g. "Agent  Codex".
+   Containers own their surface, border, and padding; this utility owns only
+   the paired text layout and typography. */
+.panel-heading-pair {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.panel-heading-pair-title,
+.panel-heading-pair-meta {
+  font-size: var(--font-size-xl);
+  line-height: 1.25;
+}
+
+.panel-heading-pair-title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.panel-heading-pair-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 * {
@@ -252,7 +478,7 @@
 }
 
 .os-theme-shipstudio.os-scrollbar .os-scrollbar-handle {
-  background: var(--border);
+  background: var(--border-default);
   transition: background-color 0.2s ease;
 }
 
@@ -273,15 +499,16 @@ body,
 }
 
 html {
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
-    'Helvetica Neue', sans-serif;
-  background: var(--bg-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-11);
+  line-height: var(--line-height-ui);
+  background: var(--surface-app);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Themed scrollbars everywhere. Without a global default, WebKit paints the
@@ -299,7 +526,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-default);
   border-radius: 999px; /* css-ok: pill thumb */
   border: 2px solid transparent; /* css-ok: inset gutter */
   background-clip: padding-box;
@@ -389,43 +616,51 @@ body.compact-mode-active html {
 button {
   cursor: pointer;
   border: none;
-  border-radius: var(--radius);
-  font-size: var(--font-size-lg);
-  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-12);
+  line-height: var(--line-height-ui);
+  padding: 0 var(--space-16);
+  min-height: var(--control-height-standard);
   transition:
-    background-color 0.2s,
-    color 0.2s,
-    border-color 0.2s,
-    opacity 0.2s;
-  background: var(--bg-tertiary);
+    background-color var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    opacity var(--transition),
+    transform var(--transition);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 button:hover {
-  background: var(--border);
+  background: var(--surface-control-hover);
 }
 
 .btn-primary {
-  background: var(--action);
-  color: var(--action-text);
-  font-weight: 500;
+  background: var(--accent-active);
+  color: var(--text-on-accent);
+  border: var(--stroke-1) solid transparent;
+  box-shadow: var(--shadow-button);
+  font-weight: var(--font-weight-500);
 }
 
 .btn-primary:hover {
-  background: var(--action-hover);
-  color: var(--action-text);
+  background: var(--accent-active-hover);
+  color: var(--text-on-accent);
 }
 
 .btn-secondary {
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border);
-  font-weight: 500;
+  border: var(--stroke-1) solid var(--border-default);
+  box-shadow: var(--shadow-button);
+  font-weight: var(--font-weight-500);
 }
 
 .btn-secondary:hover {
-  background: var(--border);
+  background: transparent;
   color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .btn-icon {
@@ -440,15 +675,17 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 28px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  gap: var(--button-gap);
+  padding: 0 var(--button-padding-inline);
+  height: var(--button-height);
+  background: var(--button-surface-default);
+  border: var(--stroke-1) solid var(--button-border-solid);
+  border-radius: var(--button-radius);
+  color: var(--button-text-default);
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size);
   cursor: pointer;
+  box-shadow: var(--button-shadow);
   white-space: nowrap;
   transition:
     background-color 0.15s,
@@ -457,9 +694,9 @@ button:hover {
 }
 
 .toolbar-icon-btn:hover:not(:disabled) {
-  background: var(--border);
-  color: var(--text-primary);
-  border-color: var(--text-muted);
+  background: var(--button-surface-hover);
+  color: var(--button-text-hover);
+  border-color: var(--button-border-solid);
 }
 
 .toolbar-icon-btn:disabled {
@@ -480,9 +717,9 @@ button:hover {
    introducing a separate color accent. */
 .toolbar-icon-btn.is-open,
 .toolbar-icon-btn.is-open:hover {
-  background: var(--border);
+  background: var(--surface-selected);
   color: var(--text-primary);
-  border-color: var(--text-muted);
+  border-color: var(--border-strong);
 }
 
 .toolbar-icon-btn.is-open svg {
@@ -497,13 +734,15 @@ button:hover {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  height: var(--button-height);
+  padding: 0 var(--button-padding-inline);
+  background: var(--button-surface-default);
+  border: var(--stroke-1) solid var(--button-border-solid);
+  border-radius: var(--button-radius);
+  color: var(--button-text-default);
+  font-size: var(--button-font-size);
   cursor: pointer;
+  box-shadow: var(--button-shadow);
   white-space: nowrap;
   transition:
     background var(--transition),
@@ -512,6 +751,7 @@ button:hover {
 }
 
 .toggle-pill-btn:hover {
+  background: var(--button-surface-hover);
   color: var(--text-primary);
 }
 
@@ -521,8 +761,8 @@ button:hover {
   width: 22px;
   height: 12px;
   margin-left: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   transition:
     background var(--transition),
@@ -544,13 +784,13 @@ button:hover {
 }
 
 .toggle-pill-switch.is-on {
-  background: var(--success-light);
-  border-color: var(--success-light);
+  background: var(--accent-success);
+  border-color: var(--accent-success);
 }
 
 .toggle-pill-switch.is-on::after {
   transform: translateX(10px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
 }
 
 /* Rotate the chevron 180° when its parent dropdown is open. */
@@ -572,8 +812,8 @@ button:hover {
 }
 
 .modal-frame-content {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-modal);
@@ -591,7 +831,7 @@ button:hover {
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: var(--spacing-lg) var(--spacing-xl);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .modal-frame-title {
@@ -619,7 +859,7 @@ button:hover {
 }
 
 .modal-frame-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -628,90 +868,202 @@ button:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: var(--font-size-md);
-  font-weight: 500;
+  gap: var(--button-gap);
+  height: var(--button-height);
+  padding: 0 var(--button-padding-inline);
+  border-radius: var(--button-radius);
+  border: var(--stroke-1) solid transparent;
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size);
+  line-height: var(--line-height-ui);
+  font-weight: var(--button-font-weight);
   cursor: pointer;
   transition:
     background-color var(--transition),
     color var(--transition),
     border-color var(--transition),
-    opacity var(--transition);
+    opacity var(--transition),
+    transform var(--transition);
+  box-shadow: var(--button-shadow);
   white-space: nowrap;
 }
 
 .button:disabled {
-  opacity: 0.6;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.button:focus-visible,
+.toolbar-icon-btn:focus-visible {
+  outline: var(--stroke-2) solid var(--accent-active);
+  outline-offset: -1px;
 }
 
 /* Keep each variant's background when hovering a disabled button — the
    global `button:hover` element rule above otherwise outranks the variant
    class (its own hover rules are gated on :not(:disabled)). */
 .button--primary:hover {
-  background: var(--action);
-  border-color: var(--action);
-}
-
-.button--secondary:hover,
-.button--danger:hover,
-.button--ghost:hover {
-  background: transparent;
-}
-
-.button--primary {
-  background: var(--action);
-  color: var(--action-text);
-  border-color: var(--action);
-}
-
-.button--primary:hover:not(:disabled) {
-  background: var(--action-hover);
-  border-color: var(--action-hover);
-}
-
-.button--secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border-color: var(--border);
-}
-
-.button--secondary:hover:not(:disabled) {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.button--danger {
-  background: transparent;
-  color: var(--error-light);
-  border-color: rgba(var(--error-light-rgb), 0.3);
-}
-
-.button--danger:hover:not(:disabled) {
-  background: rgba(var(--error-light-rgb), 0.1);
-}
-
-.button--ghost {
-  background: transparent;
-  color: var(--text-secondary);
+  background: var(--accent-active);
   border-color: transparent;
 }
 
-.button--ghost:hover:not(:disabled) {
-  background: var(--bg-tertiary);
+.button--secondary:hover {
+  background: transparent;
+  border-color: var(--button-border);
+}
+
+.button--default,
+.button--appearance-solid.button--tone-neutral {
+  background: var(--button-surface-default);
+  color: var(--button-text-default);
+  border-color: var(--button-border-solid);
+}
+
+.button--default:hover:not(:disabled),
+.button--appearance-solid.button--tone-neutral:hover:not(:disabled) {
+  background: var(--button-surface-hover);
+  color: var(--button-text-hover);
+  border-color: var(--button-border-solid);
+}
+
+.button--primary,
+.button--appearance-solid.button--tone-primary {
+  background: var(--accent-active);
+  color: var(--text-on-accent);
+  border-color: transparent;
+}
+
+.button--primary:hover:not(:disabled),
+.button--appearance-solid.button--tone-primary:hover:not(:disabled) {
+  background: var(--accent-active-hover);
+  border-color: transparent;
+}
+
+.button--secondary,
+.button--appearance-outline.button--tone-neutral {
+  background: transparent;
+  color: var(--button-text-default);
+  border-color: var(--button-border);
+}
+
+.button--secondary:hover:not(:disabled),
+.button--appearance-outline.button--tone-neutral:hover:not(:disabled) {
+  background: transparent;
+  color: var(--button-text-hover);
+  border-color: var(--border-strong);
+}
+
+.button--danger,
+.button--appearance-outline.button--tone-danger {
+  background: transparent;
+  color: var(--accent-error-light);
+  border-color: rgba(var(--accent-error-light-rgb), 0.3);
+}
+
+.button--danger:hover:not(:disabled),
+.button--appearance-outline.button--tone-danger:hover:not(:disabled) {
+  background: rgba(var(--accent-error-light-rgb), 0.1);
+}
+
+.button--ghost,
+.button--appearance-ghost.button--tone-neutral {
+  background: transparent;
+  color: var(--button-text-default);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.button--ghost:hover:not(:disabled),
+.button--appearance-ghost.button--tone-neutral:hover:not(:disabled) {
+  background: var(--button-surface-hover);
+  color: var(--button-text-hover);
+}
+
+.button--warning,
+.button--appearance-solid.button--tone-warning {
+  background: var(--button-warning-surface);
+  color: var(--button-warning-text);
+  border-color: transparent;
+}
+
+.button--warning:hover:not(:disabled),
+.button--appearance-solid.button--tone-warning:hover:not(:disabled) {
+  background: var(--button-warning-surface);
+  color: var(--button-warning-text);
+  border-color: var(--accent-warning);
+}
+
+.button--variable,
+.button--appearance-solid.button--tone-variable {
+  background: var(--button-variable-surface);
   color: var(--text-primary);
+  border-color: transparent;
+}
+
+.button--variable:hover:not(:disabled),
+.button--appearance-solid.button--tone-variable:hover:not(:disabled) {
+  background: var(--button-variable-hover);
+  color: var(--text-inverse);
+}
+
+.button--secondary[aria-pressed='true'],
+.button--secondary[data-selected='true'],
+.button--default[aria-pressed='true'],
+.button--default[data-selected='true'],
+.button--ghost[aria-pressed='true'],
+.button--ghost[data-selected='true'],
+.button--appearance-solid.button--tone-neutral[aria-pressed='true'],
+.button--appearance-solid.button--tone-neutral[data-selected='true'] {
+  background: transparent;
+  color: var(--button-text-hover);
+  border-color: var(--button-border);
 }
 
 .button--sm {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-base);
+  height: var(--control-height-compact);
+  min-height: var(--control-height-compact);
+  gap: var(--space-1);
+  padding: 0 var(--space-6);
+  font-size: var(--font-size-11);
 }
 
+.button--fill,
 .button--block {
   width: 100%;
+}
+
+.button--hug {
+  width: fit-content;
+}
+
+.button--icon-only {
+  width: var(--button-height);
+  padding-inline: 0;
+}
+
+.button--icon-only.button--density-compact {
+  width: var(--button-height-compact);
+}
+
+.button-group--split {
+  display: inline-flex;
+}
+
+.button-group--split > .button {
+  border-radius: 0;
+}
+
+.button-group--split > .button:first-child {
+  border-radius: var(--button-radius) 0 0 var(--button-radius);
+}
+
+.button-group--split > .button:last-child {
+  border-radius: 0 var(--button-radius) var(--button-radius) 0;
+  border-left-color: var(--border-default);
 }
 
 /* ===== Primitive: EmptyState ===== */
@@ -762,8 +1114,8 @@ button:hover {
   min-width: 200px;
   max-width: 320px;
   padding: var(--spacing-xs);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow);
 }
@@ -799,21 +1151,21 @@ button:hover {
 }
 
 .ss-dropdown__item--active {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .ss-dropdown__item--danger {
-  color: var(--error-light);
+  color: var(--accent-error-light);
 }
 
 .ss-dropdown__item--danger:hover:not(:disabled) {
-  background: rgba(var(--error-light-rgb), 0.1);
+  background: rgba(var(--accent-error-light-rgb), 0.1);
 }
 
 .ss-dropdown__divider {
   height: 1px;
   margin: var(--spacing-xs) 0;
-  background: var(--border);
+  background: var(--border-default);
 }
 
 /* ===== Primitive: Spinner ===== */
@@ -822,7 +1174,7 @@ button:hover {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border: 2px solid var(--border);
+  border: 2px solid var(--border-default);
   border-top-color: currentColor;
   border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
@@ -854,7 +1206,7 @@ button:hover {
 }
 
 .skeleton {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius);
   animation: skeleton-pulse 1.4s ease-in-out infinite;
 }

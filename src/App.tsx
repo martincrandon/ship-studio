@@ -662,20 +662,20 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   const pluginTheme = useMemo(
     () => ({
-      bgPrimary: 'var(--bg-primary)',
-      bgSecondary: 'var(--bg-secondary)',
-      bgTertiary: 'var(--bg-tertiary)',
+      bgPrimary: 'var(--surface-app)',
+      bgSecondary: 'var(--surface-panel)',
+      bgTertiary: 'var(--surface-control)',
       textPrimary: 'var(--text-primary)',
       textSecondary: 'var(--text-secondary)',
       textMuted: 'var(--text-muted)',
-      border: 'var(--border)',
-      accent: 'var(--accent, #10b981)',
-      accentHover: 'var(--accent-hover)',
-      action: 'var(--action)',
-      actionHover: 'var(--action-hover)',
-      actionText: 'var(--action-text)',
-      error: 'var(--error)',
-      success: 'var(--success)',
+      border: 'var(--border-default)',
+      accent: 'var(--accent-active)',
+      accentHover: 'var(--accent-active-hover)',
+      action: 'var(--accent-active)',
+      actionHover: 'var(--accent-active-hover)',
+      actionText: 'var(--text-on-accent)',
+      error: 'var(--accent-error)',
+      success: 'var(--accent-success)',
     }),
     []
   );

@@ -5,8 +5,8 @@
      stack reads as a separate section rather than crowding the projects. */
   margin: var(--spacing-2xl) 0 var(--spacing-lg);
   padding: var(--spacing-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
 }
 
@@ -43,8 +43,8 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: 1px var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-weight: 500;
@@ -84,15 +84,15 @@
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) var(--spacing-lg);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   transition: border-color var(--transition);
 }
 
 .agents-panel-row.is-default {
-  border-color: var(--action);
-  box-shadow: inset 0 0 0 1px var(--action);
+  border-color: var(--accent-active);
+  box-shadow: inset 0 0 0 1px var(--accent-active);
 }
 
 .agents-panel-row-icon {
@@ -103,7 +103,7 @@
   height: 32px;
   flex-shrink: 0;
   border-radius: var(--radius);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -148,7 +148,7 @@
   padding: var(--spacing-xs) var(--spacing-md);
   background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   font-size: var(--font-size-base);
   font-weight: 500;
@@ -170,13 +170,13 @@
 }
 
 .agents-default-pill.on {
-  background: var(--action);
-  color: var(--action-text);
-  border-color: var(--action);
+  background: var(--accent-active);
+  color: var(--text-on-accent);
+  border-color: var(--accent-active);
 }
 
 .agents-default-pill.switching {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
   border-color: var(--text-muted);
   cursor: wait;
@@ -201,9 +201,9 @@
 }
 
 .agents-default-pill.on .agents-default-pill-radio {
-  background: var(--action-text);
-  color: var(--action);
-  border-color: var(--action-text);
+  background: var(--text-on-accent);
+  color: var(--accent-active);
+  border-color: var(--text-on-accent);
 }
 
 /* Kebab menu */
@@ -218,8 +218,8 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   cursor: pointer;
@@ -230,7 +230,7 @@
 }
 
 .agents-panel-kebab:hover:not(:disabled) {
-  background: var(--border);
+  background: var(--border-default);
   border-color: var(--text-muted);
   color: var(--text-primary);
 }
@@ -246,8 +246,8 @@
   right: 0;
   min-width: 140px;
   padding: var(--spacing-xs);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   z-index: var(--z-dropdown);
@@ -268,11 +268,11 @@
 }
 
 .agents-panel-menu button:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .agents-panel-menu .agents-panel-menu-danger {
-  color: var(--error);
+  color: var(--accent-error);
 }
 
 /* Terminal modal embedded in panel */
@@ -286,7 +286,7 @@
 .agents-panel-terminal-body {
   flex: 1;
   min-height: 0;
-  background: #1e1e1e; /* css-ok: must match xterm theme bg */
+  background: var(--surface-app);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -319,8 +319,8 @@
 .dashboard-card {
   margin: 0 0 var(--spacing-lg);
   padding: var(--spacing-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
 }
 
@@ -358,8 +358,8 @@
   gap: var(--spacing-md);
   width: 100%;
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) var(--spacing-lg);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: inherit;
   text-align: left;
@@ -377,7 +377,7 @@ button.dashboard-card-row {
 
 .dashboard-card-row:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 /* Static (non-interactive) rows — e.g. status lines in Integrations */
@@ -386,8 +386,8 @@ button.dashboard-card-row {
 }
 
 .dashboard-card-row.is-static:hover {
-  border-color: var(--border);
-  background: var(--bg-primary);
+  border-color: var(--border-default);
+  background: var(--surface-app);
 }
 
 .dashboard-card-row-icon {
@@ -398,12 +398,12 @@ button.dashboard-card-row {
   height: 32px;
   flex-shrink: 0;
   border-radius: var(--radius);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 .dashboard-card-row-icon.success {
-  color: var(--success);
+  color: var(--accent-success);
 }
 
 .dashboard-card-row-main {
@@ -432,7 +432,7 @@ button.dashboard-card-row {
 }
 
 .dashboard-card-row-status.success {
-  color: var(--success);
+  color: var(--accent-success);
 }
 
 .dashboard-card-row-chevron {
@@ -446,7 +446,7 @@ button.dashboard-card-row {
    after .is-default so connection state wins the border color when both apply;
    red (needs-reconnect) always trumps green. */
 .agents-panel-row.is-connected {
-  border-color: var(--success);
+  border-color: var(--accent-success);
 }
 
 .agents-panel-row.needs-reconnect {
@@ -462,7 +462,7 @@ button.dashboard-card-row {
 }
 
 .agents-reconnect-btn:hover:not(:disabled) {
-  background: var(--error-light);
+  background: var(--accent-error-light);
 }
 
 /* ── Connect modals (shared: Claude token, GitHub/Codex/Opencode PTY, Vercel
@@ -495,8 +495,8 @@ button.dashboard-card-row {
 
 .connect-modal-field input {
   padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -504,7 +504,7 @@ button.dashboard-card-row {
 
 .connect-modal-field input:focus {
   outline: none;
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 .connect-modal-muted {

@@ -25,8 +25,8 @@
 }
 
 .modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 24px;
   max-width: 400px;
@@ -52,8 +52,8 @@
 
 /* Quit Confirmation Modal */
 .quit-confirm-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 24px;
   max-width: 360px;
@@ -108,7 +108,7 @@
   border-radius: 14px;
   background: rgba(var(--modal-action-green-rgb), 0.1);
   border: 1px solid rgba(var(--modal-action-green-rgb), 0.15);
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 .plugin-suggestion-modal h3 {
@@ -139,8 +139,8 @@
 .plugin-suggestion-dismiss {
   flex: 1;
   padding: 9px 14px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
@@ -153,7 +153,7 @@
 }
 
 .plugin-suggestion-dismiss:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -164,10 +164,10 @@
   justify-content: center;
   gap: 7px;
   padding: 9px 14px;
-  background: var(--action);
+  background: var(--accent-active);
   border: none;
   border-radius: var(--radius-md);
-  color: var(--action-text);
+  color: var(--text-on-accent);
   font-size: var(--font-size-md);
   font-weight: 600;
   cursor: pointer;
@@ -178,7 +178,7 @@
 }
 
 .plugin-suggestion-install:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
 }
 
 .plugin-suggestion-install:disabled {

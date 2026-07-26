@@ -40,7 +40,7 @@
 }
 
 .skills-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -60,7 +60,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -75,8 +75,8 @@
 }
 
 .skills-tab.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -86,7 +86,7 @@
   overflow-y: auto;
   flex: 1;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 /* Installed Tab Controls */
@@ -104,8 +104,8 @@
   gap: 6px;
   padding: 0 10px;
   height: 26px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-muted);
   transition: border-color var(--transition);
@@ -151,7 +151,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -166,8 +166,8 @@
 }
 
 .skills-filter-btn.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -184,8 +184,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   transition: border-color var(--transition);
 }
@@ -215,7 +215,7 @@
 .skill-plugin {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
 }
 
 .skill-scope-badge {
@@ -223,7 +223,7 @@
   align-items: center;
   padding: 2px 6px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
@@ -253,7 +253,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -264,8 +264,8 @@
 }
 
 .skill-remove-btn:hover {
-  color: var(--error);
-  border-color: var(--error);
+  color: var(--accent-error);
+  border-color: var(--accent-error);
   border-style: solid;
 }
 
@@ -289,8 +289,8 @@
   padding: 8px 12px;
   font-size: var(--font-size-md);
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   outline: none;
   transition: border-color var(--transition);
@@ -308,8 +308,8 @@
   padding: 8px 14px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  color: var(--action-text);
-  background: var(--action);
+  color: var(--text-on-accent);
+  background: var(--accent-active);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -320,7 +320,7 @@
 }
 
 .skills-search-btn:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
 }
 
 .skills-search-btn:disabled {
@@ -351,7 +351,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -366,8 +366,8 @@
 }
 
 .skills-scope-btn.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -385,8 +385,8 @@
 
 .skills-result-card {
   padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   transition: border-color var(--transition);
 }
@@ -416,7 +416,7 @@
 .skills-result-package {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
   margin-top: 2px;
 }
 
@@ -437,8 +437,8 @@
   padding: 6px 12px;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--action-text);
-  background: var(--action);
+  color: var(--text-on-accent);
+  background: var(--accent-active);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -450,7 +450,7 @@
 }
 
 .skills-install-btn:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
 }
 
 .skills-install-btn:disabled {
@@ -460,7 +460,7 @@
 
 .skills-install-btn.installing {
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 /* Loading & Empty States */
@@ -475,15 +475,15 @@
 /* Layout + tint for the loading <Spinner> */
 .skills-loading-spinner {
   margin: 0 auto 12px;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .skills-error {
   padding: 12px;
-  background: rgba(var(--error-deep-rgb), 0.1);
-  border: 1px solid rgba(var(--error-deep-rgb), 0.3);
+  background: rgba(var(--accent-error-deep-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-error-deep-rgb), 0.3);
   border-radius: var(--radius);
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   margin-bottom: 12px;
 }
@@ -491,7 +491,7 @@
 /* Footer */
 .skills-footer {
   padding: 12px 24px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -537,10 +537,10 @@
 .skills-cli-unavailable code {
   display: inline-block;
   padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-primary);
 }

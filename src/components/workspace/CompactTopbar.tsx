@@ -42,8 +42,8 @@ const topbarStyle: Style = {
   // so an 8px gutter avoids a big empty gap at the window's top-left.
   paddingLeft: isMac() ? 78 : 8,
   paddingRight: 8,
-  background: 'var(--bg-secondary)',
-  borderBottom: '1px solid var(--border)',
+  background: 'var(--surface-panel)',
+  borderBottom: '1px solid var(--border-default)',
   flexShrink: 0,
   userSelect: 'none',
   WebkitAppRegion: 'drag',
@@ -82,12 +82,12 @@ const paletteBtnStyle: CSSProperties = {
   justifyContent: 'center',
   height: 24,
   padding: '0 8px',
-  background: 'var(--bg-tertiary)',
-  border: '1px solid var(--border)',
+  background: 'var(--surface-control)',
+  border: '1px solid var(--border-default)',
   borderRadius: 'var(--radius-sm)',
   color: 'var(--text-secondary)',
   fontSize: 11,
-  fontFamily: 'var(--font-mono, monospace)',
+  fontFamily: 'var(--font-code)',
   letterSpacing: '0.4px',
   cursor: 'pointer',
 };
@@ -99,8 +99,8 @@ const projectBtnStyle: CSSProperties = {
   height: 24,
   maxWidth: 220,
   padding: '0 8px',
-  background: 'var(--bg-tertiary)',
-  border: '1px solid var(--border)',
+  background: 'var(--surface-control)',
+  border: '1px solid var(--border-default)',
   borderRadius: 'var(--radius-sm)',
   color: 'var(--text-primary)',
   fontSize: 11,
@@ -127,7 +127,7 @@ const dotInnerStyle: CSSProperties = {
   width: 8,
   height: 8,
   borderRadius: '50%',
-  background: 'var(--success)',
+  background: 'var(--accent-success)',
 };
 
 export function CompactTopbar({
@@ -158,7 +158,7 @@ export function CompactTopbar({
   const pinStyle: CSSProperties = isPinned
     ? {
         ...iconBtnStyle,
-        color: 'var(--accent)',
+        color: 'var(--accent-active)',
         background: 'rgba(45, 164, 157, 0.15)',
         borderColor: 'rgba(45, 164, 157, 0.3)',
       }
@@ -227,8 +227,8 @@ export function CompactTopbar({
                 maxHeight: 240,
                 overflowY: 'auto',
                 padding: 4,
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
+                background: 'var(--surface-panel)',
+                border: '1px solid var(--border-default)',
                 borderRadius: 'var(--radius-md)',
                 boxShadow: 'var(--shadow-md)',
                 zIndex: 100,
@@ -250,7 +250,7 @@ export function CompactTopbar({
               <div
                 style={{
                   height: 1,
-                  background: 'var(--border)',
+                  background: 'var(--border-default)',
                   margin: '4px 2px',
                 }}
               />

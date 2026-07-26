@@ -23,7 +23,7 @@
 }
 
 .env-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -42,17 +42,17 @@
   gap: 4px;
   flex-wrap: wrap;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .env-file-tab {
   padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-base);
-  font-family: monospace;
+  font-family: var(--font-code);
   cursor: pointer;
   transition:
     background-color var(--transition),
@@ -61,14 +61,14 @@
 }
 
 .env-file-tab:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
 .env-file-tab.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--bg-primary);
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+  color: var(--surface-app);
 }
 
 .env-file-tab.env-add-file {
@@ -86,24 +86,24 @@
 
 .env-new-file-input input {
   padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-base);
-  font-family: monospace;
+  font-family: var(--font-code);
   width: 140px;
 }
 
 .env-new-file-input input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .env-new-file-input button {
   padding: 6px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
@@ -113,7 +113,7 @@
 }
 
 .env-new-file-input button:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -143,38 +143,38 @@
 .env-var-key {
   flex: 0 0 180px;
   padding: 8px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-md);
-  font-family: monospace;
+  font-family: var(--font-code);
 }
 
 .env-var-key:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .env-var-equals {
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-code);
 }
 
 .env-var-value {
   flex: 1;
   padding: 8px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-md);
-  font-family: monospace;
+  font-family: var(--font-code);
 }
 
 .env-var-value:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .env-var-visibility {
@@ -191,7 +191,7 @@
 }
 
 .env-var-visibility:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -209,8 +209,8 @@
 }
 
 .env-var-delete:hover {
-  background: var(--bg-tertiary);
-  color: var(--error);
+  background: var(--surface-control);
+  color: var(--accent-error);
 }
 
 .env-actions {
@@ -218,7 +218,7 @@
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .env-actions-left {
@@ -253,10 +253,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
-  font-family: monospace;
+  font-family: var(--font-code);
   font-size: 28px;
   font-weight: 600;
   color: var(--text-muted);
@@ -284,10 +284,10 @@
 }
 
 .env-error {
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   padding: 8px 12px;
-  background: rgba(var(--error-rgb), 0.1);
+  background: rgba(var(--accent-error-rgb), 0.1);
   border-radius: var(--radius);
 }
 
@@ -299,8 +299,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: rgba(var(--warning-light-rgb), 0.1);
-  border: 1px solid rgba(var(--warning-light-rgb), 0.3);
+  background: rgba(var(--accent-warning-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-warning-rgb), 0.3);
   border-radius: var(--radius-md);
 }
 
@@ -315,7 +315,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--warning-light);
+  color: var(--accent-warning);
   font-size: var(--font-size-md);
 }
 
@@ -336,8 +336,8 @@
 }
 
 .env-paste-modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 20px;
   width: 90%;
@@ -370,19 +370,19 @@
   width: 100%;
   min-height: 180px;
   padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--font-size-md);
-  font-family: monospace;
+  font-family: var(--font-code);
   line-height: 1.5;
   resize: vertical;
 }
 
 .env-paste-textarea:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 .env-paste-textarea::placeholder {

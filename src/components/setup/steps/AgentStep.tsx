@@ -94,7 +94,7 @@ export function AgentStep({
               {showSelection && isPairReady && localSelectedId === agentId && (
                 <div className="wizard-agent-card-check">
                   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <circle cx="10" cy="10" r="10" fill="var(--success)" />
+                    <circle cx="10" cy="10" r="10" fill="var(--accent-success)" />
                     <path
                       d="M6 10l3 3 5-6"
                       stroke="white"

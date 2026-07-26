@@ -407,10 +407,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       scrollback: 5000,
       allowProposedApi: true,
       theme: {
-        background: '#1e1e1e',
-        foreground: '#cccccc',
+        background: '#141414',
+        foreground: '#bcbcbc',
         cursor: '#ffffff',
-        selectionBackground: '#3a3d41',
+        selectionBackground: '#393939',
         black: '#000000',
         red: '#cd3131',
         green: '#0dbc79',
@@ -1260,8 +1260,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
   );
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div className="terminal-instance" style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
+        className="terminal-instance-container"
         ref={containerRef}
         onClick={handleClick}
         onDragOver={handleDragOver}
@@ -1269,7 +1270,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         style={{
           width: '100%',
           height: '100%',
-          backgroundColor: '#1e1e1e',
+          backgroundColor: '#141414',
           filter: isFocused ? 'none' : 'grayscale(100%)',
           transition: 'filter 150ms ease-in-out',
         }}
@@ -1283,9 +1284,9 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#1e1e1e',
+            backgroundColor: '#141414',
             color: '#666666',
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            fontFamily: 'var(--font-code)',
             fontSize: 13,
           }}
         >

@@ -3,7 +3,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -16,7 +16,7 @@
 }
 
 .capture-shortcut {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   white-space: nowrap;
@@ -41,7 +41,7 @@
 }
 
 .terminal-capture:hover:not(:disabled) {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
 }
 
@@ -51,7 +51,7 @@
 }
 
 .terminal-capture.capturing {
-  color: var(--accent);
+  color: var(--accent-active);
   animation: pulse 1s infinite;
 }
 
@@ -69,6 +69,7 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  background: var(--surface-app);
 }
 
 .preview-pane {

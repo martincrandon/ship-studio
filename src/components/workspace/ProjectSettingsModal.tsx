@@ -134,8 +134,8 @@ export function ProjectSettingsModal({
                   width: '100%',
                   padding: '8px 12px',
                   borderRadius: 6,
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-primary)',
+                  border: '1px solid var(--border-default)',
+                  background: 'var(--surface-app)',
                   color: 'var(--text-primary)',
                   fontSize: 13,
                   outline: 'none',
@@ -143,7 +143,7 @@ export function ProjectSettingsModal({
                 }}
               />
               {!isValid && (
-                <span style={{ fontSize: 12, color: 'var(--error, #ef4444)' }}>
+                <span style={{ fontSize: 12, color: 'var(--accent-error)' }}>
                   Port must be between 1 and 65535
                 </span>
               )}
@@ -170,11 +170,11 @@ export function ProjectSettingsModal({
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: 6,
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-primary)',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--surface-app)',
                     color: 'var(--text-primary)',
                     fontSize: 13,
-                    fontFamily: 'var(--font-mono, monospace)',
+                    fontFamily: 'var(--font-code)',
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}

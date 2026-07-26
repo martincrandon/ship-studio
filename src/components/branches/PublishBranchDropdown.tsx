@@ -19,6 +19,7 @@ import { logger } from '../../lib/logger';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import { MenuButton } from '../primitives/MenuButton';
 
 // Module-scoped so the metric spans dropdown re-mounts. Per-project would be
 // better but cross-project publish cadence is also useful and far simpler.
@@ -205,15 +206,15 @@ export function PublishBranchDropdown({
   if (projectGithubStatus === null) {
     return (
       <div className="publish-dropdown" ref={dropdownRef}>
-        <button
-          className="publish-button publish-checking"
+        <MenuButton
+          expanded={false}
           data-education-id="publish-button"
           disabled
           title="Checking GitHub status..."
         >
           Push
           <ChevronIcon />
-        </button>
+        </MenuButton>
       </div>
     );
   }
@@ -222,15 +223,15 @@ export function PublishBranchDropdown({
   if (!hasGitHubRepo) {
     return (
       <div className="publish-dropdown" ref={dropdownRef}>
-        <button
-          className="publish-button publish-disabled"
+        <MenuButton
+          expanded={false}
           data-education-id="publish-button"
           disabled
           title="Create a GitHub repository first"
         >
           Push
           <ChevronIcon />
-        </button>
+        </MenuButton>
       </div>
     );
   }
@@ -240,14 +241,16 @@ export function PublishBranchDropdown({
 
   return (
     <div className="publish-dropdown" ref={dropdownRef}>
-      <button
-        className={`publish-button ${isPublishing ? 'publishing' : ''} ${!canSync ? 'synced' : ''}`}
+      <MenuButton
+        expanded={isOpen}
+        variant={canSync ? 'primary' : 'default'}
+        className={isPublishing ? 'publishing' : undefined}
         data-education-id="publish-button"
         onClick={() => setIsOpen(!isOpen)}
       >
         {isPublishing ? 'Pushing...' : 'Push'}
         <ChevronIcon />
-      </button>
+      </MenuButton>
 
       {isOpen && (
         <div className="publish-dropdown-menu">

@@ -39,8 +39,8 @@
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   min-width: 200px;
   flex: 1;
@@ -48,12 +48,12 @@
 }
 
 .connection-card.connected {
-  border-color: var(--success);
-  border-color: rgba(var(--success-rgb), 0.3);
+  border-color: var(--accent-success);
+  border-color: rgba(var(--accent-success-rgb), 0.3);
 }
 
 .connection-card.disconnected {
-  border-color: var(--border);
+  border-color: var(--border-default);
 }
 
 .connection-icon {
@@ -62,14 +62,14 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
 }
 
 .connection-card.connected .connection-icon {
-  background: rgba(var(--success-rgb), 0.15);
-  color: var(--success);
+  background: rgba(var(--accent-success-rgb), 0.15);
+  color: var(--accent-success);
 }
 
 .connection-info {
@@ -88,7 +88,7 @@
 
 .connection-status {
   font-size: var(--font-size-base);
-  color: var(--success);
+  color: var(--accent-success);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,8 +102,8 @@
   padding: 6px 12px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
   border-radius: var(--radius);
   cursor: pointer;
@@ -115,7 +115,7 @@
 }
 
 .connection-action:hover {
-  background: var(--border);
+  background: var(--border-default);
   border-color: var(--text-muted);
 }
 
@@ -131,9 +131,9 @@
 .project-list-empty {
   text-align: center;
   padding: 60px 24px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius-lg);
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
 }
 
 .project-list-empty p {
@@ -151,8 +151,8 @@
   position: relative;
   margin-bottom: 24px;
   padding: 20px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   min-height: 168px;
   overflow-x: auto;
@@ -187,7 +187,7 @@
 
 .github-calendar-hide-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .github-calendar-wrapper::-webkit-scrollbar {
@@ -201,8 +201,8 @@
 
 /* Tooltip styling */
 .github-calendar-tooltip {
-  background: var(--bg-primary) !important;
-  border: 1px solid var(--border) !important;
+  background: var(--surface-app) !important;
+  border: 1px solid var(--border-default) !important;
   border-radius: 6px !important;
   padding: 6px 10px !important;
   font-size: var(--font-size-base) !important;
@@ -228,7 +228,7 @@
   width: 12px;
   height: 12px;
   border-radius: 3px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 

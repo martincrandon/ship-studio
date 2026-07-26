@@ -62,7 +62,7 @@ function ErrorIcon() {
       fill="none"
       className="setup-item-icon setup-item-icon-error"
     >
-      <circle cx="10" cy="10" r="10" fill="var(--error)" />
+      <circle cx="10" cy="10" r="10" fill="var(--accent-error)" />
       <path d="M7 7l6 6M13 7l-6 6" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
@@ -78,7 +78,7 @@ function EmptyCircleIcon() {
       fill="none"
       className="setup-item-icon setup-item-icon-empty"
     >
-      <circle cx="10" cy="10" r="9" stroke="var(--border)" strokeWidth="2" fill="none" />
+      <circle cx="10" cy="10" r="9" stroke="var(--border-default)" strokeWidth="2" fill="none" />
     </svg>
   );
 }
@@ -113,7 +113,7 @@ function getStatusIcon(status: SetupItemStatus) {
     case 'error':
       return <ErrorIcon />;
     case 'in_progress':
-      return <Spinner style={{ color: 'var(--accent)' }} />;
+      return <Spinner style={{ color: 'var(--accent-active)' }} />;
     case 'blocked':
       return <BlockedIcon />;
     default:

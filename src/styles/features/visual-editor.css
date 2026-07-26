@@ -6,20 +6,22 @@
 .preview-edit-toggle {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  height: 28px;
-  padding: 0 var(--spacing-sm);
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  gap: var(--button-gap);
+  height: var(--button-height);
+  padding: 0 var(--button-padding-inline);
+  font-size: var(--button-font-size);
+  color: var(--button-text-default);
+  background: var(--button-surface-default);
+  border: var(--stroke-1) solid var(--button-border-solid);
+  border-radius: var(--button-radius);
+  box-shadow: var(--button-shadow);
   cursor: pointer;
   transition:
     background var(--transition),
     color var(--transition);
 }
 .preview-edit-toggle:hover {
+  background: var(--button-surface-hover);
   color: var(--text-primary);
 }
 
@@ -46,8 +48,8 @@
   flex-direction: column;
   gap: 4px;
   padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   font-size: var(--font-size-xs);
@@ -80,8 +82,8 @@
   width: 22px;
   height: 12px;
   margin-left: 2px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   transition:
     background var(--transition),
@@ -101,12 +103,12 @@
     background var(--transition);
 }
 .preview-edit-toggle-switch.is-on {
-  background: var(--success-light);
-  border-color: var(--success-light);
+  background: var(--accent-success);
+  border-color: var(--accent-success);
 }
 .preview-edit-toggle-switch.is-on::after {
   transform: translateX(10px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
 }
 
 .ss-edit-panel {
@@ -123,11 +125,11 @@
   /* Header + footer are fixed; only the body scrolls. Panel clips; max-height is
      set inline by the component. */
   overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  font-size: var(--font-size-md);
+  background: var(--surface-panel);
+  border: var(--stroke-1) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-window);
+  font-size: var(--font-size-11);
 }
 
 /* Pin-as-sidebar styles (pin button, header actions, pinned layout) live in
@@ -137,9 +139,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-12);
+  background: var(--surface-panel);
+  border-bottom: var(--stroke-1) solid var(--border-subtle);
   /* Drag handle */
   cursor: grab;
   user-select: none;
@@ -203,8 +205,8 @@
   justify-content: space-between;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
-  border-top: 1px solid var(--border);
-  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-panel);
 }
 
 /* Shown in the footer while the source location resolves (Save not ready yet). */
@@ -236,8 +238,8 @@
   display: inline-block;
   width: 22px;
   height: 12px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: 999px;
   transition:
     background var(--transition),
@@ -257,12 +259,12 @@
     background var(--transition);
 }
 .ss-edit-panel__switch.is-on {
-  background: var(--action);
-  border-color: var(--action);
+  background: var(--accent-active);
+  border-color: var(--accent-active);
 }
 .ss-edit-panel__switch.is-on::after {
   transform: translateX(10px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
 }
 
 /* Segmented control — a tray with inset, individually-rounded segments so the
@@ -271,9 +273,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  border: var(--stroke-1) solid var(--border-subtle);
+  border-radius: var(--radius-control);
 }
 
 .ss-edit-panel__seg {
@@ -298,7 +300,7 @@
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .ss-edit-panel__seg.active {
-  background: var(--tint-strong);
+  background: var(--surface-selected);
   color: var(--text-primary);
   box-shadow: inset 0 0 0 1px var(--tint);
 }
@@ -345,8 +347,8 @@
   text-align: left;
   white-space: normal;
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   pointer-events: none;
@@ -369,8 +371,8 @@
   font-size: var(--font-size-sm);
   line-height: 1.4;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-warning) 35%, transparent);
   border-radius: var(--radius-sm);
 }
 .ss-edit-panel__bp-note strong {
@@ -391,7 +393,7 @@
 }
 .ss-edit-panel__csshint:hover,
 .ss-edit-panel__csshint:focus-visible {
-  color: var(--action);
+  color: var(--accent-active);
   outline: none;
 }
 .ss-edit-panel__csshint-tip {
@@ -406,8 +408,8 @@
   line-height: 1.45;
   text-align: left;
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   pointer-events: none;
@@ -424,7 +426,7 @@
 .ss-edit-panel__csshint-tip code {
   font-size: var(--font-size-xs);
   padding: 1px 4px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius-sm);
 }
 
@@ -432,7 +434,7 @@
 .ss-edit-panel__beta {
   margin: var(--spacing-xs) 0 0;
   padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-muted);
@@ -449,9 +451,9 @@
   gap: 5px;
   margin-top: var(--spacing-xs);
   padding: 8px 9px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -459,7 +461,7 @@
   transition: background var(--transition);
 }
 .ss-edit-panel__slack:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-primary);
 }
 
@@ -469,7 +471,7 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-md);
 }
 .ss-edit-panel__dynhelp p {
@@ -486,15 +488,15 @@
 @keyframes ss-dynhelp-pulse {
   0% {
     box-shadow: 0 0 0 0 transparent;
-    background: var(--bg-tertiary);
+    background: var(--surface-control);
   }
   30% {
-    box-shadow: 0 0 0 2px var(--accent);
-    background: var(--bg-secondary);
+    box-shadow: 0 0 0 2px var(--accent-active);
+    background: var(--surface-panel);
   }
   100% {
     box-shadow: 0 0 0 0 transparent;
-    background: var(--bg-tertiary);
+    background: var(--surface-control);
   }
 }
 
@@ -505,7 +507,7 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-md);
 }
 .ss-edit-panel__noclass p {
@@ -517,16 +519,16 @@
 .ss-edit-panel__noclass input {
   width: 100%;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
 }
 .ss-edit-panel__noclass input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 /* Set-vs-inherited indicator: a filled dot when the value is set on the active
@@ -540,7 +542,7 @@
   vertical-align: middle;
 }
 .ss-layer-dot--here {
-  background: var(--action);
+  background: var(--accent-active);
 }
 .ss-layer-dot--inherited {
   background: transparent;
@@ -558,8 +560,8 @@
   padding: 0 var(--spacing-sm);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: border-color var(--transition);
@@ -568,7 +570,7 @@
   border-color: var(--text-muted);
 }
 .ss-enum__trigger[aria-expanded='true'] {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 .ss-enum__trigger svg {
   flex-shrink: 0;
@@ -585,8 +587,8 @@
   overflow-y: auto;
   scrollbar-width: none;
   padding: var(--spacing-xs);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
 }
@@ -612,7 +614,7 @@
 }
 .ss-enum__item:hover {
   color: var(--text-primary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 .ss-enum__item.is-active {
   color: var(--text-primary);
@@ -621,7 +623,7 @@
 
 .ss-edit-panel__slider {
   width: 100px;
-  accent-color: var(--action);
+  accent-color: var(--accent-active);
   cursor: pointer;
 }
 
@@ -633,8 +635,8 @@
   width: 34px;
   height: 20px;
   padding: 2px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: border-color var(--transition);
@@ -643,7 +645,7 @@
   border-color: var(--text-muted);
 }
 .ss-color-swatch[aria-expanded='true'] {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 .ss-color-swatch__chip {
   width: 100%;
@@ -651,8 +653,8 @@
   border-radius: 2px;
   /* checkerboard shows through if a color ever has alpha */
   background-image:
-    linear-gradient(45deg, var(--border) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--border) 25%, transparent 25%);
+    linear-gradient(45deg, var(--border-default) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-default) 25%, transparent 25%);
   background-size: 8px 8px;
 }
 .ss-color-swatch__empty {
@@ -663,23 +665,23 @@
 .ss-color-popover {
   position: fixed;
   z-index: calc(var(--z-modal-overlay) + 1);
-  width: 216px;
-  padding: var(--spacing-sm);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
+  width: var(--popover-color-picker-width);
+  padding: var(--space-12);
+  background: var(--surface-panel);
+  border: var(--stroke-1) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-window);
 }
 
 .ss-color-picker {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--space-2);
 }
 /* Size react-colorful's surface to the popover. */
 .ss-color-picker .react-colorful {
   width: 100%;
-  height: 150px;
+  height: var(--color-picker-surface-height);
 }
 .ss-color-picker .react-colorful__saturation {
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
@@ -697,17 +699,19 @@
 
 .ss-color-picker__input {
   width: 100%;
-  height: 26px;
-  padding: 0 var(--spacing-sm);
-  font-size: var(--font-size-base);
+  height: var(--control-height-standard);
+  padding: 0 var(--space-2);
+  font-family: var(--font-code);
+  font-size: var(--font-size-11);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  border: var(--stroke-1) solid var(--border-default);
+  border-radius: var(--radius-control);
 }
 .ss-color-picker__input:focus {
-  outline: 1px solid var(--action);
+  outline: var(--stroke-2) solid var(--accent-active);
+  outline-offset: -1px;
 }
 
 .ss-edit-panel__hint,
@@ -749,7 +753,7 @@
 .ss-edit-intro__list svg {
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 .ss-edit-intro__list strong {
   color: var(--text-primary);
@@ -765,8 +769,8 @@
   padding: 6px var(--spacing-sm);
   font-size: var(--font-size-sm);
   line-height: 1.4;
-  color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--accent-warning);
+  background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
   border-radius: var(--radius-sm);
 }
 
@@ -806,7 +810,7 @@
   font-variant-numeric: tabular-nums;
   text-align: left;
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -848,17 +852,17 @@
 }
 /* Tone the warning variant (in a layout / every page) with the warning color. */
 .ss-edit-panel__scope--wide {
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 .ss-edit-panel__scope--btn.ss-edit-panel__scope--wide {
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  background: color-mix(in srgb, var(--accent-warning) 12%, transparent);
 }
 .ss-edit-panel__scope strong {
   color: inherit;
   font-weight: 600;
 }
 .ss-edit-panel__scope-more {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 /* "Where X is used" modal. */
@@ -866,9 +870,9 @@
   width: min(460px, calc(100vw - 32px));
 }
 .ss-usage-modal__name {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-lg);
-  color: var(--accent, var(--action));
+  color: var(--accent-active, var(--accent-active));
 }
 .ss-usage-modal__body {
   padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-md);
@@ -880,8 +884,8 @@
   font-size: var(--font-size-base);
   line-height: 1.5;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--warning) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warning) 26%, transparent);
+  background: color-mix(in srgb, var(--accent-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-warning) 26%, transparent);
   border-radius: var(--radius-md);
 }
 .ss-usage-modal__note strong {
@@ -916,10 +920,10 @@
   flex: 0 0 auto;
 }
 .ss-usage-sec__dot--page {
-  background: var(--action);
+  background: var(--accent-active);
 }
 .ss-usage-sec__dot--layout {
-  background: var(--warning);
+  background: var(--accent-warning);
 }
 .ss-usage-sec__dot--component {
   background: var(--text-muted);
@@ -962,7 +966,7 @@
   align-items: baseline;
   flex: 1 1 auto;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
 }
 .ss-usage-row__dir {
@@ -994,7 +998,7 @@
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: 999px;
 }
 /* Clickable line chip — jumps to that file:line in the Code tab. */
@@ -1006,8 +1010,8 @@
     color var(--transition);
 }
 .ss-usage-row__line--btn:hover {
-  color: var(--action-text);
-  background: var(--action);
+  color: var(--text-on-accent);
+  background: var(--accent-active);
 }
 
 .ss-edit-panel__source {
@@ -1038,7 +1042,7 @@
 }
 .ss-edit-panel__srclink:hover {
   background: none;
-  color: var(--action);
+  color: var(--accent-active);
 }
 .ss-edit-panel__srclink code {
   color: inherit;
@@ -1054,13 +1058,13 @@
   font-size: var(--font-size-sm);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-muted);
   cursor: default;
 }
 .ss-edit-panel__badge--approx {
-  color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 14%, transparent);
+  color: var(--accent-warning);
+  background: color-mix(in srgb, var(--accent-warning) 14%, transparent);
 }
 
 /* Collapsible control sections (Layout, Spacing, Typography, …). Native
@@ -1070,9 +1074,9 @@
      tall sections to fit — clipping their content (overflow:hidden) instead of
      letting the body scroll. flex:none keeps each section at its natural height. */
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  border: var(--stroke-1) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-panel);
   overflow: hidden;
 }
 /* Keep <summary> at its default display for WebKit/Tauri (see PropSection.tsx) —
@@ -1117,7 +1121,7 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .ss-edit-panel__control {
@@ -1132,14 +1136,14 @@
 .ss-box {
   position: relative;
   padding: 22px 38px;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text-muted) 7%, transparent);
 }
 .ss-box__inner {
   position: relative;
   padding: 20px 32px;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text-muted) 9%, transparent);
 }
@@ -1176,17 +1180,17 @@
   cursor: grab;
 }
 .ss-box__field:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 .ss-box__field:focus {
-  outline: 1px solid var(--action);
-  background: var(--bg-tertiary);
+  outline: 1px solid var(--accent-active);
+  background: var(--surface-control);
 }
 /* Invalid typed value (bad unit) — flag the field; it isn't applied. */
 .ss-box__field--invalid,
 .ss-box__field--invalid:focus {
-  outline: 1px solid var(--error);
-  color: var(--error);
+  outline: 1px solid var(--accent-error);
+  color: var(--accent-error);
 }
 /* Horizontal bars (top / bottom) span the band width; vertical bars span its height. */
 .ss-box__edge--t,
@@ -1275,15 +1279,15 @@
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   cursor: pointer;
 }
 .ss-reset-pop:hover {
   border-color: var(--text-muted);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 /* A box-model side whose value is inherited from a smaller breakpoint (not set
@@ -1317,13 +1321,13 @@
   font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-sm);
   cursor: default;
   user-select: none;
 }
 .ss-edit-panel__saved svg {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 /* Editable numeric field (gap) — click to type a value. */
@@ -1335,19 +1339,19 @@
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 .ss-edit-panel__num:focus {
-  outline: 1px solid var(--action);
+  outline: 1px solid var(--accent-active);
 }
 /* Invalid typed gap value (bad unit) — flag the field; it isn't applied. */
 .ss-edit-panel__num--invalid,
 .ss-edit-panel__num--invalid:focus {
-  color: var(--error);
-  border-color: var(--error);
-  outline-color: var(--error);
+  color: var(--accent-error);
+  border-color: var(--accent-error);
+  outline-color: var(--accent-error);
 }
 
 /* Wider free-form field (sizing values, custom CSS) — left-aligned, room for a
@@ -1358,12 +1362,12 @@
   padding: 0 var(--spacing-xs);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 .ss-edit-panel__text:focus {
-  outline: 1px solid var(--action);
+  outline: 1px solid var(--accent-active);
 }
 .ss-edit-panel__text::placeholder {
   color: var(--text-muted);
@@ -1391,8 +1395,8 @@
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 .ss-custom-css__chip-text {
@@ -1421,7 +1425,7 @@
 }
 .ss-custom-css__chip-x:hover {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 .ss-custom-css__add {
   display: flex;
@@ -1441,14 +1445,14 @@
   font-size: var(--font-size-xl);
   line-height: 1;
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .ss-custom-css__addbtn:hover {
   color: var(--text-primary);
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 .ss-custom-css__hint {
   margin: 0;
@@ -1458,7 +1462,7 @@
 .ss-custom-css__hint code {
   font-size: var(--font-size-xs);
   padding: 1px 3px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-sm);
 }
 
@@ -1473,7 +1477,7 @@
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-sm);
   padding: var(--spacing-sm);
   word-break: break-word;

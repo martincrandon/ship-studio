@@ -176,7 +176,7 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
         <div className="code-tab-sidebar-content">
           {isLoadingTree ? (
             <div className="code-tab-sidebar-loading">
-              <Spinner size="sm" style={{ color: 'var(--accent)' }} />
+              <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
             </div>
           ) : treeError ? (
             <div className="code-tab-sidebar-error">

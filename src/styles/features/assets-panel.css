@@ -33,7 +33,7 @@
 }
 
 .assets-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -51,8 +51,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
 }
 
@@ -92,7 +92,7 @@
 
 .assets-search-clear:hover {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 /* Breadcrumb */
@@ -102,7 +102,7 @@
   flex-wrap: wrap;
   gap: 2px;
   padding: 8px 12px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius);
   /* Must stay visible so the assets-root dropdown isn't clipped. */
   overflow: visible;
@@ -130,7 +130,7 @@
 }
 
 .assets-breadcrumb-btn:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -162,7 +162,7 @@
 }
 
 .assets-root-toggle:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -183,8 +183,8 @@
   flex: 1;
   min-width: 0;
   padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-app);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -192,7 +192,7 @@
 
 .assets-root-custom input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-active);
 }
 
 /* Toolbar */
@@ -209,8 +209,8 @@
 /* View toggle */
 .assets-view-toggle {
   display: flex;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   overflow: hidden;
 }
@@ -232,12 +232,12 @@
 
 .assets-view-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .assets-view-btn.active {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 /* New folder input */
@@ -246,8 +246,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
 }
 
@@ -259,8 +259,8 @@
 .assets-new-folder input {
   flex: 1;
   padding: 4px 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -289,13 +289,13 @@
 }
 
 .assets-new-folder-confirm:hover {
-  background: var(--bg-secondary);
-  color: var(--success);
+  background: var(--surface-panel);
+  color: var(--accent-success);
 }
 
 .assets-new-folder-cancel:hover {
-  background: var(--bg-secondary);
-  color: var(--error);
+  background: var(--surface-panel);
+  color: var(--accent-error);
 }
 
 /* Assets list container */
@@ -304,14 +304,14 @@
   min-height: 200px;
   max-height: 400px;
   overflow-y: auto;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: none;
   border-radius: var(--radius-md);
   position: relative;
 }
 
 .assets-list-container.dragging {
-  outline: 2px dashed var(--accent);
+  outline: 2px dashed var(--accent-active);
   outline-offset: -2px;
 }
 
@@ -368,7 +368,7 @@
 }
 
 .assets-item:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .assets-item.is-folder {
@@ -397,7 +397,7 @@
 }
 
 .assets-item.is-folder .assets-item-icon {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 /* Image thumbnail */
@@ -406,7 +406,7 @@
   height: 32px;
   border-radius: var(--radius-sm);
   object-fit: cover;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   flex-shrink: 0;
 }
 
@@ -416,7 +416,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   flex-shrink: 0;
@@ -424,7 +424,7 @@
 
 .assets-item.is-folder .assets-item-file-icon {
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .assets-item-name {
@@ -447,8 +447,8 @@
 .assets-rename-input {
   flex: 1;
   padding: 4px 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -484,27 +484,27 @@
 }
 
 .assets-action-btn:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-primary);
 }
 
 .assets-action-btn.assets-action-delete:hover {
-  color: var(--error);
+  color: var(--accent-error);
 }
 
 /* Drag overlay */
 .assets-drag-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(var(--success-light-rgb), 0.1);
-  border: 2px dashed var(--accent);
+  background: rgba(var(--accent-success-rgb), 0.1);
+  border: 2px dashed var(--accent-active);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: var(--accent);
+  color: var(--accent-active);
   pointer-events: none;
 }
 
@@ -516,10 +516,10 @@
 
 /* Error */
 .assets-error {
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   padding: 8px 12px;
-  background: rgba(var(--error-rgb), 0.1);
+  background: rgba(var(--accent-error-rgb), 0.1);
   border-radius: var(--radius);
 }
 
@@ -538,7 +538,7 @@
   flex-direction: column;
   align-items: center;
   padding: 12px 8px 8px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius-md);
   cursor: default;
   transition:
@@ -549,7 +549,7 @@
 }
 
 .assets-grid-item:hover {
-  background: var(--border);
+  background: var(--border-default);
 }
 
 .assets-grid-item.is-folder {
@@ -569,12 +569,12 @@
   margin-bottom: 8px;
   border-radius: var(--radius);
   overflow: hidden;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .assets-grid-item.is-folder .assets-grid-preview {
   background: transparent;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .assets-grid-preview img {
@@ -626,20 +626,20 @@
 
 .assets-grid-actions .assets-action-btn {
   padding: 4px;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   border-radius: var(--radius-sm);
 }
 
 .assets-grid-actions .assets-action-btn:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 /* Delete button armed state (ready to confirm) */
 .assets-action-btn.assets-action-delete.armed {
-  background: var(--error-light);
-  color: var(--text-bright);
+  background: var(--accent-error-light);
+  color: var(--text-inverse);
 }
 
 .assets-action-btn.assets-action-delete.armed:hover {
-  background: var(--error-deep);
+  background: var(--accent-error-deep);
 }

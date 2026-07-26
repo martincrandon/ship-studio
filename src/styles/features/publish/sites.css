@@ -6,7 +6,7 @@
 /* Reset Section */
 .publish-reset-section {
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .publish-reset-link {
@@ -29,8 +29,8 @@
 
 .publish-reset-confirm {
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-control);
 }
 
 .publish-reset-confirm p {
@@ -47,8 +47,8 @@
 .publish-reset-options button {
   flex: 1;
   padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -60,7 +60,7 @@
 }
 
 .publish-reset-options button:hover:not(:disabled) {
-  background: var(--border);
+  background: var(--border-default);
 }
 
 .publish-reset-options button:disabled {
@@ -71,8 +71,8 @@
 /* Live Sites Section */
 .publish-live-sites {
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-control);
 }
 
 .publish-live-sites-header {
@@ -90,8 +90,8 @@
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -108,7 +108,7 @@
 
 .publish-live-site-link:hover {
   border-color: var(--text-muted);
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 .publish-live-site-label {
@@ -144,7 +144,7 @@
   min-width: 0;
   font-size: var(--font-size-base);
   color: var(--text-primary);
-  font-family: monospace;
+  font-family: var(--font-code);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

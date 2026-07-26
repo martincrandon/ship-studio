@@ -22,6 +22,7 @@ import {
 } from '../../lib/github';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
@@ -130,69 +131,59 @@ export function GitHubButton({
   // If gh CLI not installed, show install prompt
   if (!cliStatus.installed) {
     return (
-      <button
-        className="github-button github-install"
-        onClick={() => void openUrl('https://cli.github.com/')}
-        title="Install GitHub CLI"
-      >
+      <Button onClick={() => void openUrl('https://cli.github.com/')} title="Install GitHub CLI">
         <GitHubIcon />
         Install CLI
-      </button>
+      </Button>
     );
   }
 
   // If not authenticated, show connect button
   if (!cliStatus.authenticated) {
     return (
-      <button
-        className="github-button github-connect"
-        onClick={onGitHubConnect}
-        title="Connect your GitHub account"
-      >
+      <Button onClick={onGitHubConnect} title="Connect your GitHub account">
         <GitHubIcon />
         Connect
-      </button>
+      </Button>
     );
   }
 
   // If project has a GitHub repo, show icon link to repo
   if (projectStatus?.status === 'connected' && projectStatus?.github_url) {
     return (
-      <button
-        className="github-button github-link"
+      <IconButton
+        icon={<GitHubIcon />}
         onClick={() => void openUrl(projectStatus.github_url!)}
         title="Open on GitHub"
-      >
-        <GitHubIcon />
-      </button>
+        aria-label="Open on GitHub"
+      />
     );
   }
 
   // Show loading state while creating repo (even after modal closes)
   if (isCreatingRepo) {
     return (
-      <button className="github-button github-creating" disabled title="Setting up...">
+      <Button disabled title="Setting up...">
         <GitHubIcon />
         Setting up...
-      </button>
+      </Button>
     );
   }
 
   // Still checking GitHub status - show loading state
   if (projectStatus === null) {
     return (
-      <button className="github-button github-checking" disabled title="Checking GitHub status...">
+      <Button disabled title="Checking GitHub status...">
         <GitHubIcon />
         Checking...
-      </button>
+      </Button>
     );
   }
 
   // Project not connected - show Create Repo button
   return (
     <>
-      <button
-        className="github-button github-create"
+      <Button
         onClick={() => {
           setRepoName(projectName);
           // Clear so the modal's effect can default the owner to this project's
@@ -205,7 +196,7 @@ export function GitHubButton({
       >
         <GitHubIcon />
         <span style={{ whiteSpace: 'nowrap' }}>Create Repo</span>
-      </button>
+      </Button>
 
       {/* Create Repo Modal */}
       <ModalFrame

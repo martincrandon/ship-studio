@@ -16,8 +16,8 @@
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow);
   font-size: var(--font-size-md);
@@ -29,11 +29,11 @@
 }
 
 .toast.toast-success .toast-icon {
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 
 .toast.toast-error .toast-icon {
-  color: var(--error-light);
+  color: var(--accent-error-light);
 }
 
 .toast-icon {
@@ -61,7 +61,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
   background: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
@@ -69,7 +69,7 @@
 }
 
 .toast-copy:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -84,12 +84,12 @@
 }
 
 .toast-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 .toast.toast-info .toast-icon {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 @keyframes toast-slide-in {
@@ -113,8 +113,8 @@
   gap: 12px;
   padding: 8px;
   padding-right: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 32px var(--overlay-40);
   cursor: pointer;
@@ -140,7 +140,7 @@
   height: 60px;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   flex-shrink: 0;
 }
 
@@ -167,7 +167,7 @@
 }
 
 .screenshot-toast-title svg {
-  color: var(--success);
+  color: var(--accent-success);
 }
 
 .screenshot-toast-hint {
@@ -187,7 +187,7 @@
 }
 
 .screenshot-toast-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -216,7 +216,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 .screenshot-preview-content img {
@@ -229,12 +229,12 @@
 
 .screenshot-preview-footer {
   padding: 8px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-control);
 }
 
 .screenshot-preview-path {
   font-size: var(--font-size-sm);
-  font-family: monospace;
+  font-family: var(--font-code);
   color: var(--text-muted);
 }

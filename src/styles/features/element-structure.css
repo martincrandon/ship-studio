@@ -11,9 +11,9 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-md);
 }
 
@@ -40,8 +40,8 @@
 }
 
 .ss-el-toolbar__btn--danger:hover {
-  background: rgba(var(--error-rgb), 0.12);
-  color: var(--error);
+  background: rgba(var(--accent-error-rgb), 0.12);
+  color: var(--accent-error);
 }
 
 .ss-el-toolbar__busy {
@@ -60,9 +60,9 @@
   display: flex;
   flex-direction: column;
   max-height: 320px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -71,7 +71,7 @@
   display: flex;
   gap: 2px;
   padding: var(--spacing-xs);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .ss-insert-menu__position {
@@ -142,9 +142,9 @@
   display: flex;
   flex-direction: column;
   padding: var(--spacing-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-lg);
 }
 
@@ -168,9 +168,9 @@
 }
 
 .ss-tree-menu__item--danger {
-  color: var(--error);
+  color: var(--accent-error);
 }
 
 .ss-tree-menu__item--danger:hover {
-  background: rgba(var(--error-rgb), 0.12);
+  background: rgba(var(--accent-error-rgb), 0.12);
 }

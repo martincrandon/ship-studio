@@ -19,8 +19,8 @@
      left while the text ends flush right, so equal padding reads lopsided. */
   padding: 0 var(--spacing-md) 0 var(--spacing-sm);
   flex-shrink: 0;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
@@ -32,7 +32,7 @@
 }
 
 .branch-pull-button:hover:not(:disabled) {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-primary);
   border-color: var(--text-muted);
 }
@@ -47,8 +47,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
@@ -74,7 +74,7 @@
 }
 
 .branch-indicator-button:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -84,20 +84,20 @@
 
 /* Main branch warning style */
 .branch-indicator-button.main-branch {
-  background: rgba(var(--warning-rgb), 0.15);
-  border-color: rgba(var(--warning-rgb), 0.4);
-  color: var(--warning);
+  background: rgba(var(--accent-warning-rgb), 0.15);
+  border-color: rgba(var(--accent-warning-rgb), 0.4);
+  color: var(--accent-warning);
 }
 
 .branch-indicator-button.main-branch:hover {
-  background: rgba(var(--warning-rgb), 0.25);
-  border-color: rgba(var(--warning-rgb), 0.6);
-  color: var(--warning-light);
+  background: rgba(var(--accent-warning-rgb), 0.25);
+  border-color: rgba(var(--accent-warning-rgb), 0.6);
+  color: var(--accent-warning);
 }
 
 .branch-indicator-button.main-branch svg {
   opacity: 1;
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 
 .branch-name {
@@ -110,8 +110,8 @@
 .branch-live-badge {
   font-size: var(--font-size-xs);
   padding: 1px 5px;
-  background: rgba(var(--success-light-rgb), 0.15);
-  color: var(--success-light);
+  background: rgba(var(--accent-success-rgb), 0.15);
+  color: var(--accent-success);
   border-radius: 3px;
   font-weight: 500;
 }
@@ -128,19 +128,19 @@
 /* "On GitHub" is the normal state — neutral. "Local only" is the one that
    might need action (not backed up), so it carries the gentle warning tint. */
 .branch-sync-badge.synced {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
 }
 
 .branch-sync-badge.local {
-  background: rgba(var(--warning-rgb), 0.12);
-  color: var(--warning);
+  background: rgba(var(--accent-warning-rgb), 0.12);
+  color: var(--accent-warning);
 }
 
 .branch-changes-dot {
   width: 6px;
   height: 6px;
-  background: var(--warning);
+  background: var(--accent-warning);
   border-radius: var(--radius-full);
   flex-shrink: 0;
 }
@@ -148,8 +148,8 @@
 .branch-unsaved-badge {
   font-size: var(--font-size-xs);
   padding: 1px 5px;
-  background: rgba(var(--warning-rgb), 0.15);
-  color: var(--warning);
+  background: rgba(var(--accent-warning-rgb), 0.15);
+  color: var(--accent-warning);
   border-radius: 3px;
   font-weight: 500;
 }
@@ -166,8 +166,8 @@
   left: 0;
   min-width: 280px;
   max-width: 400px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   overflow: hidden;
@@ -176,7 +176,7 @@
 
 .branch-changes-header {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--text-secondary);
@@ -198,7 +198,7 @@
 }
 
 .branch-changes-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .branch-changes-item-clickable {
@@ -227,17 +227,17 @@
 
 .change-modified {
   background: rgba(var(--modified-yellow-rgb), 0.2);
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 
 .change-added {
-  background: rgba(var(--success-light-rgb), 0.2);
-  color: var(--success);
+  background: rgba(var(--accent-success-rgb), 0.2);
+  color: var(--accent-success);
 }
 
 .change-deleted {
-  background: rgba(var(--error-light-rgb), 0.2);
-  color: var(--error);
+  background: rgba(var(--accent-error-light-rgb), 0.2);
+  color: var(--accent-error);
 }
 
 .change-renamed {
@@ -266,7 +266,7 @@
 
 .branch-changes-footer {
   padding: 8px 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -280,7 +280,7 @@
   background: var(--info);
   border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-bright);
+  color: var(--text-inverse);
   font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
@@ -300,9 +300,9 @@
   gap: 6px;
   padding: 6px 10px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-base);
   cursor: pointer;
   transition:
@@ -312,8 +312,8 @@
 }
 
 .branch-changes-discard-btn:hover:not(:disabled) {
-  background: rgba(var(--error-light-rgb), 0.1);
-  border-color: var(--error);
+  background: rgba(var(--accent-error-light-rgb), 0.1);
+  border-color: var(--accent-error);
 }
 
 .branch-changes-discard-btn:disabled {
@@ -322,9 +322,9 @@
 }
 
 .branch-changes-discard-btn.confirming {
-  background: var(--error);
-  border-color: var(--error);
-  color: var(--text-bright);
+  background: var(--accent-error);
+  border-color: var(--accent-error);
+  color: var(--text-inverse);
   animation: pulse-danger 0.6s ease-in-out infinite;
 }
 
@@ -348,8 +348,8 @@
   top: calc(100% + 8px);
   left: 0;
   min-width: 260px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
   box-shadow: var(--shadow-md);
   z-index: var(--z-modal-overlay);
@@ -392,7 +392,7 @@
 }
 
 .branch-dropdown-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: 0;
 }
 
@@ -402,12 +402,12 @@
 }
 
 .branch-dropdown-item.current {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   cursor: default;
 }
 
 .branch-dropdown-item.current:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .branch-item-icon {
@@ -425,16 +425,16 @@
 .branch-item-badge {
   font-size: var(--font-size-xs);
   padding: 1px 5px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: 3px;
   color: var(--text-muted);
 }
 
 .branch-item-badge.live {
-  background: rgba(var(--success-light-rgb), 0.15);
+  background: rgba(var(--accent-success-rgb), 0.15);
   border-color: transparent;
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 
 .branch-item-meta {
@@ -443,13 +443,13 @@
 }
 
 .branch-item-meta.behind {
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 
 .branch-dropdown-footer {
   padding: 8px 0;
-  border-top: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-default);
+  background: var(--surface-control);
 }
 
 .branch-dropdown-link {
@@ -470,5 +470,5 @@
 
 .branch-dropdown-link:hover {
   color: var(--info-light);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }

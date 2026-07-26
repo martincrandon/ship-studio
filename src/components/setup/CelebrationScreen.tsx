@@ -67,7 +67,7 @@ export function CelebrationScreen({ onContinue, hostingConnected }: CelebrationS
             height="80"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="var(--action)"
+            stroke="var(--accent-active)"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"

@@ -114,10 +114,10 @@ export function OnboardingTerminal({ command, args, cwd, onExit }: OnboardingTer
       scrollback: 5000,
       allowProposedApi: true,
       theme: {
-        background: '#1e1e1e',
-        foreground: '#cccccc',
+        background: '#141414',
+        foreground: '#bcbcbc',
         cursor: '#ffffff',
-        selectionBackground: '#3a3d41',
+        selectionBackground: '#393939',
         black: '#000000',
         red: '#cd3131',
         green: '#0dbc79',
@@ -589,9 +589,9 @@ export function OnboardingTerminal({ command, args, cwd, onExit }: OnboardingTer
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#1e1e1e',
+            backgroundColor: '#141414',
             color: '#666666',
-            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            fontFamily: 'var(--font-code)',
             fontSize: 13,
           }}
         >

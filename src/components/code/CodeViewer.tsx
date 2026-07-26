@@ -18,6 +18,7 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { ChevronIcon, CodeIcon, FileIcon, VSCodeIcon, CursorIcon, CopyIcon } from '../icons';
 import { trackEvent } from '../../lib/analytics';
 import { fileExtensionForAnalytics } from '../../lib/code';
@@ -232,7 +233,7 @@ export function CodeViewer({
           <span className="code-viewer-path">{filePath}</span>
         </div>
         <div className="code-viewer-placeholder">
-          <Spinner size="sm" style={{ color: 'var(--accent)' }} />
+          <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
         </div>
       </div>
     );
@@ -342,16 +343,15 @@ export function CodeViewer({
           {onToggleEditMode && (
             // Same control as the visual editor's Edit toggle (shared
             // `preview-edit-toggle` classes) so the two read as one feature.
-            <button
+            <ToggleButton
               type="button"
-              className={`preview-edit-toggle${editModeEnabled ? ' active' : ''}`}
               onClick={() => onToggleEditMode(!editModeEnabled)}
               title={
                 editModeEnabled
                   ? 'Edit mode on — files open editable. Click to turn off.'
                   : 'Turn on edit mode to edit files in Ship Studio'
               }
-              aria-pressed={editModeEnabled}
+              pressed={editModeEnabled}
             >
               <svg
                 width="13"
@@ -371,7 +371,7 @@ export function CodeViewer({
                 className={`preview-edit-toggle-switch ${editModeEnabled ? 'is-on' : ''}`}
                 aria-hidden
               />
-            </button>
+            </ToggleButton>
           )}
           {hasIde && (
             // Portal mode: .code-tab clips overflow, so the menu renders fixed

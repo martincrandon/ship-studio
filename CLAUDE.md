@@ -369,7 +369,7 @@ import { Spinner } from './primitives/Spinner';
 
 The arc uses `currentColor` — set `color` on the spinner or let it inherit (inside a green action button it's automatically dark).
 
-### New button → use `<Button variant="...">` from `src/components/primitives/Button.tsx`
+### New button → use the semantic button family from `src/components/primitives/`
 
 Don't invent per-domain button classes (`foo-btn`, `xyz-action`, etc.) — they fragment the design system.
 
@@ -383,14 +383,19 @@ import { Button } from './primitives/Button';
 <Button variant="primary" onClick={...}>Publish</Button>
 ```
 
-Variants: `primary | secondary | danger | ghost`. Sizes: `md | sm`. Use `block` for full-width.
+Variants: `default | primary | secondary | danger | ghost | warning | variable`. The default is
+the neutral solid Figma button; `secondary` is the neutral outline treatment. Sizes: `md | sm`.
+Buttons hug their contents by default; use `width="fill"` for full-width (`block` remains a
+backwards-compatible alias).
 
-**When a raw `<button>` is fine** (don't force these into `<Button>`):
+Choose by behavior: `Button` for actions, `IconButton` for icon-only actions, `ToggleButton` for
+boolean state, `MenuButton` for dropdown triggers, and `SplitButton` for an action/menu pair. They
+share the same appearance, tone, density, width, and token-driven states.
 
-- `toolbar-icon-btn` buttons — plugin-stable shared class for icon-only toolbar chrome
-- Icon-only buttons ≤ 28px (close ×, hover-reveal row actions, inline input confirm/cancel) — Button's padding would distort them
-- Toggle/switch UI (`aria-pressed` pills), segmented controls, tab buttons (`role="tab"`)
-- Dropdown triggers (the render-prop keeps the feature's own button) and anything inside a primitive
+**When a raw `<button>` is fine** (don't force these into the button family):
+
+- Geometry controls such as canvas handles, timeline points, and colour swatches
+- Tab buttons (`role="tab"`) and internals of another primitive
 - Brand-colored CTAs whose hue is intentional (connect overlay green, conflict yours/theirs pair) — changing them is a design decision, not a cleanup
 
 Everything else that's a standalone action button (CTA, submit, cancel, delete, confirm) uses `<Button variant>`.

@@ -46,7 +46,7 @@
 }
 
 .backups-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -60,7 +60,7 @@
   overflow-y: auto;
   flex: 1;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 .backups-loading,
@@ -81,9 +81,9 @@
 }
 
 .backups-error {
-  background: rgba(var(--error-light-rgb), 0.1);
-  border: 1px solid rgba(var(--error-light-rgb), 0.3);
-  color: var(--error-light);
+  background: rgba(var(--accent-error-light-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-error-light-rgb), 0.3);
+  color: var(--accent-error-light);
   padding: 10px 12px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-base);
@@ -91,9 +91,9 @@
 }
 
 .backups-success {
-  background: rgba(var(--success-light-rgb), 0.1);
-  border: 1px solid rgba(var(--success-light-rgb), 0.3);
-  color: var(--success-light);
+  background: rgba(var(--accent-success-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-success-rgb), 0.3);
+  color: var(--accent-success);
   padding: 10px 12px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-base);
@@ -116,12 +116,12 @@
   gap: 12px;
   padding: 12px;
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   transition: background-color var(--transition);
 }
 
 .backup-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .backup-info {
@@ -147,7 +147,7 @@
 }
 
 .backup-hash {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   opacity: 0.7;
 }
 
@@ -155,8 +155,8 @@
   padding: 6px 12px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
@@ -170,8 +170,8 @@
 }
 
 .backup-restore-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
 }
 
 .backup-restore-btn:disabled {
@@ -183,13 +183,13 @@
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   padding: 4px 8px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-sm);
 }
 
 .backups-footer {
   padding: 12px 24px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,7 +229,7 @@
 
 .backups-confirm-backup {
   padding: 12px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius-md);
 }
 
@@ -258,8 +258,8 @@
   padding: 8px 16px;
   font-size: var(--font-size-md);
   font-weight: 500;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   cursor: pointer;
@@ -270,8 +270,8 @@
 }
 
 .backups-confirm-cancel:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
@@ -284,8 +284,8 @@
   padding: 8px 16px;
   font-size: var(--font-size-md);
   font-weight: 500;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
@@ -298,8 +298,8 @@
 }
 
 .backups-confirm-restore:hover:not(:disabled) {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
 }
 
 .backups-confirm-restore:disabled {
@@ -326,8 +326,8 @@
   width: 48px;
   height: 48px;
   border-radius: var(--radius-full);
-  background: rgba(var(--success-light-rgb), 0.1);
-  color: var(--success-light);
+  background: rgba(var(--accent-success-rgb), 0.1);
+  color: var(--accent-success);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -338,7 +338,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-radius: var(--radius);
 }
 
@@ -357,7 +357,7 @@
 }
 
 .backups-branch-name {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-md);
   color: var(--text-primary);
 }
@@ -392,8 +392,8 @@
   padding: 10px 16px;
   font-size: var(--font-size-md);
   font-weight: 500;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
@@ -408,8 +408,8 @@
 }
 
 .backups-success-pr-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-hover);
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
 }
 
 .backups-success-close-btn {
@@ -417,7 +417,7 @@
   font-size: var(--font-size-md);
   font-weight: 500;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   cursor: pointer;
@@ -429,7 +429,7 @@
 }
 
 .backups-success-close-btn:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--border-hover);
+  background: var(--surface-control);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }

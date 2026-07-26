@@ -2,16 +2,11 @@
 .terminal-tabs-bar {
   display: flex;
   align-items: center;
-  /* Match .terminal-toolbar's 10px horizontal padding so the Restart /
-     Settings buttons align vertically with the sidebar toggle above. */
-  padding: 9px 10px;
-  min-height: 48px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  height: var(--panel-header-h);
+  padding: 0 10px;
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
-  /* A floor gap so the left (undo/redo) and right (Split / Agent Settings)
-     clusters never butt up against each other once the flex:1 spacer between
-     them collapses on a narrow pane. */
   gap: var(--spacing-sm);
 }
 
@@ -25,8 +20,7 @@
 }
 
 /* Right-side cluster — groups feature toggles + the Agent Settings
-   dropdown so they sit together with a consistent gap. Mirrors the
-   left-side undo/redo cluster's `gap: 6` rhythm. */
+   dropdown so they sit together with a consistent gap. */
 .terminal-tabs-bar-right {
   display: flex;
   align-items: center;
@@ -36,7 +30,7 @@
 .terminal-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   min-width: 0;
   flex: 1;
 }
@@ -52,12 +46,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 8px;
+  height: var(--control-height-standard);
+  padding: 0 var(--space-08);
   max-width: 220px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
   font-size: var(--font-size-base);
   font-weight: 500;
@@ -71,9 +65,9 @@
 
 .tab-selector-trigger:hover,
 .tab-selector-trigger.open {
-  background: var(--border);
+  background: var(--surface-control-hover);
   color: var(--text-primary);
-  border-color: var(--text-muted);
+  border-color: var(--border-strong);
 }
 
 .tab-selector-title {
@@ -84,16 +78,16 @@
 }
 
 .tab-selector-shortcut {
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: var(--font-size-base);
+  font-family: var(--font-code);
+  font-size: var(--font-size-11);
   color: var(--text-muted);
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .tab-selector-cmd {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: var(--font-size-lg);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-12);
 }
 
 .tab-selector-trigger svg {
@@ -106,8 +100,8 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: var(--z-modal-overlay);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   width: 260px;
   box-shadow: var(--shadow-md);
@@ -152,11 +146,11 @@
 }
 
 .tab-selector-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .tab-selector-item.active {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .tab-selector-item.add {
@@ -183,7 +177,7 @@
 }
 
 .tab-selector-item-shortcut {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: var(--font-size-base);
   color: var(--text-muted);
   flex-shrink: 0;
@@ -194,7 +188,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--radius-full);
-  background: var(--success-light);
+  background: var(--accent-success);
   flex-shrink: 0;
 }
 
@@ -222,13 +216,13 @@
 }
 
 .tab-selector-close-btn:hover {
-  background: rgba(var(--error-light-rgb), 0.15);
+  background: rgba(var(--accent-error-light-rgb), 0.15);
   color: var(--danger);
 }
 
 .tab-selector-divider {
   height: 1px;
-  background: var(--border);
+  background: var(--border-default);
   margin: 4px 0;
 }
 
@@ -249,6 +243,7 @@
   bottom: 0;
   left: 12px;
   visibility: hidden;
+  background: var(--surface-app);
 }
 
 /* Opencode draws its own full-bleed TUI — it wants 100% of the tab, no
@@ -256,7 +251,7 @@
 .terminal-tab-content[data-agent-id='opencode'] {
   left: 0;
   padding: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 .terminal-tab-content[data-agent-id='opencode'] .xterm,
@@ -266,7 +261,7 @@
   height: 100% !important;
   padding: 0 !important;
   margin: 0 !important;
-  background: var(--bg-primary) !important;
+  background: var(--surface-app) !important;
 }
 
 .terminal-tab-content[data-agent-id='opencode'] .xterm-viewport {
@@ -278,6 +273,19 @@
   display: none;
 }
 
+/* Extend the terminal's unfocused overlay into the 12px content gutter so
+   the full Agent pane dims as one surface. Keep the xterm content at its
+   original width so fitting and text metrics do not change. */
+.terminal-tab-content:not([data-agent-id='opencode']) .terminal-instance {
+  left: -12px;
+  width: calc(100% + 12px) !important;
+}
+
+.terminal-tab-content:not([data-agent-id='opencode']) .terminal-instance-container {
+  width: calc(100% - 12px) !important;
+  margin-left: 12px;
+}
+
 .terminal-tab-content.active {
   visibility: visible;
 }
@@ -287,9 +295,9 @@
    inline `left/width` on `.terminal-tab-content.in-pane`. Reserve vertical
    space at the top for the pane header strip. */
 .terminal-content.split {
-  /* Match `.terminal-tabs-bar`'s `min-height: 48px` so the pane header
+  /* Match `.terminal-tabs-bar`'s shared panel-header height so the pane header
      visually reads as a continuation of the terminal toolbar above. */
-  --split-pane-header-height: 48px;
+  --split-pane-header-height: var(--panel-header-h);
 }
 
 .terminal-split-headers {
@@ -313,8 +321,8 @@
      label trigger sits flush with the Undo/Redo and Branch indicator
      above. */
   padding: 0 10px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
   pointer-events: auto;
 }
 
@@ -364,9 +372,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
   cursor: col-resize;
   z-index: 4;
   transition:
@@ -376,8 +384,8 @@
 
 .terminal-split-handle:hover,
 .terminal-split-handle:active {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--accent-active);
 }
 
 .terminal-split-handle-bar {
@@ -390,7 +398,7 @@
 
 .terminal-split-handle:hover .terminal-split-handle-bar,
 .terminal-split-handle:active .terminal-split-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 .terminal-logs-tabs {
@@ -447,8 +455,8 @@
      rightward/downward from the button. */
   left: 0;
   z-index: var(--z-modal-overlay);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   min-width: 200px;
   box-shadow: var(--shadow);
@@ -473,7 +481,7 @@
 }
 
 .toolbar-dropdown-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 /* Shown inside a dropdown menu when there are zero items to list
@@ -522,7 +530,7 @@
 }
 
 .plugin-dropdown-row:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .plugin-dropdown-row-trigger {
@@ -629,13 +637,13 @@
   font-weight: 600;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-muted);
 }
 
 .toolbar-dropdown-menu .toggle-indicator.on {
-  background: rgba(var(--warning-rgb), 0.2);
-  color: var(--warning);
+  background: rgba(var(--accent-warning-rgb), 0.2);
+  color: var(--accent-warning);
 }
 
 /* First-run hint shown over a fresh agent terminal until the user types. */
@@ -662,8 +670,8 @@
   width: 100%;
   max-width: var(--hint-card-max-w);
   padding: var(--spacing-lg);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   text-align: center;

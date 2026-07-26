@@ -197,17 +197,17 @@ export function DevServerStatus({
 
       <div className="preview-status__actions">
         {phase === 'loading' ? (
-          <Button variant="secondary" size="sm" onClick={onStop}>
+          <Button variant="secondary" onClick={onStop}>
             Stop
           </Button>
         ) : processGone && onRestartServer ? (
           // Poll-only Retry can't resurrect a dead process — offer the real
           // restart pipeline instead (kill port → clear cache → respawn).
-          <Button variant="primary" size="sm" onClick={onRestartServer}>
+          <Button variant="primary" onClick={onRestartServer}>
             Restart dev server
           </Button>
         ) : (
-          <Button variant="secondary" size="sm" onClick={onRetry}>
+          <Button variant="secondary" onClick={onRetry}>
             Retry
           </Button>
         )}
@@ -216,7 +216,6 @@ export function DevServerStatus({
             variant={
               phase !== 'loading' && processGone && onRestartServer ? 'secondary' : 'primary'
             }
-            size="sm"
             onClick={onFixWithAgent}
           >
             Fix with agent

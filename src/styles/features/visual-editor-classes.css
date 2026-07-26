@@ -19,7 +19,7 @@
   --classedit-check-w: 16px;
   --classedit-row-pad-y: 7px;
   /* Faint tint marking the active edit target (paired with a green check). */
-  --classedit-active-tint: color-mix(in srgb, var(--action) 14%, transparent);
+  --classedit-active-tint: color-mix(in srgb, var(--accent-active) 14%, transparent);
   /* Neutral highlight for hover / keyboard cursor. */
   --classedit-hi-tint: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
@@ -32,7 +32,7 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 /* ===== Trigger (closed control) ===== */
@@ -49,7 +49,7 @@
   min-width: 0;
 }
 .ss-classedit__trigger.is-class .ss-classedit__name {
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 /* ===== Menu shell ===== */
@@ -96,12 +96,12 @@
   gap: var(--spacing-xs);
   height: var(--classedit-search-h);
   padding: 0 var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 .ss-classedit__searchwrap:focus-within {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 .ss-classedit__searchwrap svg {
   flex: 0 0 auto;
@@ -207,7 +207,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--action);
+  color: var(--accent-active);
 }
 
 /* Applied-class row: the name picks (edit) on the left, × removes on the right. */
@@ -246,7 +246,7 @@
 }
 /* Full white on hover (--accent is #fff in this theme), from the muted base. */
 .ss-classedit__x:hover:not(:disabled) {
-  color: var(--accent);
+  color: var(--accent-active);
 }
 .ss-classedit__x:disabled {
   opacity: 0.3;
@@ -267,13 +267,13 @@
 .ss-classedit__createrow {
   flex: 0 0 auto;
   color: var(--text-secondary);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   border-radius: 0;
   padding: var(--spacing-sm);
 }
 .ss-classedit__createrow svg {
   flex: 0 0 auto;
-  color: var(--action);
+  color: var(--accent-active);
 }
 .ss-classedit__createrow:disabled {
   opacity: 0.5;

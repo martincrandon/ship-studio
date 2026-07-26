@@ -24,6 +24,7 @@ import {
   SettingsIcon,
 } from '../icons';
 import { Dropdown, DropdownItem, DropdownDivider } from '../primitives/Dropdown';
+import { MenuButton } from '../primitives/MenuButton';
 import { PluginSlot } from '../plugins/PluginSlot';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type {
@@ -64,10 +65,11 @@ export function ToolbarDropdown({
     <Dropdown
       portal
       align="right"
+      side="top"
       menuClassName="toolbar-dropdown-menu"
       trigger={(p) => (
-        <button
-          className={`toolbar-icon-btn ${p['aria-expanded'] ? 'is-open' : ''}`}
+        <MenuButton
+          expanded={Boolean(p['aria-expanded'])}
           title="Agent settings"
           data-education-id="toolbar-more"
           {...p}
@@ -75,7 +77,7 @@ export function ToolbarDropdown({
           <SettingsIcon size={12} />
           <span className="toolbar-btn-label">Agent Settings</span>
           <ChevronIcon size={10} className={p['aria-expanded'] ? 'chevron-flipped' : undefined} />
-        </button>
+        </MenuButton>
       )}
     >
       <DropdownItem icon={<BellIcon size={14} />} onSelect={onNotificationSettings}>

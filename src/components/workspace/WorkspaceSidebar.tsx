@@ -10,8 +10,9 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { SearchIcon, ChevronIcon, ResetIcon, LayersIcon } from '../icons';
+import { SearchIcon, ChevronIcon, ResetIcon, LayersIcon, PinIcon, ActivityIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
 import { useOpenPalette } from '../CommandPalette/paletteContext';
 import { ALL_AGENTS, TERMINAL, getAgentById, type AgentConfig } from '../../lib/agent';
@@ -430,7 +431,12 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         actionBusy: isRestartingDevServer,
         trailing: devServerUrl ? (
           <span data-education-id="browser-button">
-            <BrowserDropdown url={devServerUrl} buttonClassName="sidebar-row-action" iconOnly />
+            <BrowserDropdown
+              url={devServerUrl}
+              buttonClassName="sidebar-row-action"
+              buttonVariant="ghost"
+              iconOnly
+            />
           </span>
         ) : undefined,
       });
@@ -735,42 +741,48 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   return (
     <aside className="workspace-sidebar" aria-label="Processes">
       <div className="workspace-sidebar-top-row">
-        <button
-          type="button"
+        <Button
+          variant="default"
+          width="fill"
           className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
           onClick={onGoHome}
           aria-current={isHomeActive ? 'page' : undefined}
+          data-selected={isHomeActive ? 'true' : undefined}
+          leftIcon={
+            <span className="workspace-sidebar-home-icon" aria-hidden="true">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                <polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            </span>
+          }
         >
-          <span className="workspace-sidebar-home-icon" aria-hidden="true">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </span>
           <span>Home</span>
-        </button>
+        </Button>
       </div>
 
-      <button
-        type="button"
-        className="workspace-sidebar-filter"
-        onClick={() => openPalette()}
-        title="Open command palette"
-        aria-label="Open command palette"
-      >
-        <SearchIcon size={12} />
-        <span className="workspace-sidebar-filter-placeholder">Search</span>
-        <span className="workspace-sidebar-filter-shortcut">{kbd('mod', 'K')}</span>
-      </button>
+      <div className="workspace-sidebar-search-panel">
+        <button
+          type="button"
+          className="workspace-sidebar-filter"
+          onClick={() => openPalette()}
+          title="Open command palette"
+          aria-label="Open command palette"
+        >
+          <SearchIcon size={12} />
+          <span className="workspace-sidebar-filter-placeholder">Search</span>
+          <span className="workspace-sidebar-filter-shortcut">{kbd('mod', 'K')}</span>
+        </button>
+      </div>
 
       <div className="workspace-sidebar-scroll">
         <SidebarGroupHeader
@@ -803,8 +815,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
 
       <div className="workspace-sidebar-footer">
         <Button
-          variant="ghost"
-          block
+          variant="default"
+          width="fill"
           className="workspace-sidebar-add-project"
           onClick={onOpenProjectPicker}
           title="Open a project"
@@ -862,7 +874,9 @@ function SidebarGroupHeader({
       onClick={onToggle}
       aria-expanded={!collapsed}
     >
-      <ChevronIcon size={10} className={collapsed ? 'chevron-collapsed' : 'chevron-expanded'} />
+      <span className="sidebar-group-symbol" aria-hidden="true">
+        {label === 'Pinned' ? <PinIcon size={14} /> : <ActivityIcon size={14} />}
+      </span>
       <span className="sidebar-group-label">{label}</span>
       <span className="sidebar-group-count">{count}</span>
     </button>
@@ -1040,9 +1054,16 @@ function ProjectGroup({
           }
         }}
       >
-        <button
-          type="button"
-          className="sidebar-project-chevron"
+        <IconButton
+          className="sidebar-project-control sidebar-project-chevron"
+          variant="ghost"
+          density="compact"
+          icon={
+            <ChevronIcon
+              size={10}
+              className={isExpanded ? 'chevron-expanded' : 'chevron-collapsed'}
+            />
+          }
           onClick={(e) => {
             e.stopPropagation();
             onToggleExpand();
@@ -1050,12 +1071,7 @@ function ProjectGroup({
           aria-expanded={isExpanded}
           title={isExpanded ? 'Collapse project' : 'Expand project'}
           aria-label={isExpanded ? 'Collapse project' : 'Expand project'}
-        >
-          <ChevronIcon
-            size={10}
-            className={isExpanded ? 'chevron-expanded' : 'chevron-collapsed'}
-          />
-        </button>
+        />
         <span
           className={`sidebar-project-initials ${shortcutNumber !== null ? 'is-shortcut' : ''}`}
           aria-hidden="true"
@@ -1066,25 +1082,27 @@ function ProjectGroup({
         <ProjectRowName name={row.fallbackName} />
         {memoryLabel && <span className="sidebar-project-meta">{memoryLabel}</span>}
         {onClose && (
-          <button
-            type="button"
-            className="sidebar-project-close"
+          <IconButton
+            className="sidebar-project-control sidebar-project-close"
+            variant="ghost"
+            density="compact"
+            icon={
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path
+                  d="M1 1 L9 9 M9 1 L1 9"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
             onClick={(e) => {
               e.stopPropagation();
               onClose();
             }}
             aria-label={`Close ${row.fallbackName}`}
             title="Close project (stops dev server)"
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-              <path
-                d="M1 1 L9 9 M9 1 L1 9"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
+          />
         )}
         <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
       </div>
@@ -1204,18 +1222,18 @@ function SidebarSection({
           <span className="sidebar-section-label">{label}</span>
         </button>
         <div className="sidebar-section-meta">
-          <span className="sidebar-section-count">{total}</span>
+          <span className="sidebar-section-control-slot sidebar-section-count">{total}</span>
           {onAdd && (
-            <button
-              type="button"
+            <IconButton
               className="sidebar-section-add"
+              variant="ghost"
+              icon={<span aria-hidden="true">+</span>}
               onClick={handleAddClick}
               title={addLabel}
-              aria-label={addLabel}
-            >
-              +
-            </button>
+              aria-label={addLabel ?? `Add ${label.toLowerCase()}`}
+            />
           )}
+          {!onAdd && <span className="sidebar-section-control-slot" aria-hidden="true" />}
         </div>
       </header>
       {!collapsed && (
@@ -1231,9 +1249,10 @@ function SidebarSection({
                 className={`sidebar-section-add-footer-group ${hasMultipleOptions ? 'has-caret' : ''}`}
                 ref={footerWrapRef}
               >
-                <button
-                  type="button"
-                  className="toolbar-icon-btn sidebar-section-add-footer"
+                <Button
+                  variant="default"
+                  width="fill"
+                  className="sidebar-section-add-footer"
                   onClick={(e) => {
                     e.stopPropagation();
                     setFooterPickerOpen(false);
@@ -1243,11 +1262,11 @@ function SidebarSection({
                 >
                   <span>{addFooterLabel}</span>
                   {addShortcut && <span className="capture-shortcut">{addShortcut}</span>}
-                </button>
+                </Button>
                 {hasMultipleOptions && (
-                  <button
-                    type="button"
-                    className={`toolbar-icon-btn sidebar-section-add-footer-caret ${footerPickerOpen ? 'is-open' : ''}`}
+                  <Button
+                    variant="default"
+                    className={`sidebar-section-add-footer-caret ${footerPickerOpen ? 'is-open' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleFooterPicker();
@@ -1257,7 +1276,7 @@ function SidebarSection({
                     aria-label="Choose agent type"
                   >
                     <ChevronIcon size={12} />
-                  </button>
+                  </Button>
                 )}
               </div>
               {footerPickerOpen &&
@@ -1397,39 +1416,41 @@ function SidebarRow({ item }: { item: SidebarItem }) {
           {item.label}
         </span>
       )}
-      {item.meta && <span className="sidebar-row-meta">{item.meta}</span>}
-      {item.onAction && item.actionIcon && (
-        <button
-          type="button"
-          className="sidebar-row-action"
-          onClick={handleAction}
-          disabled={item.actionBusy}
-          title={item.actionLabel}
-          aria-label={item.actionLabel}
-        >
-          {item.actionIcon}
-        </button>
-      )}
-      {item.trailing && (
-        <span
-          className="sidebar-row-trailing"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          {item.trailing}
-        </span>
-      )}
-      {item.onClose && (
-        <button
-          type="button"
-          className="sidebar-row-close"
-          onClick={handleClose}
-          title="Close"
-          aria-label={`Close ${item.label}`}
-        >
-          ×
-        </button>
-      )}
+      <span className="sidebar-row-meta">{item.meta}</span>
+      <span className="sidebar-row-control-slot">
+        {item.onAction && item.actionIcon && (
+          <IconButton
+            className="sidebar-row-action"
+            variant="ghost"
+            icon={item.actionIcon}
+            onClick={handleAction}
+            disabled={item.actionBusy}
+            title={item.actionLabel}
+            aria-label={item.actionLabel ?? 'Item action'}
+          />
+        )}
+      </span>
+      <span className="sidebar-row-control-slot">
+        {item.trailing && (
+          <span
+            className="sidebar-row-trailing"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {item.trailing}
+          </span>
+        )}
+        {!item.trailing && item.onClose && (
+          <IconButton
+            className="sidebar-row-close"
+            variant="ghost"
+            icon={<span aria-hidden="true">×</span>}
+            onClick={handleClose}
+            title="Close"
+            aria-label={`Close ${item.label}`}
+          />
+        )}
+      </span>
     </li>
   );
 }

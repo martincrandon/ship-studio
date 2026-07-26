@@ -9,10 +9,10 @@
   gap: 6px;
   padding: 0 8px;
   height: 28px;
-  background: var(--action);
-  border: 1px solid var(--action-hover);
+  background: var(--accent-active);
+  border: 1px solid var(--accent-active-hover);
   border-radius: var(--radius);
-  color: var(--action-text);
+  color: var(--text-on-accent);
   font-size: var(--font-size-base);
   font-weight: 500;
   cursor: pointer;
@@ -23,17 +23,17 @@
 }
 
 .publish-button:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
 }
 
 .publish-button.no-changes {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--surface-control);
+  border-color: var(--border-default);
   color: var(--text-secondary);
 }
 
 .publish-button.no-changes:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -43,23 +43,26 @@
 }
 
 .publish-button.publish-disabled {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--button-surface-default);
+  border-color: transparent;
   color: var(--text-muted);
+  box-shadow: var(--button-shadow);
   cursor: not-allowed;
 }
 
 .publish-button.publish-checking {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--button-surface-default);
+  border-color: transparent;
   color: var(--text-muted);
+  box-shadow: var(--button-shadow);
   cursor: not-allowed;
 }
 
 .publish-button.synced {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--button-surface-default);
+  border-color: transparent;
   color: var(--text-muted);
+  box-shadow: var(--button-shadow);
   cursor: pointer;
 }
 
@@ -68,8 +71,8 @@
   top: calc(100% + 8px);
   right: 0;
   width: 320px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: 10px;
   box-shadow: var(--shadow-md);
   z-index: var(--z-modal-overlay);

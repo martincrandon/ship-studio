@@ -40,7 +40,7 @@
 }
 
 .mcp-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -60,7 +60,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -75,8 +75,8 @@
 }
 
 .mcp-tab.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -86,7 +86,7 @@
   overflow-y: auto;
   flex: 1;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 /* Connected Tab Controls */
@@ -104,8 +104,8 @@
   gap: 6px;
   padding: 0 10px;
   height: 26px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-muted);
   transition: border-color var(--transition);
@@ -151,7 +151,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -166,8 +166,8 @@
 }
 
 .mcp-filter-btn.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -184,8 +184,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   transition: border-color var(--transition);
 }
@@ -214,7 +214,7 @@
 }
 
 .mcp-status-dot.connected {
-  background: var(--success-light);
+  background: var(--accent-success);
 }
 
 .mcp-status-dot.needs_auth {
@@ -222,7 +222,7 @@
 }
 
 .mcp-status-dot.error {
-  background: var(--error-light);
+  background: var(--accent-error-light);
 }
 
 .mcp-server-name {
@@ -248,7 +248,7 @@
   align-items: center;
   padding: 2px 6px;
   background: transparent;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
@@ -266,7 +266,7 @@
   color: var(--text-secondary);
   margin-top: 6px;
   line-height: 1.4;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
   word-break: break-all;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -280,7 +280,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -291,8 +291,8 @@
 }
 
 .mcp-remove-btn:hover {
-  color: var(--error);
-  border-color: var(--error);
+  color: var(--accent-error);
+  border-color: var(--accent-error);
   border-style: solid;
 }
 
@@ -315,10 +315,10 @@
 
 .mcp-add-description code {
   padding: 2px 5px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: 3px;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
 }
@@ -333,17 +333,17 @@
   padding: 8px 12px;
   font-size: var(--font-size-md);
   color: var(--text-primary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   outline: none;
   transition: border-color var(--transition);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
 }
 
 .mcp-add-input::placeholder {
   color: var(--text-muted);
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: var(--font-code);
 }
 
 .mcp-add-input:focus {
@@ -354,8 +354,8 @@
   padding: 8px 14px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  color: var(--action-text);
-  background: var(--action);
+  color: var(--text-on-accent);
+  background: var(--accent-active);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -366,7 +366,7 @@
 }
 
 .mcp-add-btn:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
 }
 
 .mcp-add-btn:disabled {
@@ -397,7 +397,7 @@
   font-weight: 500;
   color: var(--text-muted);
   background: transparent;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius);
   cursor: pointer;
   transition:
@@ -412,8 +412,8 @@
 }
 
 .mcp-scope-btn.active {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
 }
 
@@ -434,25 +434,25 @@
 /* Layout + tint for the loading <Spinner> */
 .mcp-loading-spinner {
   margin: 0 auto 12px;
-  color: var(--accent);
+  color: var(--accent-active);
 }
 
 .mcp-error {
   padding: 12px;
-  background: rgba(var(--error-deep-rgb), 0.1);
-  border: 1px solid rgba(var(--error-deep-rgb), 0.3);
+  background: rgba(var(--accent-error-deep-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-error-deep-rgb), 0.3);
   border-radius: var(--radius);
-  color: var(--error);
+  color: var(--accent-error);
   font-size: var(--font-size-md);
   margin-bottom: 12px;
 }
 
 .mcp-success {
   padding: 12px;
-  background: rgba(var(--success-rgb), 0.1);
-  border: 1px solid rgba(var(--success-rgb), 0.3);
+  background: rgba(var(--accent-success-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-success-rgb), 0.3);
   border-radius: var(--radius);
-  color: var(--success-light);
+  color: var(--accent-success);
   font-size: var(--font-size-md);
   margin-bottom: 12px;
 }
@@ -460,7 +460,7 @@
 /* Footer */
 .mcp-footer {
   padding: 12px 24px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   display: flex;
   align-items: center;
   justify-content: space-between;

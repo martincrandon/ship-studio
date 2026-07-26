@@ -40,7 +40,7 @@
 }
 
 .plugins-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -70,13 +70,13 @@
 }
 
 .plugins-tab:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 .plugins-tab.active {
-  background: var(--bg-tertiary);
-  border-color: var(--border);
+  background: var(--surface-control);
+  border-color: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -89,8 +89,8 @@
   height: 30px;
   min-height: 30px;
   flex-shrink: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-muted);
   margin: 0 24px 12px;
@@ -128,7 +128,7 @@
   padding: 0 24px 16px;
   min-height: 200px;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 
 /* Loading / Empty */
@@ -153,8 +153,8 @@
 .plugins-beta-notice {
   font-size: var(--font-size-base);
   color: var(--text-secondary);
-  background: rgba(var(--warning-rgb), 0.08);
-  border: 1px solid rgba(var(--warning-rgb), 0.25);
+  background: rgba(var(--accent-warning-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-warning-rgb), 0.25);
   border-radius: var(--radius);
   padding: 8px 12px;
   margin-bottom: 12px;
@@ -173,8 +173,8 @@
   gap: 12px;
   padding: 12px;
   border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
 }
 
 /* Icon container: renders the toolbar component but only shows the SVG */
@@ -189,7 +189,7 @@
   color: var(--text-secondary);
   overflow: hidden;
   border-radius: var(--radius);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   font-size: 0;
   line-height: 0;
 }
@@ -299,7 +299,7 @@
 }
 
 .plugin-action-link.plugin-action-danger:hover:not(:disabled) {
-  color: var(--error-light);
+  color: var(--accent-error-light);
 }
 
 .plugin-action-status {
@@ -311,8 +311,8 @@
   font-size: var(--font-size-sm);
   padding: 3px 10px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
   color: var(--text-secondary);
   cursor: pointer;
   flex-shrink: 0;
@@ -322,9 +322,9 @@
 }
 
 .plugin-toggle-btn.enabled {
-  background: var(--success);
-  border-color: var(--success);
-  color: var(--text-bright);
+  background: var(--accent-success);
+  border-color: var(--accent-success);
+  color: var(--text-inverse);
 }
 
 .plugin-toggle-btn:hover {
@@ -336,9 +336,9 @@
   font-size: var(--font-size-sm);
   padding: 3px 14px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--success) 40;
-  background: var(--success) 20;
-  color: var(--success);
+  border: 1px solid var(--accent-success) 40;
+  background: var(--accent-success) 20;
+  color: var(--accent-success);
   cursor: pointer;
   font-weight: 500;
   flex-shrink: 0;
@@ -348,7 +348,7 @@
 }
 
 .plugin-library-install-btn:hover:not(:disabled) {
-  background: var(--success) 30;
+  background: var(--accent-success) 30;
 }
 
 .plugin-library-install-btn:disabled {
@@ -368,16 +368,16 @@
   padding: 2px 7px;
   margin-top: 6px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   text-transform: capitalize;
 }
 
 .plugins-empty-link {
   background: none;
   border: none;
-  color: var(--success);
+  color: var(--accent-success);
   cursor: pointer;
   font-size: inherit;
   padding: 0;
@@ -392,7 +392,7 @@
 .plugins-url-section {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .plugins-url-toggle {
@@ -426,8 +426,8 @@
   height: 32px;
   padding: 0 10px;
   font-size: var(--font-size-base);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   outline: none;
@@ -435,7 +435,7 @@
 }
 
 .plugins-install-input:focus {
-  border-color: var(--success);
+  border-color: var(--accent-success);
 }
 
 .plugins-install-input::placeholder {
@@ -448,8 +448,8 @@
   padding: 0 16px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  background: var(--success);
-  color: var(--text-bright);
+  background: var(--accent-success);
+  color: var(--text-inverse);
   border: none;
   border-radius: var(--radius);
   cursor: pointer;
@@ -471,9 +471,9 @@
   margin-top: 8px;
   padding: 8px 12px;
   font-size: var(--font-size-base);
-  color: var(--error-light);
-  background: var(--error-light) 10;
-  border: 1px solid var(--error-light) 30;
+  color: var(--accent-error-light);
+  background: var(--accent-error-light) 10;
+  border: 1px solid var(--accent-error-light) 30;
   border-radius: var(--radius);
 }
 
@@ -483,7 +483,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 24px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 
 .plugins-footer-hint {
@@ -500,9 +500,9 @@
   padding: 1px 5px;
   margin-left: 6px;
   border-radius: 3px;
-  background: var(--warning) 20;
-  color: var(--warning);
-  border: 1px solid var(--warning) 40;
+  background: var(--accent-warning) 20;
+  color: var(--accent-warning);
+  border: 1px solid var(--accent-warning) 40;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   vertical-align: middle;
@@ -511,7 +511,7 @@
 /* Dev Plugin Local Path */
 .plugin-local-path {
   font-size: var(--font-size-xs);
-  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-family: var(--font-code);
   color: var(--text-secondary);
   margin-top: 2px;
   overflow: hidden;
@@ -527,9 +527,9 @@
   padding: 10px;
   font-size: var(--font-size-base);
   font-weight: 500;
-  color: var(--warning);
+  color: var(--accent-warning);
   background: transparent;
-  border: 1px dashed var(--warning) 50;
+  border: 1px dashed var(--accent-warning) 50;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition:
@@ -538,8 +538,8 @@
 }
 
 .plugins-link-dev-btn:hover:not(:disabled) {
-  background: var(--warning) 10;
-  border-color: var(--warning) 80;
+  background: var(--accent-warning) 10;
+  border-color: var(--accent-warning) 80;
 }
 
 .plugins-link-dev-btn:disabled {
@@ -565,7 +565,7 @@
 
 .plugin-error-chip svg {
   flex-shrink: 0;
-  color: var(--warning);
+  color: var(--accent-warning);
   opacity: 0.7;
 }
 
@@ -597,6 +597,6 @@
   padding: 6px 12px 4px;
   font-size: var(--font-size-xs);
   color: var(--text-muted);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
   margin-top: var(--spacing-xs);
 }

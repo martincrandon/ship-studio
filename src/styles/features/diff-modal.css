@@ -14,8 +14,8 @@
   width: 720px;
   max-width: 90vw;
   max-height: 85vh;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
@@ -29,7 +29,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 
@@ -68,13 +68,13 @@
 }
 
 .diff-status-added {
-  background: rgba(var(--success-light-rgb), 0.2);
-  color: var(--success-light);
+  background: rgba(var(--accent-success-rgb), 0.2);
+  color: var(--accent-success);
 }
 
 .diff-status-deleted {
-  background: rgba(var(--error-light-rgb), 0.2);
-  color: var(--error-light);
+  background: rgba(var(--accent-error-light-rgb), 0.2);
+  color: var(--accent-error-light);
 }
 
 .diff-status-renamed {
@@ -97,7 +97,7 @@
 }
 
 .diff-close-btn:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -105,10 +105,10 @@
 .diff-path {
   padding: 8px 20px;
   font-size: var(--font-size-base);
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-family: var(--font-code);
   color: var(--text-muted);
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-control);
+  border-bottom: 1px solid var(--border-default);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -120,34 +120,34 @@
   display: flex;
   gap: 12px;
   padding: 10px 20px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-control);
+  border-bottom: 1px solid var(--border-default);
   font-size: var(--font-size-base);
   font-weight: 500;
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-family: var(--font-code);
   flex-shrink: 0;
 }
 
 .diff-stat-add {
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 
 .diff-stat-delete {
-  color: var(--error-light);
+  color: var(--accent-error-light);
 }
 
 /* Body */
 .diff-body {
   flex: 1;
   overflow: auto;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   min-height: 200px;
 }
 
 .diff-pre {
   margin: 0;
   padding: 0;
-  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.5;
 }
@@ -186,21 +186,21 @@
 }
 
 .diff-line-add {
-  background: rgba(var(--success-light-rgb), 0.15);
+  background: rgba(var(--accent-success-rgb), 0.15);
 }
 
 .diff-line-add .diff-line-prefix,
 .diff-line-add .diff-line-content {
-  color: var(--success-light);
+  color: var(--accent-success);
 }
 
 .diff-line-delete {
-  background: rgba(var(--error-light-rgb), 0.15);
+  background: rgba(var(--accent-error-light-rgb), 0.15);
 }
 
 .diff-line-delete .diff-line-prefix,
 .diff-line-delete .diff-line-content {
-  color: var(--error-light);
+  color: var(--accent-error-light);
 }
 
 .diff-line-hunk {
@@ -248,8 +248,8 @@
 
 .diff-error button {
   padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
@@ -261,7 +261,7 @@
 }
 
 .diff-error button:hover {
-  background: var(--border);
+  background: var(--border-default);
 }
 
 /* Image preview */
@@ -271,23 +271,23 @@
   justify-content: center;
   padding: 24px;
   min-height: 200px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   background-image:
     repeating-linear-gradient(
       45deg,
-      var(--bg-primary) 25%,
+      var(--surface-app) 25%,
       transparent 25%,
       transparent 75%,
-      var(--bg-primary) 75%,
-      var(--bg-primary)
+      var(--surface-app) 75%,
+      var(--surface-app)
     ),
     repeating-linear-gradient(
       45deg,
-      var(--bg-primary) 25%,
-      var(--bg-tertiary) 25%,
-      var(--bg-tertiary) 75%,
-      var(--bg-primary) 75%,
-      var(--bg-primary)
+      var(--surface-app) 25%,
+      var(--surface-control) 25%,
+      var(--surface-control) 75%,
+      var(--surface-app) 75%,
+      var(--surface-app)
     );
   background-position:
     0 0,

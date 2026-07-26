@@ -25,14 +25,14 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border-default);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-cascade-target__tag {
   padding: 1px 6px; /* css-ok: chip padding below scale */
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -73,8 +73,8 @@
   gap: 2px; /* css-ok: segmented tray gap */
   margin: var(--spacing-sm) var(--spacing-md) 0;
   padding: 2px; /* css-ok: segmented tray inset */
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 .ss-cascade-tab {
@@ -111,7 +111,7 @@
   gap: var(--spacing-xs);
   margin: var(--spacing-sm) var(--spacing-md) 0;
   padding: 5px var(--spacing-sm); /* css-ok: matches control height */
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
@@ -122,7 +122,7 @@
 }
 .ss-cascade-add-selector:hover {
   color: var(--text-secondary);
-  border-color: var(--border-hover);
+  border-color: var(--border-strong);
 }
 /* The expanded selector input + its autocomplete dropdown. */
 .ss-cascade-add-selector__wrap {
@@ -135,15 +135,15 @@
   width: 100%;
   height: 26px;
   padding: 0 var(--spacing-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-cascade-add-selector__input:focus {
-  outline: 1px solid var(--action);
+  outline: 1px solid var(--accent-active);
 }
 .ss-cascade-add-selector__input::placeholder {
   color: var(--text-muted);
@@ -179,18 +179,18 @@
 }
 
 .ss-card {
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   /* No `overflow: hidden` — autocomplete/at-rule menus must expand BEYOND the card. */
   transition: border-color var(--transition);
 }
 .ss-card.is-readonly {
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 .ss-card.is-nested {
   margin-top: var(--spacing-xs);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 /* A rule whose @media/@container doesn't match the current preview size: dimmed,
    because its declarations aren't applying right now (they're not "overridden"). */
@@ -214,7 +214,7 @@
   padding: var(--spacing-sm);
 }
 .ss-card:not(.is-collapsed) .ss-card__head {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 .ss-card__selector-row {
   display: flex;
@@ -249,9 +249,9 @@
   min-width: 0;
   padding: 1px 6px; /* css-ok: chip padding below scale */
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   font-weight: 600;
   white-space: normal;
@@ -269,7 +269,7 @@
   transition: box-shadow var(--transition-fast);
 }
 .ss-card__selector-chip--editable:hover {
-  box-shadow: inset 0 0 0 1px var(--border-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .ss-card__selector-chip--input {
   all: unset;
@@ -278,14 +278,14 @@
   min-width: 0;
   padding: 1px 6px; /* css-ok: matches the chip */
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   font-weight: 600;
 }
 .ss-card__selector-chip--input:focus {
-  outline: 1px solid var(--action);
+  outline: 1px solid var(--accent-active);
 }
 .ss-card__head-spacer {
   flex: 1 1 auto;
@@ -296,7 +296,7 @@
    prose — at spaces only, never mid-word. */
 .ss-card__context {
   padding: 0 var(--spacing-xs) var(--spacing-xs) calc(var(--cascade-rail) + var(--spacing-xs));
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
   line-height: 1.5;
 }
@@ -337,23 +337,23 @@
   max-width: 45%;
   padding: 1px var(--spacing-xs); /* css-ok: chip padding below scale */
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .is-nested .ss-card__chip {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 .ss-card__chip--editable {
   cursor: text;
   transition: box-shadow var(--transition-fast);
 }
 .ss-card__chip--editable:hover {
-  box-shadow: inset 0 0 0 1px var(--border-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .ss-card__chip--media-input {
   all: unset;
@@ -362,13 +362,13 @@
   max-width: 60%;
   padding: 1px var(--spacing-xs); /* css-ok: chip padding below scale */
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
 }
 .ss-card__chip--media-input:focus {
-  outline: 1px solid var(--action);
+  outline: 1px solid var(--accent-active);
 }
 /* While editing a condition, the field expands to fill the header and floats its
    autocomplete below (real dropdown, not a native datalist). */
@@ -435,8 +435,8 @@
   opacity: 1;
 }
 .ss-card__trash:hover {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--accent-error);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
 }
 
 /* The single grouped, searchable "+ Add" menu (portaled, fixed — never clipped). */
@@ -448,9 +448,9 @@
   display: flex;
   flex-direction: column;
   max-height: 320px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -459,9 +459,9 @@
   box-sizing: border-box;
   width: 100%;
   padding: var(--spacing-sm);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-add-menu__search::placeholder {
@@ -474,9 +474,9 @@
   display: block;
   overflow-y: auto;
   padding: var(--spacing-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-lg);
   scrollbar-width: thin;
 }
@@ -497,7 +497,7 @@
 }
 .ss-suggest__label {
   color: var(--code-property);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   overflow-wrap: anywhere;
 }
@@ -528,7 +528,7 @@
   /* Custom scrollbar so it's consistent in the packaged WebKit build (not the OS
      default). Firefox: thin + tokened colors; WebKit: the rules below. */
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--border-default) transparent;
 }
 .ss-add-menu__list::-webkit-scrollbar {
   width: 8px; /* css-ok: scrollbar width */
@@ -537,9 +537,9 @@
   background: transparent;
 }
 .ss-add-menu__list::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border-default);
   border-radius: 999px; /* css-ok: pill thumb */
-  border: 2px solid var(--bg-secondary); /* css-ok: thumb inset */
+  border: 2px solid var(--surface-panel); /* css-ok: thumb inset */
 }
 .ss-add-menu__list::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
@@ -576,7 +576,7 @@
 .ss-add-menu__label {
   flex: 0 0 auto;
   color: var(--code-property);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-add-menu__hint {
@@ -609,7 +609,7 @@
      spans the full card width — matching the header's full-width bottom border. */
   margin: 6px calc(-1 * var(--spacing-sm)) calc(-1 * var(--spacing-sm)); /* css-ok: edge-to-edge footer */
   padding: 6px var(--spacing-sm); /* css-ok: footer gap */
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
 }
 .ss-card__add {
   all: unset;
@@ -631,7 +631,7 @@
   gap: var(--spacing-xs);
   min-width: 0;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
   white-space: nowrap;
   overflow: hidden;
@@ -653,7 +653,7 @@
   padding: 2px 4px; /* css-ok: dense row */
   margin: 0 -4px; /* css-ok: edge-to-edge row */
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   line-height: 1.5;
 }
@@ -669,9 +669,9 @@
   z-index: var(--z-tooltip);
   max-width: 280px;
   padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-md);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
@@ -680,7 +680,7 @@
 }
 .ss-decl-tip__sel {
   color: var(--code-property);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
 }
 .ss-decl.is-readonly {
   white-space: normal;
@@ -726,11 +726,11 @@
   width: 11px;
   height: 11px;
   border-radius: 2px; /* css-ok: tiny swatch */
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   flex: 0 0 auto;
 }
 .ss-decl__imp {
-  color: var(--warning);
+  color: var(--accent-warning);
   white-space: nowrap;
 }
 /* Actions are pulled OUT of the inline flow (absolute, revealed on hover) so they
@@ -745,7 +745,7 @@
   gap: 1px; /* css-ok: tight action cluster */
   padding: 1px;
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-fast);
@@ -760,9 +760,9 @@
 .ss-value-pop {
   z-index: var(--z-tooltip);
   padding: var(--spacing-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-md);
 }
 /* Input row: optional drag-to-scrub handle + the text field. */
@@ -796,11 +796,11 @@
   box-sizing: border-box;
   width: 100%;
   padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--action);
+  border: 1px solid var(--accent-active);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 /* Autocomplete list under the value input (var(--…), keywords). */
@@ -827,7 +827,7 @@
   box-sizing: border-box;
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid transparent;
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   white-space: pre;
   overflow: hidden;
@@ -868,8 +868,8 @@
   background: var(--tint);
 }
 .ss-decl__remove:hover {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 14%, transparent);
+  color: var(--accent-error);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
 }
 
 /* nest-this-declaration menu (enum-style) */
@@ -887,9 +887,9 @@
   gap: 1px; /* css-ok: menu item gap */
   min-width: 130px;
   padding: var(--spacing-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   box-shadow: var(--shadow-md);
 }
 .ss-decl__nest-item {
@@ -901,12 +901,12 @@
   padding: 4px var(--spacing-sm);
   border-radius: calc(var(--radius-sm) - 1px);
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   white-space: nowrap;
 }
 .ss-decl__nest-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 .ss-decl__nest-item--new {
@@ -937,10 +937,10 @@
   align-self: flex-start;
   padding: 2px var(--spacing-sm);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-settings__classes {
@@ -954,10 +954,10 @@
   gap: var(--spacing-xs);
   padding: 2px var(--spacing-sm);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
 }
 .ss-settings__class-remove {
@@ -968,7 +968,7 @@
   transition: color var(--transition-fast);
 }
 .ss-settings__class-remove:hover {
-  color: var(--error);
+  color: var(--accent-error);
 }
 .ss-settings__class-add {
   all: unset;
@@ -977,24 +977,24 @@
   align-items: center;
   gap: 2px; /* css-ok: icon + label */
   padding: 2px var(--spacing-sm);
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
 .ss-settings__class-add:hover {
   color: var(--text-secondary);
-  border-color: var(--border-hover);
+  border-color: var(--border-strong);
 }
 .ss-settings__class-input {
   all: unset;
   width: 10ch;
   padding: 2px var(--spacing-sm);
-  border: 1px solid var(--action);
+  border: 1px solid var(--accent-active);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-xs);
 }
 .ss-settings__attrs {
@@ -1004,7 +1004,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px; /* css-ok: dense rows */
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 .ss-settings__attr {
@@ -1028,7 +1028,7 @@
   overflow-wrap: anywhere;
 }
 .ss-settings__attr-key:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 1px var(--border-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .ss-settings__attr-key:disabled {
   cursor: default;
@@ -1066,11 +1066,11 @@
   flex: 1 1 auto;
   min-width: 40px;
   padding: 0 var(--spacing-xs);
-  border: 1px solid var(--action);
+  border: 1px solid var(--accent-active);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
 /* The key input stays narrow (it's an ident, not a long value). */
@@ -1115,7 +1115,7 @@
   opacity: 1;
 }
 .ss-settings__attr-remove:hover {
-  color: var(--error);
+  color: var(--accent-error);
 }
 .ss-settings__attr-add {
   display: flex;
@@ -1130,7 +1130,7 @@
 }
 
 /* Hover affordance = brighter text/icon only, NEVER a filled background — this
-   overrides the global `button:hover { background: var(--border) }` (and a couple of
+   overrides the global `button:hover { background: var(--border-default) }` (and a couple of
    tints) for the cascade's trigger/action buttons and rows. Dropdown menu items
    (`__combo`/`__nest-item`) are intentionally NOT included — they keep the standard
    bg-hover, matching the Tailwind editor's `ss-enum__item`. */
@@ -1164,13 +1164,13 @@
   opacity: 1;
 }
 .ss-card__note--unmatched {
-  color: var(--warning);
+  color: var(--accent-warning);
 }
 .ss-card.is-draft .ss-card__selector-chip {
   opacity: 0.85;
 }
 .ss-card__chip--new {
-  color: var(--action);
+  color: var(--accent-active);
   background: var(--tint-strong);
   text-transform: uppercase;
   font-size: var(--font-size-xs);

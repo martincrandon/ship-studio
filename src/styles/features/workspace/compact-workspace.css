@@ -14,7 +14,7 @@
   width: 100vw;
   min-width: 100vw;
   height: 100vh;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   color: var(--text-primary);
   overflow: hidden;
 }
@@ -43,7 +43,7 @@
 }
 
 .compact-topbar-project-menu-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .compact-topbar-project-menu-item.is-subtle {
@@ -59,8 +59,8 @@
   gap: 2px;
   height: 30px;
   padding: 0 4px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-app);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -82,11 +82,11 @@
 }
 
 .compact-tab:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .compact-tab.is-active {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .compact-tab-select {
@@ -121,12 +121,12 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--success);
+  background: var(--accent-success);
   flex-shrink: 0;
 }
 
 .compact-tab.has-attention .compact-tab-dot {
-  background: var(--warning);
+  background: var(--accent-warning);
   animation: compact-tab-pulse 1.6s ease-in-out infinite;
 }
 
@@ -167,7 +167,7 @@
 
 .compact-tab-close:hover {
   color: var(--text-primary);
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 .compact-tab-add {
@@ -191,7 +191,7 @@
 
 .compact-tab-add:hover {
   color: var(--text-primary);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 /* ---------- Terminal stack ---------- */
@@ -205,5 +205,5 @@
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }

@@ -1,0 +1,21 @@
+import { forwardRef, type ReactNode } from 'react';
+import { Button, type ButtonProps } from './Button';
+
+export interface IconButtonProps extends Omit<
+  ButtonProps,
+  'children' | 'leftIcon' | 'rightIcon' | 'aria-label'
+> {
+  icon: ReactNode;
+  'aria-label': string;
+}
+
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
+  { icon, className, ...props },
+  ref
+) {
+  return (
+    <Button ref={ref} className={`button--icon-only ${className ?? ''}`} {...props}>
+      {icon}
+    </Button>
+  );
+});

@@ -24,8 +24,8 @@
   align-items: center;
   gap: 6px;
   padding: 10px 14px;
-  background: var(--bg-secondary);
-  border: 1px dashed var(--border);
+  background: var(--surface-panel);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: var(--font-size-md);
@@ -38,30 +38,30 @@
 }
 
 .branches-new-branch-btn:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--action);
-  color: var(--action);
+  background: var(--surface-control);
+  border-color: var(--accent-active);
+  color: var(--accent-active);
 }
 
 .branches-new-branch-form {
   padding: 14px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
 }
 
 .branches-new-branch-input-wrapper {
   display: flex;
   align-items: center;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   overflow: hidden;
   margin-bottom: 12px;
 }
 
 .branches-new-branch-input-wrapper:focus-within {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 .branches-new-branch-prefix {
@@ -109,8 +109,8 @@
   flex: 1;
   min-width: 0;
   padding: var(--spacing-sm) var(--spacing-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -119,7 +119,7 @@
 }
 
 .branches-new-branch-base-select:focus {
-  border-color: var(--action);
+  border-color: var(--accent-active);
 }
 
 /* Shown when the typed name gets sanitized (e.g. "adjust h2" → "adjust-h2") */
@@ -132,7 +132,7 @@
 
 .branches-new-branch-hint-name {
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
 }
 
 .branches-new-branch-footer {
@@ -156,7 +156,7 @@
   height: 14px;
   margin: 0;
   cursor: pointer;
-  accent-color: var(--action);
+  accent-color: var(--accent-active);
 }
 
 .branches-new-branch-checkbox:hover {
@@ -175,8 +175,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   margin-bottom: 8px;
 }
@@ -188,7 +188,7 @@
 /* The current branch reads as "filled": the card is the only filled one in
    the list, and it carries the "you are here" label — no color needed. */
 .branch-card.current {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 /* Non-current cards switch to their branch when clicked. */
@@ -201,7 +201,7 @@
 
 .branch-card.clickable:hover {
   border-color: var(--text-muted);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .branch-card-info {
@@ -255,18 +255,18 @@
   font-size: var(--font-size-sm);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-muted);
 }
 
 .branch-card-badge.ahead {
-  background: rgba(var(--action-rgb), 0.1);
-  color: var(--action);
+  background: rgba(var(--accent-active-rgb), 0.1);
+  color: var(--accent-active);
 }
 
 .branch-card-badge.behind {
-  background: rgba(var(--warning-rgb), 0.1);
-  color: var(--warning);
+  background: rgba(var(--accent-warning-rgb), 0.1);
+  color: var(--accent-warning);
 }
 
 .branch-card-actions {
@@ -296,9 +296,9 @@
 }
 
 .branch-card-delete-btn:hover:not(:disabled) {
-  color: var(--error);
-  background: rgba(var(--error-rgb), 0.1);
-  border-color: rgba(var(--error-rgb), 0.3);
+  color: var(--accent-error);
+  background: rgba(var(--accent-error-rgb), 0.1);
+  border-color: rgba(var(--accent-error-rgb), 0.3);
 }
 
 .branch-card-delete-btn:disabled {
@@ -313,8 +313,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-size: var(--font-size-base);
@@ -326,7 +326,7 @@
 }
 
 .branch-card-action:hover {
-  background: var(--border);
+  background: var(--border-default);
   color: var(--text-primary);
 }
 
@@ -361,15 +361,15 @@
 
 .prs-tab-error button {
   padding: 8px 16px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius);
   color: var(--text-primary);
   cursor: pointer;
 }
 
 .prs-tab-error button:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .prs-tab-section {
@@ -397,8 +397,8 @@
   align-items: center;
   padding: 48px 24px;
   text-align: center;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
 }
 
@@ -408,7 +408,7 @@
   justify-content: center;
   width: 64px;
   height: 64px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-radius: var(--radius-full);
   color: var(--text-muted);
   margin-bottom: 16px;
@@ -431,10 +431,10 @@
 
 .prs-tab-empty-action {
   padding: 10px 20px;
-  background: var(--action);
+  background: var(--accent-active);
   border: none;
   border-radius: var(--radius);
-  color: var(--action-text);
+  color: var(--text-on-accent);
   font-size: var(--font-size-md);
   font-weight: 500;
   cursor: pointer;
@@ -442,6 +442,6 @@
 }
 
 .prs-tab-empty-action:hover {
-  background: var(--action-hover);
+  background: var(--accent-active-hover);
   font-size: var(--font-size-md);
 }

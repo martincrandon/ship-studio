@@ -10,31 +10,64 @@ the right token or component in under a minute. Canonical sources (always trust 
 
 ## Design tokens
 
+The current styling baseline is the Ship Studio Figma Variables system. The token file is split
+into two layers:
+
+| Layer | Naming | Rule |
+| --- | --- | --- |
+| Primitive | `--color-*`, `--space-*`, `--radius-*`, `--stroke-*`, `--font-*` | Raw imported palette, scale, type, and effect ingredients. Use from semantic definitions, not directly in feature CSS. |
+| Semantic | `--surface-*`, `--text-*`, `--border-*`, `--accent-*`, `--button-*` | Application-facing roles. Components and feature styles should use these. |
+
+Representative Figma mappings are `background-app → surface-app`, `background-panel →
+surface-panel`, `background-control → surface-control`, `background-selected →
+surface-selected`, `border-subtle → border-subtle`, `accent-active → accent-active`, and
+`size-radius-control → radius-control`. Figma text/effect styles are mapped into semantic
+typography and shadow tokens rather than treated as primitives.
+
+### Token migration inventory
+
+The migration inventory is deliberately conservative. Exact imports and obvious semantic
+reattachments are automated; unresolved values remain explicit and are marked for review.
+
+| Source | Classification | Code treatment |
+| --- | --- | --- |
+| Figma color, spacing, radius, stroke, and type Variables | Exact | Imported into `--color-*`, `--space-*`, `--radius-*`, `--stroke-*`, and `--font-*` primitives. |
+| Figma `background-*`, `text-*`, `border-*`, and `accent-*` Variables | Obvious semantic | Reattached to category-first `--surface-*`, `--text-*`, `--border-*`, and `--accent-*` roles. |
+| Figma `Body M/Regular`, `Body S/Regular`, `Code S/Regular`, `Button Effects`, `Input inner shadow`, and `Window shadow` styles | Obvious semantic | Exposed through `--font-ui`, `--font-code`, `--shadow-button`, `--shadow-input-inset`, and `--shadow-window`; these are not primitives. |
+| Legacy `--bg-*`, `--accent`, `--action`, `--border`, `--warning`, `--success`, `--error`, and `--font-mono` names | Compatibility | Kept as deprecated aliases in the compatibility section only; product usages are reattached to semantic roles. |
+| Existing error palette (`#f44747`, `#ef4444`, `#dc2626`) | Ambiguous / review | Retained as explicit `--color-red-error*` values because no corresponding Figma semantic was observed. |
+| Feature-local info, purple, Slack, ANSI, and code-syntax colors | Feature semantic | Preserved where their product meaning is specific; do not use them as general surface or text roles. |
+| Terminal colors and icon/symbol typography | Platform/component input | xterm keeps explicit canvas colors; Geist Mono is used for code, while JetBrains Mono Nerd Font is retained for glyph coverage. |
+| Button `default`, `primary`, `secondary`, `danger`, `ghost`, `warning`, and `variable` states | Obvious semantic | `default` is the Figma neutral solid role, `secondary` is neutral outline, `warning` is amber, and `danger` remains destructive red. |
+
+This pass imports the current dark application mode. Other Figma modes remain part of the source
+inventory but are not wired into the application yet.
+
 All defined in the `:root` block of `base.css`. Never write raw hex colors, raw spacing px, raw
 z-index numbers, or raw durations in CSS — use a token (CI enforces colors; review enforces the rest).
 
 | Group | Tokens | When to use |
 | --- | --- | --- |
-| Surfaces | `--bg-primary` / `--bg-secondary` / `--bg-tertiary`, `--bg-deep` | App background → panels → raised elements; `--bg-deep` for recessed wells (terminals, log output, code editors). |
-| Text | `--text-primary` / `--text-secondary` / `--text-muted`, `--text-bright` | Default → secondary labels → disabled/hints; `--text-bright` (pure white) only for high-emphasis text/icons. |
-| Brand / interactive | `--accent(-hover)`, `--action(-hover)`, `--action-text` | `--accent` is the white brand accent (active/selected); `--action` is the green CTA color, always paired with `--action-text` for legible dark text on it. |
-| Status | `--success(-light)`, `--warning(-light)`, `--error(-light)`, `--error-deep`, `--modified-yellow` | Semantic states. `-light` variants for tinted backgrounds/pills, `--error-deep` for armed destructive states, `--modified-yellow` for git-modified badges. |
+| Surfaces | `--surface-app` / `--surface-panel` / `--surface-control` / `--surface-selected` / `--surface-recessed` | App background → panels → controls → selected rows; recessed wells are used for terminals, log output, and code editors. |
+| Text | `--text-primary` / `--text-secondary` / `--text-muted` / `--text-faint` / `--text-terminal-strong` | Default → supporting labels → muted hints → faint chrome; terminal output has its own readable roles. |
+| Brand / interactive | `--accent-active` / `--accent-active-hover` / `--accent-success` / `--accent-warning` / `--text-on-accent` | Figma active green and warning amber with explicit state intent. |
+| Status | `--accent-success`, `--accent-warning`, `--accent-error`, `--accent-error-light`, `--accent-error-deep`, `--modified-yellow` | Semantic states. Error values are retained as reviewed legacy inputs until their Figma mapping is confirmed. |
 | Info blue | `--info(-hover/-light/-dark)` | Links, info banners, "open" PR state, focus accents. |
 | Purple | `--purple`, `--purple-light`, `--purple-deep-rgb` | AI / agent surfaces only (skills, MCP, plugin marketplace). |
 | Slack | `--slack-pink`, `--slack-lavender(-bright)` | Slack community CTA branding only (dashboard, setup, support panel). |
-| RGB triplets | `--*-rgb` (e.g. `--error-rgb: 244, 71, 71`) | For alpha tints only: `rgba(var(--error-rgb), 0.1)`. Each must stay in sync with its solid token. |
+| RGB triplets | `--accent-*-rgb` and feature `--*-rgb` values | For alpha tints only, e.g. `rgba(var(--accent-error-rgb), 0.1)`. Each must stay in sync with its solid token. |
 | Tints | `--tint-subtle` / `--tint` / `--tint-strong` | White hover/selection washes on dark surfaces (5/8/10% white). |
 | Overlays | `--overlay-30` … `--overlay-80` | Black scrims behind modals, image dimming. Suffix = alpha %. |
 | ANSI palette | `--ansi-green/red/yellow/blue(-dark)` (+ `-rgb`) | Terminal-flavored output: health diagnostics, browser tools, log rendering. Not for general UI status — that's the status group. |
 | Code syntax | `--code-keyword/string/property/comment` | VS Code dark syntax colors for code mode and diff rendering. |
-| Structure / hover | `--border`, `--bg-hover`, `--border-hover` | Borders and the standard hover pair for list rows / tabs / bordered cards. |
-| Spacing | `--spacing-xs` … `--spacing-2xl` (4–32px) | All padding, margin, gap. |
-| Radius | `--radius-sm` (4) / `--radius` (6) / `--radius-md` (8) / `--radius-lg` (12) / `--radius-full` | Corner rounding; `--radius-full` for circles. |
+| Structure / hover | `--border-default/subtle/strong`, `--surface-control-hover`, `--surface-selected` | Figma border hierarchy and standard hover/selected roles for rows, tabs, and bordered cards. Legacy `--border` and `--bg-hover` remain aliases. |
+| Spacing | `--space-*` primitives plus `--spacing-xs` … `--spacing-2xl` compatibility scale | Product CSS uses semantic spacing aliases; use the imported `--space-*` values when no meaningful role exists. |
+| Radius | `--radius-control`, `--radius-card`, `--radius-4/6/8/12/999` | Controls use 6px, cards 8px, and pills/circles use the 999px/full roles. |
 | Z-index tiers | `--z-dropdown` (100) → `--z-preview-fullscreen` (900) → `--z-modal-overlay/-modal` (1000/1001) → `--z-tooltip` (1100) → `--z-notification` (1200) → `--z-app-*` / `--z-toast*` (9999–10010) | Pick the tier, not a number: floating menus < fullscreen preview < modals < tooltips < toasts < global app overlays. (`--z-changelog-sentinel` is the deliberate ceiling.) |
 | Layout dims | `--editor-panel-w`, `--preview-toolbar-h`, `--tree-panel-w` | Shared panel dimensions that must agree across files (and with `PANEL_WIDTH` in `VisualEditorPanel.tsx`). |
 | Shadows | `--shadow-sm` / `--shadow` / `--shadow-md` / `--shadow-lg` | Elevation: small popovers → dropdowns → modals → fullscreen layers. |
 | Transitions | `--transition-fast` (0.1s) / `--transition` (0.15s) / `--transition-slow` (0.3s) | Duration + easing bundled: `transition: background var(--transition)`. |
-| Type scale | `--font-size-xs` (10) … `--font-size-3xl` (24); `--font-mono` | Dense desktop UI, 1px steps at the small end. Off-scale sizes (9/15/17px…) are migration debt — round to the nearest token when touching that code. `--font-mono` for terminal/code. |
+| Type scale | `--font-size-10/11/12/13/16`, `--font-ui`, `--font-code`, `--font-symbol` | Geist for UI, Geist Mono for code/editor styling, and JetBrains Nerd Font for terminal/symbol glyph coverage. |
 
 Need a value that doesn't exist? Add the token to `:root` in `base.css` first, then use it.
 
@@ -89,28 +122,37 @@ Gotchas:
 - Open/close state: `useModalState()` for local toggles, `useModal('id')` from `ModalContext`
   for app-registered modals.
 
-### Button — [Button.tsx](../src/components/primitives/Button.tsx)
+### Button family — [Button.tsx](../src/components/primitives/Button.tsx)
 
-The standalone action button. Extends `ButtonHTMLAttributes` (so `onClick`, `disabled`, `title`,
-… all pass through), forwards its ref, defaults `type="button"`.
+Every button control uses one visual recipe and token set while retaining the semantics of its
+interaction: `Button` for actions, `IconButton` for icon-only actions, `ToggleButton` for boolean
+controls, `MenuButton` for dropdown triggers, and `SplitButton` for an action plus adjacent menu.
+Use the component matching the behavior instead of flattening different controls into one type.
 
 | Prop | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `variant` | `'primary' \| 'secondary' \| 'danger' \| 'ghost'` | `'secondary'` | primary = green CTA (one per view); secondary = outlined neutral; danger = red-tinted destructive; ghost = borderless low-emphasis. |
+| `variant` | `'default' \| 'primary' \| 'secondary' \| 'danger' \| 'ghost' \| 'warning' \| 'variable'` | `'default'` | Figma neutral solid, primary, outline, ghost, warning, and variable roles plus the destructive variant. |
+| `appearance` | `'solid' \| 'outline' \| 'ghost'` | from `variant` | Low-level visual recipe override. |
+| `tone` | `'neutral' \| 'primary' \| 'danger' \| 'warning' \| 'variable'` | from `variant` | Semantic colour role. |
+| `density` | `'standard' \| 'compact'` | `'standard'` | Component density; preferred over the legacy `size` prop. |
 | `size` | `'sm' \| 'md'` | `'md'` | `sm` for dense rows/toolbars. |
-| `block` | `boolean?` | — | Full width. |
+| `width` | `'hug' \| 'fill'` | `'hug'` | Hug contents or fill the available container width. |
+| `block` | `boolean?` | — | Backwards-compatible alias for `width="fill"`. |
 | `leftIcon` / `rightIcon` | `ReactNode?` | — | Rendered beside children with the standard gap. |
 
 ```tsx
 <Button variant="primary" leftIcon={<PlusIcon size={14} />} onClick={create}>
   Create project
 </Button>
+
+<Button width="fill" onClick={openProject}>
+  Open project
+</Button>
 ```
 
-When a raw `<button>` is legitimate — the canonical list lives in
-[CLAUDE.md → "When a raw `<button>` is fine"](../CLAUDE.md#new-button--use-button-variant-from-srccomponentsprimitivesbuttontsx).
-Summary: `toolbar-icon-btn` chrome, icon-only buttons ≤ 28px, toggles/segmented controls/tabs,
-dropdown triggers, internals of other primitives, and intentionally brand-colored CTAs.
+Raw `<button>` elements are reserved for controls whose geometry is the interaction itself, such
+as canvas handles, timeline points, colour swatches, and tab semantics. Toolbar actions,
+icon-only actions, toggles, menu triggers, and split actions use the matching family component.
 
 ### Spinner — [Spinner.tsx](../src/components/primitives/Spinner.tsx)
 

@@ -11,10 +11,10 @@ import { AGENT_LED_REQUIRED_ITEM_IDS, HostChoice } from '../../../lib/agentOnboa
 function CheckIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <circle cx="10" cy="10" r="10" fill="var(--action)" />
+      <circle cx="10" cy="10" r="10" fill="var(--accent-active)" />
       <path
         d="M6 10l3 3 5-6"
-        stroke="var(--action-text)"
+        stroke="var(--text-on-accent)"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"

@@ -31,6 +31,8 @@ interface DropdownProps {
   children: ReactNode;
   /** Which edge of the trigger the menu aligns to. Default 'left'. */
   align?: 'left' | 'right';
+  /** Which side of the trigger the menu opens on. Default 'bottom'. */
+  side?: 'top' | 'bottom';
   /**
    * Render the menu in a body portal with fixed positioning. Use when an
    * ancestor has overflow:hidden that would clip an absolute menu (terminal
@@ -65,6 +67,7 @@ export function Dropdown({
   trigger,
   children,
   align = 'left',
+  side = 'bottom',
   portal = false,
   menuClassName,
   onOpenChange,
@@ -118,23 +121,18 @@ export function Dropdown({
       // Explicitly neutralize the class's `left: 0` / `margin-top` — with only
       // `right` set inline, the menu would stretch from the viewport's left
       // edge to the anchor. Inline styles must own both horizontal edges.
-      setPortalPos(
-        align === 'right'
-          ? {
-              position: 'fixed',
-              top: rect.bottom + 6,
-              right: window.innerWidth - rect.right,
-              left: 'auto',
-              marginTop: 0,
-            }
-          : {
-              position: 'fixed',
-              top: rect.bottom + 6,
-              left: rect.left,
-              right: 'auto',
-              marginTop: 0,
-            }
-      );
+      const vertical =
+        side === 'top'
+          ? { top: 'auto', bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6, bottom: 'auto' };
+      setPortalPos({
+        position: 'fixed',
+        ...vertical,
+        ...(align === 'right'
+          ? { right: window.innerWidth - rect.right, left: 'auto' }
+          : { left: rect.left, right: 'auto' }),
+        marginTop: 0,
+      });
     };
     anchor();
     window.addEventListener('scroll', anchor, true);
@@ -144,7 +142,7 @@ export function Dropdown({
       window.removeEventListener('scroll', anchor, true);
       window.removeEventListener('resize', anchor);
     };
-  }, [isOpen, portal, align, close]);
+  }, [isOpen, portal, align, side, close]);
 
   const menu = isOpen ? (
     <div

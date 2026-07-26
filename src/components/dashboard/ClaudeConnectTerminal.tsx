@@ -84,10 +84,10 @@ export function ClaudeConnectTerminal({
         scrollback: 1000,
         allowProposedApi: true,
         theme: {
-          background: '#1e1e1e',
-          foreground: '#cccccc',
+          background: '#141414',
+          foreground: '#bcbcbc',
           cursor: '#ffffff',
-          selectionBackground: '#3a3d41',
+          selectionBackground: '#393939',
           black: '#000000',
           red: '#cd3131',
           green: '#0dbc79',

@@ -139,9 +139,9 @@ export function DevServerLogs({
       disableStdin: false,
       theme: {
         background: '#1a1a1a',
-        foreground: '#cccccc',
+        foreground: '#bcbcbc',
         cursor: '#ffffff',
-        selectionBackground: '#3a3d41',
+        selectionBackground: '#393939',
         black: '#000000',
         red: '#cd3131',
         green: '#0dbc79',
