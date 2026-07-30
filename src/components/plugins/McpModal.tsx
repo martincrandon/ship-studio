@@ -10,8 +10,11 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { SearchIcon } from '../icons';
+import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 import { type McpServer, listMcpServers, addMcpServer, removeMcpServer } from '../../lib/mcp';
 import { trackEvent, trackSearch } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
@@ -171,24 +174,26 @@ export function McpModal({
       className="mcp-modal"
     >
       <>
-        <div className="mcp-tabs">
-          <button
-            className={`mcp-tab ${activeTab === 'connected' ? 'active' : ''}`}
-            onClick={() => setActiveTab('connected')}
-          >
-            Connected
-          </button>
-          <button
-            className={`mcp-tab ${activeTab === 'add' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab('add');
+        <Tabs
+          value={activeTab}
+          onValueChange={(next) => {
+            const tab = next as Tab;
+            setActiveTab(tab);
+            if (tab === 'add') {
               setAddError(null);
               setAddSuccess(false);
-            }}
-          >
-            Add
-          </button>
-        </div>
+            }
+          }}
+        >
+          <TabsList className="mcp-tabs" aria-label="MCP servers view">
+            <TabsTab value="connected" className="mcp-tab">
+              Connected
+            </TabsTab>
+            <TabsTab value="add" className="mcp-tab">
+              Add
+            </TabsTab>
+          </TabsList>
+        </Tabs>
 
         <div className="mcp-modal-body">
           {activeTab === 'connected' && (
@@ -212,26 +217,16 @@ export function McpModal({
                     spellCheck={false}
                   />
                 </div>
-                <div className="mcp-filter-bar">
-                  <button
-                    className={`mcp-filter-btn ${scopeFilter === 'all' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('all')}
-                  >
-                    All
-                  </button>
-                  <button
-                    className={`mcp-filter-btn ${scopeFilter === 'user' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('user')}
-                  >
-                    User
-                  </button>
-                  <button
-                    className={`mcp-filter-btn ${scopeFilter === 'project' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('project')}
-                  >
-                    Project
-                  </button>
-                </div>
+                <SegmentedControl
+                  value={scopeFilter}
+                  options={[
+                    { value: 'all', label: 'All' },
+                    { value: 'user', label: 'User' },
+                    { value: 'project', label: 'Project' },
+                  ]}
+                  onValueChange={setScopeFilter}
+                  aria-label="Filter MCP servers by scope"
+                />
               </div>
 
               {isLoadingServers && servers.length === 0 && (
@@ -274,13 +269,14 @@ export function McpModal({
                         <div className="mcp-server-command">{server.command_or_url}</div>
                       )}
                     </div>
-                    <button
-                      className="mcp-remove-btn"
+                    <Button
+                      variant="danger"
+                      size="compact"
                       onClick={() => void handleRemove(server)}
                       disabled={removingServer === serverKey(server)}
                     >
                       {removingServer === serverKey(server) ? 'Removing...' : 'Remove'}
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -311,31 +307,25 @@ export function McpModal({
                     autoCapitalize="off"
                     spellCheck={false}
                   />
-                  <button
-                    className="mcp-add-btn"
+                  <Button
+                    variant="primary"
                     onClick={() => void handleAdd()}
                     disabled={isAdding || !addCommand.trim()}
                   >
                     {isAdding ? 'Adding...' : 'Add'}
-                  </button>
+                  </Button>
                 </div>
                 <div className="mcp-scope-toggle">
                   <span className="mcp-scope-toggle-label">Scope:</span>
-                  <button
-                    type="button"
-                    className={`mcp-scope-btn ${addScope === 'user' ? 'active' : ''}`}
-                    onClick={() => setAddScope('user')}
-                  >
-                    User
-                  </button>
-                  <button
-                    type="button"
-                    className={`mcp-scope-btn ${addScope === 'project' ? 'active' : ''}`}
-                    onClick={() => setAddScope('project')}
-                    disabled={!projectPath}
-                  >
-                    Project
-                  </button>
+                  <SegmentedControl
+                    value={addScope}
+                    options={[
+                      { value: 'user', label: 'User' },
+                      { value: 'project', label: 'Project', disabled: !projectPath },
+                    ]}
+                    onValueChange={setAddScope}
+                    aria-label="MCP server scope"
+                  />
                 </div>
               </div>
 

@@ -197,10 +197,10 @@ export function UpdateBanner() {
         </div>
         {status === 'idle' && (
           <div className="update-banner-actions">
-            <Button variant="secondary" size="sm" onClick={handleLater}>
+            <Button variant="default" size="default" onClick={handleLater}>
               Later
             </Button>
-            <Button variant="primary" size="sm" onClick={() => void handleUpdate()}>
+            <Button variant="primary" size="default" onClick={() => void handleUpdate()}>
               Update Now
             </Button>
           </div>
@@ -214,14 +214,14 @@ export function UpdateBanner() {
           </div>
         )}
         {status === 'ready' && (
-          <Button variant="primary" size="sm" onClick={() => void handleRestart()}>
+          <Button variant="primary" size="default" onClick={() => void handleRestart()}>
             Restart to Apply
           </Button>
         )}
         {status === 'error' && (
           <div className="update-banner-actions">
             <span className="update-banner-error">{error}</span>
-            <Button variant="secondary" size="sm" onClick={() => void handleUpdate()}>
+            <Button variant="secondary" size="default" onClick={() => void handleUpdate()}>
               Retry
             </Button>
           </div>

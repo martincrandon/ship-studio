@@ -67,7 +67,7 @@
   overflow: hidden;
 }
 
-/* Reset only the size/inheritance-breaking bits of the global `button` rule.
+/* Keep the menu buttons aligned with their portaled context.
    IMPORTANT: do NOT use `font: inherit` here — that shorthand also resets
    font-size, and `.ss-classedit__menu button` (specificity 0-1-1) would then
    beat the per-item font-size rules, pulling the portaled <body> default size
@@ -78,9 +78,7 @@
   line-height: 1.2;
   margin: 0;
   cursor: pointer;
-  /* Kill the global button background (base + :hover) — the highlight lives on
-     the row, never the inner pick/× buttons (those boxes leaked from `button`).
-     Equal specificity to `button:hover`, but this file loads later, so it wins.
+  /* The highlight lives on the row, never the inner pick/× buttons.
      Items still highlight via their higher-specificity .is-hi/.is-active rules. */
   background: none;
 }

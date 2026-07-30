@@ -23,6 +23,7 @@ import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
 import { ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { ToggleButton } from '../primitives/ToggleButton';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type { PluginThemeData } from '../../contexts/PluginContext';
@@ -186,7 +187,8 @@ export function WorkspaceHeader({
       {/* Left side — Elements and Assets. Learn mode, env vars, backups,
           plugin manager, and IDE launch are reachable via ⌘K. */}
       <div className="workspace-header-left">
-        <Button
+        <ToggleButton
+          pressed={elementTreeVisible}
           onClick={onToggleElementTree}
           disabled={!elementTreeAvailable}
           title={
@@ -196,26 +198,25 @@ export function WorkspaceHeader({
                 ? 'Hide element tree'
                 : 'Show element tree'
           }
-          aria-pressed={elementTreeVisible}
+          leftIcon={<PanelLeftIcon size={16} />}
         >
-          <PanelLeftIcon size={12} />
           <span className="toolbar-btn-label">Elements</span>
-        </Button>
-        <Button
+        </ToggleButton>
+        <ToggleButton
+          pressed={agentPanelVisible}
           onClick={onToggleAgentPanel}
           title={agentPanelVisible ? 'Hide Agent panel' : 'Show Agent panel'}
-          aria-pressed={agentPanelVisible}
+          leftIcon={<TerminalIcon size={16} />}
         >
-          <TerminalIcon size={12} />
           <span className="toolbar-btn-label">Agent</span>
-        </Button>
+        </ToggleButton>
         <Button
           onClick={onOpenAssetsPanel}
           title="Assets"
           aria-pressed={assetsPanelVisible}
           data-education-id="assets-button"
+          leftIcon={<ImageIcon size={16} />}
         >
-          <ImageIcon size={12} />
           <span className="toolbar-btn-label">Assets</span>
         </Button>
         {headerExtras}

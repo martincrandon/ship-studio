@@ -6,6 +6,8 @@
  * @module components/import-project/steps/Step1AccountSelection
  */
 
+import { Button } from '../../primitives/Button';
+
 export interface Step1AccountSelectionProps {
   username: string | null;
   orgs: string[];
@@ -107,9 +109,9 @@ export function Step1AccountSelection({
       {error && <p className="error">{error}</p>}
 
       <div className="create-actions">
-        <button type="button" onClick={onCancel}>
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -190,7 +190,7 @@ export function DiffModal({ projectPath, filePath, fileStatus, onClose }: DiffMo
           {error && (
             <div className="diff-error">
               <p>{error}</p>
-              <Button variant="secondary" size="sm" onClick={() => void loadDiff()}>
+              <Button variant="secondary" onClick={() => void loadDiff()}>
                 Retry
               </Button>
             </div>

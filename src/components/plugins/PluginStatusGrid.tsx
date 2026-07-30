@@ -8,6 +8,7 @@
 
 import type { PluginInfo } from '../../lib/plugins';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
+import { TextButton } from '../primitives/TextButton';
 
 export interface PluginStatusGridProps {
   plugins: PluginInfo[];
@@ -81,22 +82,21 @@ export function PluginStatusGrid({
               <div className="plugin-actions">
                 {plugin.is_dev ? (
                   <>
-                    <button
-                      className="plugin-action-link"
+                    <TextButton
                       onClick={() => onReloadDev(plugin.manifest.id)}
                       disabled={reloadingId === plugin.manifest.id}
                     >
                       {reloadingId === plugin.manifest.id ? 'Reloading...' : 'Reload'}
-                    </button>
-                    <button
-                      className="plugin-action-link plugin-action-danger"
+                    </TextButton>
+                    <TextButton
+                      variant="danger"
                       onClick={() => {
                         onUnlinkDev(plugin.manifest.id);
                       }}
                       disabled={unlinkingId === plugin.manifest.id}
                     >
                       {unlinkingId === plugin.manifest.id ? 'Unlinking...' : 'Unlink'}
-                    </button>
+                    </TextButton>
                   </>
                 ) : (
                   <>
@@ -107,14 +107,14 @@ export function PluginStatusGrid({
                       }
                       if (state === 'available') {
                         return (
-                          <button
-                            className="plugin-action-link plugin-action-update"
+                          <TextButton
+                            variant="accent"
                             onClick={() => {
                               onUpdate(plugin.manifest.id);
                             }}
                           >
                             Update available
-                          </button>
+                          </TextButton>
                         );
                       }
                       if (state === 'updating') {
@@ -124,25 +124,24 @@ export function PluginStatusGrid({
                         return <span className="plugin-action-status">Up to date</span>;
                       }
                       return (
-                        <button
-                          className="plugin-action-link"
+                        <TextButton
                           onClick={() => {
                             onCheckUpdate(plugin.manifest.id);
                           }}
                         >
                           Check for updates
-                        </button>
+                        </TextButton>
                       );
                     })()}
-                    <button
-                      className="plugin-action-link plugin-action-danger"
+                    <TextButton
+                      variant="danger"
                       onClick={() => {
                         onUninstall(plugin.manifest.id);
                       }}
                       disabled={removingId === plugin.manifest.id}
                     >
                       {removingId === plugin.manifest.id ? 'Removing...' : 'Remove'}
-                    </button>
+                    </TextButton>
                   </>
                 )}
               </div>

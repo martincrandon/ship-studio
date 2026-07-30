@@ -13,6 +13,7 @@ import { ProjectActionConfirmModal } from '../dashboard/ProjectActionConfirmModa
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
+import { IconButton } from '../primitives/IconButton';
 import { ResetIcon, SearchIcon, EditIcon } from '../icons';
 import { type FileTreeNode, fileExtensionForAnalytics } from '../../lib/code';
 import { trackEvent, trackSearch } from '../../lib/analytics';
@@ -135,9 +136,14 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
       <div className="code-tab-sidebar" style={{ width: sidebarWidth }}>
         <div className="code-tab-sidebar-header">
           <span className="code-tab-sidebar-title">Files</span>
-          <button className="code-tab-refresh-btn" onClick={refreshTree} title="Refresh file tree">
-            <ResetIcon size={12} />
-          </button>
+          <IconButton
+            variant="ghost"
+            size="compact"
+            onClick={refreshTree}
+            title="Refresh file tree"
+            aria-label="Refresh file tree"
+            icon={<ResetIcon size={12} />}
+          />
         </div>
         <div className="code-tab-search">
           <SearchIcon size={12} />
@@ -164,7 +170,7 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
           ) : treeError ? (
             <div className="code-tab-sidebar-error">
               <span>Failed to load files</span>
-              <Button variant="secondary" size="sm" onClick={refreshTree}>
+              <Button variant="secondary" size="compact" onClick={refreshTree}>
                 Retry
               </Button>
             </div>

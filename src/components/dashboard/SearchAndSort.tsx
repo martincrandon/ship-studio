@@ -7,6 +7,8 @@
  */
 
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { ChevronIcon, CheckIcon, FolderPlusIcon, GridIcon, ListIcon } from '../icons';
 import { trackEvent } from '../../lib/analytics';
@@ -56,40 +58,43 @@ export function SearchAndSort({
         {titleAccessory}
       </div>
       <div className="dashboard-section-controls">
-        <div className="dashboard-view-toggle" role="group" aria-label="Project view">
-          <Button
-            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="dashboard-view-toggle-btn"
-            aria-pressed={viewMode === 'grid'}
-            aria-label="Grid view"
-            title="Grid view"
-            onClick={() => onViewModeChange('grid')}
-          >
-            <GridIcon size={14} />
-            <span className="dashboard-view-toggle-label">Grid</span>
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="dashboard-view-toggle-btn"
-            aria-pressed={viewMode === 'list'}
-            aria-label="List view"
-            title="List view"
-            onClick={() => onViewModeChange('list')}
-          >
-            <ListIcon size={14} />
-            <span className="dashboard-view-toggle-label">List</span>
-          </Button>
-        </div>
+        <Tabs value={viewMode} onValueChange={(next) => onViewModeChange(next as ProjectViewMode)}>
+          <TabsList variant="stretch" className="dashboard-view-toggle" aria-label="Project view">
+            <TabsTab
+              value="grid"
+              className="dashboard-view-toggle-btn"
+              leftIcon={<GridIcon size={16} />}
+              aria-label="Grid view"
+              title="Grid view"
+            >
+              <span className="dashboard-view-toggle-label">Grid</span>
+            </TabsTab>
+            <TabsTab
+              value="list"
+              className="dashboard-view-toggle-btn"
+              leftIcon={<ListIcon size={16} />}
+              aria-label="List view"
+              title="List view"
+            >
+              <span className="dashboard-view-toggle-label">List</span>
+            </TabsTab>
+          </TabsList>
+        </Tabs>
         <Dropdown
           align="right"
           menuClassName="sort-dropdown-menu"
           trigger={(p) => (
-            <button className="sort-dropdown-btn" data-education-id="sort-projects" {...p}>
+            <Button
+              variant="default"
+              size="default"
+              width="hug"
+              className="sort-dropdown-btn"
+              data-education-id="sort-projects"
+              rightIcon={<ChevronIcon />}
+              {...p}
+            >
               {SORT_LABELS[sortBy]}
-              <ChevronIcon />
-            </button>
+            </Button>
           )}
         >
           {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
@@ -103,9 +108,10 @@ export function SearchAndSort({
             </DropdownItem>
           ))}
         </Dropdown>
-        <Button
-          variant="secondary"
-          size="sm"
+        <IconButton
+          variant="default"
+          size="default"
+          width="hug"
           className="new-folder-btn"
           data-education-id="new-folder-button"
           onClick={() => {
@@ -114,9 +120,8 @@ export function SearchAndSort({
           }}
           title="New Folder"
           aria-label="New Folder"
-        >
-          <FolderPlusIcon size={14} />
-        </Button>
+          icon={<FolderPlusIcon size={14} />}
+        />
       </div>
     </div>
   );

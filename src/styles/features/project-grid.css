@@ -1,8 +1,6 @@
 /* Project Grid */
 
-/* Project-grid-local colors — intentional one-offs, not part of the global scale. */
 :root {
-  --grid-on-warning-text: #000000;
   --project-table-select-w: var(--spacing-2xl);
   --project-table-menu-w: calc(var(--spacing-2xl) + var(--spacing-xs));
 }
@@ -416,15 +414,6 @@
   border-radius: var(--radius-md);
   font-size: var(--font-size-md);
   margin-bottom: 20px;
-}
-
-.btn-warning {
-  background: var(--accent-warning);
-  color: var(--grid-on-warning-text);
-}
-
-.btn-warning:hover {
-  background: var(--accent-warning);
 }
 
 /* ============ Responsive Project Grid ============ */

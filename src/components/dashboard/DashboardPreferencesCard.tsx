@@ -31,7 +31,9 @@ export function DashboardPreferencesCard({
       </header>
       <div className="dashboard-card-rows">
         <Button
-          variant="ghost"
+          variant="default"
+          size="default"
+          width="hug"
           className="dashboard-card-row"
           data-education-id="settings-button"
           onClick={() => {
@@ -51,7 +53,9 @@ export function DashboardPreferencesCard({
           <ChevronRightIcon size={14} />
         </Button>
         <Button
-          variant="ghost"
+          variant="default"
+          size="default"
+          width="hug"
           className="dashboard-card-row"
           onClick={() => {
             void trackEvent('changelog_opened', { $screen_name: 'Dashboard' });

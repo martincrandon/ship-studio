@@ -30,9 +30,9 @@ interface Props {
   openMenuRef?: React.MutableRefObject<(() => void) | null>;
 }
 
-const TOOLBAR_W = 104;
+const TOOLBAR_W = 260;
 const TOOLBAR_H = 30;
-const GAP = 6;
+const GAP = 3;
 
 export function ElementToolbar({
   selection,
@@ -88,16 +88,29 @@ export function ElementToolbar({
   const left = Math.max(4, Math.min(rect.left, maxLeft));
 
   const insideDisabled = VOID_ELEMENTS.has(selection.signature.tagName);
+  const tagName = selection.signature.tagName.toLowerCase();
+  const firstClass = selection.signature.className.split(/\s+/).find(Boolean);
+  const selector = firstClass ? `.${firstClass}` : null;
+  const selectionLabel = selector ? `${tagName} ${selector}` : tagName;
 
   return (
     <>
       <div className="ss-el-toolbar" style={{ top, left }} data-testid="element-toolbar">
+        <div
+          className="ss-el-toolbar__selection"
+          role="group"
+          aria-label={`Selected element: ${selectionLabel}`}
+          title={selectionLabel}
+        >
+          <span style={{ color: 'var(--text-primary)' }}>{tagName}</span>
+          {selector && <span style={{ color: 'var(--text-white)' }}>{selector}</span>}
+        </div>
         {busy ? (
           <span className="ss-el-toolbar__busy">
             <Spinner size="sm" />
           </span>
         ) : (
-          <>
+          <div className="ss-el-toolbar__actions" role="group" aria-label="Element actions">
             <button
               ref={plusRef}
               type="button"
@@ -111,7 +124,7 @@ export function ElementToolbar({
                 );
               }}
             >
-              <PlusIcon size={13} />
+              <PlusIcon size={14} />
             </button>
             <button
               type="button"
@@ -131,7 +144,7 @@ export function ElementToolbar({
             >
               <TrashIcon size={12} />
             </button>
-          </>
+          </div>
         )}
       </div>
       <InsertMenu

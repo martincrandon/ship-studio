@@ -7,6 +7,7 @@
  */
 
 import { GitHubIcon } from './icons';
+import { Button } from './primitives/Button';
 
 interface ConnectOverlayProps {
   /** Title text explaining what connection enables */
@@ -33,9 +34,9 @@ export function ConnectOverlay({
         </div>
         <h3 className="connect-overlay-title">{title}</h3>
         <p className="connect-overlay-description">{description}</p>
-        <button className="connect-overlay-btn" onClick={onConnect} disabled={isConnecting}>
+        <Button variant="primary" onClick={onConnect} disabled={isConnecting}>
           {isConnecting ? 'Connecting...' : 'Connect GitHub'}
-        </button>
+        </Button>
       </div>
     </div>
   );

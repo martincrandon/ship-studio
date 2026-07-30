@@ -133,7 +133,7 @@
   padding: 9px 10px;
   min-height: 48px;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 

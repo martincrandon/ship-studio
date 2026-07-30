@@ -19,6 +19,7 @@ import { asCommandError, formatCommandError } from '../../lib/errors';
 import { UploadIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import {
   useProjectCreation,
   TEMPLATES,
@@ -260,22 +261,16 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
             </button>
           </div>
 
-          <div className="create-tabs">
-            <button
-              type="button"
-              className={`create-tab ${activeTab === 'scratch' ? 'active' : ''}`}
-              onClick={() => setActiveTab('scratch')}
-            >
-              Start from Scratch
-            </button>
-            <button
-              type="button"
-              className={`create-tab ${activeTab === 'template' ? 'active' : ''}`}
-              onClick={() => setActiveTab('template')}
-            >
-              Start from Template
-            </button>
-          </div>
+          <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as typeof activeTab)}>
+            <TabsList className="create-tabs" variant="stretch" aria-label="Project source">
+              <TabsTab value="scratch" className="create-tab">
+                Start from Scratch
+              </TabsTab>
+              <TabsTab value="template" className="create-tab">
+                Start from Template
+              </TabsTab>
+            </TabsList>
+          </Tabs>
 
           {activeTab === 'scratch' && (
             <>

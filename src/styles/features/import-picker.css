@@ -2,7 +2,7 @@
 
 .import-picker-modal {
   max-width: 460px;
-  /* Override ModalFrame's --bg-secondary panel back to --bg-primary so the
+  /* Override ModalFrame's --surface-panel panel back to --surface-app so the
      nested surface hierarchy reads correctly: panel (primary) < cards
      (secondary) < icon tiles (tertiary). Without this the cards share the
      panel fill and lose their raised cue. */

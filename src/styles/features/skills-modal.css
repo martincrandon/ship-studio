@@ -46,38 +46,11 @@
 
 /* Tab Bar */
 .skills-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 16px 24px 12px;
+  margin: 16px 24px 12px;
 }
 
-.skills-tab {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
+.skills-tabs .skills-tab {
   font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.skills-tab:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.skills-tab.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
 }
 
 /* Modal Body */
@@ -133,42 +106,6 @@
 
 .skills-installed-search-input::placeholder {
   color: var(--text-muted);
-}
-
-/* Filter Buttons */
-.skills-filter-bar {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.skills-filter-btn {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.skills-filter-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.skills-filter-btn.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
 }
 
 /* Skills List - matches search results card style */
@@ -247,33 +184,6 @@
   overflow: hidden;
 }
 
-.skill-remove-btn {
-  padding: 6px 12px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-  flex-shrink: 0;
-}
-
-.skill-remove-btn:hover {
-  color: var(--accent-error);
-  border-color: var(--accent-error);
-  border-style: solid;
-}
-
-.skill-remove-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Search Section */
 .skills-search-section {
   margin-bottom: 16px;
@@ -304,30 +214,6 @@
   border-color: var(--text-muted);
 }
 
-.skills-search-btn {
-  padding: 8px 14px;
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-on-accent);
-  background: var(--accent-active);
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.skills-search-btn:hover {
-  background: var(--accent-active-hover);
-}
-
-.skills-search-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Scope Toggle - uses same style as filter buttons */
 .skills-scope-toggle {
   display: flex;
@@ -340,40 +226,6 @@
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   margin-right: 4px;
-}
-
-.skills-scope-btn {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.skills-scope-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.skills-scope-btn.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-}
-
-.skills-scope-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* Search Results */
@@ -433,36 +285,6 @@
   opacity: 0.7;
 }
 
-.skills-install-btn {
-  padding: 6px 12px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-on-accent);
-  background: var(--accent-active);
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-  flex-shrink: 0;
-}
-
-.skills-install-btn:hover {
-  background: var(--accent-active-hover);
-}
-
-.skills-install-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.skills-install-btn.installing {
-  color: var(--text-secondary);
-  background: var(--surface-control);
-}
-
 /* Loading & Empty States */
 .skills-loading,
 .skills-empty {
@@ -504,22 +326,7 @@
 }
 
 .skills-footer-link {
-  display: flex;
-  align-items: center;
   font-size: var(--font-size-base);
-  color: var(--text-muted);
-  text-decoration: none;
-  transition: color var(--transition);
-  /* Rendered as a <button> so the link opens the system browser, not in-app. */
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.skills-footer-link:hover {
-  color: var(--text-primary);
 }
 
 /* CLI not available state */

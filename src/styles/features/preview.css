@@ -70,8 +70,8 @@
    .preview-container grid (not the .preview-frame-grid). */
 .inspect-resize-handle {
   background: var(--surface-panel);
-  border-top: 1px solid var(--border-default);
-  border-bottom: 1px solid var(--border-default);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   cursor: ns-resize;
   display: flex;
   align-items: center;
@@ -83,7 +83,7 @@
 
 .inspect-resize-handle:hover {
   background: var(--surface-control);
-  border-color: var(--accent-active);
+  border-color: var(--accent);
 }
 
 .inspect-resize-handle-bar {
@@ -119,7 +119,7 @@
   height: var(--preview-toolbar-h);
   padding: 9px 12px;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border);
   overflow: visible;
 }
 
@@ -181,11 +181,11 @@
   position: relative;
 }
 
-.page-switcher-btn {
+.page-switcher-trigger {
   font-family: var(--font-code);
 }
 
-.page-switcher-btn svg {
+.page-switcher-trigger svg {
   color: var(--text-muted);
 }
 
@@ -213,7 +213,7 @@
   min-width: 220px;
   max-width: 300px;
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: var(--z-dropdown);
@@ -264,46 +264,9 @@
   font-size: var(--font-size-md);
 }
 
-.page-item {
-  position: relative;
-  display: flex;
+.page-dropdown .ss-dropdown__item {
   align-items: baseline;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  color: var(--text-secondary);
   font-family: var(--font-code);
-  font-size: var(--font-size-md);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.page-item:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-.page-item.active {
-  background: var(--tint);
-  color: var(--text-primary);
-}
-
-.page-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent-active);
-  border-radius: 0 2px 2px 0;
 }
 
 .page-item-hint {
@@ -355,7 +318,7 @@
 }
 
 .preview-tree-btn.active {
-  color: var(--accent-active);
+  color: var(--text-primary);
 }
 
 /* Fullscreen: the container covers the window below the workspace header
@@ -468,7 +431,7 @@
   color: var(--text-primary);
 }
 .ss-edit-panel__pin.is-pinned {
-  color: var(--accent-active);
+  color: var(--text-primary);
 }
 
 .breakpoint-btn {
@@ -543,7 +506,7 @@
   width: 48px;
   padding: 4px 6px;
   background: var(--surface-control);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -739,31 +702,6 @@
   height: 2px;
 }
 
-/* Dev server logs toggle (toolbar button) */
-.preview-logs-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--button-gap);
-  height: var(--button-height);
-  padding: 0 var(--button-padding-inline);
-  background: var(--button-surface-default);
-  border: var(--stroke-1) solid var(--button-border-solid);
-  border-radius: var(--button-radius);
-  color: var(--button-text-default);
-  font-size: var(--button-font-size);
-  cursor: pointer;
-  box-shadow: var(--button-shadow);
-  transition:
-    background var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.preview-logs-toggle:hover {
-  background: var(--button-surface-hover);
-  color: var(--text-primary);
-}
-
 /* iOS-style toggle pill next to the Inspect label. Reflects the open
    state of the inspector panel — replaces the prior border/background
    color-change because those didn't read as a toggle. */
@@ -774,7 +712,7 @@
   height: 12px;
   margin-left: 2px;
   background: var(--surface-app);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: 999px;
   transition:
     background var(--transition),
@@ -824,7 +762,7 @@
   align-items: stretch;
   justify-content: space-between;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding-right: var(--spacing-md);
 }
@@ -961,7 +899,7 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -1157,7 +1095,7 @@
   padding: 2px 0;
 }
 .preview-status__logs-toggle:hover {
-  /* Only brighten the label — override the global button:hover background. */
+  /* Only brighten the label; this compact control has no surface state. */
   background: none;
   color: var(--text-primary);
 }
@@ -1174,7 +1112,7 @@
   max-height: 160px;
   overflow: auto;
   background: var(--surface-app);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-family: var(--font-code);
   font-size: var(--font-size-sm);
@@ -1211,7 +1149,7 @@
   gap: var(--spacing-xs);
   padding: 6px 10px;
   background: var(--surface-control);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-primary);
   font-family: var(--font-code);
@@ -1235,7 +1173,7 @@
   margin-top: 4px;
   min-width: 180px;
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   z-index: var(--z-dropdown);

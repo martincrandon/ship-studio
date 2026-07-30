@@ -206,38 +206,9 @@
   flex: 1;
 }
 
-/* View toggle */
+/* The view mode picker is the shared Tabs primitive. */
 .assets-view-toggle {
-  display: flex;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.assets-view-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.assets-view-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-panel);
-}
-
-.assets-view-btn.active {
-  color: var(--text-primary);
-  background: var(--surface-panel);
+  flex-shrink: 0;
 }
 
 /* New folder input */

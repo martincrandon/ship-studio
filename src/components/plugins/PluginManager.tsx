@@ -32,6 +32,10 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { PluginInstallForm } from './PluginInstallForm';
 import { Spinner } from '../primitives/Spinner';
 import { PluginStatusGrid } from './PluginStatusGrid';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { TextButton } from '../primitives/TextButton';
 
 type Tab = 'installed' | 'library';
 
@@ -398,25 +402,26 @@ export function PluginManager({
       <div className="modal plugins-modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="plugins-modal-header">
           <h3>Plugins</h3>
-          <button className="plugins-close-btn" onClick={onClose} title="Close" aria-label="Close">
-            <CloseIcon size={16} />
-          </button>
+          <IconButton
+            variant="ghost"
+            size="compact"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close"
+            icon={<CloseIcon size={16} />}
+          />
         </div>
 
-        <div className="plugins-tabs">
-          <button
-            className={`plugins-tab ${activeTab === 'installed' ? 'active' : ''}`}
-            onClick={() => setActiveTab('installed')}
-          >
-            Installed
-          </button>
-          <button
-            className={`plugins-tab ${activeTab === 'library' ? 'active' : ''}`}
-            onClick={() => setActiveTab('library')}
-          >
-            Library
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as Tab)}>
+          <TabsList className="plugins-tabs" aria-label="Plugins view">
+            <TabsTab value="installed" className="plugins-tab">
+              Installed
+            </TabsTab>
+            <TabsTab value="library" className="plugins-tab">
+              Library
+            </TabsTab>
+          </TabsList>
+        </Tabs>
 
         {projectPath && (
           <div className="plugins-search">
@@ -452,9 +457,9 @@ export function PluginManager({
               {!isLoading && plugins.length === 0 && (
                 <div className="plugins-empty">
                   No plugins installed yet. Browse the{' '}
-                  <button className="plugins-empty-link" onClick={() => setActiveTab('library')}>
+                  <TextButton variant="primary" onClick={() => setActiveTab('library')}>
                     Library
-                  </button>{' '}
+                  </TextButton>{' '}
                   to add one.
                 </div>
               )}
@@ -481,15 +486,16 @@ export function PluginManager({
 
               {error && activeTab === 'installed' && <div className="plugins-error">{error}</div>}
 
-              <button
-                className="plugins-link-dev-btn"
+              <Button
+                variant="default"
+                width="fill"
                 onClick={() => {
                   void handleLinkDevPlugin();
                 }}
                 disabled={isLinkingDev}
               >
                 {isLinkingDev ? 'Linking...' : 'Link Dev Plugin'}
-              </button>
+              </Button>
             </>
           )}
 
@@ -533,15 +539,15 @@ export function PluginManager({
                           {isInstalled ? (
                             <span className="plugin-installed-badge">Installed</span>
                           ) : (
-                            <button
-                              className="plugin-library-install-btn"
+                            <Button
+                              variant="primary"
                               onClick={() => {
                                 void handleLibraryInstall(entry);
                               }}
                               disabled={isThisInstalling || installingId !== null}
                             >
                               {isThisInstalling ? 'Installing...' : 'Install'}
-                            </button>
+                            </Button>
                           )}
                         </div>
                         <div className="plugin-desc">{entry.description}</div>

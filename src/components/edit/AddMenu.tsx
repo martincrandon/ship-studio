@@ -234,7 +234,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
     <button
       ref={btnRef}
       type="button"
-      className={`ss-card__add${open ? ' is-open' : ''}`}
+      className={`ss-cascade-card__add${open ? ' is-open' : ''}`}
       aria-label={
         mode === 'keyframes'
           ? 'Add a keyframe step'

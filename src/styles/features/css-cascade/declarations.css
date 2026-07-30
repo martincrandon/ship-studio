@@ -1,0 +1,284 @@
+/* ── Declaration rows ── */
+/* Prop + value are plain WRAPPING text (clicking opens the edit popover), so a long
+   prop or value just wraps and is never cut off; a short one reads `prop: value`. */
+.ss-decl {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--spacing-xs);
+  padding: 0px 2px; /* css-ok: dense row */
+  margin: 0 -4px; /* css-ok: edge-to-edge row */
+  border-radius: var(--radius-sm);
+  font-family: var(--font-code);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+.ss-decl.is-overridden {
+  color: var(--text-muted);
+}
+.ss-decl.is-overridden .ss-decl__prop,
+.ss-decl.is-overridden .ss-decl__value {
+  text-decoration: line-through;
+}
+
+/* "Overridden by X" hover tooltip (portaled, fixed — never clipped by the panel). */
+.ss-decl-tip {
+  z-index: var(--z-tooltip);
+  max-width: 280px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ss-decl-tip__sel {
+  color: var(--property-text);
+  font-family: var(--font-code);
+}
+.ss-decl.is-readonly {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Clickable display text (button reset to read as plain text). */
+.ss-decl__edit {
+  all: unset;
+  cursor: text;
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+.ss-decl__edit:hover {
+  background: var(--tint-subtle);
+}
+
+/* Property */
+.ss-decl__prop {
+  min-width: 0;
+  color: var(--property-text);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ss-decl__prop:hover {
+  background: var(--property-field-hover);
+}
+.ss-decl__prop.is-selected {
+  background: var(--property-field-selected);
+}
+
+.ss-decl__colon {
+  justify-self: center;
+  color: var(--text-muted);
+}
+
+/* Value */
+.ss-decl__value {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  width: 100%;
+  color: var(--text-primary);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ss-decl__ph {
+  color: var(--text-muted);
+}
+.ss-decl__swatch {
+  align-self: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px; /* css-ok: tiny swatch */
+  border: 1px solid var(--border-default);
+  flex: 0 0 auto;
+}
+.ss-decl__imp {
+  color: var(--accent-warning);
+  white-space: nowrap;
+}
+/* Actions are pulled OUT of the inline flow (absolute, revealed on hover) so they
+   never reserve width and squeeze the value column into per-character wrapping.
+   A solid chip backdrop keeps them legible when they overlay a long value. */
+.ss-decl__actions {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px; /* css-ok: tight action cluster */
+  padding: 1px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.ss-decl:hover .ss-decl__actions,
+.ss-decl__actions:has(.is-open) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Edit popover (click a prop/value) */
+.ss-value-pop {
+  z-index: var(--z-tooltip);
+  padding: var(--spacing-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-md);
+}
+/* Input row: optional drag-to-scrub handle + the text field. */
+.ss-value-pop__field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+.ss-value-pop__field .ss-value-pop__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ss-value-pop__scrub {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: ew-resize;
+  touch-action: none; /* let the pointer drag scrub instead of scrolling */
+}
+.ss-value-pop__scrub:hover {
+  color: var(--text-primary);
+  background: var(--tint-subtle);
+}
+.ss-value-pop__input {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--accent-active);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-sm);
+}
+/* Autocomplete list under the value input (var(--…), keywords). */
+.ss-value-pop__menu {
+  margin-top: var(--spacing-xs);
+  border: none;
+  background: none;
+  box-shadow: none;
+  max-height: 220px;
+}
+
+/* Inline `!important` ghost completion, painted over the input (typed text is
+ * transparent so the real input shows through; the suffix is greyed). */
+.ss-value-pop__inputwrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ss-value-pop__ghost {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-sizing: border-box;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-code);
+  font-size: var(--font-size-sm);
+  white-space: pre;
+  overflow: hidden;
+}
+.ss-value-pop__ghost-typed {
+  color: transparent;
+}
+.ss-value-pop__ghost-hint {
+  color: var(--text-muted);
+}
+
+/* row action buttons (nest / ✕) — reveal on row hover */
+.ss-decl__remove,
+.ss-decl__nest-btn {
+  all: unset;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+.ss-decl:hover .ss-decl__remove,
+.ss-decl:hover .ss-decl__nest-btn,
+.ss-decl__nest-btn.is-open {
+  opacity: 1;
+}
+.ss-decl__nest-btn:hover {
+  color: var(--text-primary);
+  background: var(--tint);
+}
+.ss-decl__remove:hover {
+  color: var(--accent-error);
+  background: color-mix(in srgb, var(--accent-error) 14%, transparent);
+}
+
+/* nest-this-declaration menu (enum-style) */
+.ss-decl__nest {
+  position: relative;
+  flex: 0 0 auto;
+}
+.ss-decl__nest-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 1px; /* css-ok: menu item gap */
+  min-width: 130px;
+  padding: var(--spacing-xs);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-md);
+}
+.ss-decl__nest-item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px var(--spacing-sm);
+  border-radius: calc(var(--radius-sm) - 1px);
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+.ss-decl__nest-item:hover {
+  background: var(--surface-control);
+  color: var(--text-primary);
+}
+.ss-decl__nest-item--new {
+  color: var(--text-muted);
+}

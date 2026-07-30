@@ -9,6 +9,7 @@ import type { LibraryArticle } from '@cstar.help/js/library';
 import type { SupportView } from './SupportPanel';
 import { trackEvent } from '../../lib/analytics';
 import { SlackIcon } from '../icons';
+import { Button } from '../primitives/Button';
 
 const SLACK_INVITE_URL =
   'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g';
@@ -178,35 +179,46 @@ export function SupportHome({ onNavigate }: SupportHomeProps) {
       {/* Get Help */}
       <div className="support-section-label">Get Help</div>
       <div className="support-actions">
-        <button
+        <Button
+          variant="secondary"
+          width="fill"
           className="support-action-btn"
           onClick={() => onNavigate({ type: 'new-ticket', ticketType: 'bug' })}
         >
           <span className="action-icon">🐛</span>
           Report a Bug
           <span className="action-arrow">→</span>
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          width="fill"
           className="support-action-btn"
           onClick={() => onNavigate({ type: 'new-ticket', ticketType: 'feature' })}
         >
           <span className="action-icon">💡</span>
           Request a Feature
           <span className="action-arrow">→</span>
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          width="fill"
           className="support-action-btn"
           onClick={() => onNavigate({ type: 'new-ticket', ticketType: 'support' })}
         >
           <span className="action-icon">💬</span>
           General Support
           <span className="action-arrow">→</span>
-        </button>
+        </Button>
       </div>
 
       {/* Your Tickets */}
       <div className="support-section-label">Your Tickets</div>
-      <button className="support-tickets-link" onClick={() => onNavigate({ type: 'tickets' })}>
+      <Button
+        variant="secondary"
+        width="fill"
+        className="support-action-btn"
+        onClick={() => onNavigate({ type: 'tickets' })}
+      >
         📋 View your tickets
         {ticketCount !== null && ticketCount > 0 && (
           <span className="support-ticket-badge">{ticketCount}</span>
@@ -214,7 +226,7 @@ export function SupportHome({ onNavigate }: SupportHomeProps) {
         <span className="action-arrow" style={{ marginLeft: 'auto' }}>
           →
         </span>
-      </button>
+      </Button>
     </div>
   );
 }

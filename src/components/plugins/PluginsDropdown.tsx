@@ -1,8 +1,8 @@
 /**
  * PluginsDropdown — left-cluster header dropdown that lists the plugin
  * manager plus every currently-loaded non-hosting plugin. Matches the
- * visual shape of `ToolbarDropdown` (toolbar-icon-btn trigger, menu body
- * styled like the Dropdown primitive) so both live-together consistently.
+ * visual shape of `ToolbarDropdown` (canonical MenuButton trigger, menu body
+ * styled like the Dropdown primitive) so both live together consistently.
  *
  * NOT built on the Dropdown primitive (`primitives/Dropdown.tsx`) — the
  * primitive unmounts its menu children while closed, and this menu must
@@ -78,8 +78,8 @@ export function PluginsDropdown({
         onClick={() => setIsOpen(!isOpen)}
         title="Plugins"
         data-education-id="plugins-dropdown"
+        leftIcon={<PuzzleIcon size={16} />}
       >
-        <PuzzleIcon size={12} />
         <span className="toolbar-btn-label">Plugins</span>
         <ChevronIcon size={10} className={isOpen ? 'chevron-flipped' : undefined} />
       </MenuButton>

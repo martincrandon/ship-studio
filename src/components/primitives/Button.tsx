@@ -9,45 +9,25 @@ export type ButtonVariant =
   | 'warning'
   | 'variable';
 
-export type ButtonAppearance = 'solid' | 'outline' | 'ghost';
-export type ButtonTone = 'neutral' | 'primary' | 'danger' | 'warning' | 'variable';
-export type ButtonDensity = 'standard' | 'compact';
+export type ButtonSize = 'default' | 'compact' | 'large';
 export type ButtonWidth = 'hug' | 'fill';
-
-const variantRecipe: Record<ButtonVariant, { appearance: ButtonAppearance; tone: ButtonTone }> = {
-  default: { appearance: 'solid', tone: 'neutral' },
-  primary: { appearance: 'solid', tone: 'primary' },
-  secondary: { appearance: 'outline', tone: 'neutral' },
-  danger: { appearance: 'outline', tone: 'danger' },
-  ghost: { appearance: 'ghost', tone: 'neutral' },
-  warning: { appearance: 'solid', tone: 'warning' },
-  variable: { appearance: 'solid', tone: 'variable' },
-};
 
 export function buttonClassNames({
   variant = 'default',
-  appearance,
-  tone,
-  density = 'standard',
+  size = 'default',
   width = 'hug',
   className,
 }: {
   variant?: ButtonVariant;
-  appearance?: ButtonAppearance;
-  tone?: ButtonTone;
-  density?: ButtonDensity;
+  size?: ButtonSize;
   width?: ButtonWidth;
   className?: string;
 } = {}) {
-  const recipe = variantRecipe[variant];
   return [
     'button',
     `button--${variant}`,
-    `button--appearance-${appearance ?? recipe.appearance}`,
-    `button--tone-${tone ?? recipe.tone}`,
-    `button--density-${density}`,
+    `button--size-${size}`,
     `button--width-${width}`,
-    density === 'compact' ? 'button--sm' : null,
     width === 'fill' ? 'button--fill button--block' : 'button--hug',
     className,
   ]
@@ -64,7 +44,8 @@ export function buttonClassNames({
  *   `secondary` = neutral outline, `primary` = green CTA, `danger` =
  *   red-tinted destructive action, `ghost` = borderless low-emphasis action,
  *   `warning` = amber warning action, and `variable` = purple variable action.
- * - `size` — `md` (default) or `sm` for dense rows and toolbars.
+ * - `size` — `default` (30px), `compact` for dense rows and toolbars, or
+ *   `large` for prominent actions.
  * - `width` — `hug` (default) sizes to content; `fill` stretches to the
  *   container. `block` remains as a backwards-compatible alias for `fill`.
  * - `leftIcon` / `rightIcon` — icon nodes rendered beside the label with the
@@ -72,10 +53,7 @@ export function buttonClassNames({
  */
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  appearance?: ButtonAppearance;
-  tone?: ButtonTone;
-  size?: 'sm' | 'md';
-  density?: ButtonDensity;
+  size?: ButtonSize;
   width?: ButtonWidth;
   block?: boolean;
   leftIcon?: ReactNode;
@@ -85,10 +63,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   {
     variant = 'default',
-    appearance,
-    tone,
-    size = 'md',
-    density,
+    size = 'default',
     width = 'hug',
     block,
     leftIcon,
@@ -102,18 +77,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 ) {
   const classes = buttonClassNames({
     variant,
-    appearance,
-    tone,
-    density: density ?? (size === 'sm' ? 'compact' : 'standard'),
+    size,
     width: block ? 'fill' : width,
     className,
   });
 
   return (
     <button ref={ref} type={type} className={classes} {...rest}>
-      {leftIcon}
+      {leftIcon && <span className="button__icon">{leftIcon}</span>}
       {children}
-      {rightIcon}
+      {rightIcon && <span className="button__icon">{rightIcon}</span>}
     </button>
   );
 });

@@ -56,7 +56,7 @@
 .workspace-header-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--space-04);
 }
 
 .workspace-header-left {
@@ -76,7 +76,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--button-gap);
-  padding: 0 var(--button-padding-inline);
+  padding: 0 var(--button-padding);
   height: var(--button-height);
   font-size: var(--button-font-size);
   border-radius: var(--button-radius);

@@ -840,11 +840,9 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
             />
           )}
           {(isSidebarHidden || pinnedOpen) &&
-            (visiblePinned.length === 0 && !filterLower ? (
-              !isSidebarHidden && <div className="sidebar-group-empty">Nothing pinned yet</div>
-            ) : (
-              visiblePinned.map((row) => renderProjectRow(row))
-            ))}
+            (visiblePinned.length === 0 && !filterLower
+              ? !isSidebarHidden && <div className="sidebar-group-empty">Nothing pinned yet</div>
+              : visiblePinned.map((row) => renderProjectRow(row)))}
 
           {isSidebarHidden ? (
             <CompactSidebarGroupMarker label="Active" />
@@ -857,13 +855,11 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
             />
           )}
           {(isSidebarHidden || activeOpen) &&
-            (visibleActive.length === 0 && !filterLower ? (
-              !isSidebarHidden && (
-                <div className="sidebar-group-empty">No active projects. Open one from Home.</div>
-              )
-            ) : (
-              visibleActive.map((row) => renderProjectRow(row))
-            ))}
+            (visibleActive.length === 0 && !filterLower
+              ? !isSidebarHidden && (
+                  <div className="sidebar-group-empty">No active projects. Open one from Home.</div>
+                )
+              : visibleActive.map((row) => renderProjectRow(row)))}
         </div>
 
         <div className="workspace-sidebar-footer">
@@ -1155,7 +1151,7 @@ function ProjectGroup({
           <IconButton
             className="sidebar-project-control sidebar-project-chevron"
             variant="ghost"
-            density="compact"
+            size="compact"
             icon={
               <ChevronIcon
                 size={10}
@@ -1190,7 +1186,7 @@ function ProjectGroup({
           <IconButton
             className="sidebar-project-control sidebar-project-close"
             variant="ghost"
-            density="compact"
+            size="compact"
             icon={
               <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
                 <path

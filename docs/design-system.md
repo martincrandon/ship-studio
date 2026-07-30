@@ -34,7 +34,7 @@ reattachments are automated; unresolved values remain explicit and are marked fo
 | Figma color, spacing, radius, stroke, and type Variables | Exact | Imported into `--color-*`, `--space-*`, `--radius-*`, `--stroke-*`, and `--font-*` primitives. |
 | Figma `background-*`, `text-*`, `border-*`, and `accent-*` Variables | Obvious semantic | Reattached to category-first `--surface-*`, `--text-*`, `--border-*`, and `--accent-*` roles. |
 | Figma `Body M/Regular`, `Body S/Regular`, `Code S/Regular`, `Button Effects`, `Input inner shadow`, and `Window shadow` styles | Obvious semantic | Exposed through `--font-ui`, `--font-code`, `--shadow-button`, `--shadow-input-inset`, and `--shadow-window`; these are not primitives. |
-| Legacy `--bg-*`, `--accent`, `--action`, `--border`, `--warning`, `--success`, `--error`, and `--font-mono` names | Compatibility | Kept as deprecated aliases in the compatibility section only; product usages are reattached to semantic roles. |
+| Legacy `--bg-*`, `--accent`, `--action`, `--border`, `--warning`, `--success`, `--error`, and `--font-code` names | Compatibility | Kept as deprecated aliases in the compatibility section only; product usages are reattached to semantic roles. |
 | Existing error palette (`#f44747`, `#ef4444`, `#dc2626`) | Ambiguous / review | Retained as explicit `--color-red-error*` values because no corresponding Figma semantic was observed. |
 | Feature-local info, purple, Slack, ANSI, and code-syntax colors | Feature semantic | Preserved where their product meaning is specific; do not use them as general surface or text roles. |
 | Terminal colors and icon/symbol typography | Platform/component input | xterm keeps explicit canvas colors; Geist Mono is used for code, while JetBrains Mono Nerd Font is retained for glyph coverage. |
@@ -84,7 +84,7 @@ Need a value that doesn't exist? Add the token to `:root` in `base.css` first, t
 ### Plugin-stable API
 
 `--bg-*`, `--text-*`, `--accent`, `--action`, `--border`, `--warning`, `--success`, `--error`,
-`--font-mono`, plus the `toolbar-icon-btn` / `btn-primary` / `btn-secondary` classes, are public
+`--font-code`, plus the `toolbar-icon-btn` and `button` / `button--*` classes, are public
 API for plugins. Renaming any of them is a breaking change (see CLAUDE.md "Shared CSS Classes").
 
 ## Primitives
@@ -132,10 +132,7 @@ Use the component matching the behavior instead of flattening different controls
 | Prop | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `variant` | `'default' \| 'primary' \| 'secondary' \| 'danger' \| 'ghost' \| 'warning' \| 'variable'` | `'default'` | Figma neutral solid, primary, outline, ghost, warning, and variable roles plus the destructive variant. |
-| `appearance` | `'solid' \| 'outline' \| 'ghost'` | from `variant` | Low-level visual recipe override. |
-| `tone` | `'neutral' \| 'primary' \| 'danger' \| 'warning' \| 'variable'` | from `variant` | Semantic colour role. |
-| `density` | `'standard' \| 'compact'` | `'standard'` | Component density; preferred over the legacy `size` prop. |
-| `size` | `'sm' \| 'md'` | `'md'` | `sm` for dense rows/toolbars. |
+| `size` | `'default' \| 'compact' \| 'large'` | `'default'` | Default is the 30px standard action; compact is reserved for dense rows/toolbars; large is for prominent actions. |
 | `width` | `'hug' \| 'fill'` | `'hug'` | Hug contents or fill the available container width. |
 | `block` | `boolean?` | — | Backwards-compatible alias for `width="fill"`. |
 | `leftIcon` / `rightIcon` | `ReactNode?` | — | Rendered beside children with the standard gap. |
@@ -150,9 +147,19 @@ Use the component matching the behavior instead of flattening different controls
 </Button>
 ```
 
+Use `TextButton` for inline prose/metadata actions: it retains native button, ref, disabled, focus,
+and icon behavior without a fixed control surface. Use `Tabs` for panel navigation and
+`SegmentedControl` for mutually exclusive filters/settings.
+
+Editor values use [PropertyField.tsx](../src/components/primitives/PropertyField.tsx), not
+`Button`: `value` and `select` are neutral, while `variable` uses the purple variable tokens.
+Inherited and modified state belongs to the field label (orange and blue respectively), so the
+value surface itself does not change meaning.
+
 Raw `<button>` elements are reserved for controls whose geometry is the interaction itself, such
-as canvas handles, timeline points, colour swatches, and tab semantics. Toolbar actions,
-icon-only actions, toggles, menu triggers, and split actions use the matching family component.
+as canvas handles, timeline points, colour swatches, rich selection cards, and internals owned by
+another primitive. Toolbar actions, icon-only actions, toggles, menu triggers, tabs, segmented
+choices, and split actions use the matching family component.
 
 ### Spinner — [Spinner.tsx](../src/components/primitives/Spinner.tsx)
 
@@ -186,7 +193,14 @@ Exports `Dropdown`, `DropdownItem`, `DropdownDivider`.
 house convention), `variant: 'default' | 'danger'`, `active`, `disabled`.
 
 ```tsx
-<Dropdown align="right" trigger={(p) => <button className="toolbar-icon-btn" {...p}>•••</button>}>
+<Dropdown
+  align="right"
+  trigger={(p) => (
+    <MenuButton expanded={p['aria-expanded']} {...p}>
+      More
+    </MenuButton>
+  )}
+>
   <DropdownItem icon={<EditIcon size={14} />} onSelect={rename}>Rename</DropdownItem>
   <DropdownDivider />
   <DropdownItem variant="danger" onSelect={remove}>Delete</DropdownItem>

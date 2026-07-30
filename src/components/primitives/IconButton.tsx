@@ -14,8 +14,11 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   ref
 ) {
   return (
-    <Button ref={ref} className={`button--icon-only ${className ?? ''}`} {...props}>
-      {icon}
-    </Button>
+    <Button
+      ref={ref}
+      className={`button--icon-only ${className ?? ''}`}
+      leftIcon={icon}
+      {...props}
+    />
   );
 });

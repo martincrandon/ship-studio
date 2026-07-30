@@ -17,6 +17,7 @@ import {
 } from '../../lib/edit';
 import { EnumDropdown } from './EnumDropdown';
 import { ResettableLabel } from './ResettableLabel';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 
 const lineProps = { strokeWidth: 2, strokeLinecap: 'round' as const };
 function Icon({ children }: { children: ReactNode }) {
@@ -173,6 +174,24 @@ export function EnumControlRow({
         onChange={(token) => {
           const opt = control.options.find((o) => o.token === token);
           if (opt) onApplyEnum(opt.token, opt.style);
+        }}
+      />
+    );
+  } else if (control.label === 'Align') {
+    body = (
+      <SegmentedControl
+        className="ss-edit-panel__align-tabs"
+        value={active ?? ''}
+        options={control.options.map((option) => ({
+          value: option.token,
+          label: ICONS[option.token],
+          ariaLabel: option.label,
+          title: option.label,
+        }))}
+        aria-label={control.label}
+        onValueChange={(token) => {
+          const option = control.options.find((candidate) => candidate.token === token);
+          if (option) onApplyEnum(option.token, option.style);
         }}
       />
     );

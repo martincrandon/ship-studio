@@ -11,6 +11,7 @@ import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePoint
 import { CloseIcon } from '../icons/common';
 import { PlusIcon } from '../icons/utility';
 import { EditPopover } from './EditPopover';
+import { CssValueText } from './CssValueText';
 import { CSS_PROPERTIES, colorSwatch, suggestValues } from '../../lib/cssProperties';
 import type { Decl } from '../../lib/cssBody';
 
@@ -115,7 +116,7 @@ export function DeclarationRow(props: Props) {
         <span className="ss-decl__colon">:</span>
         <span className="ss-decl__value">
           <Swatch value={decl.value} />
-          {decl.value}
+          <CssValueText value={decl.value} />
           {decl.important && <span className="ss-decl__imp"> !important</span>}
         </span>
         {tip}
@@ -139,7 +140,11 @@ export function DeclarationRow(props: Props) {
         onClick={toggle('value')}
       >
         <Swatch value={decl.value} />
-        {decl.value || <span className="ss-decl__ph">value</span>}
+        {decl.value ? (
+          <CssValueText value={decl.value} />
+        ) : (
+          <span className="ss-decl__ph">value</span>
+        )}
         {decl.important && <span className="ss-decl__imp"> !important</span>}
       </button>
 

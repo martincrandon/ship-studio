@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
+import { PropertyField } from '../primitives/PropertyField';
 
 interface Option {
   label: string;
@@ -67,9 +68,9 @@ export function EnumDropdown({ label, options, value, onChange }: Props) {
 
   return (
     <>
-      <button
+      <PropertyField
         ref={triggerRef}
-        type="button"
+        variant="select"
         className="ss-enum__trigger"
         title={label}
         aria-label={label}
@@ -88,7 +89,7 @@ export function EnumDropdown({ label, options, value, onChange }: Props) {
         >
           <polyline points="6 9 12 15 18 9" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
-      </button>
+      </PropertyField>
       {open &&
         menuRect &&
         createPortal(

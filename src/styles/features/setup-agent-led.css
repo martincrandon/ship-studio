@@ -139,24 +139,6 @@
 
 .agent-setup-detail-back {
   align-self: flex-start;
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: color var(--transition);
-}
-
-.agent-setup-detail-back:hover:not(:disabled) {
-  /* Text-color change only — override the global button hover background. */
-  background: none;
-  color: var(--text-primary);
-}
-
-.agent-setup-detail-back:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .agent-setup-detail-header {

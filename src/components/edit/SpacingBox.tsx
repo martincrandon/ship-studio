@@ -44,9 +44,8 @@ interface FieldProps {
   label: string;
   className: string;
   dir: { axis: 'x' | 'y'; sign: 1 | -1 };
-  /** True when the shown value is inherited from a smaller breakpoint (not set
-   *  at the active one) — the field is rendered muted to signal that. */
-  inherited?: boolean;
+  /** Cascade state for the value tag. */
+  state: 'default' | 'inherited' | 'modified';
 }
 
 /** The numeric magnitude a drag/scroll scrubs, plus how to rebuild a value from a
@@ -75,7 +74,7 @@ function dragBaseOf(
  *  - click (selects all) then type a value or unit (10rem, 50%); Enter/blur applies.
  * Bad input (`40xyz`) marks the field invalid and isn't applied.
  */
-function SideField({ value, onSet, cssProp, label, className, dir, inherited }: FieldProps) {
+function SideField({ value, onSet, cssProp, label, className, dir, state }: FieldProps) {
   const display = spacingDisplay(value);
   const [text, setText] = useState(display);
   const [lastDisplay, setLastDisplay] = useState(display);
@@ -143,9 +142,10 @@ function SideField({ value, onSet, cssProp, label, className, dir, inherited }: 
 
   return (
     <input
-      className={`ss-box__field ${className}${inherited ? ' ss-box__field--inherited' : ''}${
+      className={`ss-box__field ${className} ss-box__field--${state}${
         invalid ? ' ss-box__field--invalid' : ''
       }`}
+      size={Math.max(text.length, 1)}
       aria-label={label}
       aria-invalid={invalid}
       title={
@@ -192,6 +192,8 @@ interface Props {
 export function SpacingBox({ currentClass, layer, onSetSide }: Props) {
   const field = (type: BoxType, side: Side, edge: string) => {
     const { value, definedAt } = readLayer(currentClass, layer, (s) => boxSide(s, type, side));
+    const state =
+      definedAt === null ? 'default' : definedAt.name === layer.bp.name ? 'modified' : 'inherited';
     return (
       <SideField
         value={value}
@@ -200,7 +202,7 @@ export function SpacingBox({ currentClass, layer, onSetSide }: Props) {
         label={`${type === 'padding' ? 'Padding' : 'Margin'} ${side}`}
         className={`ss-box__edge--${edge}`}
         dir={SIDE_DRAG[side]}
-        inherited={definedAt !== null && definedAt.name !== layer.bp.name}
+        state={state}
       />
     );
   };

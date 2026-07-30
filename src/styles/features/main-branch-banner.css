@@ -59,28 +59,7 @@
 }
 
 .main-branch-banner-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: rgba(var(--accent-warning-rgb), 0.2);
-  border: 1px solid rgba(var(--accent-warning-rgb), 0.3);
-  border-radius: var(--radius-sm);
-  color: var(--accent-warning);
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
   white-space: nowrap;
-}
-
-.main-branch-banner-action:hover {
-  background: rgba(var(--accent-warning-rgb), 0.3);
-  border-color: rgba(var(--accent-warning-rgb), 0.5);
-  color: var(--banner-amber-bright);
 }
 
 .main-branch-banner-checkbox {
@@ -134,26 +113,4 @@
   border: solid var(--surface-recessed);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) translateY(-1px);
-}
-
-.main-branch-banner-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--accent-warning);
-  cursor: pointer;
-  opacity: 0.6;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.main-branch-banner-close:hover {
-  opacity: 1;
-  background: rgba(var(--accent-warning-rgb), 0.2);
 }

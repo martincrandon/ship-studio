@@ -35,24 +35,6 @@
   letter-spacing: 0.5px;
 }
 
-.code-tab-refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.code-tab-refresh-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-control);
-}
-
 .code-tab-search {
   display: flex;
   align-items: center;
@@ -232,33 +214,6 @@
   gap: var(--spacing-sm);
   padding-right: var(--spacing-sm);
   border-right: 1px solid var(--border-default);
-}
-
-/* Match every header action control to the Edit toggle's height (28px). */
-.code-viewer-actions .button,
-.code-viewer-open-btn {
-  height: 28px;
-}
-
-.code-viewer-open-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  background: var(--surface-control);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  cursor: pointer;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.code-viewer-open-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-panel);
 }
 
 /* Unsaved-changes dot, shown next to the path while editing. */

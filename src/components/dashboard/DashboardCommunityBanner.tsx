@@ -31,7 +31,6 @@ export function DashboardCommunityBanner({ onHide }: DashboardCommunityBannerPro
       </div>
       <Button
         variant="secondary"
-        size="sm"
         className="slack-cta-join"
         onClick={() => void openUrl(SLACK_INVITE_URL)}
       >
@@ -39,7 +38,6 @@ export function DashboardCommunityBanner({ onHide }: DashboardCommunityBannerPro
       </Button>
       <Button
         variant="ghost"
-        size="sm"
         className="slack-cta-hide"
         onClick={onHide}
         title="Hide"

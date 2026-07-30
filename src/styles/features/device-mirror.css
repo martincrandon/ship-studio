@@ -28,41 +28,6 @@
   margin-right: auto;
 }
 
-/* [iOS | Android] segmented control — shown only when the project targets both. */
-.device-mirror-platform {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-control);
-}
-
-.device-mirror-platform-btn {
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  padding: 2px var(--spacing-sm);
-  /* Concentric with the container (radius − the 2px padding) so the active pill's
-     corners follow the outer edge — the app's segmented-control convention. */
-  border-radius: calc(var(--radius-md) - 2px);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.device-mirror-platform-btn:hover {
-  color: var(--text-primary);
-}
-
-.device-mirror-platform-btn.active {
-  background: var(--accent-active);
-  color: var(--text-on-accent); /* --accent is white in this theme → needs dark text */
-}
-
 .device-mirror-stage {
   flex: 1;
   display: flex;
@@ -136,7 +101,7 @@
   text-align: left;
 }
 
-/* Suppress the global button:hover background — the bar's own hover handles it. */
+/* The bar owns its hover state rather than inheriting a shared button treatment. */
 .device-mirror-build-toggle:hover {
   background: none;
 }
@@ -194,11 +159,11 @@
   background: none;
 }
 
-.device-mirror-build-chevron svg {
+.device-mirror-build-header > .button--icon-only svg {
   transition: transform var(--transition);
 }
 
-.device-mirror-build-chevron.open svg {
+.device-mirror-build-chevron-open svg {
   transform: rotate(180deg);
 }
 

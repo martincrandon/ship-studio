@@ -105,37 +105,11 @@
 
 /* Tabs */
 .create-tabs {
-  display: flex;
-  gap: 0;
   margin-bottom: 20px;
-  border-bottom: 1px solid var(--border-default);
 }
 
-.create-tab {
+.create-tabs .create-tab {
   flex: 1;
-  padding: 10px 0;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  color: var(--text-muted);
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.create-tab:hover {
-  color: var(--text-secondary);
-  background: transparent;
-}
-
-.create-tab.active {
-  color: var(--text-primary);
-  border-bottom-color: var(--text-primary);
-  background: transparent;
 }
 
 /* Stack Grid (Start from Scratch) */
@@ -282,15 +256,8 @@
   margin-top: 16px;
 }
 
-.create-actions button {
-  padding: 10px 18px;
+.create-actions .button {
   font-size: var(--font-size-lg);
-  font-weight: 500;
-}
-
-.create-actions .btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Creating state */

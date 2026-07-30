@@ -3,67 +3,9 @@
   position: relative;
 }
 
-.publish-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 28px;
-  background: var(--accent-active);
-  border: 1px solid var(--accent-active-hover);
-  border-radius: var(--radius);
-  color: var(--text-on-accent);
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    color 0.15s,
-    border-color 0.15s;
-}
-
-.publish-button:hover {
-  background: var(--accent-active-hover);
-}
-
-.publish-button.no-changes {
-  background: var(--surface-control);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
-}
-
-.publish-button.no-changes:hover {
-  background: var(--border-default);
-  color: var(--text-primary);
-}
-
-.publish-button.publishing {
+.publish-dropdown .button.publishing {
   cursor: wait;
   opacity: 0.7;
-}
-
-.publish-button.publish-disabled {
-  background: var(--button-surface-default);
-  border-color: transparent;
-  color: var(--text-muted);
-  box-shadow: var(--button-shadow);
-  cursor: not-allowed;
-}
-
-.publish-button.publish-checking {
-  background: var(--button-surface-default);
-  border-color: transparent;
-  color: var(--text-muted);
-  box-shadow: var(--button-shadow);
-  cursor: not-allowed;
-}
-
-.publish-button.synced {
-  background: var(--button-surface-default);
-  border-color: transparent;
-  color: var(--text-muted);
-  box-shadow: var(--button-shadow);
-  cursor: pointer;
 }
 
 .publish-dropdown-menu {

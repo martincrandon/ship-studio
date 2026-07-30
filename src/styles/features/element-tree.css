@@ -98,12 +98,12 @@
   font-family: var(--font-code);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: var(--accent-active);
+  color: var(--tag-text);
 }
 .ss-htmltab__cls {
   font-family: var(--font-code);
   font-size: var(--font-size-xs);
-  color: var(--text-muted);
+  color: var(--class-text);
 }
 .ss-htmltab__main {
   position: relative;
@@ -137,7 +137,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  height: 24px;
+  height: var(--size-control-medium);
   padding-right: var(--spacing-sm);
   cursor: pointer;
   white-space: nowrap;
@@ -181,21 +181,21 @@
 
 .ss-tree-tag {
   flex-shrink: 0;
-  color: var(--text-primary);
+  color: var(--tag-text);
   font-family: var(--font-code);
 }
 
 .ss-tree-class {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--text-muted);
+  color: var(--class-text);
   font-family: var(--font-code);
 }
 
 .ss-tree-text {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--text-muted);
+  color: var(--text-primary);
   font-style: italic;
 }
 

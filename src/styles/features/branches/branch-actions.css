@@ -353,24 +353,8 @@
 }
 
 .post-merge-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
   font-size: var(--font-size-md);
-  color: var(--text-secondary);
-  text-decoration: none;
   margin-top: var(--spacing-md);
-  transition: color var(--transition);
-  cursor: pointer;
-  /* Rendered as a <button> so external links can't navigate the app window. */
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-}
-
-.post-merge-link:hover {
-  color: var(--text-primary);
 }
 
 .post-merge-footer {

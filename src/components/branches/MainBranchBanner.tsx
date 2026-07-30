@@ -10,6 +10,8 @@
 
 import { useState, useEffect } from 'react';
 import { WarningIcon, CloseIcon, BranchIcon } from '../icons';
+import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { getHideMainBranchWarning, setHideMainBranchWarning } from '../../lib/project';
 import '../../styles/features/main-branch-banner.css';
 
@@ -67,10 +69,15 @@ export function MainBranchBanner({ projectPath, onCreateBranch }: MainBranchBann
           </span>
         </span>
         {onCreateBranch && (
-          <button className="main-branch-banner-action" onClick={onCreateBranch}>
-            <BranchIcon size={12} />
+          <Button
+            variant="secondary"
+            size="compact"
+            className="main-branch-banner-action"
+            onClick={onCreateBranch}
+            leftIcon={<BranchIcon size={12} />}
+          >
             Create branch
-          </button>
+          </Button>
         )}
       </div>
       <label className="main-branch-banner-checkbox">
@@ -81,9 +88,14 @@ export function MainBranchBanner({ projectPath, onCreateBranch }: MainBranchBann
         />
         <span>Don't show again</span>
       </label>
-      <button className="main-branch-banner-close" onClick={handleDismiss} title="Dismiss">
-        <CloseIcon size={14} />
-      </button>
+      <IconButton
+        variant="ghost"
+        size="compact"
+        onClick={handleDismiss}
+        title="Dismiss"
+        aria-label="Dismiss"
+        icon={<CloseIcon size={14} />}
+      />
     </div>
   );
 }

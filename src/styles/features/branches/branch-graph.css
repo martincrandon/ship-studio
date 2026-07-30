@@ -59,7 +59,7 @@
   cursor: default;
 }
 
-.branch-graph-refresh.spinning svg {
+.branch-graph-header-actions .spinning svg {
   animation: spin 0.8s linear infinite;
 }
 
@@ -239,9 +239,8 @@
   text-anchor: middle;
 }
 
-/* Collapsible header. The toggle must not pick up the global button hover
-   pill — the whole row already reads as one control; feedback is the title
-   brightening and the chevron. */
+/* Collapsible header. The whole row reads as one control, so feedback is the
+   title brightening and the chevron rather than a hover pill. */
 .branch-graph-toggle {
   display: inline-flex;
   align-items: center;

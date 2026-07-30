@@ -144,12 +144,12 @@ export function PreviewSizeControl({
             </p>
           )}
           <div className="preview-size-actions">
-            <Button variant="primary" size="sm" onClick={apply}>
+            <Button variant="primary" size="compact" onClick={apply}>
               Apply
             </Button>
             <Button
               variant="secondary"
-              size="sm"
+              size="compact"
               onClick={() => {
                 onFit();
                 setOpen(false);

@@ -242,6 +242,17 @@ describe('VisualEditorPanel', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Padding top').value).toBe('10rem');
   });
 
+  it('styles box-model values by cascade state and sizes them to their text', () => {
+    renderPanel(resolvedSelection, 'p-3 md:pt-6', MD);
+    const modified = screen.getByLabelText<HTMLInputElement>('Padding top');
+    const inherited = screen.getByLabelText<HTMLInputElement>('Padding right');
+
+    expect(modified).toHaveClass('ss-box__field--modified');
+    expect(inherited).toHaveClass('ss-box__field--inherited');
+    expect(modified).toHaveAttribute('size', modified.value.length.toString());
+    expect(inherited).toHaveAttribute('size', inherited.value.length.toString());
+  });
+
   it('flags an invalid typed value and does not apply it', () => {
     const onApplyEnum = vi.fn();
     renderPanel(

@@ -23,6 +23,8 @@ import { CopyIcon } from '../icons/editor';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { Spinner } from '../primitives/Spinner';
+import { Button } from '../primitives/Button';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { CascadeRuleCard } from './CascadeRuleCard';
 import { ElementSettingsPanel } from './ElementSettingsPanel';
 import { CssVariablesPanel } from './CssVariablesPanel';
@@ -117,7 +119,7 @@ export function CssCascadePanel({
     else if (scope === 'animations') void reloadAnimations();
   }, [scope, reloadVariables, reloadAnimations]);
   // "Copy id": the element's selector (tag + classes), so you can paste it to your agent
-  // and describe the change you want ("make a.btn-secondary's hover state pop").
+  // and describe the change you want ("make a .button--secondary hover state pop").
   const { showToast } = useOptionalToast();
   const { copy: copyElementId, isCopied: idCopied } = useCopyToClipboard({
     onCopy: () => showToast('Element id copied — paste it to your agent', 'success'),
@@ -216,20 +218,13 @@ export function CssCascadePanel({
       </div>
 
       <div className="ss-edit-panel__body">
-        <div className="ss-cascade-scope" role="tablist" aria-label="CSS scope">
-          {(['element', 'variables', 'animations'] as Scope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={scope === s}
-              className={`ss-cascade-scope__tab${scope === s ? ' is-active' : ''}`}
-              onClick={() => setScope(s)}
-            >
-              {s === 'element' ? 'Element' : s === 'variables' ? 'Variables' : 'Animations'}
-            </button>
-          ))}
-        </div>
+        <Tabs value={scope} onValueChange={(next) => setScope(next as Scope)}>
+          <TabsList className="ss-cascade-scope" aria-label="CSS scope">
+            <TabsTab value="element">Element</TabsTab>
+            <TabsTab value="variables">Variables</TabsTab>
+            <TabsTab value="animations">Animations</TabsTab>
+          </TabsList>
+        </Tabs>
 
         {scope === 'variables' ? (
           <CssVariablesPanel
@@ -268,9 +263,11 @@ export function CssCascadePanel({
               {selection.instanceCount > 1 && (
                 <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
               )}
-              <button
-                type="button"
-                className="ss-cascade-target__copy"
+              <Button
+                variant="ghost"
+                size="compact"
+                leftIcon={idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                style={{ marginLeft: 'auto' }}
                 title={
                   settings.location
                     ? `Copy this element's source location (${settings.location.file}:${settings.location.line}) to paste into your agent`
@@ -287,31 +284,16 @@ export function CssCascadePanel({
                   void copyElementId(id);
                 }}
               >
-                {idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
                 {idCopied ? 'Copied' : 'Copy id'}
-              </button>
+              </Button>
             </div>
 
-            <div className="ss-cascade-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'style'}
-                className={`ss-cascade-tab${tab === 'style' ? ' is-active' : ''}`}
-                onClick={() => setTab('style')}
-              >
-                Style
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={tab === 'settings'}
-                className={`ss-cascade-tab${tab === 'settings' ? ' is-active' : ''}`}
-                onClick={() => setTab('settings')}
-              >
-                Settings
-              </button>
-            </div>
+            <Tabs value={tab} onValueChange={(next) => setTab(next as 'style' | 'settings')}>
+              <TabsList className="ss-cascade-tabs" aria-label="Element editing mode">
+                <TabsTab value="style">Style</TabsTab>
+                <TabsTab value="settings">Settings</TabsTab>
+              </TabsList>
+            </Tabs>
 
             {tab === 'settings' ? (
               <ElementSettingsPanel settings={settings} />
@@ -440,9 +422,15 @@ function AddSelectorBar({
 
   if (!open) {
     return (
-      <button type="button" className="ss-cascade-add-selector" onClick={() => setOpen(true)}>
-        <PlusIcon size={11} /> Add selector
-      </button>
+      <Button
+        variant="secondary"
+        leftIcon={<PlusIcon size={11} />}
+        className="ss-cascade-action"
+        data-cascade-add-selector
+        onClick={() => setOpen(true)}
+      >
+        Add selector
+      </Button>
     );
   }
 

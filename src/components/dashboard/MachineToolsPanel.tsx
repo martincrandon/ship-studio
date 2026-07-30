@@ -18,6 +18,7 @@
 import { useState, useEffect } from 'react';
 import { CheckIcon, WarningIcon, ChevronIcon, ClaudeIcon, GitHubIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
+import { Button } from '../primitives/Button';
 import { getFullSetupStatus, SetupItem, SETUP_ITEM_ORDER, MACHINE_ITEM_IDS } from '../../lib/setup';
 import { logger } from '../../lib/logger';
 
@@ -89,8 +90,9 @@ export function MachineToolsPanel() {
       className={`dashboard-card integration-bar ${isExpanded ? 'is-expanded' : ''}`}
       data-education-id="machine-tools"
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        width="fill"
         className="dashboard-card-header integration-bar-header-btn"
         onClick={() => setIsExpanded((v) => !v)}
         aria-expanded={isExpanded}
@@ -109,7 +111,7 @@ export function MachineToolsPanel() {
           size={14}
           className={`integration-bar-chevron ${isExpanded ? 'up' : 'down'}`}
         />
-      </button>
+      </Button>
 
       {isExpanded && (
         <div className="dashboard-card-rows">

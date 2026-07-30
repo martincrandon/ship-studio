@@ -42,6 +42,7 @@ import { CreateBranchConflictModal } from './CreateBranchConflictModal';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError, humanizeGitError } from '../../lib/errors';
 
@@ -502,7 +503,7 @@ export function BranchesTab({
                   return existingPR ? (
                     <Button
                       variant="secondary"
-                      size="sm"
+                      size="compact"
                       onClick={() => onViewPR?.()}
                       title={`PR #${existingPR.number}: ${existingPR.title}`}
                     >
@@ -511,7 +512,7 @@ export function BranchesTab({
                   ) : (
                     <Button
                       variant="primary"
-                      size="sm"
+                      size="compact"
                       onClick={() => onSubmitForReview(currentBranchInfo.name)}
                     >
                       Submit for Review
@@ -521,7 +522,7 @@ export function BranchesTab({
               {!currentBranchInfo.pushed && !currentBranchInfo.isDefault && (
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="compact"
                   onClick={() => setSendToGitHubBranch(currentBranchInfo.name)}
                   disabled={publishingBranch === currentBranchInfo.name}
                   title="Push this branch to GitHub (no pull request)"
@@ -531,7 +532,7 @@ export function BranchesTab({
               )}
               <Button
                 variant="danger"
-                size="sm"
+                size="compact"
                 onClick={() => setShowRevertConfirm(true)}
                 disabled={isReverting}
                 title="Discard local changes and pull from GitHub"
@@ -546,10 +547,14 @@ export function BranchesTab({
       {/* New Branch */}
       <div className="branches-tab-section">
         {!showNewBranch ? (
-          <button className="branches-new-branch-btn" onClick={openNewBranchForm}>
-            <PlusIcon size={14} />
+          <Button
+            variant="primary"
+            width="fill"
+            onClick={openNewBranchForm}
+            leftIcon={<PlusIcon size={14} />}
+          >
             New Branch
-          </button>
+          </Button>
         ) : (
           <div className="branches-new-branch-form">
             <div className="branches-new-branch-input-wrapper">
@@ -616,7 +621,7 @@ export function BranchesTab({
               <div className="branches-new-branch-actions">
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="compact"
                   onClick={() => {
                     setShowNewBranch(false);
                     setNewBranchName('');
@@ -626,7 +631,7 @@ export function BranchesTab({
                 </Button>
                 <Button
                   variant="primary"
-                  size="sm"
+                  size="compact"
                   onClick={() => void handleCreateBranch()}
                   disabled={!sanitizedNewBranchName || isCreatingBranch}
                 >
@@ -717,7 +722,7 @@ export function BranchesTab({
             <div className="worktrees-section-actions">
               {worktrees.some((w) => w.prunable !== null) && (
                 <Button
-                  size="sm"
+                  size="compact"
                   variant="secondary"
                   onClick={() => void handlePruneWorktrees()}
                   disabled={isPruningWorktrees}
@@ -728,7 +733,7 @@ export function BranchesTab({
               )}
               {onCreateWorktree && (
                 <Button
-                  size="sm"
+                  size="compact"
                   variant="secondary"
                   leftIcon={<PlusIcon size={12} />}
                   onClick={onCreateWorktree}
@@ -762,7 +767,7 @@ export function BranchesTab({
               <div className="worktree-row-actions">
                 {!wt.isCurrent && onOpenWorktree && wt.prunable === null && (
                   <Button
-                    size="sm"
+                    size="compact"
                     variant="secondary"
                     onClick={() => {
                       void trackEvent('worktree_switched', { via: 'branches_tab' });
@@ -773,29 +778,27 @@ export function BranchesTab({
                   </Button>
                 )}
                 {wt.prunable === null && (
-                  <button
-                    type="button"
-                    className="worktree-row-icon-btn"
+                  <IconButton
+                    variant="ghost"
+                    size="compact"
                     onClick={() => void openProjectInNewWindow(wt.path, wt.branch ?? 'worktree')}
                     title="Open in new window"
                     aria-label="Open worktree in new window"
-                  >
-                    <ExternalLinkIcon size={12} />
-                  </button>
+                    icon={<ExternalLinkIcon size={12} />}
+                  />
                 )}
                 {!wt.isMain && (
-                  <button
-                    type="button"
-                    className="worktree-row-icon-btn is-danger"
+                  <IconButton
+                    variant="danger"
+                    size="compact"
                     onClick={() => {
                       setWorktreeRemoveError(null);
                       setWorktreeToRemove(wt);
                     }}
                     title="Remove worktree (git worktree remove)"
                     aria-label={`Remove worktree ${wt.branch ?? wt.path}`}
-                  >
-                    <TrashIcon size={12} />
-                  </button>
+                    icon={<TrashIcon size={12} />}
+                  />
                 )}
               </div>
             </div>
@@ -1138,26 +1141,25 @@ function BranchCard({
       <div className="branch-card-actions" onClick={(e) => e.stopPropagation()}>
         {isSwitching && <Spinner size="sm" />}
         {isCurrent && showSubmitForReview && (
-          <Button variant="primary" size="sm" onClick={onSubmitForReview}>
+          <Button variant="primary" size="compact" onClick={onSubmitForReview}>
             Submit for Review
           </Button>
         )}
         {!branch.pushed && !branch.isDefault && (
-          <Button variant="secondary" size="sm" onClick={onPublish} disabled={isPublishing}>
+          <Button variant="secondary" size="compact" onClick={onPublish} disabled={isPublishing}>
             Send to GitHub
           </Button>
         )}
         {showDelete && (
-          <button
-            type="button"
-            className="branch-card-delete-btn"
+          <IconButton
+            variant="danger"
+            size="compact"
             onClick={onDelete}
             disabled={isDeleting}
             title={`Delete ${branch.name}`}
             aria-label={`Delete branch ${branch.name}`}
-          >
-            {isDeleting ? <Spinner size="sm" /> : <TrashIcon size={15} />}
-          </button>
+            icon={isDeleting ? <Spinner size="sm" /> : <TrashIcon size={15} />}
+          />
         )}
       </div>
     </div>

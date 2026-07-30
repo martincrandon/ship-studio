@@ -63,7 +63,7 @@ export function StaleEnvBanner({ projectPath }: { projectPath: string }) {
       </span>
       <Button
         variant="ghost"
-        size="sm"
+        size="compact"
         onClick={() => sessionRegistry.clearProjectStaleEnv(projectPath)}
       >
         Dismiss

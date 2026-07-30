@@ -21,6 +21,7 @@ import { Terminal } from '../terminal/Terminal';
 import { StaleEnvBanner } from '../terminal/StaleEnvBanner';
 import type { TerminalHandle, AgentStatus } from '../terminal/Terminal';
 import { PlusIcon } from '../icons';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { CompactTopbar } from './CompactTopbar';
 import { getAgentById } from '../../lib/agent';
 import { kbd } from '../../lib/shortcuts';
@@ -138,59 +139,54 @@ export function CompactWorkspace({
         onGoHome={onGoHome}
       />
 
-      <div className="compact-tabs" role="tablist" aria-label="Agent and terminal tabs">
-        {terminalTabs.map((tab) => {
-          const isActive = tab.id === activeTerminalTab;
-          const hasAttention = attentionTabs.has(tab.id) && !isActive;
-          const label = buildTabLabel(tab, terminalTabs, tabTitles);
-          const canClose = terminalTabs.length > 1;
-          return (
-            <div
-              key={tab.id}
-              className={`compact-tab ${isActive ? 'is-active' : ''} ${
-                hasAttention ? 'has-attention' : ''
-              }`}
-              role="tab"
-              aria-selected={isActive}
-            >
-              <button
-                type="button"
-                className="compact-tab-select"
-                onClick={() => onSelectTab(tab.id)}
-                title={label}
+      <Tabs value={String(activeTerminalTab)} onValueChange={(next) => onSelectTab(Number(next))}>
+        <TabsList className="compact-tabs" aria-label="Agent and terminal tabs">
+          {terminalTabs.map((tab) => {
+            const isActive = tab.id === activeTerminalTab;
+            const hasAttention = attentionTabs.has(tab.id) && !isActive;
+            const label = buildTabLabel(tab, terminalTabs, tabTitles);
+            const canClose = terminalTabs.length > 1;
+            return (
+              <div
+                key={tab.id}
+                className={`compact-tab ${isActive ? 'is-active' : ''} ${
+                  hasAttention ? 'has-attention' : ''
+                }`}
               >
-                <span className="compact-tab-dot" aria-hidden="true" />
-                <span className="compact-tab-label">{label}</span>
-              </button>
-              {canClose && (
-                <button
-                  type="button"
-                  className="compact-tab-close"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCloseTab(tab.id);
-                  }}
-                  aria-label={`Close ${label}`}
-                  title="Close tab"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          );
-        })}
-        {!atMaxTabs && (
-          <button
-            type="button"
-            className="compact-tab-add"
-            onClick={onAddTab}
-            aria-label="New terminal tab"
-            title={`New terminal tab (${kbd('mod', 'T')})`}
-          >
-            <PlusIcon size={12} />
-          </button>
-        )}
-      </div>
+                <TabsTab value={String(tab.id)} className="compact-tab-select" title={label}>
+                  <span className="compact-tab-dot" aria-hidden="true" />
+                  <span className="compact-tab-label">{label}</span>
+                </TabsTab>
+                {canClose && (
+                  <button
+                    type="button"
+                    className="compact-tab-close"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCloseTab(tab.id);
+                    }}
+                    aria-label={`Close ${label}`}
+                    title="Close tab"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {!atMaxTabs && (
+            <button
+              type="button"
+              className="compact-tab-add"
+              onClick={onAddTab}
+              aria-label="New terminal tab"
+              title={`New terminal tab (${kbd('mod', 'T')})`}
+            >
+              <PlusIcon size={12} />
+            </button>
+          )}
+        </TabsList>
+      </Tabs>
 
       <StaleEnvBanner projectPath={currentProject.path} />
 

@@ -104,8 +104,8 @@ export function ElementHtmlEditor({ projectPath, signature }: Props) {
       {status === 'ready' && (
         <div className="ss-htmltab__foot">
           <Button
-            variant="ghost"
-            size="sm"
+            variant="danger"
+            size="default"
             disabled={!dirty}
             onClick={() => setText(baselineRef.current)}
           >
@@ -113,7 +113,7 @@ export function ElementHtmlEditor({ projectPath, signature }: Props) {
           </Button>
           <Button
             variant="primary"
-            size="sm"
+            size="default"
             disabled={!dirty || saving}
             onClick={() => void save()}
           >

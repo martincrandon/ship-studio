@@ -21,6 +21,7 @@ import {
   setDefaultBaseBranch,
 } from '../../lib/branches';
 import { Spinner } from '../primitives/Spinner';
+import { IconButton } from '../primitives/IconButton';
 import { ResetIcon } from '../icons';
 import { logger } from '../../lib/logger';
 import { useOptionalToast } from '../../contexts/ToastContext';
@@ -260,16 +261,16 @@ export function BranchGraph({
         </button>
         <div className="branch-graph-header-actions">
           {expanded && (
-            <button
-              type="button"
-              className={`branch-graph-refresh${isRefreshing ? ' spinning' : ''}`}
+            <IconButton
+              variant="ghost"
+              size="compact"
+              className={isRefreshing ? 'spinning' : undefined}
               onClick={() => void handleRefresh()}
               disabled={isRefreshing}
               title="Refresh branches"
               aria-label="Refresh branches"
-            >
-              <ResetIcon size={14} />
-            </button>
+              icon={<ResetIcon size={14} />}
+            />
           )}
           {expanded && baseOptions.length > 0 && (
             <label className="branch-graph-default-base">

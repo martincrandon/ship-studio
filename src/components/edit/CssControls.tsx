@@ -633,7 +633,7 @@ export function AddProp({
             if (e.key === 'Enter') add();
           }}
         />
-        <Button variant="secondary" size="sm" onClick={add} disabled={!ready}>
+        <Button variant="secondary" size="compact" onClick={add} disabled={!ready}>
           Add
         </Button>
       </div>

@@ -35,6 +35,8 @@ import { OnboardingTerminal } from '../setup/OnboardingTerminal';
 import { ClaudeConnectTerminal } from './ClaudeConnectTerminal';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
+import { DropdownItem } from '../primitives/Dropdown';
+import { MenuButton } from '../primitives/MenuButton';
 import { Spinner } from '../primitives/Spinner';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { useWorkspaceConnect } from '../../hooks/useWorkspaceConnect';
@@ -562,7 +564,7 @@ export function AgentsPanel() {
                 {!agent.installed && agent.installSupported && (
                   <Button
                     variant="primary"
-                    size="sm"
+                    width="hug"
                     onClick={() => openTerminal(agent, 'install')}
                     disabled={isBusy}
                   >
@@ -573,7 +575,7 @@ export function AgentsPanel() {
                 {agent.installed && !agent.authed && (
                   <Button
                     variant="primary"
-                    size="sm"
+                    width="hug"
                     onClick={() => startAuth(agent, false)}
                     disabled={isBusy}
                   >
@@ -583,8 +585,8 @@ export function AgentsPanel() {
 
                 {agent.installed && agent.needsReconnect && (
                   <Button
-                    variant="secondary"
-                    size="sm"
+                    variant="default"
+                    width="hug"
                     className="agents-reconnect-btn"
                     onClick={() => startAuth(agent, true)}
                     disabled={isBusy}
@@ -598,9 +600,9 @@ export function AgentsPanel() {
                     const isSwitchingToThis = busy === agent.id && !agent.isDefault;
                     const anySwitching = busy !== null;
                     return (
-                      <button
-                        type="button"
-                        className={`agents-default-pill ${agent.isDefault ? 'on' : ''} ${isSwitchingToThis ? 'switching' : ''}`}
+                      <Button
+                        variant={agent.isDefault ? 'primary' : 'default'}
+                        width="hug"
                         onClick={() => {
                           if (!agent.isDefault) void handleSetDefault(agent.id);
                         }}
@@ -608,71 +610,55 @@ export function AgentsPanel() {
                         aria-pressed={agent.isDefault}
                         aria-busy={isSwitchingToThis || undefined}
                       >
-                        <span className="agents-default-pill-radio">
-                          {isSwitchingToThis ? (
-                            <Spinner size="sm" />
-                          ) : agent.isDefault ? (
-                            <CheckIcon size={10} />
-                          ) : null}
-                        </span>
+                        {isSwitchingToThis ? (
+                          <Spinner size="sm" />
+                        ) : agent.isDefault ? (
+                          <CheckIcon size={10} />
+                        ) : null}
                         {isSwitchingToThis
                           ? 'Switching…'
                           : agent.isDefault
                             ? 'Default'
                             : 'Set default'}
-                      </button>
+                      </Button>
                     );
                   })()}
 
                 {agent.installed && (
                   <div className="agents-panel-menu-wrap">
-                    <button
-                      type="button"
+                    <MenuButton
+                      variant="default"
+                      size="default"
+                      width="hug"
+                      leftIcon={<KebabGlyph />}
                       className="agents-panel-kebab"
+                      expanded={menuOpen}
                       onClick={() => setOpenMenuId(menuOpen ? null : agent.id)}
                       title={`More actions for ${agent.displayName}`}
                       aria-label={`More actions for ${agent.displayName}`}
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
                       disabled={isBusy}
-                    >
-                      <KebabGlyph />
-                    </button>
+                    ></MenuButton>
                     {menuOpen && (
-                      <div className="agents-panel-menu" role="menu">
+                      <div className="ss-dropdown__menu agents-panel-menu" role="menu">
                         {agent.installSupported && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => openTerminal(agent, 'install')}
-                          >
+                          <DropdownItem onSelect={() => openTerminal(agent, 'install')}>
                             Update
-                          </button>
+                          </DropdownItem>
                         )}
                         {agent.authed && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => void handleSignOut(agent)}
-                          >
+                          <DropdownItem onSelect={() => void handleSignOut(agent)}>
                             Sign out
-                          </button>
+                          </DropdownItem>
                         )}
                         {!agent.authed && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => startAuth(agent, false)}
-                          >
+                          <DropdownItem onSelect={() => startAuth(agent, false)}>
                             Sign in
-                          </button>
+                          </DropdownItem>
                         )}
                         {agent.uninstallSupported && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="agents-panel-menu-danger"
-                            onClick={() => {
+                          <DropdownItem
+                            variant="danger"
+                            onSelect={() => {
                               setOpenMenuId(null);
                               setConfirmUninstall({
                                 agentId: agent.id,
@@ -681,7 +667,7 @@ export function AgentsPanel() {
                             }}
                           >
                             Uninstall
-                          </button>
+                          </DropdownItem>
                         )}
                       </div>
                     )}
@@ -741,48 +727,49 @@ export function AgentsPanel() {
 
                   <div className="agents-panel-row-actions">
                     {!connected && (
-                      <Button variant="primary" size="sm" onClick={() => connectService(svc.id)}>
+                      <Button
+                        variant="primary"
+                        size="default"
+                        width="hug"
+                        onClick={() => connectService(svc.id)}
+                      >
                         Connect
                       </Button>
                     )}
 
                     {connected && (
                       <div className="agents-panel-menu-wrap">
-                        <button
-                          type="button"
+                        <MenuButton
+                          variant="default"
+                          size="default"
+                          width="hug"
+                          leftIcon={<KebabGlyph />}
                           className="agents-panel-kebab"
+                          expanded={menuOpen}
                           onClick={() => setOpenMenuId(menuOpen ? null : menuKey)}
                           title={`More actions for ${svc.name}`}
                           aria-label={`More actions for ${svc.name}`}
-                          aria-haspopup="menu"
-                          aria-expanded={menuOpen}
-                        >
-                          <KebabGlyph />
-                        </button>
+                        ></MenuButton>
                         {menuOpen && (
-                          <div className="agents-panel-menu" role="menu">
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
+                          <div className="ss-dropdown__menu agents-panel-menu" role="menu">
+                            <DropdownItem
+                              onSelect={() => {
                                 setOpenMenuId(null);
                                 connectService(svc.id);
                               }}
                             >
                               {activeAccount.isDefault ? 'Sign in again' : 'Switch account'}
-                            </button>
+                            </DropdownItem>
                             {canDisconnect && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="agents-panel-menu-danger"
-                                onClick={() => {
+                              <DropdownItem
+                                variant="danger"
+                                onSelect={() => {
                                   setOpenMenuId(null);
                                   void disconnectService(svc.id);
                                 }}
                               >
                                 Disconnect
-                              </button>
+                              </DropdownItem>
                             )}
                           </div>
                         )}

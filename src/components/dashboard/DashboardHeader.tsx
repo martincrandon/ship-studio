@@ -7,7 +7,7 @@
  * @module components/DashboardHeader
  */
 
-import { SearchIcon } from '../icons';
+import { PlusIcon, SearchIcon } from '../icons';
 import { trackEvent } from '../../lib/analytics';
 import { Button } from '../primitives/Button';
 import { useModal } from '../../contexts/ModalContext';
@@ -47,7 +47,9 @@ export function DashboardHeader({
       <div className="dashboard-header-actions">
         {onImportProject && (
           <Button
-            variant="secondary"
+            variant="default"
+            size="default"
+            width="hug"
             data-education-id="import-button"
             onClick={() => {
               void trackEvent('import_button_clicked', { $screen_name: 'Dashboard' });
@@ -62,15 +64,19 @@ export function DashboardHeader({
             Import
           </Button>
         )}
+
         <Button
           variant="primary"
+          size="default"
+          width="hug"
+          leftIcon={<PlusIcon size={16} />}
           data-education-id="new-project-button"
           onClick={() => {
             void trackEvent('new_project_clicked', { $screen_name: 'Dashboard' });
             onCreateProject();
           }}
         >
-          + New Project
+          New Project
         </Button>
       </div>
     </div>

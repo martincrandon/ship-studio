@@ -232,7 +232,11 @@ export function BackupsModal({ projectPath, onRestore, onCreatePR }: BackupsModa
                   </div>
                 </div>
                 {index > 0 && (
-                  <Button variant="secondary" size="sm" onClick={() => handleRestoreClick(backup)}>
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={() => handleRestoreClick(backup)}
+                  >
                     Restore
                   </Button>
                 )}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ModalFrame } from '../primitives/ModalFrame';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { SearchIcon } from '../icons';
 import { useConsumePendingTab, type PaletteContextKind } from './paletteContext';
 import { useRankedCommands, type RankedCommand } from '../../commands/useRankedCommands';
@@ -269,20 +270,15 @@ export function CommandPalette({
         </div>
       )}
 
-      <div className="command-palette-tabs" role="tablist">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            className={`command-palette-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-            onClick={() => setActiveTab(tab.id, 'click')}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as TabId, 'click')}>
+        <TabsList className="command-palette-tabs">
+          {tabs.map((tab) => (
+            <TabsTab key={tab.id} value={tab.id} className="command-palette-tab">
+              {tab.label}
+            </TabsTab>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="command-palette-list" role="listbox" ref={listRef}>
         {filtered.length === 0 ? (
