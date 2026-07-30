@@ -169,13 +169,9 @@
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
 }
-.ss-css-create__label select {
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  padding: 4px var(--spacing-xs);
+.ss-css-create__label .property-field {
+  width: 100%;
+  justify-content: space-between;
 }
 
 .ss-css-readonly {
@@ -373,60 +369,12 @@
 
 /* ── Visual / Code mode toggle ───────────────────────────────────── */
 .ss-css-modes {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
   margin-bottom: var(--spacing-sm);
-  background: var(--surface-control);
-  border-radius: var(--radius-md);
-}
-.ss-css-mode {
-  flex: 1;
-  padding: 5px 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-.ss-css-mode.is-active {
-  background: var(--surface-app);
-  color: var(--text-primary);
+  width: 100%;
 }
 
-/* ── Category tabs ───────────────────────────────────────────────── */
-.ss-css-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: var(--spacing-sm);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--border-default);
-}
-.ss-css-tab {
-  padding: 4px 10px;
-  border: none;
-  background: var(--surface-control);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-.ss-css-tab:hover {
-  color: var(--text-primary);
-}
-.ss-css-tab.is-active {
-  background: var(--accent-active);
-  color: var(--text-on-accent);
+.ss-css-modes > .button {
+  flex: 1;
 }
 
 /* Per-section "N properties set" badge — title and count group left, chevron

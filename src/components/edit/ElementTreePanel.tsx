@@ -13,6 +13,7 @@ import { ChevronRightIcon } from '../icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import type { ElementTreeNode } from '../../hooks/useElementTree';
 import type { ElementSignature } from '../../lib/edit';
 import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
@@ -203,27 +204,15 @@ export function ElementTreePanel({
 
   return (
     <div className="ss-tree-panel" data-testid="element-tree-panel">
-      <div className="ss-tree-panel__header">
-        <span className="ss-tree-panel__title">Elements</span>
-        <div className="ss-tree-panel__modes" role="group" aria-label="Elements view">
-          <button
-            type="button"
-            className={`ss-tree-panel__mode${view === 'visual' ? ' is-active' : ''}`}
-            aria-pressed={view === 'visual'}
-            onClick={() => selectView('visual')}
-          >
-            Visual
-          </button>
-          <button
-            type="button"
-            className={`ss-tree-panel__mode${view === 'code' ? ' is-active' : ''}`}
-            aria-pressed={view === 'code'}
-            onClick={() => selectView('code')}
-          >
-            Code
-          </button>
+      <Tabs value={view} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
+        <div className="ss-tree-panel__header">
+          <span className="ss-tree-panel__title">Elements</span>
+          <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
+            <TabsTab value="visual">Visual</TabsTab>
+            <TabsTab value="code">Code</TabsTab>
+          </TabsList>
         </div>
-      </div>
+      </Tabs>
       {view === 'visual' ? (
         <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
           {tree ? (

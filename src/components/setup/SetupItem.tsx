@@ -12,6 +12,7 @@ import {
   SETUP_TIME_ESTIMATES,
   BREW_PACKAGES,
 } from '../../lib/setup';
+import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 
 interface SetupItemProps {
@@ -163,13 +164,9 @@ function getActionButton(
     return (
       <div className="setup-item-error-container">
         <span className="setup-item-error-text">{item.errorMessage || 'Something went wrong'}</span>
-        <button
-          className="setup-item-btn setup-item-btn-retry"
-          onClick={onAction}
-          disabled={isAnyActionInProgress}
-        >
+        <Button variant="secondary" onClick={onAction} disabled={isAnyActionInProgress}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -180,13 +177,9 @@ function getActionButton(
     return (
       <div className="setup-item-action-row">
         {timeEstimate && <span className="setup-item-time-estimate">{timeEstimate}</span>}
-        <button
-          className="setup-item-btn setup-item-btn-install"
-          onClick={onAction}
-          disabled={isAnyActionInProgress}
-        >
+        <Button variant="primary" onClick={onAction} disabled={isAnyActionInProgress}>
           Install
-        </button>
+        </Button>
       </div>
     );
   }
@@ -198,21 +191,13 @@ function getActionButton(
       <div className="setup-item-action-row">
         {timeEstimate && <span className="setup-item-time-estimate">{timeEstimate}</span>}
         {isOptional && onSkip && (
-          <button
-            className="setup-item-btn setup-item-btn-skip"
-            onClick={onSkip}
-            disabled={isAnyActionInProgress}
-          >
+          <Button variant="ghost" onClick={onSkip} disabled={isAnyActionInProgress}>
             Skip
-          </button>
+          </Button>
         )}
-        <button
-          className="setup-item-btn setup-item-btn-connect"
-          onClick={onAction}
-          disabled={isAnyActionInProgress}
-        >
+        <Button variant="primary" onClick={onAction} disabled={isAnyActionInProgress}>
           Connect
-        </button>
+        </Button>
       </div>
     );
   }

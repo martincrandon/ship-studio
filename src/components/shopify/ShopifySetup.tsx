@@ -127,11 +127,11 @@ export function ShopifySetup({
         </p>
         {onSendToAgent && <p className="hint">Let the agent install and configure it for you.</p>}
         {onSendToAgent && (
-          <Button variant="primary" size="sm" onClick={handleAgentSetup}>
+          <Button variant="primary" onClick={handleAgentSetup}>
             Set up with AI
           </Button>
         )}
-        <Button variant="secondary" size="sm" onClick={() => setAttempt((a) => a + 1)}>
+        <Button variant="secondary" onClick={() => setAttempt((a) => a + 1)}>
           <ResetIcon size={14} /> Try again
         </Button>
       </div>
@@ -158,12 +158,7 @@ export function ShopifySetup({
           disabled={isSaving}
           autoFocus
         />
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => void handleConnect()}
-          disabled={isSaving}
-        >
+        <Button variant="primary" onClick={() => void handleConnect()} disabled={isSaving}>
           {isSaving ? 'Connecting…' : 'Connect store'}
         </Button>
       </div>

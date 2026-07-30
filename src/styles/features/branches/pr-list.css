@@ -18,31 +18,7 @@
   margin-bottom: 12px;
 }
 
-/* New Branch Button & Form */
-.branches-new-branch-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
-  background: var(--surface-panel);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-  width: 100%;
-}
-
-.branches-new-branch-btn:hover {
-  background: var(--surface-control);
-  border-color: var(--accent-active);
-  color: var(--accent-active);
-}
-
+/* New Branch Form */
 .branches-new-branch-form {
   padding: 14px 16px;
   background: var(--surface-panel);
@@ -276,36 +252,6 @@
   flex-shrink: 0;
 }
 
-/* Grey trashcan delete — quiet by default, turns danger-red on hover. */
-.branch-card-delete-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    color var(--transition),
-    background var(--transition),
-    border-color var(--transition);
-}
-
-.branch-card-delete-btn:hover:not(:disabled) {
-  color: var(--accent-error);
-  background: rgba(var(--accent-error-rgb), 0.1);
-  border-color: rgba(var(--accent-error-rgb), 0.3);
-}
-
-.branch-card-delete-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 /* Text actions on branch/PR cards now use the <Button> primitive; this class
    remains only for the icon-only GitHub link (.pr-card-icon-btn). */
 .branch-card-action {
@@ -359,17 +305,8 @@
   font-size: var(--font-size-lg);
 }
 
-.prs-tab-error button {
-  padding: 8px 16px;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+.prs-tab-error .button {
   color: var(--text-primary);
-  cursor: pointer;
-}
-
-.prs-tab-error button:hover {
-  background: var(--surface-panel);
 }
 
 .prs-tab-section {
@@ -427,21 +364,4 @@
   font-size: var(--font-size-md);
   color: var(--text-secondary);
   line-height: 1.5;
-}
-
-.prs-tab-empty-action {
-  padding: 10px 20px;
-  background: var(--accent-active);
-  border: none;
-  border-radius: var(--radius);
-  color: var(--text-on-accent);
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.prs-tab-empty-action:hover {
-  background: var(--accent-active-hover);
-  font-size: var(--font-size-md);
 }

@@ -7,8 +7,11 @@
 
 import { useMemo, useState } from 'react';
 import { PlusIcon } from '../icons/utility';
+import { Button } from '../primitives/Button';
+import { PropertyField } from '../primitives/PropertyField';
 import { Spinner } from '../primitives/Spinner';
 import { EditPopover } from './EditPopover';
+import { CssValueText } from './CssValueText';
 import { colorSwatch } from '../../lib/cssProperties';
 import type { VariableRow } from '../../hooks/useCssVariables';
 
@@ -81,9 +84,14 @@ export function CssVariablesPanel({
           <div className="ss-vars__list">
             {vars.map((v) => (
               <div key={`${selector}-${v.name}`} className="ss-var-row is-readonly">
-                <Swatch value={v.value} />
-                <code className="ss-var-row__name">{v.name}</code>
-                <span className="ss-var-row__value ss-var-row__value--ro">{v.value}</span>
+                <span className="ss-var-row__name">
+                  <Swatch value={v.value} />
+                  <code>{v.name}</code>
+                </span>
+                <span className="ss-var-row__colon">:</span>
+                <span className="ss-var-row__value ss-var-row__value--ro">
+                  <CssValueText value={v.value} />
+                </span>
               </div>
             ))}
           </div>
@@ -117,16 +125,24 @@ function EditableVarRow({
 
   return (
     <div className="ss-var-row">
-      <Swatch value={variable.value} />
-      <code className="ss-var-row__name">{variable.name}</code>
-      <button
-        type="button"
+      <span className="ss-var-row__name">
+        <Swatch value={variable.value} />
+        <code>{variable.name}</code>
+      </span>
+      <span className="ss-var-row__colon">:</span>
+      <PropertyField
+        variant="variable"
+        size="compact"
         className="ss-var-row__value"
         title="Click to edit"
         onClick={(e) => setAnchor(e.currentTarget)}
       >
-        {variable.value || <span className="ss-var-row__empty">empty</span>}
-      </button>
+        {variable.value ? (
+          <CssValueText value={variable.value} />
+        ) : (
+          <span className="ss-var-row__empty">empty</span>
+        )}
+      </PropertyField>
       {anchor && (
         <EditPopover
           anchor={anchor}
@@ -163,9 +179,14 @@ function AddVariable({
 
   if (!open) {
     return (
-      <button type="button" className="ss-cascade-add-selector" onClick={() => setOpen(true)}>
-        <PlusIcon size={11} /> Add variable
-      </button>
+      <Button
+        variant="secondary"
+        leftIcon={<PlusIcon size={11} />}
+        className="ss-cascade-action"
+        onClick={() => setOpen(true)}
+      >
+        Add variable
+      </Button>
     );
   }
 

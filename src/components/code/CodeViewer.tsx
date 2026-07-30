@@ -18,6 +18,7 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
+import { MenuButton } from '../primitives/MenuButton';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { ChevronIcon, CodeIcon, FileIcon, VSCodeIcon, CursorIcon, CopyIcon } from '../icons';
 import { trackEvent } from '../../lib/analytics';
@@ -322,16 +323,10 @@ export function CodeViewer({
             // Contextual edit actions, grouped + divided from the persistent
             // controls so Save/Revert read as their own thing.
             <div className="code-viewer-edit-actions">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={onCancelEdit}
-                disabled={!isDirty || isSaving}
-              >
+              <Button variant="secondary" onClick={onCancelEdit} disabled={!isDirty || isSaving}>
                 Revert
               </Button>
               <Button
-                size="sm"
                 variant="primary"
                 onClick={() => void handleSave()}
                 disabled={!isDirty || isSaving}
@@ -381,10 +376,15 @@ export function CodeViewer({
               portal
               align="right"
               trigger={(p) => (
-                <button className="code-viewer-open-btn" title="Open in IDE" {...p}>
-                  <span>Open with</span>
-                  <ChevronIcon size={10} />
-                </button>
+                <MenuButton
+                  variant="secondary"
+                  title="Open in IDE"
+                  rightIcon={<ChevronIcon size={10} />}
+                  expanded={p['aria-expanded']}
+                  {...p}
+                >
+                  Open with
+                </MenuButton>
               )}
             >
               {ideAvailability.vscode && (
@@ -455,13 +455,17 @@ export function CodeViewer({
               autoFocus
             />
             <div className="code-selection-actions">
-              <button className="code-selection-cancel" onClick={dismissPopover}>
+              <Button variant="ghost" size="compact" onClick={dismissPopover}>
                 Cancel
-              </button>
-              <button className="code-selection-copy" onClick={handleCopy}>
-                <CopyIcon size={12} />
+              </Button>
+              <Button
+                variant="primary"
+                size="compact"
+                onClick={handleCopy}
+                leftIcon={<CopyIcon size={12} />}
+              >
                 Copy to agent
-              </button>
+              </Button>
             </div>
           </div>,
           document.body

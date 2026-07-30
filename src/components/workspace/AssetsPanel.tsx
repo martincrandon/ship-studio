@@ -23,6 +23,7 @@ import { formatFileSize, isImageFile, type Asset } from '../../lib/assets';
 import { useAssetManagement } from '../../hooks/useAssetManagement';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Button } from '../primitives/Button';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { useModal } from '../../contexts/ModalContext';
 import {
@@ -239,7 +240,7 @@ export function AssetsModal({ projectPath, isOpen, onClose, pick }: AssetsModalP
           {/* Toolbar */}
           <div className="assets-toolbar">
             <Button
-              variant="secondary"
+              variant="primary"
               leftIcon={<UploadIcon size={14} />}
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
@@ -254,29 +255,35 @@ export function AssetsModal({ projectPath, isOpen, onClose, pick }: AssetsModalP
               style={{ display: 'none' }}
             />
             <Button
-              variant="secondary"
+              variant="default"
               leftIcon={<FolderPlusIcon size={14} />}
               onClick={() => setShowNewFolder(true)}
             >
               New Folder
             </Button>
             <div className="assets-toolbar-spacer" />
-            <div className="assets-view-toggle">
-              <button
-                className={`assets-view-btn ${viewMode === 'list' ? 'active' : ''}`}
-                onClick={() => setViewMode('list')}
-                title="List view"
-              >
-                <ListIcon size={14} />
-              </button>
-              <button
-                className={`assets-view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setViewMode('grid')}
-                title="Grid view"
-              >
-                <GridIcon size={14} />
-              </button>
-            </div>
+            <Tabs
+              value={viewMode}
+              onValueChange={(next) => setViewMode(next as typeof viewMode)}
+              size="default"
+            >
+              <TabsList className="assets-view-toggle" aria-label="Asset view">
+                <TabsTab
+                  value="list"
+                  className="button--icon-only"
+                  leftIcon={<ListIcon size={14} />}
+                  aria-label="List view"
+                  title="List view"
+                />
+                <TabsTab
+                  value="grid"
+                  className="button--icon-only"
+                  leftIcon={<GridIcon size={14} />}
+                  aria-label="Grid view"
+                  title="Grid view"
+                />
+              </TabsList>
+            </Tabs>
           </div>
 
           {/* Search */}

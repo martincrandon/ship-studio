@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { PropertyField } from '../primitives/PropertyField';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { PlusIcon } from '../icons/utility';
 import { CheckIcon, SearchIcon } from '../icons/common';
@@ -258,9 +259,9 @@ export function ClassBar({
   return (
     <div className="ss-edit-panel__control">
       <span className="ss-edit-panel__label">Editing</span>
-      <button
+      <PropertyField
         ref={triggerRef}
-        type="button"
+        variant="select"
         className={`ss-enum__trigger ss-classedit__trigger${activeName ? ' is-class' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -268,7 +269,7 @@ export function ClassBar({
       >
         <span className="ss-classedit__name">{activeName ?? 'This element'}</span>
         <Chevron />
-      </button>
+      </PropertyField>
 
       {open &&
         menuRect &&

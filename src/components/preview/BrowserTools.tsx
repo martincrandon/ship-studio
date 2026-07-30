@@ -23,6 +23,8 @@ import {
   formatElementsForAgent,
 } from '../../lib/inspectFormat';
 import { trackEvent } from '../../lib/analytics';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Button } from '../primitives/Button';
 
 type InnerTab = 'console' | 'network' | 'elements';
 
@@ -110,47 +112,35 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
 
   return (
     <div className="browser-tools">
-      <div className="browser-tools-tabs" role="tablist">
-        <TabButton
-          label="Console"
-          count={consoleEntries.length}
-          active={tab === 'console'}
-          onClick={() => setTab('console')}
-        />
-        <TabButton
-          label="Network"
-          count={networkEntries.length}
-          active={tab === 'network'}
-          onClick={() => setTab('network')}
-        />
-        <TabButton
-          label="Elements"
-          active={tab === 'elements'}
-          onClick={() => setTab('elements')}
-        />
-        <div className="browser-tools-tabs-spacer" />
-        <div className="browser-tools-actions">
-          {onSendToAgent && (
-            <button
-              type="button"
-              className="browser-tools-send"
-              onClick={handleSendToAgent}
-              disabled={sendDisabled}
-              title={`Send current ${tab} contents to the active agent`}
+      <Tabs value={tab} onValueChange={(next) => setTab(next as InnerTab)}>
+        <TabsList className="browser-tools-tabs">
+          <TabButton label="Console" count={consoleEntries.length} value="console" />
+          <TabButton label="Network" count={networkEntries.length} value="network" />
+          <TabButton label="Elements" value="elements" />
+          <div className="browser-tools-tabs-spacer" />
+          <div className="browser-tools-actions">
+            {onSendToAgent && (
+              <Button
+                variant="primary"
+                size="compact"
+                onClick={handleSendToAgent}
+                disabled={sendDisabled}
+                title={`Send current ${tab} contents to the active agent`}
+              >
+                Send to agent
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="compact"
+              onClick={handleClear}
+              title={tab === 'elements' ? 'Refresh DOM' : `Clear ${tab}`}
             >
-              Send to agent
-            </button>
-          )}
-          <button
-            type="button"
-            className="browser-tools-clear"
-            onClick={handleClear}
-            title={tab === 'elements' ? 'Refresh DOM' : `Clear ${tab}`}
-          >
-            {tab === 'elements' ? 'Refresh' : 'Clear'}
-          </button>
-        </div>
-      </div>
+              {tab === 'elements' ? 'Refresh' : 'Clear'}
+            </Button>
+          </div>
+        </TabsList>
+      </Tabs>
       {/* All three views stay mounted and stack in the same grid cell.
           Swapping `is-active` via opacity preserves scroll position and
           state; `inert` on inactive slots blocks focus + pointer events. */}
@@ -172,22 +162,15 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
 interface TabButtonProps {
   label: string;
   count?: number;
-  active: boolean;
-  onClick: () => void;
+  value: InnerTab;
 }
 
-function TabButton({ label, count, active, onClick }: TabButtonProps) {
+function TabButton({ label, count, value }: TabButtonProps) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      className={`browser-tools-tab ${active ? 'is-active' : ''}`}
-      onClick={onClick}
-    >
+    <TabsTab value={value} className="browser-tools-tab">
       {label}
       {count !== undefined && count > 0 && <span className="browser-tools-tab-count">{count}</span>}
-    </button>
+    </TabsTab>
   );
 }
 

@@ -135,7 +135,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
               {health.detectedScripts?.hasPackageJson && (
                 <Button
                   variant="secondary"
-                  size="sm"
+                  size="compact"
                   onClick={() => void health.handleShowPackageJson()}
                   disabled={health.isLoadingPackageJson}
                   leftIcon={<FileIcon size={12} />}
@@ -162,7 +162,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
           <div className="health-tab-actions">
             <Button
               variant="primary"
-              size="sm"
+              size="compact"
               onClick={() => void health.runAllChecks()}
               disabled={health.isAnyRunning || health.isRunningAll}
             >
@@ -176,7 +176,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
             </Button>
             <Button
               variant={health.isAutoRunEnabled ? 'secondary' : 'ghost'}
-              size="sm"
+              size="compact"
               onClick={health.handleAutoRunToggle}
               title={
                 health.isAutoRunEnabled
@@ -265,7 +265,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
                   {state.status === 'fail' && onAskClaude && (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="compact"
                       onClick={() => health.handleAskClaude(cat)}
                       title="Ask Claude to fix"
                     >
@@ -274,7 +274,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
                   )}
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="compact"
                     onClick={() => void health.runCheck(cat)}
                     disabled={state.status === 'running' || health.isRunningAll}
                     title={state.result ? 'Re-run check' : 'Run check'}
@@ -312,7 +312,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
                   {selectedState.status === 'fail' && onAskClaude && (
                     <Button
                       variant="primary"
-                      size="sm"
+                      size="compact"
                       onClick={() => health.handleAskClaude(selected)}
                     >
                       Ask Claude to fix
@@ -342,7 +342,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
                 {onAskClaude && (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="compact"
                     onClick={() => {
                       const lines = suggestions
                         .map((s) => `"${s.scriptName}": "${s.scriptCommand}"`)
@@ -470,10 +470,10 @@ function PackageJsonModal({
     <ModalFrame isOpen={isOpen} onClose={onClose} title="package.json">
       <pre className="health-tab-pkg-json">{formatted}</pre>
       <div className="health-tab-pkg-json-actions">
-        <Button variant="secondary" size="sm" onClick={onCopy} leftIcon={<CopyIcon size={12} />}>
+        <Button variant="secondary" onClick={onCopy} leftIcon={<CopyIcon size={12} />}>
           Copy
         </Button>
-        <Button variant="primary" size="sm" onClick={onClose}>
+        <Button variant="primary" onClick={onClose}>
           Close
         </Button>
       </div>

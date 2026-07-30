@@ -11,8 +11,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { SearchIcon } from '../icons';
+import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { TextButton } from '../primitives/TextButton';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 import {
   type AgentSkill,
   checkSkillsCli,
@@ -226,20 +230,16 @@ export function SkillsModal({
       className="skills-modal"
     >
       <>
-        <div className="skills-tabs">
-          <button
-            className={`skills-tab ${activeTab === 'installed' ? 'active' : ''}`}
-            onClick={() => setActiveTab('installed')}
-          >
-            Installed
-          </button>
-          <button
-            className={`skills-tab ${activeTab === 'add' ? 'active' : ''}`}
-            onClick={() => setActiveTab('add')}
-          >
-            Add
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as Tab)}>
+          <TabsList className="skills-tabs" aria-label="Skills view">
+            <TabsTab value="installed" className="skills-tab">
+              Installed
+            </TabsTab>
+            <TabsTab value="add" className="skills-tab">
+              Add
+            </TabsTab>
+          </TabsList>
+        </Tabs>
 
         <div className="skills-modal-body">
           {activeTab === 'installed' && (
@@ -263,26 +263,16 @@ export function SkillsModal({
                     spellCheck={false}
                   />
                 </div>
-                <div className="skills-filter-bar">
-                  <button
-                    className={`skills-filter-btn ${scopeFilter === 'all' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('all')}
-                  >
-                    All
-                  </button>
-                  <button
-                    className={`skills-filter-btn ${scopeFilter === 'user' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('user')}
-                  >
-                    User
-                  </button>
-                  <button
-                    className={`skills-filter-btn ${scopeFilter === 'project' ? 'active' : ''}`}
-                    onClick={() => setScopeFilter('project')}
-                  >
-                    Project
-                  </button>
-                </div>
+                <SegmentedControl
+                  value={scopeFilter}
+                  options={[
+                    { value: 'all', label: 'All' },
+                    { value: 'user', label: 'User' },
+                    { value: 'project', label: 'Project' },
+                  ]}
+                  onValueChange={setScopeFilter}
+                  aria-label="Filter skills by scope"
+                />
               </div>
 
               {isLoadingSkills && skills.length === 0 && (
@@ -319,13 +309,14 @@ export function SkillsModal({
                         </div>
                         <div className="skill-desc">{skill.description}</div>
                       </div>
-                      <button
-                        className="skill-remove-btn"
+                      <Button
+                        variant="danger"
+                        size="compact"
                         onClick={() => void handleRemove(skill)}
                         disabled={removingSkill === skillKey}
                       >
                         {removingSkill === skillKey ? 'Removing...' : 'Remove'}
-                      </button>
+                      </Button>
                     </div>
                   );
                 })}
@@ -358,31 +349,25 @@ export function SkillsModal({
                         autoCapitalize="off"
                         spellCheck={false}
                       />
-                      <button
-                        className="skills-search-btn"
+                      <Button
+                        variant="primary"
                         onClick={() => void handleSearch()}
                         disabled={isSearching || !searchQuery.trim()}
                       >
                         {isSearching ? 'Searching...' : 'Search'}
-                      </button>
+                      </Button>
                     </div>
                     <div className="skills-scope-toggle">
                       <span className="skills-scope-toggle-label">Install to:</span>
-                      <button
-                        type="button"
-                        className={`skills-scope-btn ${installScope === 'user' ? 'active' : ''}`}
-                        onClick={() => setInstallScope('user')}
-                      >
-                        User
-                      </button>
-                      <button
-                        type="button"
-                        className={`skills-scope-btn ${installScope === 'project' ? 'active' : ''}`}
-                        onClick={() => setInstallScope('project')}
-                        disabled={!projectPath}
-                      >
-                        Project
-                      </button>
+                      <SegmentedControl
+                        value={installScope}
+                        options={[
+                          { value: 'user', label: 'User' },
+                          { value: 'project', label: 'Project', disabled: !projectPath },
+                        ]}
+                        onValueChange={setInstallScope}
+                        aria-label="Skill install scope"
+                      />
                     </div>
                   </div>
 
@@ -416,13 +401,14 @@ export function SkillsModal({
                               )}
                             </div>
                           </div>
-                          <button
-                            className={`skills-install-btn ${installingPackage === result.package ? 'installing' : ''}`}
+                          <Button
+                            variant="primary"
+                            size="compact"
                             onClick={() => void handleInstall(result.package)}
                             disabled={installingPackage !== null}
                           >
                             {installingPackage === result.package ? 'Installing...' : 'Install'}
-                          </button>
+                          </Button>
                         </div>
                         {result.description && (
                           <div className="skills-result-desc">{result.description}</div>
@@ -440,22 +426,17 @@ export function SkillsModal({
           <span className="skills-footer-hint">
             Press <span className="help-shortcut">Esc</span> to close
           </span>
-          <button
-            type="button"
+          <TextButton
             className="skills-footer-link"
             onClick={() => void openUrl('https://skills.sh')}
+            leftIcon={
+              <svg width={10} height={10} viewBox="0 0 76 65" fill="currentColor">
+                <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
+              </svg>
+            }
           >
-            <svg
-              width={10}
-              height={10}
-              viewBox="0 0 76 65"
-              fill="currentColor"
-              style={{ marginRight: 6 }}
-            >
-              <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-            </svg>
             Powered by skills.sh
-          </button>
+          </TextButton>
         </div>
       </>
     </ModalFrame>

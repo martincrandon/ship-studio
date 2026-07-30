@@ -46,7 +46,7 @@ export function BootLoadingScreen() {
 
   return (
     <div className="app loading">
-      <img src="/ship_studio_full_noshadow.svg" alt="Ship Studio" className="app-logo" />
+      <img src="/ship_studio_full.png" alt="Ship Studio" className="app-logo" />
       {timedOut ? (
         <div className="boot-watchdog">
           <p>

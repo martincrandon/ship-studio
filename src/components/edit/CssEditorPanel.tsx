@@ -17,6 +17,8 @@
 
 import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Button } from '../primitives/Button';
+import { SegmentedControl } from '../primitives/SegmentedControl';
+import { EnumDropdown } from './EnumDropdown';
 import { PinIcon } from '../icons/layout';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { trackEvent } from '../../lib/analytics';
@@ -134,12 +136,17 @@ function CodeView({
           />
         </div>
         <div className="ss-htmltab__foot">
-          <Button variant="ghost" size="sm" disabled={!dirty} onClick={() => setText(serialized)}>
+          <Button
+            variant="ghost"
+            size="compact"
+            disabled={!dirty}
+            onClick={() => setText(serialized)}
+          >
             Revert
           </Button>
           <Button
             variant="primary"
-            size="sm"
+            size="compact"
             disabled={!dirty}
             onClick={() => {
               const changes = diffDeclarations(declarations, parseCssText(text));
@@ -330,15 +337,15 @@ export function CssEditorPanel({
             </p>
             <div className="ss-css-prep__box">{prepPrompt}</div>
             <div className="ss-css-prep__actions">
-              <Button variant="ghost" size="sm" onClick={() => setPrep(false)}>
+              <Button variant="ghost" onClick={() => setPrep(false)}>
                 Back
               </Button>
               <div className="ss-css-prep__right">
-                <Button variant="secondary" size="sm" onClick={() => void copy(prepPrompt)}>
+                <Button variant="secondary" onClick={() => void copy(prepPrompt)}>
                   {isCopied ? 'Copied!' : 'Copy'}
                 </Button>
                 {onSendToClaude && (
-                  <Button variant="primary" size="sm" onClick={() => onSendToClaude(prepPrompt)}>
+                  <Button variant="primary" onClick={() => onSendToClaude(prepPrompt)}>
                     Paste
                   </Button>
                 )}
@@ -394,24 +401,16 @@ export function CssEditorPanel({
               </p>
             )}
 
-            <div className="ss-css-modes" role="group" aria-label="Editor view">
-              <button
-                type="button"
-                className={`ss-css-mode${view === 'visual' ? ' is-active' : ''}`}
-                aria-pressed={view === 'visual'}
-                onClick={() => setViewMode('visual')}
-              >
-                Visual
-              </button>
-              <button
-                type="button"
-                className={`ss-css-mode${view === 'code' ? ' is-active' : ''}`}
-                aria-pressed={view === 'code'}
-                onClick={() => setViewMode('code')}
-              >
-                Code
-              </button>
-            </div>
+            <SegmentedControl
+              className="ss-css-modes"
+              value={view}
+              options={[
+                { value: 'visual', label: 'Visual' },
+                { value: 'code', label: 'Code' },
+              ]}
+              onValueChange={setViewMode}
+              aria-label="Editor view"
+            />
 
             {view === 'visual' ? (
               <>
@@ -484,17 +483,15 @@ export function CssEditorPanel({
               <>
                 <label className="ss-css-create__label">
                   Stylesheet
-                  <select value={effectiveSheet} onChange={(e) => setSheet(e.target.value)}>
-                    {authoredSheets.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  <EnumDropdown
+                    label="Stylesheet"
+                    value={effectiveSheet}
+                    options={authoredSheets.map((sheet) => ({ label: sheet, token: sheet }))}
+                    onChange={setSheet}
+                  />
                 </label>
                 <Button
                   variant="primary"
-                  size="sm"
                   block
                   disabled={!effectiveSheet}
                   onClick={() => onCreateRule(effectiveSheet, res.selector, [])}

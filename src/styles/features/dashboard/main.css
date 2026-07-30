@@ -250,7 +250,7 @@
 .dashboard-header-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--space-04);
 }
 
 /* Compact button styles for dashboard header - matches editor UI */
@@ -260,12 +260,6 @@
   font-size: var(--font-size-base);
 }
 
-.dashboard-header-actions .button--secondary,
-.dashboard-header-actions .btn-secondary {
+.dashboard-header-actions .button--secondary {
   background: var(--surface-panel);
-}
-
-.dashboard-header-actions .btn-icon {
-  height: var(--dashboard-header-control-height);
-  padding: 0 var(--spacing-sm);
 }

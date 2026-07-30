@@ -18,6 +18,8 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { useModal } from '../../contexts/ModalContext';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 
 /** Props for the EnvEditor component */
 interface EnvEditorProps {
@@ -77,15 +79,21 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
       <div className="env-editor-content">
         {/* File Tabs */}
         <div className="env-file-tabs">
-          {envFiles.map((file) => (
-            <button
-              key={file.path}
-              className={`env-file-tab ${selectedFile?.path === file.path ? 'active' : ''}`}
-              onClick={() => setSelectedFile(file)}
-            >
-              {file.name}
-            </button>
-          ))}
+          <Tabs
+            value={selectedFile?.path ?? ''}
+            onValueChange={(path) => {
+              const file = envFiles.find((candidate) => candidate.path === path);
+              if (file) setSelectedFile(file);
+            }}
+          >
+            <TabsList className="env-file-tabs-list" aria-label="Environment files">
+              {envFiles.map((file) => (
+                <TabsTab key={file.path} value={file.path} className="env-file-tab">
+                  {file.name}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
           {showNewFileInput ? (
             <div className="env-new-file-input">
               <input
@@ -103,40 +111,56 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
                 autoCapitalize="off"
                 spellCheck={false}
               />
-              <button onClick={() => void handleCreateFile()} title="Create">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </button>
-              <button onClick={() => setShowNewFileInput(false)} title="Cancel">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              <IconButton
+                variant="default"
+                size="compact"
+                onClick={() => void handleCreateFile()}
+                title="Create"
+                aria-label="Create"
+                icon={
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                }
+              />
+              <IconButton
+                variant="default"
+                size="compact"
+                onClick={() => setShowNewFileInput(false)}
+                title="Cancel"
+                aria-label="Cancel"
+                icon={
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                }
+              />
             </div>
           ) : (
-            <button
-              className="env-file-tab env-add-file"
+            <IconButton
+              variant="default"
+              size="compact"
+              className="env-add-file"
               onClick={() => setShowNewFileInput(true)}
               title="Create new env file"
-            >
-              +
-            </button>
+              aria-label="Create new env file"
+              icon="+"
+            />
           )}
         </div>
 
@@ -165,7 +189,11 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
                       .env.example
                     </span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => void handleSyncToExample()}>
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={() => void handleSyncToExample()}
+                  >
                     Sync to .env.example
                   </Button>
                 </div>
@@ -191,7 +219,11 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
                       .env.local
                     </span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => void handleSyncToLocal()}>
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    onClick={() => void handleSyncToLocal()}
+                  >
                     Add to .env.local
                   </Button>
                 </div>

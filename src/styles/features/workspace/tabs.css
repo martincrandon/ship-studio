@@ -11,6 +11,18 @@
   gap: 0;
 }
 
+.workspace-tabs-list {
+  display: flex;
+  align-items: stretch;
+  height: auto;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
 /* The tabs live in the single header row (right cluster). Cancel the header's
    vertical padding so they span its full height and the active underline pins
    flush to the header's bottom border, as the tab design intends. */
@@ -19,16 +31,19 @@
   margin-bottom: calc(var(--spacing-sm) * -1);
 }
 
-.workspace-tab {
+.workspace-tab.button {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
+  height: auto;
+  min-height: 0;
   padding: 0 var(--spacing-md);
   min-width: 0;
   background: transparent;
   border: none;
   border-radius: 0;
+  box-shadow: none;
   color: var(--text-muted);
   font-family: inherit;
   font-size: var(--font-size-base);
@@ -38,16 +53,17 @@
   outline: none;
 }
 
-.workspace-tab:hover,
-.workspace-tab:focus-visible {
+.workspace-tab.button:hover:not(:disabled),
+.workspace-tab.button:focus-visible {
   color: var(--text-secondary);
 }
 
-.workspace-tab.active {
+.workspace-tab.button.is-active,
+.workspace-focus-tab.button[aria-pressed='true'] {
   color: var(--text-primary);
 }
 
-.workspace-tab.active::after {
+.workspace-focus-tab.button[aria-pressed='true']::after {
   content: '';
   position: absolute;
   left: 0;
@@ -58,7 +74,7 @@
   border-radius: 2px 2px 0 0;
 }
 
-.workspace-tab.attention {
+.workspace-tab.button.attention {
   color: var(--accent-success);
 }
 

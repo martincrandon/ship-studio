@@ -164,25 +164,6 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.account-card-settings:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
 }
 
 /* ── Account modal (New Workspace) shared body ───────────────────────────── */
@@ -435,27 +416,6 @@
   font-size: var(--font-size-sm);
   padding: 5px var(--spacing-sm);
   font-family: var(--font-code);
-}
-
-/* Show/Hide toggle for sensitive credential values in the edit row. */
-.account-cred-reveal {
-  flex-shrink: 0;
-  padding: 4px var(--spacing-sm);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.account-cred-reveal:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
 }
 
 .account-cred-input:focus {

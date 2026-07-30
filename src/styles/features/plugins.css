@@ -24,60 +24,13 @@
   color: var(--text-primary);
 }
 
-.plugins-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.plugins-close-btn:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
 /* Tab Bar */
 .plugins-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 0 24px 12px;
+  margin: 0 24px 12px;
 }
 
-.plugins-tab {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
+.plugins-tabs .plugins-tab {
   font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.plugins-tab:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-.plugins-tab.active {
-  background: var(--surface-control);
-  border-color: var(--border-default);
-  color: var(--text-primary);
 }
 
 /* Search */
@@ -263,7 +216,7 @@
   line-height: 1.4;
 }
 
-/* Action links row below description */
+/* TextButton actions row below description */
 .plugin-actions {
   display: flex;
   align-items: center;
@@ -271,35 +224,8 @@
   margin-top: 6px;
 }
 
-.plugin-action-link {
+.plugin-actions .text-button {
   font-size: var(--font-size-sm);
-  color: var(--text-muted);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: color var(--transition);
-}
-
-.plugin-action-link:hover:not(:disabled) {
-  color: var(--text-primary);
-}
-
-.plugin-action-link:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.plugin-action-link.plugin-action-update {
-  color: var(--info);
-}
-
-.plugin-action-link.plugin-action-update:hover {
-  color: var(--info-light);
-}
-
-.plugin-action-link.plugin-action-danger:hover:not(:disabled) {
-  color: var(--accent-error-light);
 }
 
 .plugin-action-status {
@@ -331,31 +257,7 @@
   opacity: 0.85;
 }
 
-/* Library: Install / Installed badges */
-.plugin-library-install-btn {
-  font-size: var(--font-size-sm);
-  padding: 3px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-success) 40;
-  background: var(--accent-success) 20;
-  color: var(--accent-success);
-  cursor: pointer;
-  font-weight: 500;
-  flex-shrink: 0;
-  transition:
-    background-color var(--transition),
-    opacity var(--transition);
-}
-
-.plugin-library-install-btn:hover:not(:disabled) {
-  background: var(--accent-success) 30;
-}
-
-.plugin-library-install-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+/* Library: Installed badge */
 .plugin-installed-badge {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
@@ -374,39 +276,11 @@
   text-transform: capitalize;
 }
 
-.plugins-empty-link {
-  background: none;
-  border: none;
-  color: var(--accent-success);
-  cursor: pointer;
-  font-size: inherit;
-  padding: 0;
-  text-decoration: underline;
-}
-
-.plugins-empty-link:hover {
-  opacity: 0.8;
-}
-
 /* URL install section at bottom of library */
 .plugins-url-section {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-default);
-}
-
-.plugins-url-toggle {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  transition: color var(--transition);
-}
-
-.plugins-url-toggle:hover {
-  color: var(--text-primary);
 }
 
 /* Install input (shared between URL and old add tab) */
@@ -441,29 +315,6 @@
 .plugins-install-input::placeholder {
   color: var(--text-secondary);
   opacity: 0.6;
-}
-
-.plugins-install-btn {
-  height: 32px;
-  padding: 0 16px;
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  background: var(--accent-success);
-  color: var(--text-inverse);
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity var(--transition);
-}
-
-.plugins-install-btn:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.plugins-install-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Error */
@@ -520,31 +371,9 @@
   opacity: 0.7;
 }
 
-/* Link Dev Plugin Button */
-.plugins-link-dev-btn {
-  width: 100%;
+/* Link Dev Plugin Button spacing */
+.plugins-modal-body > .button--fill {
   margin-top: 12px;
-  padding: 10px;
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--accent-warning);
-  background: transparent;
-  border: 1px dashed var(--accent-warning) 50;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    border-color var(--transition);
-}
-
-.plugins-link-dev-btn:hover:not(:disabled) {
-  background: var(--accent-warning) 10;
-  border-color: var(--accent-warning) 80;
-}
-
-.plugins-link-dev-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Plugin error chip — compact inline stand-in rendered where a crashed

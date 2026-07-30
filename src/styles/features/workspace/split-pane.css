@@ -29,9 +29,9 @@
 
 .split-pane-handle {
   width: 8px;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -43,8 +43,8 @@
 }
 
 .split-pane-handle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--border-strong);
 }
 
 .split-pane-handle-bar {
@@ -55,7 +55,7 @@
 }
 
 .split-pane-handle:hover .split-pane-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 .terminal-pane {
@@ -82,7 +82,7 @@
   gap: var(--spacing-sm);
   height: 45px;
   padding: 0 var(--spacing-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-top: 1px solid var(--border);
 }
 
@@ -106,7 +106,7 @@
   justify-content: space-between;
   padding: 9px 10px;
   min-height: 48px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }

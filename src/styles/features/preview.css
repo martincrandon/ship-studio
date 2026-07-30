@@ -69,7 +69,7 @@
    preview's vertical resize handle, but lives in the outer
    .preview-container grid (not the .preview-frame-grid). */
 .inspect-resize-handle {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   cursor: ns-resize;
@@ -82,7 +82,7 @@
 }
 
 .inspect-resize-handle:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border-color: var(--accent);
 }
 
@@ -110,10 +110,10 @@
 .preview-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
   height: var(--preview-toolbar-h);
   padding: 9px 12px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
   overflow: visible;
 }
@@ -123,29 +123,11 @@
   position: relative;
 }
 
-.page-switcher-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-primary);
+.page-switcher-trigger {
   font-family: monospace;
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
 }
 
-.page-switcher-btn:hover {
-  border-color: var(--accent);
-}
-
-.page-switcher-btn svg {
+.page-switcher-trigger svg {
   color: var(--text-muted);
 }
 
@@ -163,7 +145,7 @@
   margin-top: 4px;
   min-width: 220px;
   max-width: 300px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
@@ -174,7 +156,7 @@
 .page-search {
   width: 100%;
   padding: 10px 12px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text-primary);
@@ -202,7 +184,7 @@
 .page-list::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 999px;
-  border: 2px solid var(--bg-secondary);
+  border: 2px solid var(--surface-panel);
 }
 .page-list::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
@@ -215,46 +197,9 @@
   font-size: var(--font-size-md);
 }
 
-.page-item {
-  position: relative;
-  display: flex;
+.page-dropdown .ss-dropdown__item {
   align-items: baseline;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  color: var(--text-secondary);
   font-family: monospace;
-  font-size: var(--font-size-md);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.page-item:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-}
-
-.page-item.active {
-  background: var(--tint);
-  color: var(--text-primary);
-}
-
-.page-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
 }
 
 .page-item-hint {
@@ -292,7 +237,7 @@
 .preview-refresh:hover:not(:disabled),
 .preview-fullscreen-btn:hover:not(:disabled),
 .preview-tree-btn:hover:not(:disabled) {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -306,7 +251,7 @@
 }
 
 .preview-tree-btn.active {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 /* Fullscreen: the container covers the window below the workspace header
@@ -317,7 +262,7 @@
   position: fixed;
   inset: 0;
   z-index: var(--z-preview-fullscreen);
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 /* ===== Visual editor pin-as-sidebar =====
@@ -387,7 +332,7 @@
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header {
   height: var(--preview-toolbar-h);
   flex-shrink: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header,
 .ss-edit-panel.ss-edit-panel--pinned .ss-edit-panel__header:active {
@@ -415,11 +360,11 @@
     color var(--transition);
 }
 .ss-edit-panel__pin:hover {
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   color: var(--text-primary);
 }
 .ss-edit-panel__pin.is-pinned {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 .breakpoint-btn {
@@ -486,14 +431,14 @@
 }
 
 .preview-zoom button:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
 .preview-zoom input {
   width: 48px;
   padding: 4px 6px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -513,7 +458,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -533,7 +478,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -571,7 +516,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   overflow: hidden;
   padding: 0;
   position: relative;
@@ -603,7 +548,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .preview-frame-grid--floating .preview-resize-handle {
@@ -626,7 +571,7 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: var(--bg-primary);
+  background: var(--surface-app);
 }
 
 /* Preview resize overlay (captures mouse during drag) */
@@ -647,9 +592,9 @@
 /* Preview resize handle (right edge by default; placed by grid). */
 .preview-resize-handle {
   grid-area: right;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-default);
+  border-right: 1px solid var(--border-default);
   cursor: ew-resize;
   display: flex;
   align-items: center;
@@ -660,8 +605,8 @@
 }
 
 .preview-resize-handle:hover {
-  background: var(--bg-tertiary);
-  border-color: var(--accent);
+  background: var(--surface-control);
+  border-color: var(--border-strong);
 }
 
 .preview-resize-handle-bar {
@@ -672,7 +617,7 @@
 }
 
 .preview-resize-handle:hover .preview-resize-handle-bar {
-  background: var(--accent);
+  background: var(--accent-active);
 }
 
 /* Vertical (bottom) resize handle — flips the right-handle layout */
@@ -680,36 +625,14 @@
   grid-area: bottom;
   border-left: none;
   border-right: none;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-default);
+  border-bottom: 1px solid var(--border-default);
   cursor: ns-resize;
 }
 
 .preview-resize-handle-bar--vertical {
   width: 40px;
   height: 2px;
-}
-
-/* Dev server logs toggle (toolbar button) */
-.preview-logs-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: 6px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.preview-logs-toggle:hover {
-  color: var(--text-primary);
 }
 
 /* iOS-style toggle pill next to the Inspect label. Reflects the open
@@ -721,7 +644,7 @@
   width: 22px;
   height: 12px;
   margin-left: 2px;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   border: 1px solid var(--border);
   border-radius: 999px;
   transition:
@@ -750,7 +673,7 @@
 
 .preview-logs-toggle-switch.is-on::after {
   transform: translateX(10px);
-  background: var(--text-bright);
+  background: var(--text-inverse);
 }
 
 /* Collapsible dev server logs panel (bottom of preview) */
@@ -771,7 +694,7 @@
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   padding-right: var(--spacing-md);
@@ -841,7 +764,7 @@
 }
 
 .preview-logs-close:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
@@ -909,7 +832,7 @@
   justify-content: space-between;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -976,7 +899,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--overlay-80);
-  color: var(--text-bright);
+  color: var(--text-inverse);
   padding: 16px 24px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-lg);
@@ -1001,7 +924,7 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .preview-loading .hint,
@@ -1018,7 +941,7 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xl);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   text-align: center;
 }
 
@@ -1036,8 +959,8 @@
 }
 
 .preview-install-prompt code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  background: var(--bg-tertiary);
+  font-family: var(--font-code, ui-monospace, monospace);
+  background: var(--surface-control);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-base);
@@ -1058,7 +981,7 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-xl);
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   text-align: center;
 }
 .preview-status .hint {
@@ -1106,7 +1029,7 @@
   padding: 2px 0;
 }
 .preview-status__logs-toggle:hover {
-  /* Only brighten the label — override the global button:hover background. */
+  /* Only brighten the label; this compact control has no surface state. */
   background: none;
   color: var(--text-primary);
 }
@@ -1122,10 +1045,10 @@
   padding: var(--spacing-sm);
   max-height: 160px;
   overflow: auto;
-  background: var(--bg-primary);
+  background: var(--surface-app);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-code, ui-monospace, monospace);
   font-size: var(--font-size-sm);
   line-height: 1.5;
   color: var(--text-secondary);
@@ -1159,11 +1082,11 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: 6px 10px;
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   cursor: pointer;
   transition: border-color var(--transition);
@@ -1183,7 +1106,7 @@
   left: 0;
   margin-top: 4px;
   min-width: 180px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
@@ -1208,7 +1131,7 @@
 }
 
 .locale-item:hover {
-  background: var(--bg-tertiary);
+  background: var(--surface-control);
 }
 
 .locale-item.active {
@@ -1216,7 +1139,7 @@
 }
 
 .locale-item-code {
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   font-size: var(--font-size-sm);
   color: var(--text-muted);
 }

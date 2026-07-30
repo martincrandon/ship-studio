@@ -13,6 +13,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { ColorPicker } from './ColorPicker';
+import { CssValueText } from './CssValueText';
 import { colorSwatch, parseNumericValue, formatNumericValue } from '../../lib/cssProperties';
 
 interface Props {
@@ -221,7 +222,9 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
                       onClose();
                     }}
                   >
-                    <code className="ss-add-menu__label">{o}</code>
+                    <code className="ss-add-menu__label">
+                      <CssValueText value={o} />
+                    </code>
                   </button>
                 ))}
               </div>

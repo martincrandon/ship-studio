@@ -9,38 +9,75 @@
   z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
+  gap: var(--spacing-xs);
+  padding: 1.5px 1.5px 1.5px 3px;
+  border: 1px solid var(--property-border);
+  border-radius: var(--radius-6);
+  background: var(--property-surface);
   box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ss-el-toolbar__selection {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-2xs);
+  padding: 0 var(--spacing-xs);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+  cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ss-el-toolbar__tag {
+  color: var(--text-primary);
+}
+
+.ss-el-toolbar__selector {
+  max-width: var(--size-element-toolbar-selector);
+  overflow: hidden;
+  color: var(--class-text);
+  text-overflow: ellipsis;
+}
+
+.ss-el-toolbar__actions {
+  display: flex;
+  align-items: center;
+}
+
+.ss-el-toolbar:hover {
+  background: var(--property-surface-hover);
 }
 
 .ss-el-toolbar__btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  /* The global `button` rule's 10px/16px padding + border-box would crush the
-     icon to zero width at this size. */
-  padding: 0;
+  min-height: var(--control-height-compact);
+
+  /* This compact icon control owns its padding to preserve its hit area. */
+  padding: 4px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--property-text);
   cursor: pointer;
   transition: background var(--transition);
 }
 
 .ss-el-toolbar__btn:hover {
-  background: var(--tint);
-  color: var(--text-primary);
+  background: var(--property-surface);
+  color: var(--property-text-hover);
 }
 
 .ss-el-toolbar__btn--danger:hover {
-  background: rgba(var(--accent-error-rgb), 0.12);
+  background: var(--property-surface);
   color: var(--accent-error);
 }
 
@@ -68,36 +105,18 @@
 }
 
 .ss-insert-menu__positions {
-  display: flex;
-  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
   padding: var(--spacing-xs);
-  border-bottom: 1px solid var(--border-default);
-}
-
-.ss-insert-menu__position {
-  flex: 1;
-  padding: 3px 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-bottom: var(--stroke-1) solid var(--border-default);
+  border-radius: 0;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: background var(--transition);
 }
 
-.ss-insert-menu__position:hover:not(:disabled) {
-  background: var(--tint-subtle);
-}
-
-.ss-insert-menu__position.is-active {
-  background: var(--tint);
-  color: var(--text-primary);
-}
-
-.ss-insert-menu__position:disabled {
-  opacity: 0.4;
-  cursor: default;
+.ss-insert-menu__positions .tabs__tab {
+  flex: 1 1 0;
+  width: auto;
 }
 
 .ss-insert-menu__list {
@@ -107,22 +126,14 @@
 }
 
 .ss-insert-menu__item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-sm);
-  width: 100%;
-  padding: 5px var(--spacing-sm);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  box-sizing: border-box;
+  justify-content: flex-start;
   text-align: left;
-  cursor: pointer;
 }
 
 .ss-insert-menu__item.is-active {
-  background: var(--tint);
+  background: var(--button-surface-hover);
+  color: var(--button-text-hover);
 }
 
 .ss-insert-menu__label {

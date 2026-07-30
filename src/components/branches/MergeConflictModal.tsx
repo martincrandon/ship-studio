@@ -130,15 +130,10 @@ export function MergeConflictModal({
       </div>
 
       <div className="git-error-footer">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => void handleUndo()}
-          disabled={isAborting}
-        >
+        <Button variant="secondary" onClick={() => void handleUndo()} disabled={isAborting}>
           {isAborting ? 'Undoing...' : 'Undo the merge'}
         </Button>
-        <Button variant="primary" size="sm" onClick={handleCopyAndFix} disabled={isAborting}>
+        <Button variant="primary" onClick={handleCopyAndFix} disabled={isAborting}>
           Copy &amp; Fix
         </Button>
       </div>

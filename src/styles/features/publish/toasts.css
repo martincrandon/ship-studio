@@ -52,42 +52,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Copy-to-clipboard affordance on error toasts — lets the user paste the
-   full error into Slack/a bug report instead of screenshotting it. */
-.toast-copy {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: none;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-}
-
-.toast-copy:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-.toast-close {
-  flex-shrink: 0;
-  padding: 4px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-
-.toast-close:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
 .toast.toast-info .toast-icon {
   color: var(--accent-active);
 }

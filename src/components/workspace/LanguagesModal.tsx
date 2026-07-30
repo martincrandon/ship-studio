@@ -453,7 +453,7 @@ export function LanguagesModal({ projectPath, onSendToClaude }: LanguagesModalPr
             <div className="languages-error">
               {saveError}
               {needsAiFallback && (
-                <Button variant="secondary" size="sm" onClick={handleAiFallback}>
+                <Button variant="secondary" onClick={handleAiFallback}>
                   Fix with AI
                 </Button>
               )}

@@ -1,5 +1,3 @@
-/* Geist is the Figma UI/code family. The Nerd Font remains separate because
- * terminal sessions and symbol-heavy output depend on its glyph coverage. */
 @font-face {
   font-family: 'Geist';
   src: url('../../assets/fonts/Geist-Variable.woff2') format('woff2');
@@ -35,24 +33,35 @@
 
 /*
  * ============================================================================
- * Ship Studio design tokens (single source of truth)
+ * Design Tokens
  * ============================================================================
  * When editing CSS, ALWAYS prefer these tokens over raw values.
  * Adding a new color/spacing/radius? Add it here first, then reference it.
  *
  * Stable plugin API: --bg-*, --text-*, --accent, --action, --border, --warning,
- * --success, --error, --font-mono. Renaming any of these is a breaking change.
+ * --success, --error, --font-code. Renaming any of these is a breaking change.
  * See CLAUDE.md "Shared CSS Classes" for the related component-level API.
  * ============================================================================
- */
+*/
+
 :root {
   /* ========================================================================
-   * Figma primitive tokens
+   * Primitives
    * ========================================================================
-   * These are the imported values from the Ship Studio Variables file. They
-   * describe palette, scale, typography, and effect ingredients only. Product
-   * styles should consume the semantic roles below instead of these directly.
-   */
+   * New values from updated design. These values should not be used directly
+   * in production code, only to be selected by Semantic Tokens.
+  */
+
+  /* Color Palette */
+
+  --color-white: #ffffff;
+  --color-white-o15: rgba(255, 255, 255, 0.15);
+
+  --color-black: #000000;
+  --color-black-o15: rgba(0, 0, 0, 0.15);
+  --color-black-o38: rgba(0, 0, 0, 0.38);
+  --color-black-o75: rgba(0, 0, 0, 0.75);
+
   --color-gray-950: #141414;
   --color-gray-900: #1a1a1a;
   --color-gray-850: #282828;
@@ -64,34 +73,49 @@
   --color-gray-400: #979797;
   --color-gray-300: #a9a9a9;
   --color-gray-200: #bcbcbc;
-  --color-white: #ffffff;
-  --color-black: #000000;
-  --color-white-15: rgba(255, 255, 255, 0.15);
-  --color-black-13: rgba(0, 0, 0, 0.075);
-  --color-black-38: rgba(0, 0, 0, 0.38);
-  --color-black-75: rgba(0, 0, 0, 0.75);
-  --color-red-traffic: #ff5f56;
-  --color-amber-traffic: #f6bf3e;
-  --color-green-traffic: #46e76f;
-  --color-green-500: #46e76f;
-  --color-green-600: #35d35d;
+  --color-gray-100: #f1f1f1;
+
   --color-green-700: #26bf4f;
-  --color-amber-500: #e89a1c;
+  --color-green-600: #35d35d;
+  --color-green-500: #46e76f;
+  --color-green-400: #3fce90;
+  --color-green-300: #a1ffca;
+
+  --color-blue-700: #006acc;
+  --color-blue-600: #0978e3;
+  --color-blue-500: #2792ff;
+  --color-blue-400: #6bb5ff;
+
+  --color-blue-500-o40: color-mix(in srgb, var(--color-blue-500) 40%, transparent);
+  --color-blue-500-o15: color-mix(in srgb, var(--color-blue-500) 15%, transparent);
+
+  --color-purple-700: #734ce0;
+  --color-purple-600: #815beb;
+  --color-purple-500: #875ffd;
+  --color-purple-400: #b89eff;
+  --color-purple-300: #cbb8ff;
+
+  --color-purple-500-o40: color-mix(in srgb, var(--color-purple-500) 40%, transparent);
+  --color-purple-500-o15: color-mix(in srgb, var(--color-purple-500) 15%, transparent);
+
+  --color-pink-600: #cc26a8;
+  --color-pink-500: #e52abd;
+  --color-pink-400: #ff6bdf;
+
+  --color-orange-400: #ebab6b;
+  --color-orange-500: #f6bf3e;
+  --color-orange-600: #e89a1c;
+
+  --color-red-500: #ff5f56;
+  --color-red-400: #ff6b6b;
+
   /* REVIEW: no matching Figma error semantic was observed; these legacy
    * values remain explicit until the error palette is confirmed. */
   --color-red-error: #f44747;
   --color-red-error-light: #ef4444;
   --color-red-error-deep: #dc2626;
-  --color-purple-variable: #734ce0;
-  --color-purple-variable-hover: #815beb;
-  --color-blue-property: #006acc;
-  --color-blue-border: #007df0;
-  --color-blue-property-text: #6bb5ff;
-  --color-purple-property-text: #b89eff;
   --color-green-tag: #3fce90;
-  --color-amber-class: #ebab6b;
-  --color-magenta-media: #cc26a8;
-  --color-pink-media-text: #ff6bdf;
+
   --color-swatch-blue: #007aff;
   --color-swatch-green: #34c759;
   --color-swatch-yellow: #ffcc00;
@@ -101,55 +125,79 @@
   --color-swatch-indigo: #5856d6;
   --color-swatch-pink: #ff2e55;
 
-  --space-05: 2px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-6: 6px;
-  --space-9: 9px;
+  /* Spacing */
+  --space-01: 1px;
+  --space-02: 2px;
+  --space-04: 4px;
+  --space-06: 6px;
+  --space-08: 8px;
+  --space-09: 9px;
   --space-12: 12px;
   --space-16: 16px;
   --space-24: 24px;
   --space-32: 32px;
+
   --stroke-1: 1px;
   --stroke-2: 2px;
+
+  --radius-2: 2px;
   --radius-4: 4px;
   --radius-6: 6px;
   --radius-8: 8px;
   --radius-12: 12px;
   --radius-999: 999px;
+
+  /* Fonts */
   --font-family-geist: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-family-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-family-nerd-mono: 'JetBrainsMono NF', 'JetBrains Mono', Menlo, Consolas, monospace;
+
   --font-size-10: 10px;
   --font-size-11: 11px;
   --font-size-12: 12px;
   --font-size-13: 13px;
   --font-size-16: 16px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-ui: 1;
+  --line-height-code: 1.3;
+  --tracking-code: -0.44px;
+
   --size-control-standard: 30px;
+  --size-control-large: 36px;
+  --size-control-medium: 24px;
   --size-control-compact: 20px;
+  --size-element-toolbar-selector: 140px;
+
   --size-sidebar-project-shortcut: 24px;
   --size-sidebar-project: 214px;
   --size-sidebar-project-row: 46px;
   --size-sidebar-section-row: 22px;
   --size-sidebar-shortcut: 21px;
+
   --size-icon-sm: 14px;
+  --size-icon-button: 16px;
   --size-icon-md: 18px;
+  --icon-size-full: 24px;
+
   --size-color-picker-width: 336px;
   --size-color-picker-surface: 212px;
-  --font-weight-400: 400;
-  --font-weight-500: 500;
-  --font-weight-600: 600;
-  --font-weight-700: 700;
-  --line-height-ui: 1;
-  --line-height-code: 1.3;
-  --tracking-code: -0.44px;
 
   /* ========================================================================
-   * Figma semantic tokens
+   * Semantic Tokens
    * ========================================================================
    * Roles are the application-facing contract. Component tokens below are
    * also semantic: they describe intent/state and reference these roles.
-   */
+  */
+
+  /* -----------------------------------------------------------------------
+   * Colour Palette
+  */
+
   --surface-app: var(--color-gray-950);
   --surface-panel: var(--color-gray-900);
   --surface-control: var(--color-gray-850);
@@ -159,6 +207,8 @@
   --surface-terminal-input: var(--color-gray-750);
   --surface-canvas: var(--color-white);
   --surface-warning: rgba(232, 154, 28, 0.15);
+
+  --text-white: var(--color-white);
   --text-primary: var(--color-gray-200);
   --text-secondary: var(--color-gray-400);
   --text-muted: var(--color-gray-600);
@@ -166,75 +216,154 @@
   --text-terminal: var(--color-gray-500);
   --text-terminal-strong: var(--color-gray-300);
   --text-inverse: var(--color-white);
+
   --border-default: var(--color-gray-850);
   --border-subtle: var(--color-gray-800);
   --border-strong: var(--color-gray-750);
+  --border-accent: var(--color-gray-200);
+
   --accent-active: var(--color-green-500);
   --accent-active-hover: var(--color-green-600);
+  --accent-selected: var(--text-primary);
+  --accent-focus: var(--color-blue-500);
+
   --accent-success: var(--color-green-600);
-  --accent-warning: var(--color-amber-500);
+  --accent-warning: var(--color-orange-600);
   --accent-error: var(--color-red-error);
   --accent-error-light: var(--color-red-error-light);
   --accent-error-deep: var(--color-red-error-deep);
   --accent-warning-light: var(--accent-warning);
   --accent-warning-light-rgb: 232, 154, 28;
   --text-on-accent: var(--color-gray-950);
+
+  --color-red-traffic: var(--color-red-500);
+  --color-amber-traffic: var(--color-orange-500);
+  --color-green-traffic: var(--color-green-500);
+
   --radius-control: var(--radius-6);
   --radius-card: var(--radius-8);
-  --space-control-gap: var(--space-6);
+
   --control-height-standard: var(--size-control-standard);
+  --control-height-large: var(--size-control-large);
   --control-height-compact: var(--size-control-compact);
   --popover-color-picker-width: var(--size-color-picker-width);
   --color-picker-surface-height: var(--size-color-picker-surface);
+
+  /* Fonts */
   --font-ui: var(--font-family-geist);
   --font-code: var(--font-family-geist-mono);
   --font-symbol: var(--font-family-nerd-mono);
-  --shadow-button: 0 0.5px 1px var(--color-black-75), inset 0 0.5px 0.5px var(--color-white-15);
-  --shadow-window: 0 12px 28px var(--color-black-38);
+
+  --font-size-hero: var(--font-size-18);
+  --font-size-heading: var(--font-size-16);
+  --font-size-subhead: var(--font-size-14);
+  --font-size-body-lg: var(--font-size-13);
+  --font-size-body-md: var(--font-size-12);
+  --font-size-body-sm: var(--font-size-11);
+  --font-size-badge: var(--font-size-10);
+
+  --shadow-button:
+    0 var(--stroke-1) var(--space-02) var(--color-black-o75),
+    inset 0 var(--stroke-1) 0 var(--color-white-o15);
+  --shadow-window: 0 12px 28px var(--color-black-o38);
   --shadow-input-inset:
-    inset 0 1px 1px var(--color-black-13), inset 0 3px 3px var(--color-black-13),
-    inset 0 4px 4px var(--color-black-13), inset 0 8px 8px var(--color-black-13),
-    inset 0 12px 12px var(--color-black-13), inset 0 16px 16px var(--color-black-13);
+    inset 0 1px 1px var(--color-black-o15), inset 0 3px 3px var(--color-black-o15),
+    inset 0 4px 4px var(--color-black-o15), inset 0 8px 8px var(--color-black-o15),
+    inset 0 12px 12px var(--color-black-o15), inset 0 16px 16px var(--color-black-o15);
   --accent-active-rgb: 70, 231, 111;
+
   --accent-success-rgb: 53, 211, 93;
   --accent-warning-rgb: 232, 154, 28;
   --accent-error-rgb: 244, 71, 71;
   --accent-error-light-rgb: 239, 68, 68;
   --accent-error-deep-rgb: 220, 38, 38;
+
+  --property-surface: var(--color-blue-700);
+  --property-surface-hover: var(--color-blue-600);
+  --property-border: var(--color-blue-700);
+  --property-text: var(--color-blue-400);
+  --property-field-hover: var(--color-blue-500-o15);
+  --property-field-selected: var(--color-blue-500-o40);
+  --property-label-modified-surface: var(--color-blue-500-o15);
+  --property-label-modified-text: var(--color-blue-400);
+  --property-label-inherited-surface: color-mix(in srgb, var(--color-orange-500) 15%, transparent);
+  --property-label-inherited-text: var(--color-orange-400);
+
+  --tag-surface: color-mix(in oklch, var(--color-green-700) 15%);
+  --tag-text: var(--color-green-400);
+
+  --variable-surface: var(--color-purple-700);
+  --variable-surface-hover: var(--color-purple-600);
+  --variable-border: var(--color-purple-700);
+  --variable-text: var(--color-purple-400);
+  --variable-field-hover: var(--color-purple-500-o15);
+  --variable-field-selected: var(--color-purple-500-o40);
+
+  --class-text: var(--color-orange-400);
+  --property-text-hover: var(--color-white);
+  --function-text: var(--color-red-400);
+  --media-text: var(--color-pink-400);
+
+  /* Buttons */
   --button-surface-default: var(--surface-control);
   --button-surface-hover: var(--surface-control-hover);
   --button-surface-selected: var(--surface-selected);
-  --button-text-default: var(--text-secondary);
-  --button-text-hover: var(--text-primary);
+
   --button-border-solid: transparent;
   --button-border: var(--border-default);
   --button-border-outline: var(--border-strong);
+
+  --button-text-default: var(--text-secondary);
+  --button-text-hover: var(--text-primary);
+  --button-font-size: var(--font-size-11);
+  --button-font-weight: var(--font-weight-medium);
+
   --button-height: var(--control-height-standard);
   --button-height-compact: var(--control-height-compact);
-  --button-padding-inline: var(--space-2);
-  --button-gap: var(--space-control-gap);
+
+  --button-padding: var(--space-08);
+  --button-gap: var(--space-06);
   --button-radius: var(--radius-control);
-  --button-font-size: var(--font-size-11);
-  --button-font-weight: var(--font-weight-500);
   --button-shadow: var(--shadow-button);
-  --button-primary-start: var(--color-green-600);
-  --button-primary-end: var(--color-green-700);
-  --button-variable-surface: var(--color-purple-variable);
-  --button-variable-hover: var(--color-purple-variable-hover);
+  --button-disabled-opacity: 0.45;
+  --button-active-scale: 0.96;
+
+  --button-primary-start: var(--color-green-700);
+  --button-primary-mid: var(--color-green-600);
+  --button-primary-end: var(--color-green-500);
+
+  --button-variable-surface: var(--color-purple-700);
+  --button-variable-hover: var(--color-purple-600);
+
   --button-warning-surface: var(--surface-warning);
   --button-warning-text: var(--accent-warning);
 
-  /* Surfaces */
-  --bg-primary: var(--surface-app);
-  --bg-secondary: var(--surface-panel);
-  --bg-tertiary: var(--surface-control);
+  /* -----------------------------------------------------------------------
+   * Spacing
+  */
+
+  --button-group-spacing: var(--space-04);
+
+  /* Spacing scale (use for padding, margin, gap) */
+  --spacing-3xs: var(--space-01);
+  --spacing-2xs: var(--space-02);
+  --spacing-xs: var(--space-04);
+  --spacing-sm: var(--space-08);
+  --spacing-md: var(--space-12);
+  --spacing-lg: var(--space-16);
+  --spacing-xl: var(--space-24);
+  --spacing-2xl: var(--space-32);
+
+  /* ========================================================================
+   * Legacy Tokens
+   * ========================================================================
+   * The below tokens were from the old design system and are being transitioned
+   * to thew new Primitive/Semantic system, so currently reference them but have
+   * not yet been totally replaced. They are being kept here for now to avoid breaking existing code.
+  */
+
   /* Recessed wells: terminal panes, log output, code editors */
   --bg-deep: var(--surface-recessed);
-
-  /* Text */
-  /* --text-primary/secondary/muted are canonical semantic tokens above. */
-  /* Pure white — high-emphasis text/icons on dark surfaces */
-  --text-bright: var(--text-inverse);
 
   /* Brand / interactive */
   --accent: var(--accent-active);
@@ -251,9 +380,6 @@
   --error: var(--accent-error);
   --error-light: var(--accent-error-light);
 
-  /* Deep red — destructive/armed states (delete confirmation, publish errors) */
-  --error-deep: var(--accent-error-deep);
-
   /* Modified-state yellow (git modified badges, needs-attention markers) */
   --modified-yellow: #eab308;
 
@@ -266,6 +392,7 @@
   /* AI / agent accent (skills, MCP, plugin marketplace) */
   --purple: #a855f7;
   --purple-light: #a78bfa;
+
   /* Deeper purple used only for tinted purple backgrounds (#9333ea) */
   --purple-deep-rgb: 147, 51, 234;
 
@@ -283,7 +410,7 @@
   --warning-light-rgb: var(--accent-warning-rgb);
   --error-rgb: var(--accent-error-rgb);
   --error-light-rgb: var(--accent-error-light-rgb);
-  --error-deep-rgb: var(--accent-error-deep-rgb);
+  --accent-error-deep-rgb: var(--accent-error-deep-rgb);
   --modified-yellow-rgb: 234, 179, 8;
   --info-rgb: 59, 130, 246;
   --info-light-rgb: 96, 165, 250;
@@ -334,14 +461,6 @@
   --bg-hover: var(--surface-control-hover);
   --border-hover: var(--border-strong);
 
-  /* Spacing scale (use for padding, margin, gap) */
-  --spacing-xs: var(--space-1);
-  --spacing-sm: var(--space-2);
-  --spacing-md: var(--space-12);
-  --spacing-lg: var(--space-16);
-  --spacing-xl: var(--space-24);
-  --spacing-2xl: var(--space-32);
-
   /* Border radius scale */
   --radius-sm: var(--radius-4);
   --radius: var(--radius-control);
@@ -361,23 +480,28 @@
    *   app-*     — global overlays owning the full viewport (connect overlay,
    *               education mode, high-priority toasts). Pre-existing code
    *               used 10000+ here; the tokens preserve that layering.
-   */
+  */
   --z-dropdown: 100;
+
   /* Fullscreen preview overlay — above workspace chrome, below modals. */
   --z-preview-fullscreen: 900;
+
   /* Visual editor panel width — shared by the panel itself (visual-editor.css)
      and the preview grid column that hosts it when pinned (preview.css).
      MUST match PANEL_WIDTH in VisualEditorPanel.tsx. */
   --editor-panel-w: 264px;
+
   /* Standard fixed panel-header height. Preview chrome and pinned editor
      headers share it so adjacent panels remain aligned. */
   --panel-header-h: 47px;
   --preview-toolbar-h: var(--panel-header-h);
+
   /* Element tree (navigator) panel width — the preview's left grid column in
      fullscreen edit mode. The Code (markup-edit) view widens to --tree-code-w
      so hand-editing HTML isn't cramped. */
   --tree-panel-w: 240px;
   --tree-code-w: 420px;
+
   /* Max width for the terminal first-run hint card. */
   --hint-card-max-w: 720px;
   --z-modal-overlay: 1000;
@@ -403,11 +527,6 @@
   --transition-fast: 0.1s ease;
   --transition: 0.15s ease;
   --transition-slow: 0.3s ease;
-
-  /* Typography */
-  /* Legacy --font-mono is now Geist Mono. Terminal instances that need Nerd
-   * glyphs keep using --font-symbol or their explicit loaded font. */
-  --font-mono: var(--font-code);
 
   /* Type scale — dense desktop UI, hence 1px steps at the small end.
    * Off-scale sizes (9px, 15px, 17px…) are migration debt: round to the
@@ -612,85 +731,35 @@ body.compact-mode-active html {
   }
 }
 
-/* Buttons */
-button {
-  cursor: pointer;
-  border: none;
-  border-radius: var(--radius-control);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-12);
-  line-height: var(--line-height-ui);
-  padding: 0 var(--space-16);
-  min-height: var(--control-height-standard);
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition),
-    opacity var(--transition),
-    transform var(--transition);
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-button:hover {
-  background: var(--surface-control-hover);
-}
-
-.btn-primary {
-  background: var(--accent-active);
-  color: var(--text-on-accent);
-  border: var(--stroke-1) solid transparent;
-  box-shadow: var(--shadow-button);
-  font-weight: var(--font-weight-500);
-}
-
-.btn-primary:hover {
-  background: var(--accent-active-hover);
-  color: var(--text-on-accent);
-}
-
-.btn-secondary {
-  background: transparent;
-  color: var(--text-secondary);
-  border: var(--stroke-1) solid var(--border-default);
-  box-shadow: var(--shadow-button);
-  font-weight: var(--font-weight-500);
-}
-
-.btn-secondary:hover {
-  background: transparent;
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
-}
-
 /* Toolbar icon buttons (header actions row) */
 .toolbar-icon-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--button-gap);
-  padding: 0 var(--button-padding-inline);
+  padding: 0 var(--button-padding);
   height: var(--button-height);
+  min-height: var(--button-height);
   background: var(--button-surface-default);
   border: var(--stroke-1) solid var(--button-border-solid);
   border-radius: var(--button-radius);
   color: var(--button-text-default);
   font-family: var(--font-ui);
   font-size: var(--button-font-size);
+  line-height: var(--line-height-ui);
+  font-weight: var(--button-font-weight);
   cursor: pointer;
   box-shadow: var(--button-shadow);
   white-space: nowrap;
   transition:
-    background-color 0.15s,
-    color 0.15s,
-    border-color 0.15s;
+    background-color var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    opacity var(--transition),
+    transform var(--transition);
 }
 
 .toolbar-icon-btn:hover:not(:disabled) {
@@ -700,8 +769,12 @@ button:hover {
 }
 
 .toolbar-icon-btn:disabled {
-  opacity: 0.4;
+  opacity: var(--button-disabled-opacity);
   cursor: not-allowed;
+}
+
+.toolbar-icon-btn:active:not(:disabled) {
+  transform: scale(var(--button-active-scale));
 }
 
 .toolbar-icon-btn svg {
@@ -731,28 +804,46 @@ button:hover {
    button with a child `.toggle-pill-switch` span that gets `.is-on`
    when the feature is active. */
 .toggle-pill-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   height: var(--button-height);
-  padding: 0 var(--button-padding-inline);
+  min-height: var(--button-height);
+  padding: 0 var(--button-padding);
   background: var(--button-surface-default);
   border: var(--stroke-1) solid var(--button-border-solid);
   border-radius: var(--button-radius);
   color: var(--button-text-default);
+  font-family: var(--font-ui);
   font-size: var(--button-font-size);
+  line-height: var(--line-height-ui);
+  font-weight: var(--button-font-weight);
   cursor: pointer;
   box-shadow: var(--button-shadow);
   white-space: nowrap;
   transition:
-    background var(--transition),
+    background-color var(--transition),
     color var(--transition),
-    border-color var(--transition);
+    border-color var(--transition),
+    opacity var(--transition),
+    transform var(--transition);
 }
 
 .toggle-pill-btn:hover {
   background: var(--button-surface-hover);
   color: var(--text-primary);
+}
+
+.toggle-pill-btn:disabled {
+  opacity: var(--button-disabled-opacity);
+  cursor: not-allowed;
+}
+
+.toggle-pill-btn:active:not(:disabled) {
+  transform: scale(var(--button-active-scale));
 }
 
 .toggle-pill-switch {
@@ -794,9 +885,10 @@ button:hover {
 }
 
 /* Rotate the chevron 180° when its parent dropdown is open. */
-.toolbar-icon-btn .chevron-flipped {
+.toolbar-icon-btn .chevron-flipped,
+.button .chevron-flipped {
   transform: rotate(180deg);
-  transition: transform 0.15s;
+  transition: transform var(--transition);
 }
 
 /* ===== Primitive: ModalFrame ===== */
@@ -843,34 +935,18 @@ button:hover {
   gap: var(--spacing-sm);
 }
 
-.modal-frame-close {
-  background: transparent;
-  border: none;
-  padding: var(--spacing-xs);
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.modal-frame-close:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
 /* ===== Primitive: Button ===== */
 .button {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--button-gap);
   height: var(--button-height);
-  padding: 0 var(--button-padding-inline);
+  min-height: var(--button-height);
+  padding: 0 var(--button-padding);
   border-radius: var(--button-radius);
   border: var(--stroke-1) solid transparent;
   font-family: var(--font-ui);
@@ -888,147 +964,160 @@ button:hover {
   white-space: nowrap;
 }
 
+.button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--size-icon-button);
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+}
+.button__icon > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Icon-only buttons own their hit area, but the icon should keep the size it
+ * was authored with. The generic icon wrapper is intentionally 16px for
+ * labelled buttons; applying that size to IconButton SVGs makes small controls
+ * such as the workspace-sidebar close action appear oversized. */
+.button--icon-only .button__icon {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+}
+
+.button--icon-only .button__icon > svg {
+  width: auto;
+  height: auto;
+}
+
 .button:disabled {
-  opacity: 0.45;
+  opacity: var(--button-disabled-opacity);
   cursor: not-allowed;
 }
 
 .button:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(var(--button-active-scale));
 }
 
 .button:focus-visible,
 .toolbar-icon-btn:focus-visible {
-  outline: var(--stroke-2) solid var(--accent-active);
+  outline: var(--stroke-2) solid var(--accent-focus);
   outline-offset: -1px;
 }
 
-/* Keep each variant's background when hovering a disabled button — the
-   global `button:hover` element rule above otherwise outranks the variant
-   class (its own hover rules are gated on :not(:disabled)). */
-.button--primary:hover {
-  background: var(--accent-active);
-  border-color: transparent;
-}
-
-.button--secondary:hover {
-  background: transparent;
-  border-color: var(--button-border);
-}
-
-.button--default,
-.button--appearance-solid.button--tone-neutral {
+.button--default {
   background: var(--button-surface-default);
   color: var(--button-text-default);
   border-color: var(--button-border-solid);
 }
 
-.button--default:hover:not(:disabled),
-.button--appearance-solid.button--tone-neutral:hover:not(:disabled) {
+.button--default:hover:not(:disabled) {
   background: var(--button-surface-hover);
   color: var(--button-text-hover);
   border-color: var(--button-border-solid);
 }
 
-.button--primary,
-.button--appearance-solid.button--tone-primary {
-  background: var(--accent-active);
+.button--primary {
+  background: linear-gradient(180deg, var(--button-primary-start), var(--button-primary-mid));
   color: var(--text-on-accent);
   border-color: transparent;
 }
-
-.button--primary:hover:not(:disabled),
-.button--appearance-solid.button--tone-primary:hover:not(:disabled) {
-  background: var(--accent-active-hover);
+.button--primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--button-primary-mid), var(--button-primary-end));
   border-color: transparent;
 }
 
-.button--secondary,
-.button--appearance-outline.button--tone-neutral {
+.button--secondary {
   background: transparent;
   color: var(--button-text-default);
   border-color: var(--button-border);
 }
-
-.button--secondary:hover:not(:disabled),
-.button--appearance-outline.button--tone-neutral:hover:not(:disabled) {
+.button--secondary:hover:not(:disabled) {
   background: transparent;
   color: var(--button-text-hover);
-  border-color: var(--border-strong);
+  border-color: var(--button-border-outline);
 }
 
-.button--danger,
-.button--appearance-outline.button--tone-danger {
+.button--danger {
   background: transparent;
   color: var(--accent-error-light);
   border-color: rgba(var(--accent-error-light-rgb), 0.3);
 }
 
-.button--danger:hover:not(:disabled),
-.button--appearance-outline.button--tone-danger:hover:not(:disabled) {
+.button--danger:hover:not(:disabled) {
   background: rgba(var(--accent-error-light-rgb), 0.1);
 }
 
-.button--ghost,
-.button--appearance-ghost.button--tone-neutral {
+.button--ghost {
   background: transparent;
   color: var(--button-text-default);
   border-color: transparent;
   box-shadow: none;
 }
 
-.button--ghost:hover:not(:disabled),
-.button--appearance-ghost.button--tone-neutral:hover:not(:disabled) {
+.button--ghost:hover:not(:disabled) {
   background: var(--button-surface-hover);
   color: var(--button-text-hover);
 }
 
-.button--warning,
-.button--appearance-solid.button--tone-warning {
+.button--warning {
   background: var(--button-warning-surface);
   color: var(--button-warning-text);
   border-color: transparent;
 }
 
-.button--warning:hover:not(:disabled),
-.button--appearance-solid.button--tone-warning:hover:not(:disabled) {
+.button--warning:hover:not(:disabled) {
   background: var(--button-warning-surface);
   color: var(--button-warning-text);
   border-color: var(--accent-warning);
 }
 
-.button--variable,
-.button--appearance-solid.button--tone-variable {
+.button--variable {
   background: var(--button-variable-surface);
   color: var(--text-primary);
   border-color: transparent;
 }
 
-.button--variable:hover:not(:disabled),
-.button--appearance-solid.button--tone-variable:hover:not(:disabled) {
+.button--variable:hover:not(:disabled) {
   background: var(--button-variable-hover);
   color: var(--text-inverse);
 }
 
-.button--secondary[aria-pressed='true'],
-.button--secondary[data-selected='true'],
-.button--default[aria-pressed='true'],
-.button--default[data-selected='true'],
-.button--ghost[aria-pressed='true'],
-.button--ghost[data-selected='true'],
-.button--appearance-solid.button--tone-neutral[aria-pressed='true'],
-.button--appearance-solid.button--tone-neutral[data-selected='true'] {
-  background: transparent;
+.button--default:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']),
+.button--secondary:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']),
+.button--ghost:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']) {
+  background: var(--button-surface-selected);
   color: var(--button-text-hover);
-  border-color: var(--button-border);
 }
 
-.button--sm {
+.button--default:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']) {
+  border-color: var(--button-border-solid);
+}
+
+.button--secondary:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']) {
+  border-color: var(--button-border-outline);
+}
+
+.button--ghost:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']) {
+  border-color: transparent;
+}
+
+.button--size-compact {
   height: var(--control-height-compact);
   min-height: var(--control-height-compact);
-  gap: var(--space-1);
-  padding: 0 var(--space-6);
+  gap: var(--space-04);
+  padding: 0 var(--space-06);
   font-size: var(--font-size-11);
+}
+
+.button--size-large {
+  height: var(--control-height-large);
+  min-height: var(--control-height-large);
+  gap: var(--space-08);
+  padding: 0 var(--space-12);
+  font-size: var(--font-size-12);
 }
 
 .button--fill,
@@ -1042,11 +1131,19 @@ button:hover {
 
 .button--icon-only {
   width: var(--button-height);
-  padding-inline: 0;
+  min-width: var(--button-height);
+  padding: 0;
 }
 
-.button--icon-only.button--density-compact {
+.button--icon-only.button--size-compact {
   width: var(--button-height-compact);
+  min-width: var(--button-height-compact);
+  height: var(--button-height-compact);
+}
+
+.button--icon-only.button--size-large {
+  width: var(--control-height-large);
+  min-width: var(--control-height-large);
 }
 
 .button-group--split {
@@ -1064,6 +1161,101 @@ button:hover {
 .button-group--split > .button:last-child {
   border-radius: 0 var(--button-radius) var(--button-radius) 0;
   border-left-color: var(--border-default);
+}
+
+/* ===== Primitive: PropertyField ===== */
+.property-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: text;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.property-field--size-default {
+  min-height: var(--control-height-default);
+}
+
+.property-field--size-compact {
+  min-height: var(--control-height-compact);
+}
+
+.property-field--select {
+  height: var(--button-height);
+  min-height: var(--button-height);
+  padding: 0 var(--button-padding);
+  border-color: var(--button-border-solid);
+  border-radius: var(--button-radius);
+  background: var(--button-surface-default);
+  color: var(--button-text-default);
+  font-family: var(--font-ui);
+  font-size: var(--button-font-size);
+  line-height: var(--line-height-ui);
+  font-weight: var(--button-font-weight);
+  box-shadow: var(--button-shadow);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    color var(--transition),
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.property-field:hover {
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
+}
+
+.property-field:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.property-field[aria-expanded='true'] {
+  background: var(--surface-selected);
+  border-color: var(--border-strong);
+}
+
+.property-field--select:hover {
+  background: var(--button-surface-hover);
+  color: var(--button-text-hover);
+  border-color: var(--button-border-solid);
+}
+
+.property-field--select:active {
+  transform: scale(var(--button-active-scale));
+}
+
+.property-field--select:focus-visible {
+  outline: var(--stroke-2) solid var(--accent-focus);
+  outline-offset: -1px;
+  border-color: var(--button-border-solid);
+}
+
+.property-field--select[aria-expanded='true'] {
+  background: var(--button-surface-selected);
+  color: var(--button-text-hover);
+  border-color: var(--button-border-solid);
+}
+
+.property-field--variable {
+  color: var(--variable-text);
+  background: var(--variable-field-hover);
+  border-color: var(--variable-border);
+}
+
+.property-field--variable:hover {
+  background: var(--variable-field-selected);
+  border-color: var(--variable-surface-hover);
 }
 
 /* ===== Primitive: EmptyState ===== */

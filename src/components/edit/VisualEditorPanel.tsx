@@ -16,7 +16,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { Button } from '../primitives/Button';
+import { Button, buttonClassNames } from '../primitives/Button';
 import { EnumDropdown } from './EnumDropdown';
 import { MultiSourceControl } from './MultiSourceControl';
 import { UsageScope } from './UsageScope';
@@ -69,7 +69,13 @@ function buildAgentRequest(sig: ElementSignature, resolution: Resolution | null)
  *  shifts height between the two (auto-save) states. */
 function StatusBadge({ saving }: { saving: boolean }) {
   return (
-    <div className="ss-edit-panel__saved" aria-live="polite">
+    <div
+      className={buttonClassNames({
+        variant: 'default',
+        className: 'ss-edit-panel__saved',
+      })}
+      aria-live="polite"
+    >
       {saving ? (
         'Saving…'
       ) : (
@@ -200,7 +206,6 @@ function DynamicTextHelp({
       </p>
       <Button
         variant="secondary"
-        size="sm"
         block
         onClick={() => void copy(buildAgentRequest(signature, resolution))}
       >
@@ -250,13 +255,7 @@ function NoClassState({
           if (e.key === 'Enter') void submit();
         }}
       />
-      <Button
-        variant="primary"
-        size="sm"
-        block
-        disabled={!trimmed || busy}
-        onClick={() => void submit()}
-      >
+      <Button variant="primary" block disabled={!trimmed || busy} onClick={() => void submit()}>
         {busy ? 'Adding…' : 'Add class'}
       </Button>
     </div>
@@ -691,15 +690,16 @@ export function VisualEditorPanel({
           <strong>Visual editor is in beta.</strong> Hit a bug or have feedback? We'd genuinely
           appreciate hearing about it.
         </p>
-        <button
-          type="button"
+        <Button
+          variant="default"
+          width="fill"
+          leftIcon={<SlackIcon size={12} />}
           className="ss-edit-panel__slack"
           onClick={() => void openUrl(SLACK_INVITE_URL)}
           title="Join the Ship Studio community on Slack"
         >
-          <SlackIcon size={12} />
           Join the Slack
-        </button>
+        </Button>
       </div>
 
       {controlsVisible && (
@@ -721,7 +721,7 @@ export function VisualEditorPanel({
           ) : autoSave ? (
             <StatusBadge saving={dirty} />
           ) : dirty ? (
-            <Button size="sm" variant="primary" onClick={onCommit}>
+            <Button variant="primary" onClick={onCommit}>
               Save to source
             </Button>
           ) : (

@@ -83,6 +83,10 @@ import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
 import { useModal } from '../../contexts/ModalContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
 import { Spinner } from '../primitives/Spinner';
+import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { ToggleButton } from '../primitives/ToggleButton';
 import '../../styles/features/notifications.css';
 
 // ---------------------------------------------------------------------------
@@ -935,70 +939,74 @@ export const WorkspaceView = memo(function WorkspaceView({
     ) : null;
 
   const tabsNode = (
-    <div className="workspace-tabs">
-      {hasPreview && (
-        <button
-          className={`workspace-tab ${workspaceTab === 'preview' && !isPreviewHidden ? 'active' : ''}`}
-          onClick={() => {
-            setIsPreviewHidden(false);
-            setWorkspaceTab('preview');
-          }}
-          title="Preview"
+    <Tabs
+      value={workspaceTab}
+      className="workspace-tabs"
+      onValueChange={(next) => {
+        setIsPreviewHidden(false);
+        setWorkspaceTab(next as typeof workspaceTab);
+      }}
+    >
+      <TabsList
+        className="workspace-tabs-list"
+        variant="stretch"
+        appearance="underline"
+        aria-label="Workspace view"
+      >
+        {hasPreview && (
+          <TabsTab
+            value="preview"
+            className="workspace-tab"
+            leftIcon={<EyeIcon size={14} />}
+            title="Preview"
+          >
+            <span>Preview</span>
+          </TabsTab>
+        )}
+        <TabsTab
+          value="code"
+          className="workspace-tab"
+          leftIcon={<CodeIcon size={14} />}
+          title="Code"
         >
-          <EyeIcon size={14} />
-          <span>Preview</span>
-        </button>
-      )}
+          <span>Code</span>
+        </TabsTab>
+        {integrations.projectGithub?.status === 'connected' && (
+          <>
+            <TabsTab
+              value="branches"
+              className="workspace-tab"
+              leftIcon={<BranchIcon size={14} />}
+              title="Branches"
+              data-education-id="branches-tab"
+            >
+              <span>Branches</span>
+            </TabsTab>
+            <TabsTab
+              value="prs"
+              className="workspace-tab"
+              leftIcon={<PullRequestIcon size={14} />}
+              title="PRs"
+              data-education-id="prs-tab"
+            >
+              <span>PRs</span>
+            </TabsTab>
+          </>
+        )}
+      </TabsList>
       {/* Focus mode — collapses the preview pane so the agent terminal takes the
           full workspace. Active whenever the preview is hidden. */}
-      <button
-        className={`workspace-tab ${isPreviewHidden ? 'active' : ''}`}
+      <ToggleButton
+        pressed={isPreviewHidden}
+        variant="ghost"
+        className="workspace-tab workspace-focus-tab"
+        leftIcon={<EyeOffIcon size={14} />}
         onClick={() => setIsPreviewHidden(!isPreviewHidden)}
         title={isPreviewHidden ? 'Exit focus mode' : 'Hide preview — agent only'}
       >
-        <EyeOffIcon size={14} />
         <span>Focus</span>
-      </button>
-      <button
-        className={`workspace-tab ${workspaceTab === 'code' && !isPreviewHidden ? 'active' : ''}`}
-        onClick={() => {
-          setIsPreviewHidden(false);
-          setWorkspaceTab('code');
-        }}
-        title="Code"
-      >
-        <CodeIcon size={14} />
-        <span>Code</span>
-      </button>
-      {integrations.projectGithub?.status === 'connected' && (
-        <>
-          <button
-            className={`workspace-tab ${workspaceTab === 'branches' && !isPreviewHidden ? 'active' : ''}`}
-            onClick={() => {
-              setIsPreviewHidden(false);
-              setWorkspaceTab('branches');
-            }}
-            title="Branches"
-            data-education-id="branches-tab"
-          >
-            <BranchIcon size={14} />
-            <span>Branches</span>
-          </button>
-          <button
-            className={`workspace-tab ${workspaceTab === 'prs' && !isPreviewHidden ? 'active' : ''}`}
-            onClick={() => {
-              setIsPreviewHidden(false);
-              setWorkspaceTab('prs');
-            }}
-            title="PRs"
-            data-education-id="prs-tab"
-          >
-            <PullRequestIcon size={14} />
-            <span>PRs</span>
-          </button>
-        </>
-      )}
-    </div>
+      </ToggleButton>
+    </Tabs>
   );
 
   const header = WorkspaceHeader({
@@ -1162,31 +1170,26 @@ export const WorkspaceView = memo(function WorkspaceView({
                             (Commands → Dev server). "Edit dev command" and
                             "Project settings" moved to the ⌘K palette. */}
                           <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              className="toolbar-icon-btn"
+                            <IconButton
                               onClick={() => void undoSnapshot()}
                               disabled={!canUndo}
                               title={undoTitle}
                               aria-label="Undo"
-                            >
-                              <UndoIcon size={12} />
-                            </button>
-                            <button
-                              className="toolbar-icon-btn"
+                              icon={<UndoIcon size={12} />}
+                            />
+                            <IconButton
                               onClick={() => void redoSnapshot()}
                               disabled={!canRedo}
                               title={redoTitle}
                               aria-label="Redo"
-                            >
-                              <RedoIcon size={12} />
-                            </button>
+                              icon={<RedoIcon size={12} />}
+                            />
                           </div>
                           <div style={{ flex: 1 }} />
                           <div className="terminal-tabs-bar-right">
                             {canSplit && (
-                              <button
-                                type="button"
-                                className="toggle-pill-btn"
+                              <ToggleButton
+                                pressed={isSplitActive}
                                 onClick={() =>
                                   isSplitActive ? disableSplitView() : enableSplitView()
                                 }
@@ -1196,28 +1199,29 @@ export const WorkspaceView = memo(function WorkspaceView({
                                     : 'View agents side by side'
                                 }
                                 aria-label="Toggle side-by-side view"
-                                aria-pressed={isSplitActive}
+                                leftIcon={
+                                  <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 16 16"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <rect x="2" y="3" width="12" height="10" rx="1.2" />
+                                    <line x1="8" y1="3" x2="8" y2="13" />
+                                  </svg>
+                                }
                               >
-                                <svg
-                                  width="14"
-                                  height="14"
-                                  viewBox="0 0 16 16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.6"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  aria-hidden="true"
-                                >
-                                  <rect x="2" y="3" width="12" height="10" rx="1.2" />
-                                  <line x1="8" y1="3" x2="8" y2="13" />
-                                </svg>
                                 <span>Split</span>
                                 <span
                                   className={`toggle-pill-switch ${isSplitActive ? 'is-on' : ''}`}
                                   aria-hidden
                                 />
-                              </button>
+                              </ToggleButton>
                             )}
                             <ToolbarDropdown
                               agent={getActiveTabAgent()}
@@ -1393,38 +1397,41 @@ export const WorkspaceView = memo(function WorkspaceView({
                         something to screenshot. */}
                       {workspaceTab === 'preview' && isWebProject && (
                         <div className="terminal-pane-footer">
-                          <button
-                            className="toolbar-icon-btn"
+                          <Button
                             onClick={() => void handleCaptureScreenshot()}
                             disabled={isCapturing || isCropMode}
                             title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
                             data-education-id="screenshot-button"
+                            leftIcon={
+                              isCapturing ? (
+                                <Spinner size="sm" style={{ color: 'var(--accent)' }} />
+                              ) : (
+                                <CameraIcon size={14} />
+                              )
+                            }
                           >
-                            {isCapturing ? (
-                              <Spinner size="sm" style={{ color: 'var(--accent)' }} />
-                            ) : (
-                              <CameraIcon size={14} />
-                            )}
                             <span className="capture-label-full">Full Screenshot</span>
                             <span className="capture-label-short">Full</span>
                             <span className="capture-shortcut">{kbd('mod', 'shift', 'S')}</span>
-                          </button>
-                          <button
-                            className={`toolbar-icon-btn ${isCropMode ? 'is-open' : ''}`}
+                          </Button>
+                          <ToggleButton
+                            pressed={isCropMode}
                             onClick={() => setIsCropMode(!isCropMode)}
                             disabled={isCapturing || isCropCapturing}
                             title={`Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`}
                             data-education-id="crop-button"
+                            leftIcon={
+                              isCropCapturing ? (
+                                <Spinner size="sm" style={{ color: 'var(--accent)' }} />
+                              ) : (
+                                <CropIcon size={14} />
+                              )
+                            }
                           >
-                            {isCropCapturing ? (
-                              <Spinner size="sm" style={{ color: 'var(--accent)' }} />
-                            ) : (
-                              <CropIcon size={14} />
-                            )}
                             <span className="capture-label-full">Crop Screenshot</span>
                             <span className="capture-label-short">Crop</span>
                             <span className="capture-shortcut">{kbd('mod', 'shift', 'C')}</span>
-                          </button>
+                          </ToggleButton>
                         </div>
                       )}
                     </div>

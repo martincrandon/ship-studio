@@ -38,6 +38,7 @@ import type { WorktreeInfo } from '../../lib/worktrees';
 import type { AuthTerminalConfig, IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import { Spinner } from '../primitives/Spinner';
+import { Button } from '../primitives/Button';
 
 export interface WorkspaceModalsProps {
   // Project context
@@ -321,26 +322,20 @@ export function WorkspaceModals({
               to see deployment information.
             </p>
             <div className="plugin-suggestion-actions">
-              <button className="plugin-suggestion-dismiss" onClick={onDismissPluginSuggestion}>
+              <Button variant="secondary" width="fill" onClick={onDismissPluginSuggestion}>
                 Not Now
-              </button>
-              <button
-                className="plugin-suggestion-install"
+              </Button>
+              <Button
+                variant="primary"
+                width="fill"
                 disabled={pluginSuggestionInstalling}
                 onClick={onInstallSuggestedPlugin}
+                leftIcon={
+                  pluginSuggestionInstalling ? <Spinner size="sm" /> : <DownloadIcon size={14} />
+                }
               >
-                {pluginSuggestionInstalling ? (
-                  <>
-                    <Spinner size="sm" />
-                    Installing…
-                  </>
-                ) : (
-                  <>
-                    <DownloadIcon size={14} />
-                    Install Plugin
-                  </>
-                )}
-              </button>
+                {pluginSuggestionInstalling ? 'Installing…' : 'Install Plugin'}
+              </Button>
             </div>
           </div>
         </div>
@@ -368,10 +363,12 @@ export function WorkspaceModals({
               <strong>not liable</strong> for any unintended changes or actions taken by the AI.
             </p>
             <div className="modal-actions">
-              <button onClick={onCloseAutoAcceptWarning}>Cancel</button>
-              <button className="btn-warning" onClick={onAcceptAutoAcceptWarning}>
+              <Button variant="secondary" onClick={onCloseAutoAcceptWarning}>
+                Cancel
+              </Button>
+              <Button variant="warning" onClick={onAcceptAutoAcceptWarning}>
                 I understand, enable it
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -430,9 +427,9 @@ export function WorkspaceModals({
           <div className="onboarding-terminal-modal">
             <div className="onboarding-terminal-header">
               <span className="onboarding-terminal-title">GitHub Account</span>
-              <button className="onboarding-terminal-cancel" onClick={onCloseAuthTerminal}>
+              <Button variant="ghost" size="compact" onClick={onCloseAuthTerminal}>
                 Cancel
-              </button>
+              </Button>
             </div>
             <OnboardingTerminal
               command={authTerminalConfig.command}
@@ -452,9 +449,9 @@ export function WorkspaceModals({
               <span className="onboarding-terminal-title">
                 Installing dependencies ({installTerminalConfig.packageManager})
               </span>
-              <button className="onboarding-terminal-cancel" onClick={onCloseInstallTerminal}>
+              <Button variant="ghost" size="compact" onClick={onCloseInstallTerminal}>
                 {installTerminalExited ? 'Close' : 'Cancel'}
-              </button>
+              </Button>
             </div>
             <OnboardingTerminal
               command={installTerminalConfig.packageManager}
@@ -490,9 +487,9 @@ export function WorkspaceModals({
           <div className="onboarding-terminal-modal">
             <div className="onboarding-terminal-header">
               <span className="onboarding-terminal-title">{pluginTerminal.title}</span>
-              <button className="onboarding-terminal-cancel" onClick={onClosePluginTerminal}>
+              <Button variant="ghost" size="compact" onClick={onClosePluginTerminal}>
                 {pluginTerminalExited ? 'Close' : 'Cancel'}
-              </button>
+              </Button>
             </div>
             <OnboardingTerminal
               command={pluginTerminal.command}

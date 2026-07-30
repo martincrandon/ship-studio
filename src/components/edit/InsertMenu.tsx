@@ -9,6 +9,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ELEMENT_KINDS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
+import { Button } from '../primitives/Button';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 
 interface Props {
   /** Where to anchor the popover (viewport coords); null = closed. */
@@ -108,26 +110,28 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
         }
       }}
     >
-      <div className="ss-insert-menu__positions" role="radiogroup" aria-label="Placement">
-        {POSITIONS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            role="radio"
-            aria-checked={effectivePosition === p.id}
-            className={`ss-insert-menu__position${effectivePosition === p.id ? ' is-active' : ''}`}
-            disabled={p.id === 'inside' && insideDisabled}
-            title={
-              p.id === 'inside' && insideDisabled
-                ? 'This element can’t contain children'
-                : undefined
-            }
-            onClick={() => setPosition(p.id)}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        value={effectivePosition}
+        onValueChange={(value) => setPosition(value as InsertPosition)}
+        size="compact"
+      >
+        <TabsList className="ss-insert-menu__positions" variant="stretch" aria-label="Placement">
+          {POSITIONS.map((p) => (
+            <TabsTab
+              key={p.id}
+              value={p.id}
+              disabled={p.id === 'inside' && insideDisabled}
+              title={
+                p.id === 'inside' && insideDisabled
+                  ? 'This element can’t contain children'
+                  : undefined
+              }
+            >
+              {p.label}
+            </TabsTab>
+          ))}
+        </TabsList>
+      </Tabs>
       <div
         ref={listRef}
         className="ss-insert-menu__list"
@@ -138,9 +142,11 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
         tabIndex={0}
       >
         {ELEMENT_KINDS.map((row, i) => (
-          <button
+          <Button
             key={row.kind}
-            type="button"
+            variant="ghost"
+            size="compact"
+            width="fill"
             role="option"
             id={optionId(i)}
             aria-selected={i === active}
@@ -151,7 +157,7 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
           >
             <span className="ss-insert-menu__label">{row.label}</span>
             <code className="ss-insert-menu__tag">{`<${row.kind}>`}</code>
-          </button>
+          </Button>
         ))}
       </div>
     </div>,

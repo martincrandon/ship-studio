@@ -7,6 +7,9 @@
 @import './components/modal.css';
 @import './components/command-palette.css';
 @import './components/code-overlay.css';
+@import './components/tabs.css';
+@import './components/text-button.css';
+@import './components/segmented-control.css';
 
 /* Features */
 @import './features/setup.css';
@@ -32,7 +35,12 @@
 @import './features/visual-editor-image.css';
 @import './features/visual-editor-classes.css';
 @import './features/visual-editor-css-mode.css';
-@import './features/css-cascade.css';
+@import './features/css-cascade/main.css';
+@import './features/css-cascade/chips.css';
+@import './features/css-cascade/popovers.css';
+@import './features/css-cascade/declarations.css';
+@import './features/css-cascade/settings.css';
+@import './features/css-cascade/interactions.css';
 @import './features/css-globals.css';
 @import './features/css-predict.css';
 @import './features/element-tree.css';

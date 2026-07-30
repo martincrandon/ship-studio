@@ -46,38 +46,11 @@
 
 /* Tab Bar */
 .mcp-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 16px 24px 12px;
+  margin: 16px 24px 12px;
 }
 
-.mcp-tab {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 12px;
+.mcp-tabs .mcp-tab {
   font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.mcp-tab:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.mcp-tab.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
 }
 
 /* Modal Body */
@@ -133,42 +106,6 @@
 
 .mcp-search-input::placeholder {
   color: var(--text-muted);
-}
-
-/* Filter Buttons */
-.mcp-filter-bar {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.mcp-filter-btn {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.mcp-filter-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.mcp-filter-btn.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
 }
 
 /* Server List */
@@ -274,33 +211,6 @@
   overflow: hidden;
 }
 
-.mcp-remove-btn {
-  padding: 6px 12px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-  flex-shrink: 0;
-}
-
-.mcp-remove-btn:hover {
-  color: var(--accent-error);
-  border-color: var(--accent-error);
-  border-style: solid;
-}
-
-.mcp-remove-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Add Section */
 .mcp-add-section {
   margin-bottom: 16px;
@@ -350,30 +260,6 @@
   border-color: var(--text-muted);
 }
 
-.mcp-add-btn {
-  padding: 8px 14px;
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-on-accent);
-  background: var(--accent-active);
-  border: none;
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.mcp-add-btn:hover {
-  background: var(--accent-active-hover);
-}
-
-.mcp-add-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Scope Toggle */
 .mcp-scope-toggle {
   display: flex;
@@ -386,40 +272,6 @@
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   margin-right: 4px;
-}
-
-.mcp-scope-btn {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 10px;
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.mcp-scope-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.mcp-scope-btn.active {
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-}
-
-.mcp-scope-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
 }
 
 /* Loading & Empty States */

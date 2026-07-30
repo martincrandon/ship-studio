@@ -286,11 +286,10 @@ These classes are defined in `src/styles/global/base.css` and are part of Ship S
 
 | Class | Defined In | Description |
 |-------|-----------|-------------|
-| `toolbar-icon-btn` | `base.css` | Icon button for the workspace toolbar (32px height, border, rounded corners, hover states). Used by all header action buttons and toolbar plugins. |
-| `btn-primary` | `base.css` | Primary action button (accent background, white text) |
-| `btn-secondary` | `base.css` | Secondary button (tertiary background, border) |
+| `toolbar-icon-btn` | `base.css` | Legacy plugin-facing toolbar class. Internal React code uses `IconButton`; keep this class only for plugin compatibility. |
+| `button` + `button--*` | `base.css` | Plugin-facing CSS for the semantic action family. Internal React code uses the primitives below rather than applying these classes directly. |
 
-CSS variables (`--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--text-primary`, `--text-secondary`, `--text-muted`, `--border`, `--accent`, `--action`, etc.) are also stable and available to plugins.
+CSS variables (`--surface-app`, `--surface-panel`, `--surface-control`, `--text-primary`, `--text-secondary`, `--text-muted`, `--border`, `--accent`, `--action`, etc.) are also stable and available to plugins.
 
 ## Common Patterns
 
@@ -383,20 +382,35 @@ import { Button } from './primitives/Button';
 <Button variant="primary" onClick={...}>Publish</Button>
 ```
 
+`Button.tsx` is the component/API source of truth; the `base.css` `.button*` rules are its
+token-driven implementation and the plugin-compatible CSS surface. Do not style an internal action
+by applying `.button` classes to a raw element.
+
 Variants: `default | primary | secondary | danger | ghost | warning | variable`. The default is
-the neutral solid Figma button; `secondary` is the neutral outline treatment. Sizes: `md | sm`.
-Buttons hug their contents by default; use `width="fill"` for full-width (`block` remains a
-backwards-compatible alias).
+the neutral solid Figma button; `secondary` is the neutral outline treatment. Sizes:
+`default | compact | large`; omitted `size` means the 30px `default`, while `compact` is reserved
+for dense rows, toolbars, and tight popovers. Buttons hug their contents by default; use
+`width="fill"` for full-width (`block` remains a backwards-compatible alias).
 
 Choose by behavior: `Button` for actions, `IconButton` for icon-only actions, `ToggleButton` for
 boolean state, `MenuButton` for dropdown triggers, and `SplitButton` for an action/menu pair. They
-share the same appearance, tone, density, width, and token-driven states.
+share the same appearance, variant, size, width, and token-driven states. Use `TextButton` for an
+inline action in prose or metadata; it delegates button semantics and focus behavior to `Button`
+but deliberately has no control surface, fixed height, radius, or shadow. Use `Tabs` for tab
+navigation rather than hand-rolling `role="tab"` buttons, and `SegmentedControl` for mutually
+exclusive filters or settings that update a value in place.
+
+Use `PropertyField` for interactive values in the visual/CSS editors rather than treating them as
+actions. Its `value` and `select` variants stay neutral. The `variable` variant uses the shared
+purple variable tokens. Inherited/modified state is communicated by the accompanying label, not by
+recoloring the field.
 
 **When a raw `<button>` is fine** (don't force these into the button family):
 
 - Geometry controls such as canvas handles, timeline points, and colour swatches
-- Tab buttons (`role="tab"`) and internals of another primitive
-- Brand-colored CTAs whose hue is intentional (connect overlay green, conflict yours/theirs pair) — changing them is a design decision, not a cleanup
+- Internals of another primitive where that primitive owns the interaction
+- Large selection surfaces/cards with richer content than a normal label and icon
+- Special equal-choice controls such as the conflict yours/theirs pair — changing their hierarchy is a design decision, not a cleanup
 
 Everything else that's a standalone action button (CTA, submit, cancel, delete, confirm) uses `<Button variant>`.
 

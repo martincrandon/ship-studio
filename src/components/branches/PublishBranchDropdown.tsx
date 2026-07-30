@@ -19,7 +19,9 @@ import { logger } from '../../lib/logger';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import { Button } from '../primitives/Button';
 import { MenuButton } from '../primitives/MenuButton';
+import { TextButton } from '../primitives/TextButton';
 
 // Module-scoped so the metric spans dropdown re-mounts. Per-project would be
 // better but cross-project publish cadence is also useful and far simpler.
@@ -268,24 +270,24 @@ export function PublishBranchDropdown({
                     <>
                       {' '}
                       To make the changes live,{' '}
-                      <button
-                        className="publish-create-pr-link"
+                      <TextButton
+                        variant="primary"
                         onClick={() => {
                           handleDone();
                           onCreatePR();
                         }}
                       >
                         create a PR
-                      </button>
+                      </TextButton>
                       .
                     </>
                   )}
                 </div>
               )}
               <div className="publish-actions publish-actions-center">
-                <button className="publish-done" onClick={handleDone}>
+                <Button width="fill" onClick={handleDone}>
                   Done
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -305,15 +307,12 @@ export function PublishBranchDropdown({
                     : publishState.message}
               </div>
               <div className="publish-actions">
-                <button className="publish-close" onClick={handleDone}>
+                <Button variant="secondary" onClick={handleDone}>
                   Close
-                </button>
-                <button
-                  className="publish-submit"
-                  onClick={() => setPublishState({ status: 'idle' })}
-                >
+                </Button>
+                <Button variant="primary" onClick={() => setPublishState({ status: 'idle' })}>
                   Try Again
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -326,9 +325,9 @@ export function PublishBranchDropdown({
                 <span>Pushing to GitHub...</span>
               </div>
               <div className="publish-actions">
-                <button className="publish-close" onClick={() => setIsOpen(false)}>
+                <Button variant="secondary" onClick={() => setIsOpen(false)}>
                   Close
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -362,16 +361,16 @@ export function PublishBranchDropdown({
               </div>
 
               <div className="publish-actions">
-                <button className="publish-close" onClick={handleDone}>
+                <Button variant="secondary" onClick={handleDone}>
                   Cancel
-                </button>
-                <button
-                  className="publish-submit"
+                </Button>
+                <Button
+                  variant="primary"
                   onClick={() => void handlePublish()}
                   disabled={isPublishing}
                 >
                   Push
-                </button>
+                </Button>
               </div>
             </>
           )}
@@ -384,9 +383,9 @@ export function PublishBranchDropdown({
                 <span>Nothing to push — GitHub is up to date</span>
               </div>
               <div className="publish-actions publish-actions-center">
-                <button className="publish-done" onClick={handleDone}>
+                <Button width="fill" onClick={handleDone}>
                   Done
-                </button>
+                </Button>
               </div>
             </>
           )}

@@ -76,45 +76,6 @@
   flex: 1;
 }
 
-.support-back-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.support-back-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-control);
-}
-
-.support-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-2xl);
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-}
-
-.support-close-btn:hover {
-  color: var(--text-primary);
-  background: var(--surface-control);
-}
-
 /* ─── Panel Body ───────────────────────────────────────────────────────────── */
 
 .support-panel-body {
@@ -285,23 +246,9 @@
 }
 
 .support-action-btn {
-  display: flex;
-  align-items: center;
+  justify-content: flex-start;
   gap: 10px;
-  padding: 10px 12px;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  width: 100%;
   text-align: left;
-}
-
-.support-action-btn:hover {
-  border-color: var(--text-muted);
-  background: var(--surface-panel);
 }
 
 .support-action-btn .action-icon {
@@ -318,26 +265,6 @@
 }
 
 /* ─── Ticket List ──────────────────────────────────────────────────────────── */
-
-.support-tickets-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: none;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-}
-
-.support-tickets-link:hover {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-}
 
 .support-ticket-badge {
   background: var(--surface-control);
@@ -805,7 +732,7 @@
   color: var(--text-muted);
 }
 
-.support-reply-input button {
+.support-reply-input .button {
   padding: 8px 14px;
   background: var(--info-hover);
   border: none;
@@ -816,11 +743,11 @@
   cursor: pointer;
 }
 
-.support-reply-input button:hover:not(:disabled) {
+.support-reply-input .button:hover:not(:disabled) {
   background: var(--info-dark);
 }
 
-.support-reply-input button:disabled {
+.support-reply-input .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

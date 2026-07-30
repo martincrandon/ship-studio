@@ -326,8 +326,7 @@
   pointer-events: auto;
 }
 
-/* Pane label trigger reuses .toolbar-icon-btn for consistency with the
-   Agent Settings dropdown. Natural size — the action cluster's
+/* Pane label trigger uses the canonical MenuButton. Natural size — the action cluster's
    `margin-left: auto` handles right-alignment; no max-width math needed.
    `min-width: 0` (on the Dropdown primitive's wrapper AND the trigger
    inside it) lets the label ellipsize if a pane gets very narrow. */
@@ -354,10 +353,8 @@
   margin-left: auto;
 }
 
-/* The per-pane add/remove buttons reuse `.toolbar-icon-btn` directly —
-   same height (28px) and padding as the dropdown trigger next to them,
-   so the row reads as one consistent control cluster. No size override
-   needed beyond the base class. */
+/* The per-pane add/remove controls use canonical IconButtons, so their
+   height and padding stay aligned with the MenuButton trigger. */
 
 /* Drag handle between adjacent split panes. Mirrors the visual language
    of `.split-pane-handle` used by the workspace's preview SplitPane — 8px

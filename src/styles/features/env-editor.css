@@ -39,43 +39,23 @@
 
 .env-file-tabs {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-04);
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-default);
 }
 
-.env-file-tab {
-  padding: 6px 12px;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
+.env-file-tabs-list {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.env-file-tabs-list .env-file-tab {
   font-family: var(--font-code);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
 }
 
-.env-file-tab:hover {
-  background: var(--border-default);
-  color: var(--text-primary);
-}
-
-.env-file-tab.active {
-  background: var(--accent-active);
-  border-color: var(--accent-active);
-  color: var(--surface-app);
-}
-
-.env-file-tab.env-add-file {
-  padding: 6px 10px;
-  font-family: inherit;
+.env-add-file .button__icon {
   font-size: var(--font-size-lg);
-  font-weight: 500;
 }
 
 .env-new-file-input {
@@ -100,7 +80,7 @@
   border-color: var(--accent-active);
 }
 
-.env-new-file-input button {
+.env-new-file-input .button {
   padding: 6px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
@@ -112,7 +92,7 @@
   justify-content: center;
 }
 
-.env-new-file-input button:hover {
+.env-new-file-input .button:hover:not(:disabled) {
   background: var(--border-default);
   color: var(--text-primary);
 }

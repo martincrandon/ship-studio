@@ -65,7 +65,11 @@ import { useElementTree } from '../../hooks/useElementTree';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
 import { CompactIcon, ExpandIcon, PanelLeftIcon, ResetIcon, UndoIcon, RedoIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { Dropdown, DropdownItem } from '../primitives/Dropdown';
+import { MenuButton } from '../primitives/MenuButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { Spinner } from '../primitives/Spinner';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
 import { useCommands } from '../../commands/useCommands';
@@ -1162,28 +1166,31 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         )}
 
         {onToggleLogs && (
-          <button
-            type="button"
-            className={`preview-logs-toggle ${showLogs ? 'active' : ''}`}
+          <ToggleButton
+            variant="default"
+            pressed={showLogs}
             onClick={onToggleLogs}
             title={showLogs ? 'Hide inspector' : 'Show inspector'}
+            leftIcon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+            }
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="4 17 10 11 4 5" />
-              <line x1="12" y1="19" x2="20" y2="19" />
-            </svg>
             <span className="preview-toolbar-btn-label">Inspect</span>
             <span className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`} aria-hidden />
-          </button>
+          </ToggleButton>
         )}
 
         {/* Locale Switcher — only for projects with 2+ configured languages */}
@@ -1195,64 +1202,75 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         />
 
         {/* Page Switcher */}
-        <div className="page-switcher" ref={conn.dropdownRef} data-education-id="page-switcher">
-          <button
-            className="page-switcher-btn"
-            onClick={() => conn.setShowPageDropdown(!conn.showPageDropdown)}
+        <div className="page-switcher" data-education-id="page-switcher">
+          <Dropdown
+            menuClassName="page-dropdown"
+            onOpenChange={(open) => {
+              conn.setShowPageDropdown(open);
+              if (!open) conn.setPageSearch('');
+            }}
+            trigger={(triggerProps) => (
+              <MenuButton
+                {...triggerProps}
+                expanded={triggerProps['aria-expanded']}
+                variant="default"
+                className="page-switcher-trigger"
+                rightIcon={
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                }
+              >
+                <span className="page-route">{conn.currentPage}</span>
+              </MenuButton>
+            )}
           >
-            <span className="page-route">{conn.currentPage}</span>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          {conn.showPageDropdown && (
-            <div className="page-dropdown">
-              <input
-                ref={conn.searchInputRef}
-                type="text"
-                className="page-search"
-                placeholder="Search pages..."
-                value={conn.pageSearch}
-                onChange={(e) => conn.setPageSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && conn.filteredPages.length > 0) {
-                    selectPageKeepingLocale(conn.filteredPages[0].route);
-                  }
-                  if (e.key === 'Escape') {
-                    conn.setShowPageDropdown(false);
-                    conn.setPageSearch('');
-                  }
-                }}
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-              />
-              <div className="page-list">
-                {conn.filteredPages.length === 0 ? (
-                  <div className="page-list-empty">No pages found</div>
-                ) : (
-                  conn.filteredPages.map((page) => (
-                    <button
-                      key={page.route}
-                      className={`page-item ${page.route === conn.currentPage ? 'active' : ''}`}
-                      onClick={() => selectPageKeepingLocale(page.route)}
-                    >
-                      <span className="page-item-route">{page.route}</span>
-                      {page.route === '/' && <span className="page-item-hint">Home</span>}
-                    </button>
-                  ))
-                )}
-              </div>
+            <input
+              ref={conn.searchInputRef}
+              type="text"
+              className="page-search"
+              placeholder="Search pages..."
+              value={conn.pageSearch}
+              onChange={(e) => conn.setPageSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && conn.filteredPages.length > 0) {
+                  selectPageKeepingLocale(conn.filteredPages[0].route);
+                }
+                if (e.key === 'Escape') {
+                  conn.setShowPageDropdown(false);
+                  conn.setPageSearch('');
+                }
+              }}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            <div className="page-list">
+              {conn.filteredPages.length === 0 ? (
+                <div className="page-list-empty">No pages found</div>
+              ) : (
+                conn.filteredPages.map((page) => (
+                  <DropdownItem
+                    key={page.route}
+                    active={page.route === conn.currentPage}
+                    onSelect={() => selectPageKeepingLocale(page.route)}
+                  >
+                    <span className="page-item-route">{page.route}</span>
+                    {page.route === '/' && <span className="page-item-hint">Home</span>}
+                  </DropdownItem>
+                ))
+              )}
             </div>
-          )}
+          </Dropdown>
         </div>
 
         <button
@@ -1455,15 +1473,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   browser.
                 </p>
                 <div className="preview-iframe-error-actions">
-                  <Button variant="secondary" size="sm" onClick={conn.handleRefresh}>
+                  <Button variant="secondary" onClick={conn.handleRefresh}>
                     Retry
                   </Button>
                   {handleFixWithAgent && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleFixWithAgent('blank-iframe')}
-                    >
+                    <Button variant="primary" onClick={() => handleFixWithAgent('blank-iframe')}>
                       Fix with agent
                     </Button>
                   )}
@@ -1729,35 +1743,19 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
   return (
     <div ref={ref} className="preview-logs-panel" aria-hidden={hidden}>
       <div className="preview-logs-header">
-        <div className="preview-logs-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'logs'}
-            className={`preview-logs-tab ${activeTab === 'logs' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('logs')}
-          >
-            Server Logs
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'browser'}
-            className={`preview-logs-tab ${activeTab === 'browser' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('browser')}
-          >
-            Browser Tools
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'health'}
-            className={`preview-logs-tab ${activeTab === 'health' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('health')}
-          >
-            Health
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as InspectTab)}>
+          <TabsList className="preview-logs-tabs">
+            <TabsTab value="logs" className="preview-logs-tab">
+              Server Logs
+            </TabsTab>
+            <TabsTab value="browser" className="preview-logs-tab">
+              Browser Tools
+            </TabsTab>
+            <TabsTab value="health" className="preview-logs-tab">
+              Health
+            </TabsTab>
+          </TabsList>
+        </Tabs>
         {onClose && (
           <button
             type="button"

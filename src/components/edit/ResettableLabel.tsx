@@ -25,6 +25,11 @@ interface Props {
 export function ResettableLabel({ label, definedAt, active, onReset }: Props) {
   // Resettable only when the value is set on THIS breakpoint (a solid LayerDot).
   const setHere = definedAt !== null && definedAt.name === active.name;
+  const stateClass = setHere
+    ? ' ss-edit-panel__label--modified'
+    : definedAt
+      ? ' ss-edit-panel__label--inherited'
+      : '';
   const [pop, setPop] = useState<{ top: number; left: number } | null>(null);
   const popRef = useRef<HTMLButtonElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -47,7 +52,7 @@ export function ResettableLabel({ label, definedAt, active, onReset }: Props) {
 
   if (!setHere) {
     return (
-      <span className="ss-edit-panel__label">
+      <span className={`ss-edit-panel__label${stateClass}`}>
         {label}
         <LayerDot definedAt={definedAt} active={active} />
       </span>
@@ -65,7 +70,7 @@ export function ResettableLabel({ label, definedAt, active, onReset }: Props) {
   };
 
   return (
-    <span className="ss-edit-panel__label ss-edit-panel__label--resettable">
+    <span className={`ss-edit-panel__label ss-edit-panel__label--resettable${stateClass}`}>
       <button
         ref={btnRef}
         type="button"

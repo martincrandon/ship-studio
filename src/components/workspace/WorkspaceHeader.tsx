@@ -23,6 +23,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
 import { ImageIcon, SlackIcon, PanelLeftIcon } from '../icons';
+import { Button } from '../primitives/Button';
+import { ToggleButton } from '../primitives/ToggleButton';
 // SupportPanel is hidden for now (the Support button links straight to Slack) but
 // intentionally kept around so we can bring the panel back later.
 import { SupportPanel } from '../support/SupportPanel';
@@ -190,35 +192,33 @@ export function WorkspaceHeader({
           moved up here so that row can stay focused on health/logs. */}
       <div className="workspace-header-left">
         {onToggleSidebar && (
-          <button
-            className="toolbar-icon-btn"
+          <ToggleButton
+            pressed={Boolean(isSidebarHidden)}
             onClick={onToggleSidebar}
             title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
             aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
             data-education-id="toggle-sidebar"
+            leftIcon={<PanelLeftIcon size={16} />}
           >
-            <PanelLeftIcon size={12} />
             <span className="toolbar-btn-label">{isSidebarHidden ? 'Show' : 'Hide'}</span>
-          </button>
+          </ToggleButton>
         )}
-        <button
-          className="toolbar-icon-btn"
+        <Button
           onClick={onOpenAssetsPanel}
           title="Assets"
           data-education-id="assets-button"
+          leftIcon={<ImageIcon size={16} />}
         >
-          <ImageIcon size={12} />
           <span className="toolbar-btn-label">Assets</span>
-        </button>
-        <button
-          className="toolbar-icon-btn"
+        </Button>
+        <Button
           onClick={() => void openUrl(SLACK_INVITE_URL)}
           title="Join the Ship Studio community on Slack"
           data-education-id="support-button"
+          leftIcon={<SlackIcon size={16} />}
         >
-          <SlackIcon size={12} />
           <span className="toolbar-btn-label">Support</span>
-        </button>
+        </Button>
         {headerExtras}
         {branchIndicator}
       </div>

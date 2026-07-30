@@ -12,7 +12,7 @@
   height: 32px;
   /* Left padding clears the macOS traffic lights (overlay mode) */
   padding: 0 16px 0 78px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
   -webkit-user-select: none;
   user-select: none;
@@ -74,7 +74,7 @@
   align-items: center;
   gap: 16px;
   padding: 8px 10px;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
 }
 

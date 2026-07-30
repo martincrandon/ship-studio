@@ -55,7 +55,7 @@ const DropdownContext = createContext<{ close: () => void } | null>(null);
  * ```tsx
  * <Dropdown
  *   align="right"
- *   trigger={(p) => <button className="toolbar-icon-btn" {...p}>•••</button>}
+ *   trigger={(p) => <MenuButton expanded={p['aria-expanded']} {...p}>•••</MenuButton>}
  * >
  *   <DropdownItem icon={<EditIcon size={14} />} onSelect={rename}>Rename</DropdownItem>
  *   <DropdownDivider />

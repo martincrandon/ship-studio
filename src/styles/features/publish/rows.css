@@ -232,49 +232,6 @@
   margin-left: auto;
 }
 
-.publish-close {
-  padding: 8px 16px;
-  background: var(--surface-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.publish-close:hover {
-  background: var(--border-default);
-  color: var(--text-primary);
-}
-
-.publish-submit {
-  padding: 8px 16px;
-  background: var(--accent-active);
-  border: none;
-  border-radius: var(--radius);
-  color: var(--text-on-accent);
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.publish-submit:hover {
-  background: var(--accent-active-hover);
-}
-
-.publish-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Publish Option Labels (simplified) */
 .publish-option-label {
   font-size: var(--font-size-lg);

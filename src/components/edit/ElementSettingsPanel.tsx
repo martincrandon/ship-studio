@@ -8,6 +8,7 @@ import { useState, type KeyboardEvent } from 'react';
 import { CloseIcon } from '../icons/common';
 import { PlusIcon } from '../icons/utility';
 import type { ElementSettings } from '../../hooks/useElementSettings';
+import { CascadeChip } from './CascadeChip';
 
 export function ElementSettingsPanel({ settings }: { settings: ElementSettings }) {
   const {
@@ -42,8 +43,8 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
         <h4 className="ss-settings__label">Classes</h4>
         <div className="ss-settings__classes">
           {classes.map((c) => (
-            <span key={c} className="ss-settings__class-chip">
-              .{c}
+            <CascadeChip key={c} tone="selector" className="ss-settings__class-chip">
+              <span className="ss-cascade-chip__content">.{c}</span>
               <button
                 type="button"
                 className="ss-settings__class-remove"
@@ -53,7 +54,7 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
               >
                 <CloseIcon size={10} />
               </button>
-            </span>
+            </CascadeChip>
           ))}
           {adding ? (
             <input

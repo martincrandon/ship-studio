@@ -3,6 +3,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { logger } from '../lib/logger';
 import { lookupBlobOwner, markPluginCrashed } from '../lib/plugin-loader';
 import { uninstallPlugin } from '../lib/plugins';
+import { Button } from './primitives/Button';
 
 interface Props {
   children: ReactNode;
@@ -111,51 +112,16 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           <div style={{ display: 'flex', gap: '12px' }}>
             {this.isPluginError() && (
-              <button
-                onClick={this.handleContinue}
-                style={{
-                  backgroundColor: '#2472c8',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '10px 20px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'background-color 150ms',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#1e5fa8')}
-                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#2472c8')}
-              >
+              <Button variant="primary" onClick={this.handleContinue}>
                 Continue
-              </button>
+              </Button>
             )}
-            <button
+            <Button
+              variant={this.isPluginError() ? 'secondary' : 'primary'}
               onClick={() => void this.handleRestart()}
-              style={{
-                backgroundColor: this.isPluginError() ? '#3a3a3a' : '#2472c8',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '10px 20px',
-                fontSize: '14px',
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'background-color 150ms',
-              }}
-              onMouseOver={(e) =>
-                (e.currentTarget.style.backgroundColor = this.isPluginError()
-                  ? '#4a4a4a'
-                  : '#1e5fa8')
-              }
-              onMouseOut={(e) =>
-                (e.currentTarget.style.backgroundColor = this.isPluginError()
-                  ? '#3a3a3a'
-                  : '#2472c8')
-              }
             >
               Restart App
-            </button>
+            </Button>
           </div>
           {this.state.error && (
             <details

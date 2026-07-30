@@ -179,21 +179,71 @@ export function BranchIndicator({
   }
 
   return (
-    <div
-      className="branch-indicator"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      data-education-id="branch-indicator"
-    >
-      <button
-        className={`branch-indicator-button ${isMainBranch ? 'main-branch' : ''}`}
-        onClick={onClick}
+    <div className="branch-indicator" data-education-id="branch-indicator">
+      <div
+        className="branch-changes-trigger"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <BranchIcon size={14} />
-        <span className="branch-name">{currentBranch}</span>
-        {isMainBranch && <span className="branch-live-badge">Live</span>}
-        {hasUncommittedChanges && <span className="branch-unsaved-badge">Unsaved</span>}
-      </button>
+        <button
+          className={`branch-indicator-button ${isMainBranch ? 'main-branch' : ''}`}
+          onClick={onClick}
+        >
+          <BranchIcon size={14} />
+          <span className="branch-name">{currentBranch}</span>
+          {isMainBranch && <span className="branch-live-badge">Live</span>}
+          {hasUncommittedChanges && <span className="branch-unsaved-badge">Unsaved</span>}
+        </button>
+
+        {showDropdown && changedFiles.length > 0 && (
+          <div className="branch-changes-dropdown">
+            <div className="branch-changes-header">
+              <span>
+                {changedFiles.length} Unsaved {changedFiles.length === 1 ? 'Change' : 'Changes'}
+              </span>
+            </div>
+            <div className="branch-changes-list">
+              {changedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="branch-changes-item branch-changes-item-clickable"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedFile({ path: file.path, status: file.status });
+                  }}
+                >
+                  {getStatusIndicator(file.status)}
+                  <FileIcon size={12} />
+                  <span className="branch-changes-path">
+                    <span className="branch-changes-dir">{getDirectory(file.path)}</span>
+                    <span className="branch-changes-filename">{getFileName(file.path)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="branch-changes-footer">
+              <Button variant="primary" onClick={handleSave}>
+                Push
+              </Button>
+              <Button
+                variant="danger"
+                className={`branch-changes-discard-btn ${confirmDiscard ? 'confirming' : ''}`}
+                leftIcon={<TrashIcon size={12} />}
+                onClick={(e) => {
+                  void handleDiscardAll(e);
+                }}
+                disabled={isDiscarding}
+              >
+                {isDiscarding
+                  ? 'Discarding...'
+                  : confirmDiscard
+                    ? 'Click to Confirm'
+                    : 'Discard All'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {onPullLatest && (
         <Button
@@ -208,50 +258,6 @@ export function BranchIndicator({
           {isPulling ? <Spinner size="sm" /> : <PullIcon size={13} />}
           <span>Pull</span>
         </Button>
-      )}
-
-      {showDropdown && changedFiles.length > 0 && (
-        <div className="branch-changes-dropdown">
-          <div className="branch-changes-header">
-            <span>
-              {changedFiles.length} Unsaved {changedFiles.length === 1 ? 'Change' : 'Changes'}
-            </span>
-          </div>
-          <div className="branch-changes-list">
-            {changedFiles.map((file, index) => (
-              <div
-                key={index}
-                className="branch-changes-item branch-changes-item-clickable"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedFile({ path: file.path, status: file.status });
-                }}
-              >
-                {getStatusIndicator(file.status)}
-                <FileIcon size={12} />
-                <span className="branch-changes-path">
-                  <span className="branch-changes-dir">{getDirectory(file.path)}</span>
-                  <span className="branch-changes-filename">{getFileName(file.path)}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="branch-changes-footer">
-            <button className="branch-changes-save-btn" onClick={handleSave}>
-              Push
-            </button>
-            <button
-              className={`branch-changes-discard-btn ${confirmDiscard ? 'confirming' : ''}`}
-              onClick={(e) => {
-                void handleDiscardAll(e);
-              }}
-              disabled={isDiscarding}
-            >
-              <TrashIcon size={12} />
-              {isDiscarding ? 'Discarding...' : confirmDiscard ? 'Click to Confirm' : 'Discard All'}
-            </button>
-          </div>
-        </div>
       )}
 
       {selectedFile && (

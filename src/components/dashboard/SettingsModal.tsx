@@ -299,7 +299,6 @@ export function SettingsModal({
               </div>
               <Button
                 variant="secondary"
-                size="sm"
                 onClick={() => {
                   onClose();
                   openModal('attachedLibraries');

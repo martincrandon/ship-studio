@@ -14,6 +14,7 @@ import {
   type LayerContext,
   type ResetSpec,
 } from '../../lib/edit';
+import { CssValueText } from './CssValueText';
 
 interface Props {
   currentClass: string;
@@ -48,7 +49,11 @@ export function CustomCssBox({ currentClass, layer, onApplyEnum, onReset }: Prop
           {props.map((p) => (
             <li key={p.token} className="ss-custom-css__chip" title={`${p.prop}: ${p.value}`}>
               <span className="ss-custom-css__chip-text">
-                <span className="ss-custom-css__chip-prop">{p.prop}</span>: {p.value}
+                <span className="ss-custom-css__chip-prop">{p.prop}</span>
+                <span className="ss-custom-css__chip-colon">:</span>
+                <span className="ss-custom-css__chip-value">
+                  <CssValueText value={p.value} />
+                </span>
               </span>
               <button
                 type="button"

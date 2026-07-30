@@ -72,49 +72,37 @@
 
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--button-group-spacing);
 }
 
 .dashboard-view-toggle {
+  --tabs-list-padding: var(--space-02);
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  height: var(--dashboard-control-height);
-  padding: var(--spacing-xs);
+  gap: var(--space-04);
+  height: var(--control-height-standard);
+  padding: var(--tabs-list-padding);
   box-sizing: border-box;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: calc(var(--radius-4) + var(--tabs-list-padding));
+}
+
+.dashboard-view-toggle.tabs__list--stretch {
+  align-items: stretch;
 }
 
 .dashboard-view-toggle-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xs);
-  height: 100%;
-  padding: 0 var(--spacing-sm);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: var(--font-size-base);
-  line-height: 1;
-  transition:
-    background-color var(--transition),
-    border-color var(--transition),
-    color var(--transition);
+  flex-shrink: 0;
 }
 
-.dashboard-view-toggle-btn:hover {
-  background: var(--surface-control);
-  color: var(--text-secondary);
-}
-
-.dashboard-view-toggle-btn[aria-pressed='true'] {
-  background: var(--surface-control);
-  border-color: var(--border-default);
-  color: var(--text-primary);
+.dashboard-view-toggle .tabs__tab {
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .project-bulk-actions {
@@ -150,27 +138,8 @@
 .project-bulk-actions-controls {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--space-04);
   flex-shrink: 0;
-}
-
-.dashboard-section-controls .new-folder-btn {
-  height: var(--dashboard-control-height);
-}
-
-.dashboard-section-controls .btn-icon {
-  height: var(--dashboard-control-height);
-  padding: 0 var(--spacing-sm);
-  background: transparent;
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-}
-
-.dashboard-section-controls .btn-icon:hover {
-  background: var(--surface-control);
-  border-color: var(--text-muted);
-  color: var(--text-primary);
 }
 
 /* .dashboard-settings-row removed in favor of .dashboard-card + .dashboard-card-row */
@@ -178,27 +147,7 @@
 /* Sort Dropdown — menu/items come from the Dropdown primitive (ss-dropdown__*);
    only the trigger button and small scoped menu tweaks live here. */
 .sort-dropdown-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: var(--dashboard-control-height);
-  padding: 0 var(--spacing-md);
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.sort-dropdown-btn:hover {
-  background: var(--surface-control);
-  border-color: var(--text-muted);
-  color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 /* Keep the selected-option checkmark pushed to the right edge of the menu. */

@@ -8,7 +8,7 @@
   align-items: center;
   gap: var(--button-gap);
   height: var(--button-height);
-  padding: 0 var(--button-padding-inline);
+  padding: 0 var(--button-padding);
   font-size: var(--button-font-size);
   color: var(--button-text-default);
   background: var(--button-surface-default);
@@ -139,7 +139,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-12);
+  padding: var(--space-08) var(--space-12);
   background: var(--surface-panel);
   border-bottom: var(--stroke-1) solid var(--border-subtle);
   /* Drag handle */
@@ -229,7 +229,7 @@
   transition: color var(--transition);
 }
 .ss-edit-panel__autosave:hover {
-  /* Only brighten the label — override the global button:hover background. */
+  /* Only brighten the label; this compact control has no surface state. */
   background: none;
   color: var(--text-secondary);
 }
@@ -311,6 +311,17 @@
   padding: 0 5px;
 }
 .ss-edit-panel__seg--icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.ss-edit-panel__align-tabs > .button {
+  width: var(--control-height-compact);
+  min-width: var(--control-height-compact);
+  padding: 0;
+}
+
+.ss-edit-panel__align-tabs svg {
   width: 13px;
   height: 13px;
 }
@@ -443,26 +454,9 @@
   color: var(--text-secondary);
   font-weight: 600;
 }
-/* Small Slack link at the foot of the beta note. */
+/* The shared Button owns the Slack action's geometry and interaction states. */
 .ss-edit-panel__slack {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
   margin-top: var(--spacing-xs);
-  padding: 8px 9px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-control);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-.ss-edit-panel__slack:hover {
-  background: var(--surface-panel);
-  color: var(--text-primary);
 }
 
 /* Hand-off block for text that's rendered from code/data (can't be edited inline). */
@@ -551,26 +545,9 @@
 
 /* Custom dropdown (trigger lives in the panel; menu is portaled to <body>). */
 .ss-enum__trigger {
-  display: inline-flex;
-  align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
   min-width: 92px;
-  height: 22px;
-  padding: 0 var(--spacing-sm);
   font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: border-color var(--transition);
-}
-.ss-enum__trigger:hover {
-  border-color: var(--text-muted);
-}
-.ss-enum__trigger[aria-expanded='true'] {
-  border-color: var(--accent-active);
 }
 .ss-enum__trigger svg {
   flex-shrink: 0;
@@ -676,7 +653,7 @@
 .ss-color-picker {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-08);
 }
 /* Size react-colorful's surface to the popover. */
 .ss-color-picker .react-colorful {
@@ -700,7 +677,7 @@
 .ss-color-picker__input {
   width: 100%;
   height: var(--control-height-standard);
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-08);
   font-family: var(--font-code);
   font-size: var(--font-size-11);
   font-variant-numeric: tabular-nums;
@@ -1119,7 +1096,7 @@
 .ss-edit-panel__section-body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   padding: var(--spacing-md);
   border-top: 1px solid var(--border-default);
 }
@@ -1131,8 +1108,8 @@
   justify-content: space-between;
 }
 
-/* Box-model spacing editor (margin outer, padding inner). Each side is a wide
-   "bar" filling its band, draggable anywhere along it. */
+/* Box-model spacing editor (margin outer, padding inner). Each side is a
+   content-sized value tag that still supports dragging from the visible field. */
 .ss-box {
   position: relative;
   padding: 22px 38px;
@@ -1166,87 +1143,110 @@
 .ss-box__field {
   position: absolute;
   margin: 0;
-  padding: 0;
+  padding: var(--space-02) var(--space-04);
   text-align: center;
   font-size: var(--font-size-xs);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  /* Transparent by default (just the number) — the wide hit area is still there
-     for dragging; it only lights up on hover/focus. */
   background: transparent;
-  border: none;
-  border-radius: 3px;
+  border: var(--stroke-1) solid transparent;
+  border-radius: var(--radius-sm);
   cursor: grab;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition);
 }
 .ss-box__field:hover {
-  background: var(--surface-control);
+  border-color: var(--border-default);
 }
 .ss-box__field:focus {
-  outline: 1px solid var(--accent-active);
-  background: var(--surface-control);
+  outline: none;
+  border-color: var(--border-strong);
+}
+.ss-box__field--inherited {
+  color: var(--property-label-inherited-text);
+  background: var(--property-label-inherited-surface);
+}
+.ss-box__field--modified {
+  color: var(--property-label-modified-text);
+  background: var(--property-label-modified-surface);
 }
 /* Invalid typed value (bad unit) — flag the field; it isn't applied. */
 .ss-box__field--invalid,
 .ss-box__field--invalid:focus {
-  outline: 1px solid var(--accent-error);
+  outline: none;
+  border-color: var(--accent-error);
   color: var(--accent-error);
 }
-/* Horizontal bars (top / bottom) span the band width; vertical bars span its height. */
+/* Content-sized fields are centered within each side's band. */
 .ss-box__edge--t,
 .ss-box__edge--b {
-  left: 34px;
-  right: 34px;
-  height: 14px;
+  left: 50%;
+  right: auto;
+  width: auto;
+  height: auto;
+  transform: translateX(-50%);
 }
-/* Centered within the 22px margin band ((22 - 14) / 2) so the field has equal
-   space above and below — not pushed toward its edge. */
 .ss-box__edge--t {
-  top: 4px;
+  top: var(--space-02);
 }
 .ss-box__edge--b {
-  bottom: 4px;
+  bottom: var(--space-02);
 }
 .ss-box__edge--l,
 .ss-box__edge--r {
-  top: 24px;
-  bottom: 24px;
-  width: 28px;
+  top: 50%;
+  bottom: auto;
+  width: auto;
+  height: auto;
+  transform: translateY(-50%);
 }
-/* Centered in their band too ((44 - 34) / 2; the inner 30px field in its 40px
-   band also lands at 5px), matching the top/bottom fields. */
 .ss-box__edge--l {
-  left: 5px;
+  left: var(--space-04);
 }
 .ss-box__edge--r {
-  right: 5px;
+  right: var(--space-04);
 }
-/* The inner padding band is smaller — tighten its bars to fit and re-center
-   within the 20px band ((20 - 12) / 2). */
 .ss-box__inner .ss-box__edge--t,
 .ss-box__inner .ss-box__edge--b {
-  left: 28px;
-  right: 28px;
-  height: 12px;
+  left: 50%;
+  right: auto;
+  width: auto;
+  height: auto;
 }
 .ss-box__inner .ss-box__edge--t {
-  top: 4px;
+  top: var(--space-02);
 }
 .ss-box__inner .ss-box__edge--b {
-  bottom: 4px;
+  bottom: var(--space-02);
 }
 .ss-box__inner .ss-box__edge--l,
 .ss-box__inner .ss-box__edge--r {
-  top: 20px;
-  bottom: 20px;
-  width: 24px;
+  top: 50%;
+  bottom: auto;
+  width: auto;
+  height: auto;
 }
 
 .ss-edit-panel__label {
   display: inline-flex;
   align-items: center;
+  padding: var(--space-02) var(--space-04);
+  border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+}
+
+.ss-edit-panel__label--inherited {
+  color: var(--property-label-inherited-text);
+  background: var(--property-label-inherited-surface);
+}
+
+.ss-edit-panel__label--modified {
+  color: var(--property-label-modified-text);
+  background: var(--property-label-modified-surface);
 }
 
 /* A label that doubles as a Reset trigger: the name is a bare button, and a small
@@ -1259,16 +1259,16 @@
   align-items: center;
   padding: 0;
   font-size: inherit;
-  color: var(--text-secondary);
+  color: inherit;
   background: none;
   border: none;
   cursor: pointer;
   transition: color var(--transition);
 }
 .ss-edit-panel__labelbtn:hover {
-  /* Only brighten the name — override the global button:hover background. */
+  /* Only brighten the name; this compact control has no surface state. */
   background: none;
-  color: var(--text-primary);
+  color: inherit;
 }
 /* Floating "Reset" that pops up next to the cursor when a set value's name is
    clicked — portaled to <body> and positioned fixed, so it never shifts the row. */
@@ -1290,12 +1290,6 @@
   background: var(--surface-panel);
 }
 
-/* A box-model side whose value is inherited from a smaller breakpoint (not set
-   on the active one) reads muted, so it's clear it's not a local override. */
-.ss-box__field--inherited {
-  color: var(--text-muted);
-}
-
 .ss-edit-panel__stepper {
   display: flex;
   align-items: center;
@@ -1312,19 +1306,9 @@
 /* Non-interactive "Saved" confirmation (replaces a disabled button so there's
    no misleading hover affordance when there's nothing to save). */
 .ss-edit-panel__saved {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 var(--spacing-md);
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  color: var(--text-muted);
-  background: var(--surface-control);
-  border-radius: var(--radius-sm);
   cursor: default;
   user-select: none;
+  pointer-events: none;
 }
 .ss-edit-panel__saved svg {
   color: var(--accent-active);
@@ -1388,9 +1372,10 @@
   gap: var(--spacing-xs);
 }
 .ss-custom-css__chip {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--spacing-xs);
+  column-gap: var(--spacing-xs);
   padding: 4px 6px;
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
@@ -1400,13 +1385,24 @@
   border-radius: var(--radius-sm);
 }
 .ss-custom-css__chip-text {
-  flex: 1 1 auto;
+  display: contents;
+}
+.ss-custom-css__chip-prop {
+  min-width: 0;
+  color: var(--property-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ss-custom-css__chip-prop {
+.ss-custom-css__chip-colon {
+  color: var(--text-muted);
+}
+.ss-custom-css__chip-value {
+  min-width: 0;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ss-custom-css__chip-x {
   flex: 0 0 auto;

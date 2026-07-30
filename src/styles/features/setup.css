@@ -188,44 +188,6 @@
   max-width: 180px;
 }
 
-.setup-item-btn {
-  padding: 6px 14px;
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  border-radius: var(--radius);
-  border: none;
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    opacity var(--transition);
-}
-
-.setup-item-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.setup-item-btn-install,
-.setup-item-btn-connect {
-  background: var(--setup-wizard-green);
-  color: var(--text-on-accent);
-}
-
-.setup-item-btn-install:hover:not(:disabled),
-.setup-item-btn-connect:hover:not(:disabled) {
-  background: var(--setup-wizard-green-hover);
-}
-
-.setup-item-btn-retry {
-  background: var(--surface-control);
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-}
-
-.setup-item-btn-retry:hover:not(:disabled) {
-  background: var(--surface-control-hover);
-}
-
 .setup-item-action-row {
   display: flex;
   align-items: center;
@@ -413,50 +375,6 @@
   text-align: right;
 }
 
-.wizard-nav-back {
-  padding: 8px 18px;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  background: var(--surface-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.wizard-nav-back:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-.wizard-nav-next {
-  padding: 8px 24px;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  border: none;
-  background: var(--setup-wizard-green);
-  color: var(--text-on-accent);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-.wizard-nav-next:hover:not(:disabled) {
-  background: var(--setup-wizard-green-hover);
-}
-
-.wizard-nav-next:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* ============ Agent Step Cards ============ */
 
 .wizard-agent-selection-hint {
@@ -580,29 +498,8 @@
   line-height: 1.5;
 }
 
-.wizard-hosting-skip-btn {
-  padding: 10px 28px;
-  font-size: var(--font-size-lg);
-  font-weight: 500;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  background: var(--surface-control);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition);
+.wizard-hosting-skip {
   margin-top: 8px;
-}
-
-.wizard-hosting-skip-btn:hover {
-  background: var(--surface-panel);
-  color: var(--text-primary);
-}
-
-.wizard-hosting-skip-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ============ Slack CTA ============ */
@@ -635,21 +532,8 @@
   font-weight: 600;
 }
 
-.onboarding-slack-cta button {
-  padding: 6px 14px;
-  background: rgba(var(--purple-deep-rgb), 0.2);
-  border: 1px solid rgba(var(--purple-deep-rgb), 0.3);
-  border-radius: var(--radius);
-  color: var(--slack-lavender);
-  font-size: var(--font-size-md);
-  font-weight: 500;
+.onboarding-slack-cta > .button {
   flex-shrink: 0;
-}
-
-.onboarding-slack-cta button:hover {
-  background: rgba(var(--purple-deep-rgb), 0.3);
-  border-color: rgba(var(--purple-deep-rgb), 0.5);
-  color: var(--slack-lavender-bright);
 }
 
 /* ============ Celebration Screen ============ */
@@ -856,25 +740,6 @@
   color: var(--text-primary);
 }
 
-.onboarding-terminal-cancel {
-  padding: 6px 14px;
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-default);
-  background: var(--surface-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.onboarding-terminal-cancel:hover {
-  background: var(--surface-control-hover);
-  color: var(--text-primary);
-}
-
 .onboarding-terminal-container {
   height: 350px;
   background: var(--surface-app);
@@ -911,15 +776,4 @@
   border-radius: var(--radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.setup-item-btn-skip {
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-default);
-}
-
-.setup-item-btn-skip:hover:not(:disabled) {
-  background: var(--surface-control);
-  color: var(--text-secondary);
 }

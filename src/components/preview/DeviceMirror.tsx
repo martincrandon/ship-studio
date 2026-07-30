@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 import { logger } from '../../lib/logger';
 import {
   startMobilePreview,
@@ -45,6 +46,7 @@ import { attachPtySession, writePtySessionLogged } from '../../lib/ptySession';
 import { getWindowLabel } from '../../lib/window';
 import { ResetIcon, ChevronIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { Spinner } from '../primitives/Spinner';
 import { BuildTerminal } from '../terminal/BuildTerminal';
 import { AndroidMirrorStage } from './AndroidMirrorStage';
@@ -540,11 +542,11 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
       <p className="hint">{detail}</p>
       {extra && <p className="hint">{extra}</p>}
       {setup && onSendToAgent && (
-        <Button variant="primary" size="sm" onClick={() => handleAgentSetup(setup)}>
+        <Button variant="primary" onClick={() => handleAgentSetup(setup)}>
           Set up with AI
         </Button>
       )}
-      <Button variant="secondary" size="sm" onClick={restart}>
+      <Button variant="secondary" onClick={restart}>
         <ResetIcon size={14} /> Try again
       </Button>
     </div>
@@ -598,19 +600,15 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
       <div className="device-mirror">
         <div className="device-mirror-toolbar">
           {showPicker && (
-            <div className="device-mirror-platform" role="group" aria-label="Preview platform">
-              {(['ios', 'android'] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`device-mirror-platform-btn${activePlatform === p ? ' active' : ''}`}
-                  aria-pressed={activePlatform === p}
-                  onClick={() => switchPlatform(p)}
-                >
-                  {p === 'ios' ? 'iOS' : 'Android'}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              value={activePlatform}
+              options={[
+                { value: 'ios', label: 'iOS' },
+                { value: 'android', label: 'Android' },
+              ]}
+              onValueChange={switchPlatform}
+              aria-label="Preview platform"
+            />
           )}
           <span className="device-mirror-label">
             {mirror.device_name
@@ -618,11 +616,11 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
               : `${PLATFORM_COPY[activePlatform].device} · live`}
           </span>
           {launchStatus === 'launched' && buildAlive && (
-            <Button variant="ghost" size="sm" onClick={reloadApp}>
+            <Button variant="ghost" size="compact" onClick={reloadApp}>
               <ResetIcon size={14} /> Reload
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={restart}>
+          <Button variant="ghost" size="compact" onClick={restart}>
             <ResetIcon size={14} /> Restart
           </Button>
         </div>
@@ -673,24 +671,24 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
                 <span className="device-mirror-build-title">{summary}</span>
               </button>
               {launchStatus === 'failed' && onSendToAgent && (
-                <button
-                  type="button"
-                  className="device-mirror-build-send"
+                <Button
+                  variant="secondary"
+                  size="compact"
                   onClick={() => void sendBuildToAgent()}
                   title="Send the build error to the active agent"
                 >
                   Send to agent
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
-                className={`device-mirror-build-chevron${buildOpen ? ' open' : ''}`}
+              <IconButton
+                variant="ghost"
+                size="compact"
+                className={buildOpen ? 'device-mirror-build-chevron-open' : undefined}
                 onClick={() => setBuildOpen((o) => !o)}
                 title={buildOpen ? 'Collapse build log' : 'Expand build log'}
                 aria-label={buildOpen ? 'Collapse build log' : 'Expand build log'}
-              >
-                <ChevronIcon size={14} />
-              </button>
+                icon={<ChevronIcon size={14} />}
+              />
             </div>
             {needsInstall && (
               <p className="device-mirror-build-hint">
