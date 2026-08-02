@@ -186,6 +186,8 @@
 
   --size-color-picker-width: 336px;
   --size-color-picker-surface: 212px;
+  --size-source-control-popover: 320px;
+  --size-source-control-branch: 140px;
 
   /* ========================================================================
    * Semantic Tokens
@@ -247,6 +249,8 @@
   --control-height-large: var(--size-control-large);
   --control-height-compact: var(--size-control-compact);
   --popover-color-picker-width: var(--size-color-picker-width);
+  --popover-source-control-width: var(--size-source-control-popover);
+  --source-control-branch-max-width: var(--size-source-control-branch);
   --color-picker-surface-height: var(--size-color-picker-surface);
 
   /* Fonts */
@@ -265,6 +269,8 @@
   --shadow-button:
     0 var(--stroke-1) var(--space-02) var(--color-black-o75),
     inset 0 var(--stroke-1) 0 var(--color-white-o15);
+  --shadow-source-control-attention: 0 var(--space-02) var(--space-08)
+    color-mix(in srgb, var(--accent-warning) 35%, transparent);
   --shadow-window: 0 12px 28px var(--color-black-o38);
   --shadow-input-inset:
     inset 0 1px 1px var(--color-black-o15), inset 0 3px 3px var(--color-black-o15),
@@ -485,6 +491,8 @@
 
   /* Fullscreen preview overlay — above workspace chrome, below modals. */
   --z-preview-fullscreen: 900;
+  /* Draggable panels stay above an expanded preview, but below modal chrome. */
+  --z-floating-panel: 950;
 
   /* Visual editor panel width — shared by the panel itself (visual-editor.css)
      and the preview grid column that hosts it when pinned (preview.css).

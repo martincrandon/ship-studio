@@ -9,7 +9,7 @@
  * @module components/PublishBranchDropdown
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { ProjectGitHubStatus } from '../../lib/github';
 import { publishBranch } from '../../lib/branches';
 import { ChevronIcon, BranchIcon, SuccessIcon, ErrorIcon } from '../icons';
@@ -22,6 +22,8 @@ import { asCommandError, formatCommandError } from '../../lib/errors';
 import { Button } from '../primitives/Button';
 import { MenuButton } from '../primitives/MenuButton';
 import { TextButton } from '../primitives/TextButton';
+import type { ChangedFile } from '../../lib/git';
+import { ChangedFilesSection } from './ChangedFilesSection';
 
 // Module-scoped so the metric spans dropdown re-mounts. Per-project would be
 // better but cross-project publish cadence is also useful and far simpler.
@@ -55,6 +57,16 @@ interface PublishBranchDropdownProps {
   forceOpen?: boolean;
   /** Callback when forceOpen has been handled */
   onForceOpenHandled?: () => void;
+  /** Controlled open state used by the workspace header's exclusive menus. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Visually joins the trigger to the adjacent unsaved-changes segment. */
+  grouped?: boolean;
+  /** Changed-file review is part of this single source-control menu. */
+  changedFiles?: ChangedFile[];
+  onDiscardChanges?: () => void;
+  /** Hosting integration controls rendered inside the Push workflow. */
+  hostingControls?: ReactNode;
   /**
    * CSS selector for elements that should NOT trigger click-outside closing.
    * Used by compact mode to exclude its publish button from closing the dropdown.
@@ -85,17 +97,33 @@ export function PublishBranchDropdown({
   onCreatePR,
   forceOpen,
   onForceOpenHandled,
+  open: controlledOpen,
+  onOpenChange,
+  grouped = false,
+  changedFiles = [],
+  onDiscardChanges,
+  hostingControls,
   excludeClickOutsideSelector,
 }: PublishBranchDropdownProps) {
   const { showToast } = useOptionalToast();
   const onToast = (message: string, type?: 'success' | 'error') => showToast(message, type);
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const hostingRef = useRef<HTMLDivElement>(null);
 
   const hasGitHubRepo =
     projectGithubStatus?.status === 'connected' && projectGithubStatus?.github_repo;
   const isMainBranch = currentBranch === 'main' || currentBranch === 'master';
+  const isOpen = controlledOpen ?? internalOpen;
+
+  const setOpen = useCallback(
+    (open: boolean) => {
+      if (controlledOpen === undefined) setInternalOpen(open);
+      onOpenChange?.(open);
+    },
+    [controlledOpen, onOpenChange]
+  );
 
   // Track previous forceOpen value to detect true→false transitions
   const prevForceOpenRef = useRef<boolean | undefined>(undefined);
@@ -109,23 +137,26 @@ export function PublishBranchDropdown({
     prevForceOpenRef.current = forceOpen;
 
     if (forceOpen && hasGitHubRepo) {
-      setIsOpen(true);
+      setOpen(true);
       onForceOpenHandled?.();
       // In trigger mode, the parent immediately sets forceOpen back to false.
       // Pre-set the ref so the true→false transition doesn't close the dropdown.
       prevForceOpenRef.current = false;
     } else if (prevForceOpen === true && forceOpen === false) {
       // Controlled mode: parent explicitly closed the dropdown
-      setIsOpen(false);
+      setOpen(false);
     }
-  }, [forceOpen, hasGitHubRepo, onForceOpenHandled]);
+  }, [forceOpen, hasGitHubRepo, onForceOpenHandled, setOpen]);
 
   // Close dropdown when clicking outside
   const closeDropdown = useCallback(() => {
-    setIsOpen(false);
+    setOpen(false);
     onModalClose?.();
-  }, [onModalClose]);
-  useClickOutside(dropdownRef, closeDropdown, isOpen, excludeClickOutsideSelector);
+  }, [onModalClose, setOpen]);
+  const clickOutsideExclusions = excludeClickOutsideSelector
+    ? `${excludeClickOutsideSelector}, .modal-frame-overlay, .cf-modal-overlay`
+    : '.modal-frame-overlay, .cf-modal-overlay';
+  useClickOutside(dropdownRef, closeDropdown, isOpen, clickOutsideExclusions);
 
   // Drop a stale `success` state when the dropdown closes by any path —
   // click-outside, toggle, controlled-mode close, etc. Without this, the
@@ -140,6 +171,33 @@ export function PublishBranchDropdown({
       setPublishState({ status: 'idle' });
     }
   }, [isOpen, publishState.status]);
+
+  useEffect(() => {
+    if (!isOpen || !hostingControls) return;
+    const host = hostingRef.current;
+    if (!host) return;
+
+    const revealHostingLinks = () => {
+      const wrappers = host.querySelectorAll<HTMLElement>(
+        '.cf-dropdown-wrapper, .vercel-dropdown-wrapper'
+      );
+
+      wrappers.forEach((wrapper) => {
+        const menu = wrapper.querySelector('.cf-dropdown, .vercel-dropdown');
+        if (!menu) {
+          wrapper.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        }
+      });
+    };
+
+    const frame = requestAnimationFrame(revealHostingLinks);
+    const observer = new MutationObserver(revealHostingLinks);
+    observer.observe(host, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [hostingControls, isOpen]);
 
   const handlePublish = async () => {
     logger.info('Starting publish', { branch: currentBranch, isMainBranch, projectPath });
@@ -199,7 +257,7 @@ export function PublishBranchDropdown({
   };
 
   const handleDone = () => {
-    setIsOpen(false);
+    setOpen(false);
     setPublishState({ status: 'idle' });
     onModalClose?.();
   };
@@ -207,9 +265,13 @@ export function PublishBranchDropdown({
   // Still checking GitHub status - show loading state
   if (projectGithubStatus === null) {
     return (
-      <div className="publish-dropdown" ref={dropdownRef}>
+      <div
+        className={`publish-dropdown${grouped ? ' publish-dropdown--grouped' : ''}`}
+        ref={dropdownRef}
+      >
         <MenuButton
           expanded={false}
+          className="source-control-push-button"
           data-education-id="publish-button"
           disabled
           title="Checking GitHub status..."
@@ -224,9 +286,13 @@ export function PublishBranchDropdown({
   // If no GitHub repo, show disabled state
   if (!hasGitHubRepo) {
     return (
-      <div className="publish-dropdown" ref={dropdownRef}>
+      <div
+        className={`publish-dropdown${grouped ? ' publish-dropdown--grouped' : ''}`}
+        ref={dropdownRef}
+      >
         <MenuButton
           expanded={false}
+          className="source-control-push-button"
           data-education-id="publish-button"
           disabled
           title="Create a GitHub repository first"
@@ -242,13 +308,16 @@ export function PublishBranchDropdown({
   const canSync = hasChangesToSync || isPublishing || publishState.status !== 'idle';
 
   return (
-    <div className="publish-dropdown" ref={dropdownRef}>
+    <div
+      className={`publish-dropdown${grouped ? ' publish-dropdown--grouped' : ''}`}
+      ref={dropdownRef}
+    >
       <MenuButton
         expanded={isOpen}
         variant={canSync ? 'primary' : 'default'}
-        className={isPublishing ? 'publishing' : undefined}
+        className={`${isPublishing ? 'publishing ' : ''}source-control-push-button`}
         data-education-id="publish-button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setOpen(!isOpen)}
       >
         {isPublishing ? 'Pushing...' : 'Push'}
         <ChevronIcon />
@@ -269,7 +338,7 @@ export function PublishBranchDropdown({
                   {onCreatePR && (
                     <>
                       {' '}
-                      To make the changes live,{' '}
+                      When they are ready for review,{' '}
                       <TextButton
                         variant="primary"
                         onClick={() => {
@@ -325,7 +394,7 @@ export function PublishBranchDropdown({
                 <span>Pushing to GitHub...</span>
               </div>
               <div className="publish-actions">
-                <Button variant="secondary" onClick={() => setIsOpen(false)}>
+                <Button variant="secondary" onClick={() => setOpen(false)}>
                   Close
                 </Button>
               </div>
@@ -343,35 +412,28 @@ export function PublishBranchDropdown({
                 <div className="publish-branch-info">
                   <BranchIcon size={12} />
                   <span className="publish-branch-name">{currentBranch}</span>
-                  {isMainBranch && <span className="branch-live-badge">Live</span>}
                 </div>
 
-                {isMainBranch && (
-                  <div className="publish-branch-warning">
-                    This will update your live site. Changes will be visible to everyone.
-                  </div>
-                )}
-
-                {!isMainBranch && (
-                  <div className="publish-branch-description">
-                    Commits your changes and pushes the <strong>{currentBranch}</strong> branch to
-                    GitHub.
-                  </div>
-                )}
+                <div className="publish-branch-description">
+                  Commits your changes and pushes the <strong>{currentBranch}</strong> branch to
+                  GitHub.
+                </div>
               </div>
 
-              <div className="publish-actions">
-                <Button variant="secondary" onClick={handleDone}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void handlePublish()}
-                  disabled={isPublishing}
-                >
-                  Push
-                </Button>
-              </div>
+              <ChangedFilesSection
+                changedFiles={changedFiles}
+                projectPath={projectPath}
+                onDiscard={onDiscardChanges}
+                primaryAction={
+                  <Button
+                    variant="primary"
+                    onClick={() => void handlePublish()}
+                    disabled={isPublishing}
+                  >
+                    Push
+                  </Button>
+                }
+              />
             </>
           )}
 
@@ -388,6 +450,17 @@ export function PublishBranchDropdown({
                 </Button>
               </div>
             </>
+          )}
+
+          {hostingControls && (
+            <section className="publish-hosting-section" aria-labelledby="publish-hosting-heading">
+              <div className="publish-hosting-heading" id="publish-hosting-heading">
+                Hosting
+              </div>
+              <div className="publish-hosting-plugins" ref={hostingRef}>
+                {hostingControls}
+              </div>
+            </section>
           )}
         </div>
       )}

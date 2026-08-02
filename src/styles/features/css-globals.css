@@ -1,18 +1,15 @@
 /**
- * Project-global scopes of the CSS panel — the scope switch (Element / Variables /
- * Animations) and the Variables (design tokens) + Animations (@keyframes) editors.
+ * Project-global views of the CSS panel — the shared Style / Settings / Variables /
+ * Animate switch and the Variables (design tokens) + Animations (@keyframes) editors.
  * Element-scoped cascade-card styles live in the css-cascade/ feature folder. Tokens only.
  */
 
-/* ── Scope switch (Element / Variables / Animations) ──
-   Top-level scope of the CSS panel: the selected element vs the project-global
-   design tokens and @keyframes. Distinct from the element's Style/Settings tabs.
-*/
+/* ── Top-level view switch (Style / Settings / Variables / Animate) ── */
 
 .ss-cascade-scope {
   --tabs-list-padding: var(--spacing-2xs);
   /* Pinned to the top of the scrolling panel body (which has 0 padding here) so the
-     Element/Variables/Animations switch stays reachable while the cards scroll under
+     Style/Settings/Variables/Animate switch stays reachable while the cards scroll under
      it. Opaque bg + z-index keep scrolled content from showing through. */
   position: sticky;
   top: 0;

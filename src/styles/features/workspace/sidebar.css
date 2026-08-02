@@ -40,7 +40,7 @@
 .workspace-sidebar-top-row {
   display: flex;
   align-items: center;
-  gap: var(--space-04);
+  gap: var(--button-gap);
   padding: var(--space-08);
   border-bottom: var(--stroke-1) solid var(--border-subtle);
   flex-shrink: 0;
@@ -52,7 +52,7 @@
 
 .workspace-body.is-sidebar-hidden .workspace-sidebar-top-row {
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--button-gap);
 }
 
 .workspace-body.is-sidebar-hidden .workspace-sidebar-toggle,
@@ -986,7 +986,7 @@
 .workspace-sidebar-footer-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--button-gap);
 }
 
 /* Belt-and-suspenders against a horizontal scrollbar appearing inside a

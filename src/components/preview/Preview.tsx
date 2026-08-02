@@ -69,6 +69,8 @@ import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocale
 import { CompactIcon, ExpandIcon, ResetIcon, UndoIcon, RedoIcon } from '../icons';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
+import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
+import { DockablePanel } from '../primitives/DockablePanel';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
@@ -240,9 +242,15 @@ interface PreviewProps {
   redoTitle?: string;
   onUndo?: () => void;
   onRedo?: () => void;
-  /** Whether the fullscreen visual editor's element tree is visible. */
+  /** Whether the preview's element tree is visible. */
   elementTreeVisible: boolean;
-  /** Reports whether the current preview is actively able to show the element tree. */
+  /** Whether Elements occupies its preview-side dock or floats over the workspace. */
+  elementTreePinned: boolean;
+  /** Switch Elements between docked and floating modes. */
+  onToggleElementTreePin: () => void;
+  /** Hide Elements without changing its docked/floating preference. */
+  onCloseElementTree: () => void;
+  /** Reports whether the current preview is mounted and able to show the element tree. */
   onElementTreeAvailabilityChange?: (available: boolean) => void;
 }
 
@@ -277,9 +285,18 @@ const INSPECT_VIEWPORT_RESERVE_PX = 200;
  *  negative or absurdly small. */
 const INSPECT_PANEL_MAX_FALLBACK_PX = 160;
 
-/** Keyboard arrow-key step. Shift+arrow uses the larger step. */
-const INSPECT_PANEL_KEY_STEP_PX = 12;
-const INSPECT_PANEL_KEY_STEP_LARGE_PX = 60;
+/** Width bounds for the Element Tree's resizable left column. */
+const TREE_PANEL_MIN_WIDTH_PX = 180;
+const TREE_PANEL_MAX_WIDTH_PX = 480;
+const TREE_VIEWPORT_RESERVE_PX = 160;
+const TREE_PANEL_DEFAULT_WIDTH_PX = 240;
+const TREE_CODE_DEFAULT_WIDTH_PX = 420;
+const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
+const EDITOR_PANEL_MIN_WIDTH_PX = 220;
+const EDITOR_PANEL_MAX_WIDTH_PX = 560;
+const EDITOR_PANEL_DEFAULT_WIDTH_PX = 264;
+const EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTH_PX = 360;
+const EDITOR_PANEL_DEFAULT_VERSION_KEY = 'cssPanelDockedWidthDefault';
 
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   {
@@ -319,6 +336,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onUndo,
     onRedo,
     elementTreeVisible,
+    elementTreePinned,
+    onToggleElementTreePin,
+    onCloseElementTree,
     onElementTreeAvailabilityChange,
   },
   ref
@@ -443,72 +463,28 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     return Math.max(INSPECT_PANEL_MAX_FALLBACK_PX, containerHeight - INSPECT_VIEWPORT_RESERVE_PX);
   }, []);
 
-  const handleInspectResizeStart = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
+  const resizeInspectPanel = useCallback(
+    (clientY: number) => {
       const panel = inspectPanelRef.current;
       const container = panel?.parentElement;
       if (!panel || !container) return;
 
-      setIsInspectResizing(true);
-      document.body.style.cursor = 'ns-resize';
-      document.body.style.userSelect = 'none';
-
-      const startY = e.clientY;
-      const startHeight = panel.offsetHeight;
       const maxPanelHeight = computeMaxPanelHeight(container.clientHeight);
-
-      let rafId: number | null = null;
-      const onMove = (ev: MouseEvent) => {
-        if (rafId !== null) return;
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
-          const deltaY = startY - ev.clientY; // up = grow panel
-          const next = startHeight + deltaY;
-          setInspectPanelHeight(
-            Math.max(INSPECT_PANEL_MIN_HEIGHT_PX, Math.min(next, maxPanelHeight))
-          );
-        });
-      };
-      const onUp = () => {
-        if (rafId !== null) cancelAnimationFrame(rafId);
-        setIsInspectResizing(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      const next = container.getBoundingClientRect().bottom - clientY;
+      setInspectPanelHeight(Math.max(INSPECT_PANEL_MIN_HEIGHT_PX, Math.min(next, maxPanelHeight)));
     },
     [computeMaxPanelHeight]
   );
 
-  // Keyboard support for the resize separator: arrow keys nudge, Home/End
-  // jump to the bounds. Required for users who can't drag with a pointer.
-  const handleInspectResizeKey = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'Home' && e.key !== 'End') {
-        return;
-      }
+  const resizeInspectPanelBy = useCallback(
+    (delta: number) => {
       const panel = inspectPanelRef.current;
       const container = panel?.parentElement;
       if (!panel || !container) return;
-      e.preventDefault();
 
       const max = computeMaxPanelHeight(container.clientHeight);
       const current = inspectPanelHeight ?? panel.offsetHeight;
-      const step = e.shiftKey ? INSPECT_PANEL_KEY_STEP_LARGE_PX : INSPECT_PANEL_KEY_STEP_PX;
-
-      if (e.key === 'ArrowUp') {
-        setInspectPanelHeight(Math.min(current + step, max));
-      } else if (e.key === 'ArrowDown') {
-        setInspectPanelHeight(Math.max(current - step, INSPECT_PANEL_MIN_HEIGHT_PX));
-      } else if (e.key === 'Home') {
-        setInspectPanelHeight(INSPECT_PANEL_MIN_HEIGHT_PX);
-      } else if (e.key === 'End') {
-        setInspectPanelHeight(max);
-      }
+      setInspectPanelHeight(Math.max(INSPECT_PANEL_MIN_HEIGHT_PX, Math.min(current - delta, max)));
     },
     [inspectPanelHeight, computeMaxPanelHeight]
   );
@@ -654,9 +630,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     signature: cssEditor.selection?.signature ?? null,
     onToast,
   });
-  // The CSS panel's active scope (Element / Variables / Animations), lifted so the
-  // Cmd+K palette can open the editor straight to a given scope.
-  const [cssScope, setCssScope] = useState<'element' | 'variables' | 'animations'>('element');
+  // The CSS panel's active view (Style / Settings / Variables / Animate), lifted so
+  // the Cmd+K palette can open the editor straight to a given view.
+  const [cssScope, setCssScope] = useState<'style' | 'settings' | 'variables' | 'animations'>(
+    'style'
+  );
   // Project-global scopes of the CSS panel: design tokens + animations.
   const cssVariables = useCssVariables({
     iframeRef,
@@ -677,9 +655,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       : null;
   const activeEditMode = editor.editMode || cssEditor.editMode;
   useEffect(() => {
-    onElementTreeAvailabilityChange?.(activeEditMode);
+    onElementTreeAvailabilityChange?.(true);
     return () => onElementTreeAvailabilityChange?.(false);
-  }, [activeEditMode, onElementTreeAvailabilityChange]);
+  }, [onElementTreeAvailabilityChange]);
   // Inline text editing (double-click copy) is shared by both styling editors —
   // mounted once here, active whenever either editor's edit mode is on, so it
   // works for vanilla-CSS/Astro projects (cssEditor) as well as Tailwind.
@@ -704,12 +682,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     editorMode === 'css' ? cssEditor.toggleEditMode : editor.toggleEditMode;
 
   // ── Cmd+K commands for the native CSS editor (vanilla-CSS projects only). The panel
-  // is opened by toggling edit mode; the scope state lets a command land straight on
+  // is opened by toggling edit mode; the view state lets a command land straight on
   // Variables or Animations. Registered only when this editor applies to the project.
   const cssEditorOn = cssEditor.editMode;
   const cssToggleEditMode = cssEditor.toggleEditMode;
   const openCssEditor = useCallback(
-    (scope: 'element' | 'variables' | 'animations') => {
+    (scope: 'style' | 'settings' | 'variables' | 'animations') => {
       try {
         setCssScope(scope);
         if (!cssEditorOn) cssToggleEditMode();
@@ -734,7 +712,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               run: () => {
                 try {
                   if (cssEditorOn) cssToggleEditMode();
-                  else openCssEditor('element');
+                  else openCssEditor('style');
                 } catch (err) {
                   const detail = formatCommandError(asCommandError(err));
                   onToast(`Could not toggle the CSS editor: ${detail}`, 'error');
@@ -851,14 +829,111 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     []
   );
 
-  // Element tree (navigator) — left column in visual edit mode, like
-  // Webflow's navigator: read-only, select-only. The workspace toolbar controls
-  // it in both normal and fullscreen layouts.
-  const showTree = activeEditMode && elementTreeVisible;
+  // Element tree (navigator) — available throughout Preview mode. Structural
+  // actions remain exclusive to edit mode; outside it the panel is a read-only
+  // view of the rendered page.
+  const showTree = elementTreeVisible;
   // The Elements panel's Code (markup-edit) view needs a wider column than the
   // navigator; the tree panel reports its view so we can widen the grid track.
   const [treeCodeView, setTreeCodeView] = useState(false);
+  const effectiveTreeCodeView = activeEditMode && treeCodeView;
+  const [treePanelWidth, setTreePanelWidth] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem('elementTreeDockedWidth'));
+    return Number.isFinite(saved) &&
+      saved >= TREE_PANEL_MIN_WIDTH_PX &&
+      saved <= TREE_PANEL_MAX_WIDTH_PX
+      ? saved
+      : null;
+  });
+  const [isTreeResizing, setIsTreeResizing] = useState(false);
+  const treePanelRef = useRef<HTMLDivElement | null>(null);
+  const editorPanelDockRef = useRef<HTMLDivElement | null>(null);
+  const [editorPanelWidth, setEditorPanelWidth] = useState(() => {
+    const saved = Number(localStorage.getItem('cssPanelDockedWidth'));
+    const defaultWasMigrated =
+      localStorage.getItem(EDITOR_PANEL_DEFAULT_VERSION_KEY) ===
+      String(EDITOR_PANEL_DEFAULT_WIDTH_PX);
+    if (!defaultWasMigrated && saved === EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTH_PX) {
+      return EDITOR_PANEL_DEFAULT_WIDTH_PX;
+    }
+    return Number.isFinite(saved) &&
+      saved >= EDITOR_PANEL_MIN_WIDTH_PX &&
+      saved <= EDITOR_PANEL_MAX_WIDTH_PX
+      ? saved
+      : EDITOR_PANEL_DEFAULT_WIDTH_PX;
+  });
   const elementTree = useElementTree({ iframeRef, enabled: showTree });
+
+  useEffect(() => {
+    if (treePanelWidth !== null) {
+      localStorage.setItem('elementTreeDockedWidth', String(treePanelWidth));
+    }
+  }, [treePanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('cssPanelDockedWidth', String(editorPanelWidth));
+    localStorage.setItem(EDITOR_PANEL_DEFAULT_VERSION_KEY, String(EDITOR_PANEL_DEFAULT_WIDTH_PX));
+  }, [editorPanelWidth]);
+
+  const computeMaxTreeWidth = useCallback((containerWidth: number) => {
+    return Math.max(
+      TREE_PANEL_MIN_WIDTH_PX,
+      Math.min(TREE_PANEL_MAX_WIDTH_PX, containerWidth - TREE_VIEWPORT_RESERVE_PX)
+    );
+  }, []);
+
+  const resizeTreePanel = useCallback(
+    (clientX: number) => {
+      const panel = treePanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const maxTreeWidth = computeMaxTreeWidth(container.clientWidth);
+      const next = clientX - container.getBoundingClientRect().left;
+      setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(next, maxTreeWidth)));
+    },
+    [computeMaxTreeWidth]
+  );
+
+  const resizeTreePanelBy = useCallback(
+    (delta: number) => {
+      const panel = treePanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const max = computeMaxTreeWidth(container.clientWidth);
+      const current = treePanelWidth ?? panel.offsetWidth;
+      setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max)));
+    },
+    [treePanelWidth, computeMaxTreeWidth]
+  );
+
+  const resizeEditorPanel = useCallback((clientX: number) => {
+    const container = editorPanelDockRef.current?.parentElement;
+    if (!container) return;
+    const next = container.getBoundingClientRect().right - clientX;
+    setEditorPanelWidth(
+      Math.max(EDITOR_PANEL_MIN_WIDTH_PX, Math.min(next, EDITOR_PANEL_MAX_WIDTH_PX))
+    );
+  }, []);
+
+  const resizeEditorPanelBy = useCallback((delta: number) => {
+    setEditorPanelWidth((current) =>
+      Math.max(EDITOR_PANEL_MIN_WIDTH_PX, Math.min(current + delta, EDITOR_PANEL_MAX_WIDTH_PX))
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!showTree) return;
+    const container = treePanelRef.current?.parentElement;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      const max = computeMaxTreeWidth(container.clientWidth);
+      setTreePanelWidth((prev) => (prev === null || prev <= max ? prev : max));
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [showTree, computeMaxTreeWidth]);
 
   const [iframeSize, setIframeSize] = useState<{ w: number; h: number } | null>(null);
   const iframeSizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -1089,15 +1164,29 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     <div
       className={`preview-container${isFullscreen ? ' preview-container--fullscreen' : ''}${
         activeEditMode && editorPinned ? ' preview-container--editor-pinned' : ''
-      }${showTree ? ' preview-container--tree' : ''}${
-        showTree && treeCodeView ? ' preview-container--tree-code' : ''
+      }${showTree && elementTreePinned ? ' preview-container--tree' : ''}${
+        showTree && elementTreePinned && effectiveTreeCodeView
+          ? ' preview-container--tree-code'
+          : ''
       }`}
       data-logs={showLogs ? 'open' : 'closed'}
       style={{
+        ...(showTree && elementTreePinned && treePanelWidth !== null
+          ? {
+              gridTemplateColumns: `${treePanelWidth}px minmax(0, 1fr)${
+                activeEditMode && editorPinned ? ' var(--editor-panel-w)' : ''
+              }`,
+            }
+          : undefined),
         ...(showLogs && inspectPanelHeight !== null
           ? {
               gridTemplateRows: `auto minmax(0, 1fr) var(--handle-size) ${inspectPanelHeight}px`,
             }
+          : undefined),
+        ...(activeEditMode && editorPinned
+          ? ({
+              '--editor-panel-w': `${editorPanelWidth}px`,
+            } as React.CSSProperties)
           : undefined),
         ...(isFullscreen ? { top: chromeTop } : undefined),
       }}
@@ -1277,21 +1366,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           </Dropdown>
         </div>
 
-        <button
-          className="preview-refresh"
-          onClick={conn.handleRefresh}
-          title="Refresh preview"
-          data-education-id="preview-refresh"
-        >
-          <ResetIcon size={14} />
-        </button>
-
-        {/* Undo/redo live in the workspace header, which is hidden in fullscreen
-            — surface them here so visual edits can be undone while editing. */}
-        {isFullscreen && onUndo && (
+        {onUndo && (
           <button
             type="button"
-            className="preview-fullscreen-btn"
+            className="preview-fullscreen-btn preview-history-btn"
             onClick={onUndo}
             disabled={!canUndo}
             title={undoTitle ?? `Undo last change (${kbd('mod', 'Z')})`}
@@ -1300,10 +1378,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             <UndoIcon size={14} />
           </button>
         )}
-        {isFullscreen && onRedo && (
+        {onRedo && (
           <button
             type="button"
-            className="preview-fullscreen-btn"
+            className="preview-fullscreen-btn preview-history-btn"
             onClick={onRedo}
             disabled={!canRedo}
             title={redoTitle ?? `Redo (${kbd('mod', 'shift', 'Z')})`}
@@ -1312,6 +1390,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             <RedoIcon size={14} />
           </button>
         )}
+
+        <button
+          className="preview-refresh"
+          onClick={conn.handleRefresh}
+          title="Refresh preview"
+          data-education-id="preview-refresh"
+        >
+          <ResetIcon size={14} />
+        </button>
 
         <button
           type="button"
@@ -1548,19 +1635,24 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         </div>
       </div>
       {showLogs && (
-        <div
-          className="inspect-resize-handle"
-          onMouseDown={handleInspectResizeStart}
-          onKeyDown={handleInspectResizeKey}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize inspect panel"
-          tabIndex={0}
-        >
-          <div className="inspect-resize-handle-bar" />
-        </div>
+        <PanelResizeHandle
+          value={
+            inspectPanelHeight ??
+            inspectPanelRef.current?.offsetHeight ??
+            INSPECT_PANEL_MIN_HEIGHT_PX
+          }
+          min={INSPECT_PANEL_MIN_HEIGHT_PX}
+          max={computeMaxPanelHeight(
+            inspectPanelRef.current?.parentElement?.clientHeight ?? INSPECT_PANEL_MAX_FALLBACK_PX
+          )}
+          label="Resize Inspect panel"
+          orientation="horizontal"
+          onResize={resizeInspectPanel}
+          onResizeBy={resizeInspectPanelBy}
+          onDragChange={setIsInspectResizing}
+        />
       )}
-      {isInspectResizing && <div className="inspect-resize-overlay" />}
+      {isInspectResizing && <div className="panel-resize-overlay" />}
       <InspectPanel
         ref={inspectPanelRef}
         hidden={!showLogs}
@@ -1577,26 +1669,64 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         onDevServerResize={onDevServerResize}
       />
       {showTree && (
-        <ElementTreePanel
-          tree={elementTree.tree}
-          truncated={elementTree.truncated}
-          selectedId={elementTree.selectedId}
-          onSelect={elementTree.selectNode}
-          onHover={elementTree.hoverNode}
-          projectPath={projectPath}
-          selectedSignature={
-            (editorMode === 'css' ? cssEditor.selection?.signature : editor.selection?.signature) ??
-            null
-          }
-          onViewChange={(v) => setTreeCodeView(v === 'code')}
-          structure={{
-            selectAndRun: structure.selectAndRun,
-            insert: (position, kind) => void structure.insert(position, kind),
-            duplicate: () => void structure.duplicate(),
-            remove: () => void structure.remove(),
-          }}
-        />
+        <>
+          <DockablePanel
+            docked={elementTreePinned}
+            ariaLabel="Elements panel"
+            positionKey="elementTreeFloatingPosition"
+            sizeKey="elementTreeFloatingSize"
+            floatingSize={ELEMENT_TREE_FLOATING_SIZE}
+            initialPosition={() => ({ left: 72, top: 96 })}
+            placeholderClassName="ss-tree-panel-dock"
+            surfaceClassName="dockable-panel__surface--preview"
+            placeholderRef={treePanelRef}
+          >
+            <ElementTreePanel
+              tree={elementTree.tree}
+              truncated={elementTree.truncated}
+              selectedId={elementTree.selectedId}
+              onSelect={elementTree.selectNode}
+              onHover={elementTree.hoverNode}
+              projectPath={projectPath}
+              selectedSignature={
+                (editorMode === 'css'
+                  ? cssEditor.selection?.signature
+                  : editor.selection?.signature) ?? null
+              }
+              onViewChange={(v) => setTreeCodeView(v === 'code')}
+              pinned={elementTreePinned}
+              onTogglePin={onToggleElementTreePin}
+              onClose={onCloseElementTree}
+              structure={
+                activeEditMode
+                  ? {
+                      selectAndRun: structure.selectAndRun,
+                      insert: (position, kind) => void structure.insert(position, kind),
+                      duplicate: () => void structure.duplicate(),
+                      remove: () => void structure.remove(),
+                    }
+                  : undefined
+              }
+            />
+          </DockablePanel>
+          {elementTreePinned && (
+            <PanelResizeHandle
+              value={
+                treePanelWidth ??
+                (effectiveTreeCodeView ? TREE_CODE_DEFAULT_WIDTH_PX : TREE_PANEL_DEFAULT_WIDTH_PX)
+              }
+              min={TREE_PANEL_MIN_WIDTH_PX}
+              max={TREE_PANEL_MAX_WIDTH_PX}
+              label="Resize Elements panel"
+              className="panel-resize-handle--tree"
+              onResize={resizeTreePanel}
+              onResizeBy={resizeTreePanelBy}
+              onDragChange={setIsTreeResizing}
+            />
+          )}
+        </>
       )}
+      {isTreeResizing && <div className="panel-resize-overlay panel-resize-overlay--vertical" />}
       {editor.editMode &&
         (() => {
           // Floating mode portals to <body> (position:fixed is the only way to
@@ -1652,46 +1782,81 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           // — grid track-sizing was letting the in-flow panel grow past the
           // viewport in WebKit instead.
           return editorPinned ? (
-            <div className="ss-edit-panel-dock">{panel}</div>
+            <div ref={editorPanelDockRef} className="ss-edit-panel-dock">
+              {panel}
+              <PanelResizeHandle
+                value={editorPanelWidth}
+                min={EDITOR_PANEL_MIN_WIDTH_PX}
+                max={EDITOR_PANEL_MAX_WIDTH_PX}
+                label="Resize CSS panel"
+                className="ss-edit-panel-dock__resize"
+                onResize={resizeEditorPanel}
+                onResizeBy={resizeEditorPanelBy}
+              />
+            </div>
           ) : (
             createPortal(panel, document.body)
           );
         })()}
       {cssEditor.editMode &&
         (() => {
-          // Same floating-vs-pinned strategy as the Tailwind panel above.
-          const panel = (
-            <CssCascadePanel
-              selection={cssEditor.selection}
-              rows={cssEditor.rows}
-              loading={cssEditor.loading}
-              bodies={cssEditor.bodies}
-              overridden={cssEditor.overridden}
-              onChangeBody={cssEditor.setBody}
-              onDeleteRule={(key) => void cssEditor.deleteRule(key)}
-              onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
-              onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
-              onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
-              onAddSelector={(sel) => void cssEditor.addSelector(sel)}
-              selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
-              existingSelectors={cssEditor.existingSelectors}
-              variables={cssEditor.variableSuggestions}
-              animations={cssEditor.animationSuggestions}
-              justCreatedKey={cssEditor.justCreatedKey}
-              settings={elementSettings}
-              variablesState={cssVariables}
-              animationsState={cssAnimations}
-              onClose={cssEditor.toggleEditMode}
-              pinned={editorPinned}
-              onTogglePin={toggleEditorPinned}
-              scope={cssScope}
-              onScopeChange={setCssScope}
-            />
-          );
-          return editorPinned ? (
-            <div className="ss-edit-panel-dock">{panel}</div>
-          ) : (
-            createPortal(panel, document.body)
+          return (
+            <div
+              ref={editorPanelDockRef}
+              className={editorPinned ? 'ss-edit-panel-dock' : 'ss-edit-panel-dock-host--floating'}
+            >
+              <DockablePanel
+                docked={editorPinned}
+                ariaLabel="CSS panel"
+                positionKey="cssPanelFloatingPosition"
+                sizeKey="cssPanelFloatingSize"
+                floatingSize={{ width: 360, height: 680 }}
+                initialPosition={() => ({
+                  left: Math.max(24, window.innerWidth - 384),
+                  top: 76,
+                })}
+                placeholderClassName="ss-edit-panel-dock__slot"
+                surfaceClassName="dockable-panel__surface--preview"
+              >
+                <CssCascadePanel
+                  selection={cssEditor.selection}
+                  rows={cssEditor.rows}
+                  loading={cssEditor.loading}
+                  bodies={cssEditor.bodies}
+                  overridden={cssEditor.overridden}
+                  onChangeBody={cssEditor.setBody}
+                  onDeleteRule={(key) => void cssEditor.deleteRule(key)}
+                  onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
+                  onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
+                  onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
+                  onAddSelector={(sel) => void cssEditor.addSelector(sel)}
+                  selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
+                  existingSelectors={cssEditor.existingSelectors}
+                  variables={cssEditor.variableSuggestions}
+                  animations={cssEditor.animationSuggestions}
+                  justCreatedKey={cssEditor.justCreatedKey}
+                  settings={elementSettings}
+                  variablesState={cssVariables}
+                  animationsState={cssAnimations}
+                  onClose={cssEditor.toggleEditMode}
+                  pinned={editorPinned}
+                  onTogglePin={toggleEditorPinned}
+                  scope={cssScope}
+                  onScopeChange={setCssScope}
+                />
+              </DockablePanel>
+              {editorPinned && (
+                <PanelResizeHandle
+                  value={editorPanelWidth}
+                  min={EDITOR_PANEL_MIN_WIDTH_PX}
+                  max={EDITOR_PANEL_MAX_WIDTH_PX}
+                  label="Resize CSS panel"
+                  className="ss-edit-panel-dock__resize"
+                  onResize={resizeEditorPanel}
+                  onResizeBy={resizeEditorPanelBy}
+                />
+              )}
+            </div>
           );
         })()}
     </div>

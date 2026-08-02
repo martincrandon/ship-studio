@@ -250,7 +250,7 @@
 .dashboard-header-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-04);
+  gap: var(--button-gap);
 }
 
 /* Compact button styles for dashboard header - matches editor UI */

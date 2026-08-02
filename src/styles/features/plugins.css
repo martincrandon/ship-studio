@@ -1,5 +1,27 @@
 /* Plugin Manager Modal Styles */
 
+/* Hosting plugins supply their own toolbar popovers. Keep their panels on the
+   app surface even if a plugin stylesheet omits a background, so preview
+   content can never show through them. */
+.plugin-slot-item {
+  display: contents;
+}
+
+.workspace-header .plugin-slot-item [class*='dropdown'],
+.workspace-header .plugin-slot-item [class*='popover'],
+.workspace-header .plugin-slot-item [class*='menu'] {
+  z-index: var(--z-modal-overlay) !important;
+}
+
+.workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='dropdown'],
+.workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='popover'],
+.workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='menu'],
+.workspace-header .plugin-slot-item[data-plugin-id='vercel'] [class*='dropdown'],
+.workspace-header .plugin-slot-item[data-plugin-id='vercel'] [class*='popover'],
+.workspace-header .plugin-slot-item[data-plugin-id='vercel'] [class*='menu'] {
+  background: var(--surface-panel) !important;
+}
+
 .plugins-modal {
   width: 90%;
   max-width: 520px;

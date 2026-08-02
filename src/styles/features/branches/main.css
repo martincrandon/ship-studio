@@ -1,108 +1,68 @@
-/* Branch Indicator */
+/* Conditional unsaved-changes segment beside Push */
+.source-control-actions,
+.source-control-push {
+  display: flex;
+  align-items: center;
+}
+
+.source-control-actions {
+  gap: var(--button-group-spacing);
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.source-control-push.has-unsaved-changes {
+  box-sizing: border-box;
+  height: var(--button-height);
+  padding: var(--spacing-2xs);
+  overflow: visible;
+  background: var(--surface-app);
+  border: var(--stroke-1) solid var(--accent-warning);
+  border-radius: var(--button-radius);
+  box-shadow: none;
+  transition: box-shadow var(--transition);
+}
+
+.source-control-push.has-unsaved-changes:hover {
+  background: var(--surface-app);
+  box-shadow: var(--shadow-source-control-attention);
+}
+
 .branch-indicator {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  align-self: stretch;
+  border-radius: var(--button-radius) 0 0 var(--button-radius);
 }
 
-.branch-changes-trigger {
-  position: relative;
-  display: flex;
+.branch-indicator .branch-indicator-button.button {
+  height: 100%;
+  min-height: var(--button-height);
+  max-width: calc(var(--source-control-branch-max-width) + var(--spacing-xl));
+  background: transparent;
+  border: 0;
+  border-radius: var(--button-radius) 0 0 var(--button-radius);
+  box-shadow: none;
+  color: var(--accent-warning);
 }
 
-/* Small pull-latest button beside the branch chip (git pull). Icon + "Pull"
-   label at full width; the label collapses at the header's icon-only
-   breakpoint (workspace/main.css), which also squares the button. */
-.branch-pull-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
-  /* Optically balanced: the icon glyph carries ~2px of built-in air on its
-     left while the text ends flush right, so equal padding reads lopsided. */
-  padding: 0 var(--spacing-md) 0 var(--spacing-sm);
-  flex-shrink: 0;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
+.branch-indicator .branch-indicator-push-trigger.button {
+  min-height: 0;
 }
 
-.branch-pull-button:hover:not(:disabled) {
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  border-color: var(--text-muted);
+.branch-indicator .branch-indicator-push-trigger.button:hover {
+  background: transparent;
+  color: var(--accent-warning);
 }
 
-.branch-pull-button:disabled {
-  cursor: default;
-  opacity: 0.7;
+.branch-indicator .branch-indicator-button.button:hover:not(.branch-indicator-push-trigger) {
+  background: var(--surface-warning);
+  color: var(--accent-warning-light);
 }
 
-.branch-indicator-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition),
-    border-color var(--transition);
-}
-
-/* Match the branch chip's height to the toolbar buttons (.toolbar-icon-btn,
-   28px) now that it lives in the header row alongside them. */
-.workspace-header .branch-indicator-button {
-  height: 28px;
-  padding: 0 var(--spacing-md);
-}
-
-/* In the header the chip shares the row with the tabs and toolbar, so truncate
-   the branch name much sooner than the standalone chip's 280px to keep long
-   names from crowding out the tabs. */
 .workspace-header .branch-name {
-  max-width: 150px;
-}
-
-.branch-indicator-button:hover {
-  background: var(--border-default);
-  color: var(--text-primary);
-}
-
-.branch-indicator-button svg {
-  opacity: 0.7;
-}
-
-/* Main branch warning style */
-.branch-indicator-button.main-branch {
-  background: rgba(var(--accent-warning-rgb), 0.15);
-  border-color: rgba(var(--accent-warning-rgb), 0.4);
-  color: var(--accent-warning);
-}
-
-.branch-indicator-button.main-branch:hover {
-  background: rgba(var(--accent-warning-rgb), 0.25);
-  border-color: rgba(var(--accent-warning-rgb), 0.6);
-  color: var(--accent-warning);
-}
-
-.branch-indicator-button.main-branch svg {
-  opacity: 1;
-  color: var(--accent-warning);
+  max-width: var(--source-control-branch-max-width);
 }
 
 .branch-name {
@@ -110,15 +70,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.branch-live-badge {
-  font-size: var(--font-size-xs);
-  padding: 1px 5px;
-  background: rgba(var(--accent-success-rgb), 0.15);
-  color: var(--accent-success);
-  border-radius: 3px;
-  font-weight: 500;
+  color: var(--accent-warning);
 }
 
 /* Sync state: is this branch on GitHub or only local? */
@@ -150,27 +102,20 @@
   flex-shrink: 0;
 }
 
-.branch-unsaved-badge {
-  font-size: var(--font-size-xs);
-  padding: 1px 5px;
-  background: rgba(var(--accent-warning-rgb), 0.15);
-  color: var(--accent-warning);
-  border-radius: 3px;
-  font-weight: 500;
+.branch-unsaved-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  white-space: nowrap;
 }
 
-/* Back to Preview button */
-.branch-indicator-back .back-chevron {
-  transform: rotate(90deg);
-}
-
-/* Branch Changes Hover Dropdown */
+/* Changed-files review */
 .branch-changes-dropdown {
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
-  min-width: 280px;
-  max-width: 400px;
+  right: 0;
+  left: auto;
+  width: var(--popover-source-control-width);
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -200,6 +145,10 @@
   color: var(--text-secondary);
   font-size: var(--font-size-md);
   transition: background var(--transition-fast);
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
 }
 
 .branch-changes-item:hover {
@@ -273,8 +222,15 @@
   padding: 8px 12px;
   border-top: 1px solid var(--border-default);
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+}
+
+.branch-changes-empty {
+  padding: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-code);
 }
 
 .branch-changes-discard-btn.button.confirming {
@@ -296,6 +252,151 @@
 
 .branch-changes-discard-btn .button__icon {
   flex-shrink: 0;
+}
+
+/* Header Branches workflow */
+.branches-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.branches-menu-trigger.is-active {
+  color: var(--button-text-hover);
+  border-color: var(--button-border-outline);
+}
+
+.branches-menu-popover {
+  position: absolute;
+  top: calc(100% + var(--spacing-sm));
+  right: 0;
+  left: auto;
+  width: var(--popover-source-control-width);
+  min-width: var(--popover-source-control-width);
+  max-width: var(--popover-source-control-width);
+  max-height: calc(100vh - var(--spacing-2xl) - var(--panel-header-h));
+  padding: 0;
+  overflow-y: auto;
+  background: var(--surface-panel);
+  border: var(--stroke-1) solid var(--border-default);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-modal-overlay);
+}
+
+.branches-menu-section,
+.branches-menu-setup {
+  padding: var(--spacing-md);
+}
+
+.branches-menu-section + .branches-menu-section,
+.branches-menu-repository {
+  border-top: var(--stroke-1) solid var(--border-default);
+}
+
+.branches-menu-section-title {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-code);
+  text-transform: uppercase;
+}
+
+.branches-menu-section > .branches-menu-section-title,
+.branches-menu-section-heading {
+  margin-bottom: var(--spacing-sm);
+}
+
+.branches-menu-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.branches-menu-count {
+  min-width: var(--control-height-compact);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-pill);
+  background: var(--surface-control);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+
+.branches-menu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  min-height: var(--button-height);
+  padding: 0 var(--spacing-sm);
+  background: transparent;
+  border: 0;
+  border-radius: var(--button-radius);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-base);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.branches-menu-row:hover:not(:disabled) {
+  background: var(--surface-control);
+  color: var(--text-primary);
+}
+
+.branches-menu-row:focus-visible {
+  outline: var(--stroke-1) solid var(--accent-focus);
+  outline-offset: calc(var(--stroke-1) * -1);
+}
+
+.branches-menu-row:disabled {
+  cursor: default;
+}
+
+.branches-menu-row.is-current {
+  background: var(--surface-control);
+  color: var(--text-primary);
+}
+
+.branches-menu-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branches-menu-row-meta,
+.branches-menu-empty {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.branches-menu-empty {
+  padding: var(--spacing-sm);
+}
+
+.branches-menu-section > .button--ghost {
+  justify-content: flex-start;
+  margin-top: var(--spacing-xs);
+  color: var(--info);
+}
+
+.branches-menu-setup p {
+  margin: var(--spacing-sm) 0 var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-code);
+}
+
+.branches-menu-setup .button {
+  width: 100%;
 }
 
 /* Branch Indicator Dropdown */

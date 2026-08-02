@@ -71,10 +71,9 @@ export function MainBranchBanner({ projectPath, onCreateBranch }: MainBranchBann
         {onCreateBranch && (
           <Button
             variant="secondary"
-            size="compact"
             className="main-branch-banner-action"
             onClick={onCreateBranch}
-            leftIcon={<BranchIcon size={12} />}
+            leftIcon={<BranchIcon size={14} />}
           >
             Create branch
           </Button>

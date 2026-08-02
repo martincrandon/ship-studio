@@ -65,46 +65,27 @@
   grid-template-areas: 'iframe right';
 }
 
-/* Inspect-panel resize handle. Mirrors the visual language of the
-   preview's vertical resize handle, but lives in the outer
-   .preview-container grid (not the .preview-frame-grid). */
-.inspect-resize-handle {
-  background: var(--surface-panel);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  cursor: ns-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background var(--transition),
-    border-color var(--transition);
+.panel-resize-handle--tree {
+  grid-area: 1 / 1 / -1 / 2;
+  justify-self: end;
+  z-index: var(--z-dropdown);
 }
 
-.inspect-resize-handle:hover {
-  background: var(--surface-control);
-  border-color: var(--accent);
-}
-
-.inspect-resize-handle-bar {
-  width: 40px;
-  height: 2px;
-  background: var(--text-muted);
-  border-radius: 1px;
-  transition: background var(--transition);
-}
-
-.inspect-resize-handle:hover .inspect-resize-handle-bar {
-  background: var(--accent-active);
+.ss-tree-panel-dock {
+  grid-area: 1 / 1 / -1 / 2;
 }
 
 /* Full-container overlay during drag — prevents iframes inside the
    viewport or the inspect panel from swallowing mouse events. */
-.inspect-resize-overlay {
+.panel-resize-overlay {
   position: absolute;
   inset: 0;
   z-index: var(--z-dropdown);
   cursor: ns-resize;
+}
+
+.panel-resize-overlay--vertical {
+  cursor: ew-resize;
 }
 
 .preview-toolbar {
@@ -115,7 +96,7 @@
   z-index: var(--z-dropdown);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--button-gap);
   height: var(--preview-toolbar-h);
   padding: 9px 12px;
   background: var(--surface-panel);
@@ -138,6 +119,10 @@
   order: 2;
 }
 
+.preview-toolbar > .preview-history-btn {
+  order: 1;
+}
+
 .preview-toolbar > .preview-breakpoints {
   order: 10;
   margin-left: auto;
@@ -148,7 +133,7 @@
   margin-left: var(--space-1);
 }
 
-.preview-toolbar > .preview-fullscreen-btn {
+.preview-toolbar > .preview-fullscreen-btn:not(.preview-history-btn) {
   order: 12;
 }
 
@@ -169,7 +154,14 @@
   order: 22;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--button-gap);
+}
+
+/* PluginSlot returns null when no preview plugins are installed, but the
+   toolbar wrapper remains mounted. Remove that empty flex item so it cannot
+   create an extra gap between Inspect and Open in Browser. */
+.preview-toolbar > .preview-toolbar-plugins:empty {
+  display: none;
 }
 
 .preview-toolbar > .preview-browser-control {
@@ -333,10 +325,10 @@
 }
 
 /* ===== Visual editor pin-as-sidebar =====
-   The container grows a second grid column that hosts the panel in-tree. The
-   toolbar keeps the full width (row 1 spans both columns); the panel sits
-   below it, spanning the canvas + inspect rows, so it matches the preview's
-   height and can never overlap any bar. Works unchanged in fullscreen mode. */
+   The container grows side columns for docked panels. Each side panel spans
+   the complete preview height, including the toolbar row; the toolbar stays
+   with the canvas column so its width always matches the preview it controls.
+   Works unchanged in fullscreen mode. */
 .preview-container--editor-pinned {
   grid-template-columns: minmax(0, 1fr) var(--editor-panel-w);
 }
@@ -361,9 +353,16 @@
   grid-template-columns: var(--tree-code-w) minmax(0, 1fr) var(--editor-panel-w);
 }
 
-.preview-container--editor-pinned .preview-toolbar,
+.preview-container--editor-pinned .preview-toolbar {
+  grid-column: 1 / -2;
+}
+
 .preview-container--tree .preview-toolbar {
-  grid-column: 1 / -1;
+  grid-column: 2 / -1;
+}
+
+.preview-container--tree.preview-container--editor-pinned .preview-toolbar {
+  grid-column: 2 / -2;
 }
 
 /* Compound selector: this file loads before visual-editor.css, so the pinned
@@ -373,11 +372,28 @@
    canvas column, which is bounded. This is what finally lets the panel body
    scroll: an in-flow panel was growing its own row past the viewport in WebKit. */
 .ss-edit-panel-dock {
-  grid-area: 2 / -2 / -1 / -1;
+  grid-area: 1 / -2 / -1 / -1;
   position: relative;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
+}
+
+.ss-edit-panel-dock-host--floating {
+  display: contents;
+}
+
+.ss-edit-panel-dock__slot {
+  width: 100%;
+  height: 100%;
+}
+
+.ss-edit-panel-dock__resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--z-floating-panel);
 }
 
 .ss-edit-panel.ss-edit-panel--pinned {
@@ -409,7 +425,7 @@
 .ss-edit-panel__header-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--button-gap);
 }
 
 .ss-edit-panel__pin {
@@ -573,7 +589,7 @@
 
 .preview-iframe-error-actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   margin-top: var(--spacing-sm);
 }
 
@@ -896,7 +912,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   padding: var(--spacing-xs) var(--spacing-md);
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border);
@@ -1075,7 +1091,7 @@
 }
 .preview-status__actions {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   margin-top: var(--spacing-xs);
 }
 .preview-status__logs {

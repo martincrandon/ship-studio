@@ -78,6 +78,15 @@
   container-name: terminal-pane;
 }
 
+.agent-panel-dock {
+  width: 100%;
+  height: 100%;
+}
+
+.dockable-panel__surface--floating.dockable-panel__surface--agent .terminal-pane {
+  border-radius: inherit;
+}
+
 /* One floating control row over the bottom of both the split Agents pane and
    full-width Terminal view. The transparent, borderless panel lets the controls
    sit directly over the terminal surface. */
@@ -110,6 +119,12 @@
 
 .terminal-pane-footer-right {
   flex-shrink: 0;
+}
+
+/* Focus mode gives the agent the whole workspace, so keep every terminal
+   control in one predictable left-aligned action group. */
+.terminal-pane-footer--focus {
+  justify-content: flex-start;
 }
 
 /* Preserve the actions as the pane narrows: screenshot labels yield first,

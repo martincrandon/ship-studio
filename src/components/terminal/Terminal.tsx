@@ -1260,7 +1260,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
   );
 
   return (
-    <div className="terminal-instance" style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div
+      className={`terminal-instance ${isFocused ? 'is-focused' : 'is-unfocused'}`}
+      style={{ position: 'relative', width: '100%', height: '100%' }}
+    >
       <div
         className="terminal-instance-container"
         ref={containerRef}

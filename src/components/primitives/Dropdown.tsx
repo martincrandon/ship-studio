@@ -43,6 +43,8 @@ interface DropdownProps {
   menuClassName?: string;
   /** Notified after open state changes (e.g. to lazy-load menu data). */
   onOpenChange?: (open: boolean) => void;
+  /** Optional controlled open state. */
+  open?: boolean;
 }
 
 const DropdownContext = createContext<{ close: () => void } | null>(null);
@@ -71,18 +73,20 @@ export function Dropdown({
   portal = false,
   menuClassName,
   onOpenChange,
+  open: controlledOpen,
 }: DropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledOpen ?? internalOpen;
   const [portalPos, setPortalPos] = useState<CSSProperties | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const setOpen = useCallback(
     (open: boolean) => {
-      setIsOpen(open);
+      if (controlledOpen === undefined) setInternalOpen(open);
       onOpenChange?.(open);
     },
-    [onOpenChange]
+    [controlledOpen, onOpenChange]
   );
 
   const close = useCallback(() => setOpen(false), [setOpen]);
@@ -104,7 +108,10 @@ export function Dropdown({
     if (!isOpen) return;
 
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {
+        close();
+        triggerRef.current?.focus();
+      }
     };
     window.addEventListener('keydown', handler);
 

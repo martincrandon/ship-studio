@@ -29,7 +29,6 @@ import { Preview } from '../preview/Preview';
 import type { PreviewHandle, InspectTab } from '../preview/Preview';
 import { DeviceMirror } from '../preview/DeviceMirror';
 import { SplitPane } from './SplitPane';
-import { BranchIndicator } from '../branches/BranchIndicator';
 import { CodeTab } from '../code/CodeTab';
 import { BranchPRTabContainer } from './BranchPRTabContainer';
 import { CompactWorkspace } from './CompactWorkspace';
@@ -44,6 +43,8 @@ import { PluginSlot } from '../plugins/PluginSlot';
 import { UpdateBanner } from '../UpdateBanner';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
+import { DockablePanel } from '../primitives/DockablePanel';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
@@ -52,12 +53,12 @@ import {
   CameraIcon,
   CodeIcon,
   CropIcon,
-  BranchIcon,
-  PullRequestIcon,
   EyeIcon,
   EyeOffIcon,
   UndoIcon,
   RedoIcon,
+  PinIcon,
+  CloseIcon,
 } from '../icons';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
@@ -166,6 +167,8 @@ interface NotificationProps {
   ) => (status: AgentStatus, title: string) => void;
   handleSaveNotificationSettings: (settings: NotificationSettings) => void;
 }
+
+const AGENT_PANEL_FLOATING_SIZE = { width: 560, height: 680 };
 
 interface IntegrationProps {
   integrations: IntegrationState;
@@ -727,9 +730,17 @@ export const WorkspaceView = memo(function WorkspaceView({
   const [showPreviewLogs, setShowPreviewLogs] = useState(false);
   const [inspectTab, setInspectTabRaw] = useState<InspectTab>('logs');
   const [isAgentPanelHidden, setIsAgentPanelHidden] = useState(false);
-  const [elementTreeEditorAvailable, setElementTreeEditorAvailable] = useState(false);
+  const [forceBranchesOpen, setForceBranchesOpen] = useState(false);
+  const [createBranchRequest, setCreateBranchRequest] = useState(0);
+  const [agentPanelPinned, setAgentPanelPinned] = useState(
+    () => localStorage.getItem('agentPanelPinned') !== '0'
+  );
+  const [elementTreePreviewAvailable, setElementTreePreviewAvailable] = useState(false);
   const [elementTreeVisible, setElementTreeVisible] = useState(
     () => localStorage.getItem('elementTreeVisible') !== '0'
+  );
+  const [elementTreePinned, setElementTreePinned] = useState(
+    () => localStorage.getItem('elementTreePinned') !== '0'
   );
   const toggleElementTree = useCallback(() => {
     setElementTreeVisible((visible) => {
@@ -737,9 +748,25 @@ export const WorkspaceView = memo(function WorkspaceView({
       return !visible;
     });
   }, []);
+  const closeElementTree = useCallback(() => {
+    localStorage.setItem('elementTreeVisible', '0');
+    setElementTreeVisible(false);
+  }, []);
   const elementTreeAvailable =
-    workspaceTab === 'preview' && !isPreviewHidden && elementTreeEditorAvailable;
+    workspaceTab === 'preview' && !isPreviewHidden && elementTreePreviewAvailable;
   const elementTreePanelVisible = elementTreeAvailable && elementTreeVisible;
+  const toggleAgentPanelPinned = useCallback(() => {
+    setAgentPanelPinned((pinned) => {
+      localStorage.setItem('agentPanelPinned', pinned ? '0' : '1');
+      return !pinned;
+    });
+  }, []);
+  const toggleElementTreePinned = useCallback(() => {
+    setElementTreePinned((pinned) => {
+      localStorage.setItem('elementTreePinned', pinned ? '0' : '1');
+      return !pinned;
+    });
+  }, []);
   const toggleAgentPanel = useCallback(() => {
     if (!isAgentPanelHidden) {
       setIsPreviewHidden(false);
@@ -757,8 +784,31 @@ export const WorkspaceView = memo(function WorkspaceView({
         keywords: ['terminal', 'pane', 'sidebar'],
         run: toggleAgentPanel,
       },
+      {
+        id: 'workspace.toggleAgentPanelPin',
+        title: agentPanelPinned ? 'Float Agent panel' : 'Dock Agent panel',
+        category: 'action',
+        when: 'project',
+        keywords: ['terminal', 'pane', 'pin', 'float', 'dock'],
+        run: toggleAgentPanelPinned,
+      },
+      {
+        id: 'workspace.toggleElementTreePin',
+        title: elementTreePinned ? 'Float Elements panel' : 'Dock Elements panel',
+        category: 'action',
+        when: 'project',
+        keywords: ['elements', 'tree', 'navigator', 'pin', 'float', 'dock'],
+        run: toggleElementTreePinned,
+      },
     ],
-    [isAgentPanelHidden, toggleAgentPanel]
+    [
+      isAgentPanelHidden,
+      toggleAgentPanel,
+      agentPanelPinned,
+      toggleAgentPanelPinned,
+      elementTreePinned,
+      toggleElementTreePinned,
+    ]
   );
 
   // Wrap setters with click tracking. We read previous state from the closure
@@ -786,6 +836,12 @@ export const WorkspaceView = memo(function WorkspaceView({
     setShowSubmitReview,
     handleResolveConflicts: () => void handleResolveConflicts(),
     openPushDropdown: () => setForcePublishOpen(true),
+    openBranchesMenu: () => setForceBranchesOpen(true),
+    openCreateBranch: () => {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('branches');
+      setCreateBranchRequest((request) => request + 1);
+    },
     handlePullLatest: () => void handlePullLatest(),
     isGitHubConnected: integrations.projectGithub?.status === 'connected',
     openWorktreeCreate: worktree.openCreate,
@@ -944,105 +1000,55 @@ export const WorkspaceView = memo(function WorkspaceView({
     sessionRegistry.setTerminalTabAttention(currentProject.path, activeTerminalTab, false);
   }, [currentProject.path, activeTerminalTab, setAttentionTabs]);
 
-  // Branch chip + workspace tabs live in the single header row. The primary
-  // Preview/Focus/Code modes occupy their own center cluster, while repository
-  // views stay with the GitHub and publishing actions on the right.
-  const branchIndicatorNode =
-    integrations.projectGithub?.status === 'connected' && currentBranch ? (
-      <BranchIndicator
-        currentBranch={currentBranch}
-        hasUncommittedChanges={hasUncommittedChanges}
-        changedFiles={changedFiles}
-        projectPath={currentProject.path}
-        isOnBranchesTab={workspaceTab === 'branches' || workspaceTab === 'prs'}
-        hasPreview={hasPreview}
-        onClick={() => {
-          if (workspaceTab === 'branches' || workspaceTab === 'prs') {
-            setWorkspaceTab(hasPreview ? 'preview' : 'code');
-          } else {
-            setWorkspaceTab('branches');
-          }
-        }}
-        onDiscard={() => {
-          void checkGitStatus(currentProject.path);
-        }}
-        onSave={() => setForcePublishOpen(true)}
-        onPullLatest={() => void handlePullLatest()}
-        isPulling={isPulling}
-      />
-    ) : null;
-
   const modesNode = (
-    <div className="workspace-tabs">
-      {hasPreview && (
-        <button
-          className={`workspace-tab ${workspaceTab === 'preview' && !isPreviewHidden ? 'active' : ''}`}
-          onClick={() => {
-            setIsPreviewHidden(false);
-            setWorkspaceTab('preview');
-          }}
-          title="Preview"
+    <Tabs
+      value={isPreviewHidden ? 'focus' : workspaceTab}
+      className="workspace-tabs"
+      onValueChange={(next) => {
+        if (next === 'focus') {
+          setIsAgentPanelHidden(false);
+          setIsPreviewHidden(true);
+          return;
+        }
+        setIsPreviewHidden(false);
+        setWorkspaceTab(next as 'preview' | 'code');
+      }}
+    >
+      <TabsList
+        className="workspace-tabs-list"
+        variant="stretch"
+        appearance="underline"
+        aria-label="Workspace mode"
+      >
+        {hasPreview && (
+          <TabsTab
+            value="preview"
+            className="workspace-tab"
+            leftIcon={<EyeIcon size={14} />}
+            title="Preview"
+          >
+            <span>Preview</span>
+          </TabsTab>
+        )}
+        <TabsTab
+          value="focus"
+          className="workspace-tab"
+          leftIcon={<EyeOffIcon size={14} />}
+          title={isPreviewHidden ? 'Exit focus mode' : 'Hide preview — agent only'}
         >
-          <EyeIcon size={14} />
-          <span>Preview</span>
-        </button>
-      )}
-      {/* Focus mode — collapses the preview pane so the agent terminal takes the
-          full workspace. Active whenever the preview is hidden. */}
-      <button
-        className={`workspace-tab ${isPreviewHidden ? 'active' : ''}`}
-        onClick={() => {
-          if (!isPreviewHidden) setIsAgentPanelHidden(false);
-          setIsPreviewHidden(!isPreviewHidden);
-        }}
-        title={isPreviewHidden ? 'Exit focus mode' : 'Hide preview — agent only'}
-      >
-        <EyeOffIcon size={14} />
-        <span>Focus</span>
-      </button>
-      <button
-        className={`workspace-tab ${workspaceTab === 'code' && !isPreviewHidden ? 'active' : ''}`}
-        onClick={() => {
-          setIsPreviewHidden(false);
-          setWorkspaceTab('code');
-        }}
-        title="Code"
-      >
-        <CodeIcon size={14} />
-        <span>Code</span>
-      </button>
-    </div>
+          <span>Focus</span>
+        </TabsTab>
+        <TabsTab
+          value="code"
+          className="workspace-tab"
+          leftIcon={<CodeIcon size={14} />}
+          title="Code"
+        >
+          <span>Code</span>
+        </TabsTab>
+      </TabsList>
+    </Tabs>
   );
-
-  const repositoryTabsNode =
-    integrations.projectGithub?.status === 'connected' ? (
-      <div className="workspace-tabs">
-        <button
-          className={`workspace-tab ${workspaceTab === 'branches' && !isPreviewHidden ? 'active' : ''}`}
-          onClick={() => {
-            setIsPreviewHidden(false);
-            setWorkspaceTab('branches');
-          }}
-          title="Branches"
-          data-education-id="branches-tab"
-        >
-          <BranchIcon size={14} />
-          <span>Branches</span>
-        </button>
-        <button
-          className={`workspace-tab ${workspaceTab === 'prs' && !isPreviewHidden ? 'active' : ''}`}
-          onClick={() => {
-            setIsPreviewHidden(false);
-            setWorkspaceTab('prs');
-          }}
-          title="PRs"
-          data-education-id="prs-tab"
-        >
-          <PullRequestIcon size={14} />
-          <span>PRs</span>
-        </button>
-      </div>
-    ) : null;
 
   const header = WorkspaceHeader({
     projectPath: currentProject.path,
@@ -1054,9 +1060,7 @@ export const WorkspaceView = memo(function WorkspaceView({
     onToggleElementTree: toggleElementTree,
     agentPanelVisible: !isAgentPanelHidden,
     onToggleAgentPanel: toggleAgentPanel,
-    branchIndicator: branchIndicatorNode,
     modes: modesNode,
-    repositoryTabs: repositoryTabsNode,
     headerExtras: (
       <PluginsDropdown
         plugins={loadedPlugins.filter((p) => !HOSTING_PLUGIN_IDS.includes(p.info.manifest.id))}
@@ -1075,7 +1079,29 @@ export const WorkspaceView = memo(function WorkspaceView({
     onGitHubConnect: handleGitHubConnect,
     focusActiveTerminal,
     currentBranch,
+    branches,
+    openPRs,
     hasUncommittedChanges,
+    changedFiles,
+    isPulling,
+    isBranchSwitching,
+    isRepositoryViewActive: workspaceTab === 'branches' || workspaceTab === 'prs',
+    onPullLatest: () => void handlePullLatest(),
+    onBranchSwitch: (branch) => void handleBranchSwitch(branch),
+    onViewBranches: () => {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('branches');
+    },
+    onCreateBranch: () => {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('branches');
+      setCreateBranchRequest((request) => request + 1);
+    },
+    onViewPRs: () => {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('prs');
+    },
+    onDiscardChanges: () => void checkGitStatus(currentProject.path),
     isPublishing,
     setIsPublishing,
     onPublishError: handlePublishError,
@@ -1084,9 +1110,11 @@ export const WorkspaceView = memo(function WorkspaceView({
       void fetchBranchInfo(currentProject.path);
       void worktree.refresh();
     },
-    onCreatePR: () => setShowSubmitReview(currentBranch || 'main'),
+    onCreatePR: (branch) => setShowSubmitReview(branch ?? currentBranch ?? 'main'),
     forcePublishOpen,
     onForcePublishOpenHandled: () => setForcePublishOpen(false),
+    forceBranchesOpen,
+    onForceBranchesOpenHandled: () => setForceBranchesOpen(false),
     getSlotPlugins,
     pluginProject,
     pluginActions,
@@ -1203,276 +1231,337 @@ export const WorkspaceView = memo(function WorkspaceView({
                   defaultSplit={29}
                   minLeft={20}
                   minRight={35}
+                  persistenceKey="agentPanelDockedSplit"
                   rightCollapsed={isPreviewHidden}
-                  leftCollapsed={isAgentPanelHidden}
+                  leftCollapsed={isAgentPanelHidden || (!agentPanelPinned && !isPreviewHidden)}
                   left={
-                    <div className="terminal-pane">
-                      <div className="workspace-terminal-view">
-                        <div className="terminal-agent-header panel-heading-pair">
-                          <span className="panel-heading-pair-title">Agent</span>
-                          <span className="panel-heading-pair-meta">
-                            {getActiveTabAgent().displayName}
-                          </span>
-                        </div>
-                        <StaleEnvBanner projectPath={currentProject.path} />
-                        <div
-                          className={`terminal-content${isSplitActive ? ' split' : ''}`}
-                          data-education-id="claude-terminal"
-                        >
-                          {isSplitActive && currentProject && splitPaneTabIds && splitPaneSizes && (
-                            <>
-                              <TerminalSplitHeaders
-                                panes={splitPaneTabIds}
-                                sizes={splitPaneSizes}
-                                tabs={terminalTabs}
-                                tabTitles={tabTitles}
-                                onSelectTab={setSplitPaneTab}
-                                onRemovePane={removeSplitPane}
-                                onAddPane={() => addSplitPane()}
-                                canAddPane={splitPaneTabIds.length < terminalTabs.length}
-                              />
-                              <TerminalSplitDividers
-                                sizes={splitPaneSizes}
-                                onResize={setSplitPaneSizes}
-                              />
-                            </>
-                          )}
-                          {allSessions.flatMap((session) =>
-                            session.tabs.map((tab) => {
-                              const isCurrentProject = session.projectPath === currentProject.path;
-                              const paneIdx =
-                                isSplitActive && isCurrentProject && splitPaneTabIds
-                                  ? splitPaneTabIds.indexOf(tab.id)
-                                  : -1;
-                              const inSplitPane = paneIdx >= 0;
-                              const isVisible =
-                                isCurrentProject &&
-                                !showHealthLogs &&
-                                (isSplitActive ? inSplitPane : activeTerminalTab === tab.id);
-                              const refKey = `${session.projectPath}::${tab.id}`;
-                              // Anchor both edges to percentages computed from
-                              // splitPaneSizes — guarantees the last pane's
-                              // right edge hits exactly 100% (no rounding
-                              // drift). Reserve 4px next to each drag handle
-                              // so the 8px handle sits in clean space. Then
-                              // add a 12px content gutter on every edge so
-                              // xterm has the same breathing room from the
-                              // pane chrome that single-pane mode gives it
-                              // from the sidebar. Opencode is full-bleed by
-                              // design (its TUI fills the viewport) — skip
-                              // the content gutter for it.
-                              let paneStyle: React.CSSProperties | undefined;
-                              if (inSplitPane && splitPaneSizes) {
-                                const leftPct = splitPaneSizes
-                                  .slice(0, paneIdx)
-                                  .reduce((a, b) => a + b, 0);
-                                const rightPct = splitPaneSizes
-                                  .slice(paneIdx + 1)
-                                  .reduce((a, b) => a + b, 0);
-                                const leftAbutsHandle = paneIdx > 0;
-                                const rightAbutsHandle = paneIdx < splitPaneSizes.length - 1;
-                                const gutter = tab.agentId === 'opencode' ? 0 : 12;
-                                const leftOffset = (leftAbutsHandle ? 4 : 0) + gutter;
-                                const rightOffset = (rightAbutsHandle ? 4 : 0) + gutter;
-                                paneStyle = {
-                                  left: `calc(${leftPct}% + ${leftOffset}px)`,
-                                  right: `calc(${rightPct}% + ${rightOffset}px)`,
-                                  top: 'var(--split-pane-header-height)',
-                                };
-                              }
-                              // Background projects use the same `.terminal-tab-content`
-                              // visibility-based hide (position: absolute + visibility: hidden).
-                              // `display: none` would zero out xterm's container dims and leave
-                              // the renderer desynced when the tab became visible again.
-                              return (
-                                <div
-                                  key={`session-${session.sessionEpoch}-${refKey}`}
-                                  className={`terminal-tab-content ${isVisible ? 'active' : ''}${
-                                    inSplitPane ? ' in-pane' : ''
-                                  }`}
-                                  data-agent-id={tab.agentId}
-                                  data-pane-idx={inSplitPane ? paneIdx : undefined}
-                                  style={paneStyle}
-                                  onMouseDownCapture={
-                                    inSplitPane && tab.id !== activeTerminalTab
-                                      ? () => setActiveTerminalTab(tab.id)
-                                      : undefined
-                                  }
-                                >
-                                  <Terminal
-                                    ref={(ref) => {
-                                      if (ref) {
-                                        terminalRefsMap.current.set(refKey, ref);
-                                      } else {
-                                        terminalRefsMap.current.delete(refKey);
-                                      }
-                                    }}
-                                    agent={getAgentById(tab.agentId)}
-                                    projectPath={session.projectPath}
-                                    onSpawn={(pid) => {
-                                      sessionRegistry.patchTerminalTab(
-                                        session.projectPath,
-                                        tab.id,
-                                        {
-                                          status: 'running',
-                                          pid,
-                                          exitCode: null,
-                                        }
-                                      );
-                                    }}
-                                    onExit={(code) => {
-                                      handleTerminalExit(code);
-                                      sessionRegistry.patchTerminalTab(
-                                        session.projectPath,
-                                        tab.id,
-                                        {
-                                          status:
-                                            code === 0 || code === null ? 'exited' : 'crashed',
-                                          pid: null,
-                                          exitCode: code,
-                                        }
-                                      );
-                                    }}
-                                    autoAcceptMode={autoAcceptMode}
-                                    onStatusChange={createTabStatusHandler(
-                                      session.projectPath,
-                                      tab.id
-                                    )}
-                                    onTitleChange={handleTabTitleChange(
-                                      session.projectPath,
-                                      tab.id
-                                    )}
-                                    sessionName={tab.sessionId}
-                                    isActive={isVisible}
-                                    shouldResume={tab.shouldResume}
-                                    onRequestRestart={() =>
-                                      restartTerminalTab(tab.id, session.projectPath)
-                                    }
+                    <DockablePanel
+                      docked={agentPanelPinned || isPreviewHidden}
+                      visible={!isAgentPanelHidden}
+                      ariaLabel="Agent panel"
+                      positionKey="agentPanelFloatingPosition"
+                      sizeKey="agentPanelFloatingSize"
+                      floatingSize={AGENT_PANEL_FLOATING_SIZE}
+                      initialPosition={() => ({
+                        left: Math.max(24, Math.round(window.innerWidth * 0.08)),
+                        top: 96,
+                      })}
+                      placeholderClassName="agent-panel-dock"
+                      surfaceClassName="dockable-panel__surface--agent"
+                    >
+                      <div className="terminal-pane">
+                        <div className="workspace-terminal-view">
+                          <div
+                            className="terminal-agent-header panel-heading-pair"
+                            data-dockable-drag-handle
+                          >
+                            <span className="terminal-agent-header__identity">
+                              <span className="panel-heading-pair-title">Agent</span>
+                              <span className="panel-heading-pair-meta">
+                                {getActiveTabAgent().displayName}
+                              </span>
+                            </span>
+                            <span className="terminal-agent-header__actions">
+                              <button
+                                type="button"
+                                className={`terminal-agent-header__pin${
+                                  agentPanelPinned ? ' is-pinned' : ''
+                                }`}
+                                onClick={toggleAgentPanelPinned}
+                                title={
+                                  agentPanelPinned
+                                    ? 'Unpin — float over the workspace'
+                                    : 'Pin to the left sidebar'
+                                }
+                                aria-label={
+                                  agentPanelPinned ? 'Float Agent panel' : 'Dock Agent panel'
+                                }
+                                aria-pressed={agentPanelPinned}
+                              >
+                                <PinIcon size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="terminal-agent-header__close"
+                                onClick={toggleAgentPanel}
+                                aria-label="Close Agent panel"
+                              >
+                                <CloseIcon size={14} />
+                              </button>
+                            </span>
+                          </div>
+                          <StaleEnvBanner projectPath={currentProject.path} />
+                          <div
+                            className={`terminal-content${isSplitActive ? ' split' : ''}`}
+                            data-education-id="claude-terminal"
+                          >
+                            {isSplitActive &&
+                              currentProject &&
+                              splitPaneTabIds &&
+                              splitPaneSizes && (
+                                <>
+                                  <TerminalSplitHeaders
+                                    panes={splitPaneTabIds}
+                                    sizes={splitPaneSizes}
+                                    tabs={terminalTabs}
+                                    tabTitles={tabTitles}
+                                    onSelectTab={setSplitPaneTab}
+                                    onRemovePane={removeSplitPane}
+                                    onAddPane={() => addSplitPane()}
+                                    canAddPane={splitPaneTabIds.length < terminalTabs.length}
                                   />
-                                </div>
-                              );
-                            })
-                          )}
-                          {showHealthLogs && (
-                            <div className="terminal-tab-content active">
-                              <DevServerLogs
-                                output={healthOutput}
-                                outputVersion={healthOutputVersion}
-                                onSendToAgent={sendToClaude}
-                              />
-                            </div>
-                          )}
+                                  <TerminalSplitDividers
+                                    sizes={splitPaneSizes}
+                                    onResize={setSplitPaneSizes}
+                                  />
+                                </>
+                              )}
+                            {allSessions.flatMap((session) =>
+                              session.tabs.map((tab) => {
+                                const isCurrentProject =
+                                  session.projectPath === currentProject.path;
+                                const paneIdx =
+                                  isSplitActive && isCurrentProject && splitPaneTabIds
+                                    ? splitPaneTabIds.indexOf(tab.id)
+                                    : -1;
+                                const inSplitPane = paneIdx >= 0;
+                                const isVisible =
+                                  isCurrentProject &&
+                                  !showHealthLogs &&
+                                  (isSplitActive ? inSplitPane : activeTerminalTab === tab.id);
+                                const refKey = `${session.projectPath}::${tab.id}`;
+                                // Anchor both edges to percentages computed from
+                                // splitPaneSizes — guarantees the last pane's
+                                // right edge hits exactly 100% (no rounding
+                                // drift). Reserve 4px next to each drag handle
+                                // so the 8px handle sits in clean space. Then
+                                // add a 12px content gutter on every edge so
+                                // xterm has the same breathing room from the
+                                // pane chrome that single-pane mode gives it
+                                // from the sidebar. Opencode is full-bleed by
+                                // design (its TUI fills the viewport) — skip
+                                // the content gutter for it.
+                                let paneStyle: React.CSSProperties | undefined;
+                                if (inSplitPane && splitPaneSizes) {
+                                  const leftPct = splitPaneSizes
+                                    .slice(0, paneIdx)
+                                    .reduce((a, b) => a + b, 0);
+                                  const rightPct = splitPaneSizes
+                                    .slice(paneIdx + 1)
+                                    .reduce((a, b) => a + b, 0);
+                                  const leftAbutsHandle = paneIdx > 0;
+                                  const rightAbutsHandle = paneIdx < splitPaneSizes.length - 1;
+                                  const gutter = tab.agentId === 'opencode' ? 0 : 12;
+                                  const leftOffset = (leftAbutsHandle ? 4 : 0) + gutter;
+                                  const rightOffset = (rightAbutsHandle ? 4 : 0) + gutter;
+                                  paneStyle = {
+                                    left: `calc(${leftPct}% + ${leftOffset}px)`,
+                                    right: `calc(${rightPct}% + ${rightOffset}px)`,
+                                    top: 'var(--split-pane-header-height)',
+                                  };
+                                }
+                                // Background projects use the same `.terminal-tab-content`
+                                // visibility-based hide (position: absolute + visibility: hidden).
+                                // `display: none` would zero out xterm's container dims and leave
+                                // the renderer desynced when the tab became visible again.
+                                return (
+                                  <div
+                                    key={`session-${session.sessionEpoch}-${refKey}`}
+                                    className={`terminal-tab-content ${isVisible ? 'active' : ''}${
+                                      inSplitPane ? ' in-pane' : ''
+                                    }`}
+                                    data-agent-id={tab.agentId}
+                                    data-pane-idx={inSplitPane ? paneIdx : undefined}
+                                    style={paneStyle}
+                                    onMouseDownCapture={
+                                      inSplitPane && tab.id !== activeTerminalTab
+                                        ? () => setActiveTerminalTab(tab.id)
+                                        : undefined
+                                    }
+                                  >
+                                    <Terminal
+                                      ref={(ref) => {
+                                        if (ref) {
+                                          terminalRefsMap.current.set(refKey, ref);
+                                        } else {
+                                          terminalRefsMap.current.delete(refKey);
+                                        }
+                                      }}
+                                      agent={getAgentById(tab.agentId)}
+                                      projectPath={session.projectPath}
+                                      onSpawn={(pid) => {
+                                        sessionRegistry.patchTerminalTab(
+                                          session.projectPath,
+                                          tab.id,
+                                          {
+                                            status: 'running',
+                                            pid,
+                                            exitCode: null,
+                                          }
+                                        );
+                                      }}
+                                      onExit={(code) => {
+                                        handleTerminalExit(code);
+                                        sessionRegistry.patchTerminalTab(
+                                          session.projectPath,
+                                          tab.id,
+                                          {
+                                            status:
+                                              code === 0 || code === null ? 'exited' : 'crashed',
+                                            pid: null,
+                                            exitCode: code,
+                                          }
+                                        );
+                                      }}
+                                      autoAcceptMode={autoAcceptMode}
+                                      onStatusChange={createTabStatusHandler(
+                                        session.projectPath,
+                                        tab.id
+                                      )}
+                                      onTitleChange={handleTabTitleChange(
+                                        session.projectPath,
+                                        tab.id
+                                      )}
+                                      sessionName={tab.sessionId}
+                                      isActive={isVisible}
+                                      shouldResume={tab.shouldResume}
+                                      onRequestRestart={() =>
+                                        restartTerminalTab(tab.id, session.projectPath)
+                                      }
+                                    />
+                                  </div>
+                                );
+                              })
+                            )}
+                            {showHealthLogs && (
+                              <div className="terminal-tab-content active">
+                                <DevServerLogs
+                                  output={healthOutput}
+                                  outputVersion={healthOutputVersion}
+                                  onSendToAgent={sendToClaude}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="terminal-pane-footer">
-                        <div className="terminal-pane-footer-left">
-                          <IconButton
-                            icon={<UndoIcon size={12} />}
-                            onClick={() => void undoSnapshot()}
-                            disabled={!canUndo}
-                            title={undoTitle}
-                            aria-label="Undo"
-                          />
-                          <IconButton
-                            icon={<RedoIcon size={12} />}
-                            onClick={() => void redoSnapshot()}
-                            disabled={!canRedo}
-                            title={redoTitle}
-                            aria-label="Redo"
-                          />
-                        </div>
+                        <div
+                          className={`terminal-pane-footer${
+                            isPreviewHidden ? ' terminal-pane-footer--focus' : ''
+                          }`}
+                        >
+                          <div className="terminal-pane-footer-left">
+                            <IconButton
+                              icon={<UndoIcon size={12} />}
+                              onClick={() => void undoSnapshot()}
+                              disabled={!canUndo}
+                              title={undoTitle}
+                              aria-label="Undo"
+                            />
+                            <IconButton
+                              icon={<RedoIcon size={12} />}
+                              onClick={() => void redoSnapshot()}
+                              disabled={!canRedo}
+                              title={redoTitle}
+                              aria-label="Redo"
+                            />
+                          </div>
 
-                        <div className="terminal-pane-footer-center">
-                          {/* Screenshot actions only make sense when the Preview
+                          <div className="terminal-pane-footer-center">
+                            {/* Screenshot actions only make sense when the Preview
                             tab has a web preview to capture. */}
-                          {workspaceTab === 'preview' && isWebProject && (
-                            <>
-                              <Button
-                                onClick={() => void handleCaptureScreenshot()}
-                                disabled={isCapturing || isCropMode}
-                                title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
-                                data-education-id="screenshot-button"
-                              >
-                                {isCapturing ? (
-                                  <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
-                                ) : (
-                                  <CameraIcon size={14} />
-                                )}
-                                <span className="capture-label-full">Full Screenshot</span>
-                                <span className="capture-shortcut">{kbd('mod', 'shift', 'S')}</span>
-                              </Button>
-                              <ToggleButton
-                                pressed={isCropMode}
-                                onClick={() => setIsCropMode(!isCropMode)}
-                                disabled={isCapturing || isCropCapturing}
-                                title={`Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`}
-                                data-education-id="crop-button"
-                              >
-                                {isCropCapturing ? (
-                                  <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
-                                ) : (
-                                  <CropIcon size={14} />
-                                )}
-                                <span className="capture-label-full">Crop Screenshot</span>
-                                <span className="capture-shortcut">{kbd('mod', 'shift', 'C')}</span>
-                              </ToggleButton>
-                            </>
-                          )}
-                        </div>
+                            {isWebProject && (
+                              <>
+                                <Button
+                                  onClick={() => void handleCaptureScreenshot()}
+                                  disabled={isCapturing || isCropMode}
+                                  title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
+                                  data-education-id="screenshot-button"
+                                >
+                                  {isCapturing ? (
+                                    <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
+                                  ) : (
+                                    <CameraIcon size={14} />
+                                  )}
+                                  <span className="capture-label-full">Full Screenshot</span>
+                                  <span className="capture-shortcut">
+                                    {kbd('mod', 'shift', 'S')}
+                                  </span>
+                                </Button>
+                                <ToggleButton
+                                  pressed={isCropMode}
+                                  onClick={() => setIsCropMode(!isCropMode)}
+                                  disabled={isCapturing || isCropCapturing}
+                                  title={`Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`}
+                                  data-education-id="crop-button"
+                                >
+                                  {isCropCapturing ? (
+                                    <Spinner size="sm" style={{ color: 'var(--accent-active)' }} />
+                                  ) : (
+                                    <CropIcon size={14} />
+                                  )}
+                                  <span className="capture-label-full">Crop Screenshot</span>
+                                  <span className="capture-shortcut">
+                                    {kbd('mod', 'shift', 'C')}
+                                  </span>
+                                </ToggleButton>
+                              </>
+                            )}
+                          </div>
 
-                        <div className="terminal-pane-footer-right">
-                          {canSplit && (
-                            <ToggleButton
-                              type="button"
-                              pressed={isSplitActive}
-                              onClick={() =>
-                                isSplitActive ? disableSplitView() : enableSplitView()
-                              }
-                              title={
-                                isSplitActive
-                                  ? 'Exit side-by-side view'
-                                  : 'View agents side by side'
-                              }
-                              aria-label="Toggle side-by-side view"
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 16 16"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
+                          <div className="terminal-pane-footer-right">
+                            {canSplit && (
+                              <ToggleButton
+                                type="button"
+                                pressed={isSplitActive}
+                                onClick={() =>
+                                  isSplitActive ? disableSplitView() : enableSplitView()
+                                }
+                                title={
+                                  isSplitActive
+                                    ? 'Exit side-by-side view'
+                                    : 'View agents side by side'
+                                }
+                                aria-label="Toggle side-by-side view"
                               >
-                                <rect x="2" y="3" width="12" height="10" rx="1.2" />
-                                <line x1="8" y1="3" x2="8" y2="13" />
-                              </svg>
-                              <span>Split</span>
-                              <span
-                                className={`toggle-pill-switch ${isSplitActive ? 'is-on' : ''}`}
-                                aria-hidden
-                              />
-                            </ToggleButton>
-                          )}
-                          <ToolbarDropdown
-                            agent={getActiveTabAgent()}
-                            autoAcceptMode={autoAcceptMode}
-                            onNotificationSettings={() => setShowNotificationSettings(true)}
-                            onSkills={skillsModal.open}
-                            onMcp={mcpModal.open}
-                            onAutoAcceptToggle={handleToolbarAutoAcceptToggle}
-                            onHelp={helpModal.open}
-                            terminalPlugins={getSlotPlugins('terminal')}
-                            pluginProject={pluginProject}
-                            pluginActions={pluginActions}
-                            pluginTheme={pluginTheme}
-                          />
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                >
+                                  <rect x="2" y="3" width="12" height="10" rx="1.2" />
+                                  <line x1="8" y1="3" x2="8" y2="13" />
+                                </svg>
+                                <span>Split</span>
+                                <span
+                                  className={`toggle-pill-switch ${isSplitActive ? 'is-on' : ''}`}
+                                  aria-hidden
+                                />
+                              </ToggleButton>
+                            )}
+                            <ToolbarDropdown
+                              agent={getActiveTabAgent()}
+                              autoAcceptMode={autoAcceptMode}
+                              onNotificationSettings={() => setShowNotificationSettings(true)}
+                              onSkills={skillsModal.open}
+                              onMcp={mcpModal.open}
+                              onAutoAcceptToggle={handleToolbarAutoAcceptToggle}
+                              onHelp={helpModal.open}
+                              terminalPlugins={getSlotPlugins('terminal')}
+                              pluginProject={pluginProject}
+                              pluginActions={pluginActions}
+                              pluginTheme={pluginTheme}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </DockablePanel>
                   }
                   right={
                     <div className="preview-pane">
@@ -1532,7 +1621,10 @@ export const WorkspaceView = memo(function WorkspaceView({
                             onUndo={() => void undoSnapshot()}
                             onRedo={() => void redoSnapshot()}
                             elementTreeVisible={elementTreeVisible}
-                            onElementTreeAvailabilityChange={setElementTreeEditorAvailable}
+                            elementTreePinned={elementTreePinned}
+                            onToggleElementTreePin={toggleElementTreePinned}
+                            onCloseElementTree={closeElementTree}
+                            onElementTreeAvailabilityChange={setElementTreePreviewAvailable}
                             previewPlugins={
                               <PluginSlot
                                 name="preview"
@@ -1581,6 +1673,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                         handleResolveConflicts={handleResolveConflicts}
                         handleGitHubConnect={handleGitHubConnect}
                         onSendToAgent={sendToClaude}
+                        createBranchRequest={createBranchRequest}
                         {...worktree.tabProps}
                       />
                     </div>

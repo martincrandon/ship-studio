@@ -301,30 +301,31 @@ export function PluginSlot({ name, plugins, project, actions, theme }: PluginSlo
         };
 
         return (
-          <PluginIsolationBoundary
-            key={pluginId}
-            pluginId={pluginId}
-            pluginName={pluginName}
-            compact={compact}
-            onCrash={handleCrash}
-          >
-            <PluginContext.Provider value={ctx}>
-              <PluginErrorBoundary
-                pluginId={pluginId}
-                pluginName={pluginName}
-                compact={compact}
-                onCrash={handleCrash}
-              >
-                <SafePluginWrapper
-                  Component={SlotComponent}
+          <div key={pluginId} className="plugin-slot-item" data-plugin-id={pluginId}>
+            <PluginIsolationBoundary
+              pluginId={pluginId}
+              pluginName={pluginName}
+              compact={compact}
+              onCrash={handleCrash}
+            >
+              <PluginContext.Provider value={ctx}>
+                <PluginErrorBoundary
                   pluginId={pluginId}
                   pluginName={pluginName}
                   compact={compact}
                   onCrash={handleCrash}
-                />
-              </PluginErrorBoundary>
-            </PluginContext.Provider>
-          </PluginIsolationBoundary>
+                >
+                  <SafePluginWrapper
+                    Component={SlotComponent}
+                    pluginId={pluginId}
+                    pluginName={pluginName}
+                    compact={compact}
+                    onCrash={handleCrash}
+                  />
+                </PluginErrorBoundary>
+              </PluginContext.Provider>
+            </PluginIsolationBoundary>
+          </div>
         );
       })}
     </>

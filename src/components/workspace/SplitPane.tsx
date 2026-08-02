@@ -27,6 +27,8 @@ interface SplitPaneProps {
   rightCollapsed?: boolean;
   /** Whether the left pane is collapsed */
   leftCollapsed?: boolean;
+  /** Optional localStorage key used to restore the user's split ratio. */
+  persistenceKey?: string;
 }
 
 export function SplitPane({
@@ -37,9 +39,18 @@ export function SplitPane({
   minRight = 20,
   rightCollapsed = false,
   leftCollapsed = false,
+  persistenceKey,
 }: SplitPaneProps) {
-  const [split, setSplit] = useState(defaultSplit);
-  const savedSplitRef = useRef(defaultSplit);
+  const initialSplit = (() => {
+    if (!persistenceKey) return defaultSplit;
+    const saved = Number(localStorage.getItem(persistenceKey));
+    return Number.isFinite(saved) && saved >= minLeft && saved <= 100 - minRight
+      ? saved
+      : defaultSplit;
+  })();
+  const [split, setSplit] = useState(initialSplit);
+  const savedSplitRef = useRef(initialSplit);
+  const latestSplitRef = useRef(initialSplit);
   const prevCollapsedRef = useRef(rightCollapsed);
   const prevLeftCollapsedRef = useRef(leftCollapsed);
   const [isDragging, setIsDragging] = useState(false);
@@ -109,6 +120,7 @@ export function SplitPane({
 
           // Clamp to min/max
           const clamped = Math.max(minLeft, Math.min(100 - minRight, percentage));
+          latestSplitRef.current = clamped;
           setSplit(clamped);
 
           // Trigger resize event for terminals to recalculate
@@ -124,6 +136,9 @@ export function SplitPane({
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
         dragListenersRef.current = { move: null, up: null };
+        if (persistenceKey) {
+          localStorage.setItem(persistenceKey, String(latestSplitRef.current));
+        }
       };
 
       // Store listeners for cleanup
@@ -132,7 +147,7 @@ export function SplitPane({
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [minLeft, minRight]
+    [minLeft, minRight, persistenceKey]
   );
 
   return (

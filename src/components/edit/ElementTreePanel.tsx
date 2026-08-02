@@ -8,8 +8,8 @@
  * (`selectAndRun`) so it operates on the element the user aimed at.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRightIcon } from '../icons';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { ChevronRightIcon, CloseIcon, PinIcon } from '../icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
@@ -41,6 +41,14 @@ interface Props {
   onViewChange?: (view: 'visual' | 'code') => void;
   /** When provided, rows get an insert/duplicate/delete context menu. */
   structure?: TreeStructureActions;
+  /** Ref to the panel shell, used by the parent resize control. */
+  panelRef?: RefObject<HTMLDivElement | null>;
+  /** Whether the panel currently occupies its left-hand preview dock. */
+  pinned?: boolean;
+  /** Switch between the preview dock and a draggable floating panel. */
+  onTogglePin?: () => void;
+  /** Hide the panel without changing its docked/floating preference. */
+  onClose?: () => void;
 }
 
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
@@ -79,6 +87,10 @@ export function ElementTreePanel({
   selectedSignature,
   onViewChange,
   structure,
+  panelRef,
+  pinned = true,
+  onTogglePin,
+  onClose,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
@@ -99,6 +111,7 @@ export function ElementTreePanel({
     onViewChange?.(next);
   };
   const bodyRef = useRef<HTMLDivElement>(null);
+  const visibleView = structure ? view : 'visual';
 
   const ancestors = useMemo(() => (tree ? buildAncestors(tree) : null), [tree]);
 
@@ -159,7 +172,7 @@ export function ElementTreePanel({
     // The `collapsed` set tracks explicit toggles both ways via presence.
     const isCollapsed = hasChildren && collapsedState(node.id, depth);
     return (
-      <div key={node.id}>
+      <div key={node.id} className="ss-tree-node">
         <div
           className={`ss-tree-row${node.id === selectedId ? ' selected' : ''}`}
           style={{ paddingLeft: depth * 14 + 6 }}
@@ -203,17 +216,39 @@ export function ElementTreePanel({
     : '';
 
   return (
-    <div className="ss-tree-panel" data-testid="element-tree-panel">
-      <Tabs value={view} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
-        <div className="ss-tree-panel__header">
+    <div ref={panelRef} className="ss-tree-panel" data-testid="element-tree-panel">
+      <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
+        <div className="ss-tree-panel__header" data-dockable-drag-handle>
           <span className="ss-tree-panel__title">Elements</span>
           <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
             <TabsTab value="visual">Visual</TabsTab>
-            <TabsTab value="code">Code</TabsTab>
+            {structure && <TabsTab value="code">Code</TabsTab>}
           </TabsList>
+          {onTogglePin && (
+            <button
+              type="button"
+              className={`ss-tree-panel__pin${pinned ? ' is-pinned' : ''}`}
+              onClick={onTogglePin}
+              title={pinned ? 'Unpin — float over the workspace' : 'Pin to the preview'}
+              aria-label={pinned ? 'Float Elements panel' : 'Dock Elements panel'}
+              aria-pressed={pinned}
+            >
+              <PinIcon size={13} />
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              className="ss-tree-panel__close"
+              onClick={onClose}
+              aria-label="Close Elements panel"
+            >
+              <CloseIcon size={14} />
+            </button>
+          )}
         </div>
       </Tabs>
-      {view === 'visual' ? (
+      {visibleView === 'visual' ? (
         <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
           {tree ? (
             renderNode(tree, 0)

@@ -63,7 +63,18 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
   useEffect(() => {
     if (!enabled) return;
 
-    post({ type: 'ss:requestTree' });
+    let retryTimer: number | null = null;
+    const stopRetrying = () => {
+      if (retryTimer !== null) {
+        window.clearInterval(retryTimer);
+        retryTimer = null;
+      }
+    };
+    const requestUntilReady = () => {
+      stopRetrying();
+      post({ type: 'ss:requestTree' });
+      retryTimer = window.setInterval(() => post({ type: 'ss:requestTree' }), 500);
+    };
 
     const onMessage = (e: MessageEvent) => {
       // SECURITY: only trust messages from the actual preview iframe (untrusted
@@ -74,10 +85,11 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
         | undefined;
       if (!d || typeof d.type !== 'string') return;
       if (d.type === 'ss:tree' && d.tree) {
+        stopRetrying();
         setTree(mapNode(d.tree));
         setTruncated(!!d.truncated);
       } else if (d.type === 'ss:treeDirty') {
-        post({ type: 'ss:requestTree' });
+        requestUntilReady();
       } else if (d.type === 'ss:select') {
         setSelectedId(typeof d.nodeId === 'number' ? d.nodeId : null);
       }
@@ -88,10 +100,12 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
     // so re-request on iframe load to keep the navigator alive across HMR
     // full-reloads and manual refreshes.
     const iframe = iframeRef.current;
-    const onLoad = () => post({ type: 'ss:requestTree' });
+    const onLoad = () => requestUntilReady();
     iframe?.addEventListener('load', onLoad);
+    requestUntilReady();
 
     return () => {
+      stopRetrying();
       post({ type: 'ss:treeOff' });
       window.removeEventListener('message', onMessage);
       iframe?.removeEventListener('load', onLoad);

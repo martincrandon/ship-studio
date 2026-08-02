@@ -8,14 +8,7 @@
  * editor panels.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { PinIcon } from '../icons/layout';
 import { CloseIcon, CheckIcon } from '../icons/common';
 import { PlusIcon } from '../icons/utility';
@@ -38,10 +31,8 @@ import type { ElementSettings } from '../../hooks/useElementSettings';
 import type { useCssVariables } from '../../hooks/useCssVariables';
 import type { useCssAnimations } from '../../hooks/useCssAnimations';
 
-/** The panel's scope: the selected element, or the project-global tokens/animations. */
-type Scope = 'element' | 'variables' | 'animations';
-
-const PANEL_WIDTH = 360;
+/** The panel's top-level view: element style/settings, or project-global CSS. */
+type Scope = 'style' | 'settings' | 'variables' | 'animations';
 
 interface Props {
   selection: CascadeSelection | null;
@@ -74,8 +65,8 @@ interface Props {
   onClose: () => void;
   pinned?: boolean;
   onTogglePin?: () => void;
-  /** Controlled scope (Element / Variables / Animations) — lets the Cmd+K palette open
-   *  the panel straight to a scope. Uncontrolled (local state) when omitted. */
+  /** Controlled view — lets the Cmd+K palette open the panel directly to Style,
+   *  Variables, or Animate. Uncontrolled (local state) when omitted. */
   scope?: Scope;
   onScopeChange?: (scope: Scope) => void;
 }
@@ -106,8 +97,7 @@ export function CssCascadePanel({
   scope: controlledScope,
   onScopeChange,
 }: Props) {
-  const [tab, setTab] = useState<'style' | 'settings'>('style');
-  const [localScope, setLocalScope] = useState<Scope>('element');
+  const [localScope, setLocalScope] = useState<Scope>('style');
   const scope = controlledScope ?? localScope;
   const setScope = onScopeChange ?? setLocalScope;
   // Refresh the project-global data when its scope becomes visible — works whether the
@@ -136,36 +126,6 @@ export function CssCascadePanel({
       return next;
     });
   }, []);
-  const [pos, setPos] = useState(() => ({
-    top: 76,
-    left: Math.max(
-      8,
-      (typeof window !== 'undefined' ? window.innerWidth : 1280) - PANEL_WIDTH - 24
-    ),
-  }));
-  const rootRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
-
-  const onHeaderPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('.ss-edit-panel__header-actions')) return;
-    const r = rootRef.current?.getBoundingClientRect();
-    if (!r) return;
-    dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, []);
-  const onHeaderPointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const w = rootRef.current?.offsetWidth ?? PANEL_WIDTH;
-    const left = Math.max(8, Math.min(e.clientX - d.dx, window.innerWidth - w - 8));
-    const top = Math.max(8, Math.min(e.clientY - d.dy, window.innerHeight - 40));
-    setPos({ top, left });
-  }, []);
-  const onHeaderPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
-    dragRef.current = null;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-  }, []);
-
   const classes = (selection?.signature.className ?? '').split(/\s+/).filter(Boolean);
   // The element's own classes lead the "Add selector" suggestions (so a class you
   // just added in Settings is one click away from getting a rule), then the rest of
@@ -177,28 +137,12 @@ export function CssCascadePanel({
 
   return (
     <div
-      ref={rootRef}
-      className={`ss-edit-panel ss-cascade-panel${pinned ? ' ss-edit-panel--pinned' : ''}`}
+      className={`ss-edit-panel ss-cascade-panel ss-cascade-panel--dockable${
+        pinned ? ' ss-edit-panel--pinned' : ''
+      }`}
       data-testid="css-cascade-panel"
-      style={
-        pinned
-          ? undefined
-          : {
-              position: 'fixed',
-              top: pos.top,
-              left: pos.left,
-              right: 'auto',
-              zIndex: 1000,
-              maxHeight: `min(680px, calc(100vh - ${pos.top + 16}px))`,
-            }
-      }
     >
-      <div
-        className="ss-edit-panel__header"
-        onPointerDown={pinned ? undefined : onHeaderPointerDown}
-        onPointerMove={pinned ? undefined : onHeaderPointerMove}
-        onPointerUp={pinned ? undefined : onHeaderPointerUp}
-      >
+      <div className="ss-edit-panel__header" data-dockable-drag-handle>
         <span className="ss-edit-panel__title">CSS</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
@@ -219,10 +163,11 @@ export function CssCascadePanel({
 
       <div className="ss-edit-panel__body">
         <Tabs value={scope} onValueChange={(next) => setScope(next as Scope)}>
-          <TabsList className="ss-cascade-scope" aria-label="CSS scope">
-            <TabsTab value="element">Element</TabsTab>
+          <TabsList className="ss-cascade-scope" aria-label="CSS panel view">
+            <TabsTab value="style">Style</TabsTab>
+            <TabsTab value="settings">Settings</TabsTab>
             <TabsTab value="variables">Variables</TabsTab>
-            <TabsTab value="animations">Animations</TabsTab>
+            <TabsTab value="animations">Animate</TabsTab>
           </TabsList>
         </Tabs>
 
@@ -288,14 +233,7 @@ export function CssCascadePanel({
               </Button>
             </div>
 
-            <Tabs value={tab} onValueChange={(next) => setTab(next as 'style' | 'settings')}>
-              <TabsList className="ss-cascade-tabs" aria-label="Element editing mode">
-                <TabsTab value="style">Style</TabsTab>
-                <TabsTab value="settings">Settings</TabsTab>
-              </TabsList>
-            </Tabs>
-
-            {tab === 'settings' ? (
+            {scope === 'settings' ? (
               <ElementSettingsPanel settings={settings} />
             ) : (
               <>
@@ -423,7 +361,8 @@ function AddSelectorBar({
   if (!open) {
     return (
       <Button
-        variant="secondary"
+        variant="default"
+        width="fill"
         leftIcon={<PlusIcon size={11} />}
         className="ss-cascade-action"
         data-cascade-add-selector

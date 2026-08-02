@@ -1,8 +1,8 @@
-/* Element tree panel — read-only navigator shown as the preview container's
-   left grid column in visual edit mode (see preview.css for the grid). */
+/* Element tree panel — read-only navigator shown in the preview container's
+   left grid column (see preview.css for the grid). */
 
 .ss-tree-panel {
-  grid-area: 2 / 1 / -1 / 2;
+  grid-area: 1 / 1 / -1 / 2;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -16,6 +16,7 @@
 .ss-tree-panel__header {
   display: flex;
   align-items: center;
+  gap: var(--space-04);
   height: var(--preview-toolbar-h);
   flex-shrink: 0;
   padding: 0 var(--spacing-md);
@@ -25,6 +26,10 @@
 }
 
 .ss-tree-panel__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--text-primary);
   font-size: var(--font-size-md);
@@ -33,31 +38,75 @@
 /* Visual / Code toggle in the header. */
 .ss-tree-panel__modes {
   margin-left: auto;
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--surface-control);
-  border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
-.ss-tree-panel__mode {
+
+/* Compact the segmented control just enough for the title and both choices to
+   coexist at the panel's narrowest supported width. The shared Tabs primitive
+   still supplies the active indicator and all keyboard behavior. */
+.ss-tree-panel__modes .tabs__tab.button {
+  padding-inline: var(--space-06);
+}
+
+.ss-tree-panel__pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--spacing-xs);
+  background: none;
   border: none;
-  background: transparent;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
   cursor: pointer;
+  border-radius: var(--radius-sm);
   transition:
-    background var(--transition),
+    background-color var(--transition),
     color var(--transition);
 }
-.ss-tree-panel__mode.is-active {
-  background: var(--tint-strong);
+
+.ss-tree-panel__pin:hover {
+  background: var(--surface-control);
   color: var(--text-primary);
 }
 
-.ss-tree-panel__body {
+.ss-tree-panel__pin.is-pinned {
+  color: var(--text-primary);
+}
+
+.ss-tree-panel__close {
+  flex-shrink: 0;
+  padding: 0 var(--spacing-xs);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ss-tree-panel__close:hover {
+  color: var(--text-primary);
+}
+
+.dockable-panel__surface--floating .ss-tree-panel {
+  border-right: none;
+}
+
+.dockable-panel__surface--floating .ss-tree-panel__header {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.dockable-panel__surface--floating .ss-tree-panel__header:active {
+  cursor: grabbing;
+}
+
+.ss-tree-panel > .ss-tree-panel__body {
+  /* Keep the tree in normal block flow. A flex scroll body can let the
+     intrinsic width of the recursive root become the cross-axis alignment
+     target, which leaves the whole tree floating against the right edge. */
+  display: block;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -65,6 +114,13 @@
   box-sizing: border-box;
   overflow: auto;
   padding: var(--spacing-xs) 0;
+}
+
+.ss-tree-node {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-inline: 0 auto;
 }
 
 /* Code (Edit-HTML) view. The body is just the positioning context; the tab
@@ -136,8 +192,12 @@
 .ss-tree-row {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--spacing-xs);
+  width: 100%;
+  box-sizing: border-box;
   height: var(--size-control-medium);
+  margin-inline: 0 auto;
   padding-right: var(--spacing-sm);
   cursor: pointer;
   white-space: nowrap;

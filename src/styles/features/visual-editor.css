@@ -132,6 +132,13 @@
   font-size: var(--font-size-11);
 }
 
+.ss-cascade-panel.ss-cascade-panel--dockable {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
 /* Pin-as-sidebar styles (pin button, header actions, pinned layout) live in
    preview.css — they integrate the panel into the preview container's grid. */
 
@@ -152,8 +159,13 @@
 }
 
 .ss-edit-panel__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   color: var(--text-primary);
+  font-size: var(--font-size-md);
 }
 
 .ss-edit-panel__close {

@@ -97,7 +97,8 @@ function AddAnimation({
   if (!open) {
     return (
       <Button
-        variant="secondary"
+        variant="default"
+        width="fill"
         leftIcon={<PlusIcon size={11} />}
         className="ss-cascade-action"
         onClick={() => setOpen(true)}

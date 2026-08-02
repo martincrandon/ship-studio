@@ -203,7 +203,7 @@
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   flex-shrink: 0;
 }
 
@@ -211,7 +211,7 @@
 .code-viewer-edit-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   padding-right: var(--spacing-sm);
   border-right: 1px solid var(--border-default);
 }
@@ -350,7 +350,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--button-gap);
   padding: 8px 12px;
 }
 

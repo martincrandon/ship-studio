@@ -112,6 +112,8 @@ interface BranchesTabProps {
   onWorktreesChanged?: () => void;
   /** Open the "New worktree" modal. */
   onCreateWorktree?: () => void;
+  /** Increment to open and focus the new-branch form from outside this view. */
+  createBranchRequest?: number;
 }
 
 export function BranchesTab({
@@ -130,6 +132,7 @@ export function BranchesTab({
   onCloseWorktreeSession,
   onWorktreesChanged,
   onCreateWorktree,
+  createBranchRequest = 0,
 }: BranchesTabProps) {
   const { showToast } = useOptionalToast();
   const onToast = (message: string, type?: 'success' | 'error') => showToast(message, type);
@@ -197,6 +200,12 @@ export function BranchesTab({
       defaultBaseBranch || branches.find((b) => b.isDefault)?.name || branches[0]?.name || 'main',
     [defaultBaseBranch, branches]
   );
+
+  useEffect(() => {
+    if (createBranchRequest === 0) return;
+    setBaseBranch(effectiveDefaultBase);
+    setShowNewBranch(true);
+  }, [createBranchRequest, effectiveDefaultBase]);
 
   // Selectable base branches (unique names), default/base ones first.
   const baseBranchOptions = useMemo(() => {

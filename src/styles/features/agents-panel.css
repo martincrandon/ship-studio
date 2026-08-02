@@ -135,7 +135,7 @@
 .agents-panel-row-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-04);
+  gap: var(--button-gap);
   flex-shrink: 0;
 }
 
@@ -184,7 +184,7 @@
 .agents-panel-confirm-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-04);
+  gap: var(--button-gap);
   margin-top: var(--spacing-lg);
 }
 
@@ -407,7 +407,7 @@ button.dashboard-card-row {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-04);
+  gap: var(--button-gap);
 }
 
 /* Terminal phase — fills the (terminal-sized) modal: instructions on top, the

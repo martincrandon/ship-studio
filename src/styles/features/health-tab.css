@@ -89,7 +89,7 @@
 .health-tab-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--button-gap);
   flex-shrink: 0;
 }
 
@@ -276,7 +276,7 @@
 .health-tab-row-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--button-gap);
   padding-right: var(--spacing-md);
   flex-shrink: 0;
 }
@@ -359,7 +359,7 @@
 .health-tab-output-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--button-gap);
 }
 
 .health-tab-output-body {
@@ -456,6 +456,6 @@
 .health-tab-pkg-json-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   margin-top: var(--spacing-md);
 }

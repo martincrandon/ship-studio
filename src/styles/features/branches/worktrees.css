@@ -11,7 +11,7 @@
 .worktrees-section-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   /* The uppercase header styling shouldn't leak into the action buttons. */
   text-transform: none;
   letter-spacing: normal;
@@ -89,7 +89,7 @@
 .worktree-row-actions {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--button-gap);
   flex-shrink: 0;
 }
 
@@ -309,6 +309,6 @@
 .worktree-create-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--spacing-sm);
+  gap: var(--button-gap);
   margin-top: var(--spacing-xs);
 }

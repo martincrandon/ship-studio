@@ -2,11 +2,82 @@
    while keeping all actions in the floating footer. */
 .terminal-agent-header {
   align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   height: var(--panel-header-h);
   padding: 0 var(--spacing-md);
   background: var(--surface-panel);
   border-bottom: var(--stroke-1) solid var(--border-default);
   flex-shrink: 0;
+}
+
+.terminal-agent-header__identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.terminal-agent-header .panel-heading-pair-title,
+.terminal-agent-header .panel-heading-pair-meta {
+  font-size: var(--font-size-md);
+}
+
+.terminal-agent-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-04);
+  flex-shrink: 0;
+}
+
+.terminal-agent-header__pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: var(--spacing-xs);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.terminal-agent-header__pin:hover {
+  background: var(--surface-control);
+  color: var(--text-primary);
+}
+
+.terminal-agent-header__pin.is-pinned {
+  color: var(--text-primary);
+}
+
+.terminal-agent-header__close {
+  flex-shrink: 0;
+  padding: 0 var(--spacing-xs);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-2xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.terminal-agent-header__close:hover {
+  color: var(--text-primary);
+}
+
+.dockable-panel__surface--floating .terminal-agent-header {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.dockable-panel__surface--floating .terminal-agent-header:active {
+  cursor: grabbing;
 }
 
 /* Collapse "Agent Settings" to its gear icon at the SAME window width as the
@@ -231,10 +302,20 @@
   position: absolute;
   top: 0;
   right: 0;
-  bottom: 0;
+  /* The persistent footer is absolutely positioned over the pane. Keep the
+     terminal viewport clear of its controls, with a small visual gap above
+     them, so scrollback never runs underneath the action row. */
+  bottom: calc(var(--control-height-standard) + var(--spacing-lg));
   left: 12px;
   visibility: hidden;
   background: var(--surface-app);
+}
+
+/* An unfocused terminal is dimmed by its own overlay. The footer clearance is
+   painted by `.terminal-content`, behind the shortened tab content, so match
+   its composited tone here to keep the whole panel visually continuous. */
+.terminal-content:has(.terminal-tab-content.active .terminal-instance.is-unfocused) {
+  background: color-mix(in srgb, var(--surface-app) 80%, var(--surface-control) 20%);
 }
 
 /* Opencode draws its own full-bleed TUI — it wants 100% of the tab, no
@@ -268,6 +349,10 @@
    Extend that layer into the 12px content gutter so the gutter receives the
    same focused/unfocused treatment as the xterm surface. Keep the xterm
    itself at its original width so fitting and text metrics are unchanged. */
+.terminal-instance {
+  background: var(--surface-app);
+}
+
 .terminal-tab-content:not([data-agent-id='opencode']) .terminal-instance {
   left: -12px;
   width: calc(100% + 12px) !important;
@@ -341,7 +426,7 @@
 .terminal-split-pane-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--button-gap);
   margin-left: auto;
 }
 

@@ -85,7 +85,7 @@
 .agent-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--button-gap);
 }
 
 /* Open in Browser Button */
@@ -160,7 +160,7 @@
 .preview-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--button-gap);
 }
 
 /* Preview Action Buttons */
@@ -224,7 +224,7 @@
 .preview-hidden-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--button-gap);
 }
 
 /* Show Preview Button (when preview is hidden) */

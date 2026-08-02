@@ -14,9 +14,10 @@
  * @module components/WorkspaceHeader
  */
 
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { GitHubButton } from '../branches/GitHubButton';
+import { BranchIndicator } from '../branches/BranchIndicator';
+import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { fileManagerName } from '../../lib/setup';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
@@ -27,8 +28,11 @@ import { ToggleButton } from '../primitives/ToggleButton';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type { PluginThemeData } from '../../contexts/PluginContext';
+import type { BranchInfo, PullRequestInfo } from '../../lib/branches';
+import type { ChangedFile } from '../../lib/git';
 
 export const HOSTING_PLUGIN_IDS = ['vercel', 'cloudflare', 'netlify'];
+export const PUSH_HOSTING_PLUGIN_IDS = ['vercel', 'cloudflare'];
 
 export interface WorkspaceHeaderProps {
   // Project
@@ -52,19 +56,10 @@ export interface WorkspaceHeaderProps {
   // WorkspaceView. Omit to hide.
   headerExtras?: ReactNode;
 
-  // Branch chip rendered at the very end of the left cluster (after
-  // headerExtras). Pre-composed in WorkspaceView since it needs git/branch
-  // state. Omit to hide.
-  branchIndicator?: ReactNode;
-
   // Primary workspace modes (Preview/Focus/Code), rendered in their own center
   // cluster between the workspace tools and repository/publishing actions.
   // Pre-composed in WorkspaceView since they drive the right-pane state.
   modes?: ReactNode;
-
-  // Repository views (Branches/PRs), rendered at the start of the right cluster
-  // with the other GitHub-related actions. Omit when GitHub is not connected.
-  repositoryTabs?: ReactNode;
 
   // GitHub
   integrations: IntegrationState;
@@ -74,7 +69,19 @@ export interface WorkspaceHeaderProps {
 
   // Publish
   currentBranch: string | null;
+  branches: BranchInfo[];
+  openPRs: PullRequestInfo[];
   hasUncommittedChanges: boolean;
+  changedFiles: ChangedFile[];
+  isPulling: boolean;
+  isBranchSwitching: boolean;
+  isRepositoryViewActive: boolean;
+  onPullLatest: () => void;
+  onBranchSwitch: (branch: string) => void;
+  onViewBranches: () => void;
+  onCreateBranch: () => void;
+  onViewPRs: () => void;
+  onDiscardChanges: () => void;
   isPublishing: boolean;
   setIsPublishing: (v: boolean) => void;
   onPublishError: (
@@ -82,9 +89,11 @@ export interface WorkspaceHeaderProps {
     errorType: 'push_rejected' | 'auth_error' | 'merge_conflict' | 'generic'
   ) => void;
   onPublishStatusChange: () => void;
-  onCreatePR: () => void;
+  onCreatePR: (branch?: string) => void;
   forcePublishOpen: boolean;
   onForcePublishOpenHandled: () => void;
+  forceBranchesOpen: boolean;
+  onForceBranchesOpenHandled: () => void;
 
   // Plugin slots
   getSlotPlugins: (slot: string) => LoadedPlugin[];
@@ -121,15 +130,25 @@ export function WorkspaceHeader({
   agentPanelVisible,
   onToggleAgentPanel,
   headerExtras,
-  branchIndicator,
   modes,
-  repositoryTabs,
   integrations,
   onGitHubStatusChange,
   onGitHubConnect,
   focusActiveTerminal,
   currentBranch,
+  branches,
+  openPRs,
   hasUncommittedChanges,
+  changedFiles,
+  isPulling,
+  isBranchSwitching,
+  isRepositoryViewActive,
+  onPullLatest,
+  onBranchSwitch,
+  onViewBranches,
+  onCreateBranch,
+  onViewPRs,
+  onDiscardChanges,
   isPublishing,
   setIsPublishing,
   onPublishError,
@@ -137,11 +156,14 @@ export function WorkspaceHeader({
   onCreatePR,
   forcePublishOpen,
   onForcePublishOpenHandled,
+  forceBranchesOpen,
+  onForceBranchesOpenHandled,
   getSlotPlugins,
   pluginProject,
   pluginActions,
   pluginTheme,
 }: WorkspaceHeaderProps) {
+  const [openSourceMenu, setOpenSourceMenu] = useState<'branches' | 'push' | null>(null);
   // Window dragging — only from the title bar (not the toolbar with plugins)
   const handleDrag = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
@@ -165,6 +187,26 @@ export function WorkspaceHeader({
       hosting: all.filter((p) => HOSTING_PLUGIN_IDS.includes(p.info.manifest.id)),
     };
   }, [getSlotPlugins]);
+  const pushHostingPlugins = useMemo(
+    () =>
+      toolbarPlugins.hosting.filter((plugin) =>
+        PUSH_HOSTING_PLUGIN_IDS.includes(plugin.info.manifest.id)
+      ),
+    [toolbarPlugins.hosting]
+  );
+  const headerHostingPlugins = useMemo(
+    () =>
+      toolbarPlugins.hosting.filter(
+        (plugin) => !PUSH_HOSTING_PLUGIN_IDS.includes(plugin.info.manifest.id)
+      ),
+    [toolbarPlugins.hosting]
+  );
+
+  useEffect(() => {
+    if (!forceBranchesOpen) return;
+    setOpenSourceMenu('branches');
+    onForceBranchesOpenHandled();
+  }, [forceBranchesOpen, onForceBranchesOpenHandled]);
 
   // IDE launch, env editor, backups, plugin manager, and learn-mode toggle
   // now live in the Cmd+K palette. See src/commands/useAppCommands.tsx.
@@ -188,12 +230,14 @@ export function WorkspaceHeader({
           plugin manager, and IDE launch are reachable via ⌘K. */}
       <div className="workspace-header-left">
         <ToggleButton
+          variant={elementTreeVisible ? 'secondary' : 'default'}
+          className="workspace-panel-toggle"
           pressed={elementTreeVisible}
           onClick={onToggleElementTree}
           disabled={!elementTreeAvailable}
           title={
             !elementTreeAvailable
-              ? 'Elements are available in Preview while visual editing is active'
+              ? 'Elements are available in Preview'
               : elementTreeVisible
                 ? 'Hide element tree'
                 : 'Show element tree'
@@ -203,6 +247,8 @@ export function WorkspaceHeader({
           <span className="toolbar-btn-label">Elements</span>
         </ToggleButton>
         <ToggleButton
+          variant={agentPanelVisible ? 'secondary' : 'default'}
+          className="workspace-panel-toggle"
           pressed={agentPanelVisible}
           onClick={onToggleAgentPanel}
           title={agentPanelVisible ? 'Hide Agent panel' : 'Show Agent panel'}
@@ -220,27 +266,14 @@ export function WorkspaceHeader({
           <span className="toolbar-btn-label">Assets</span>
         </Button>
         {headerExtras}
-        {branchIndicator}
       </div>
 
       {/* Center — the primary workspace mode switcher is deliberately isolated
           from both local workspace tools and publishing/hosting actions. */}
       <div className="workspace-header-center">{modes}</div>
 
-      {/* Right side — repository views, GitHub, hosting, and publishing */}
+      {/* Right side — hosting, repository workflow, and publishing */}
       <div className="workspace-header-right">
-        {repositoryTabs}
-        <span data-education-id="github-button">
-          <GitHubButton
-            githubState={integrations.github}
-            projectStatus={integrations.projectGithub}
-            projectPath={projectPath}
-            projectName={projectName}
-            onStatusChange={onGitHubStatusChange}
-            onGitHubConnect={onGitHubConnect}
-            onModalClose={focusActiveTerminal}
-          />
-        </span>
         <PluginSlot
           name="publish"
           plugins={getSlotPlugins('publish')}
@@ -250,25 +283,87 @@ export function WorkspaceHeader({
         />
         <PluginSlot
           name="toolbar"
-          plugins={toolbarPlugins.hosting}
+          plugins={headerHostingPlugins}
           project={pluginProject}
           actions={pluginActions}
           theme={pluginTheme}
         />
-        <PublishBranchDropdown
-          currentBranch={currentBranch || 'main'}
-          projectGithubStatus={integrations.projectGithub}
-          projectPath={projectPath}
-          hasChangesToSync={hasUncommittedChanges}
-          onStatusChange={onPublishStatusChange}
-          onModalClose={focusActiveTerminal}
-          isPublishing={isPublishing}
-          setIsPublishing={setIsPublishing}
-          onPublishError={onPublishError}
-          onCreatePR={onCreatePR}
-          forceOpen={forcePublishOpen}
-          onForceOpenHandled={onForcePublishOpenHandled}
-        />
+        <div className="source-control-actions">
+          <BranchesMenu
+            githubState={integrations.github}
+            projectStatus={integrations.projectGithub}
+            projectPath={projectPath}
+            projectName={projectName}
+            currentBranch={currentBranch}
+            branches={branches}
+            openPRs={openPRs}
+            isPulling={isPulling}
+            isBranchSwitching={isBranchSwitching}
+            isRepositoryViewActive={isRepositoryViewActive}
+            isOpen={openSourceMenu === 'branches'}
+            onOpenChange={(open) => setOpenSourceMenu(open ? 'branches' : null)}
+            onPullLatest={onPullLatest}
+            onBranchSwitch={onBranchSwitch}
+            onViewBranches={onViewBranches}
+            onCreateBranch={onCreateBranch}
+            onViewPRs={onViewPRs}
+            onStartPR={(branch) => onCreatePR(branch)}
+            onGitHubConnect={onGitHubConnect}
+            onGitHubStatusChange={onGitHubStatusChange}
+            onModalClose={focusActiveTerminal}
+          />
+          <div
+            className={`source-control-push${hasUncommittedChanges ? ' has-unsaved-changes' : ''}`}
+            onClick={(event) => {
+              if (!hasUncommittedChanges) return;
+              if ((event.target as HTMLElement).closest('button')) return;
+              setOpenSourceMenu(openSourceMenu === 'push' ? null : 'push');
+            }}
+          >
+            {hasUncommittedChanges && currentBranch && (
+              <BranchIndicator
+                currentBranch={currentBranch}
+                hasUncommittedChanges={hasUncommittedChanges}
+                changedFiles={changedFiles}
+                projectPath={projectPath}
+                onDiscard={onDiscardChanges}
+                isOpen={openSourceMenu === 'push'}
+                onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
+                opensPushMenu
+              />
+            )}
+            <PublishBranchDropdown
+              currentBranch={currentBranch || 'main'}
+              projectGithubStatus={integrations.projectGithub}
+              projectPath={projectPath}
+              hasChangesToSync={hasUncommittedChanges}
+              onStatusChange={onPublishStatusChange}
+              onModalClose={focusActiveTerminal}
+              isPublishing={isPublishing}
+              setIsPublishing={setIsPublishing}
+              onPublishError={onPublishError}
+              onCreatePR={onCreatePR}
+              forceOpen={forcePublishOpen}
+              onForceOpenHandled={onForcePublishOpenHandled}
+              open={openSourceMenu === 'push'}
+              onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
+              grouped={hasUncommittedChanges}
+              changedFiles={changedFiles}
+              onDiscardChanges={onDiscardChanges}
+              hostingControls={
+                pushHostingPlugins.length > 0 ? (
+                  <PluginSlot
+                    name="toolbar"
+                    plugins={pushHostingPlugins}
+                    project={pluginProject}
+                    actions={pluginActions}
+                    theme={pluginTheme}
+                  />
+                ) : undefined
+              }
+            />
+          </div>
+        </div>
       </div>
     </header>
   );

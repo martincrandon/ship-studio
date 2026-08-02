@@ -80,6 +80,20 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* An open workspace panel is signalled by the standard outlined button state,
+   not the filled selected treatment used by ordinary toggles. */
+.workspace-panel-toggle.button--secondary[aria-pressed='true'] {
+  background: transparent;
+  color: var(--button-text-default);
+  border-color: var(--button-border);
+}
+
+.workspace-panel-toggle.button--secondary[aria-pressed='true']:hover:not(:disabled) {
+  background: transparent;
+  color: var(--button-text-hover);
+  border-color: var(--button-border-outline);
+}
+
 /* Collapse the header's text labels to icon-only so every control stays
    visible (and reachable) instead of overflowing or scrolling out of sight.
    The icons + tooltips carry the meaning. Only genuinely wide windows keep
@@ -89,19 +103,13 @@
    unison. */
 @media (max-width: 1600px) {
   .workspace-header .toolbar-btn-label,
-  .workspace-header .workspace-tab > span,
-  .workspace-header .branch-pull-button > span {
+  .workspace-header .workspace-tab > span {
     display: none;
   }
 
   /* Tighter tab padding once they're icon-only. */
   .workspace-header .workspace-tab {
     padding: 0 var(--spacing-sm);
-  }
-
-  .workspace-header .branch-pull-button {
-    padding: 0;
-    width: 28px;
   }
 }
 

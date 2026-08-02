@@ -20,6 +20,10 @@ export interface UseWorkspaceCommandsParams {
   handleResolveConflicts: () => void | Promise<void>;
   /** Opens the header Push dropdown */
   openPushDropdown: () => void;
+  /** Opens the header Branches workflow menu */
+  openBranchesMenu: () => void;
+  /** Opens the full Branches view with its creation form active. */
+  openCreateBranch: () => void;
   /** Pulls the latest changes from GitHub (routes conflicts to the resolver) */
   handlePullLatest: () => void;
   /** Push/pull commands only make sense with a connected GitHub repo */
@@ -74,6 +78,8 @@ export function useWorkspaceCommands({
   setShowSubmitReview,
   handleResolveConflicts,
   openPushDropdown,
+  openBranchesMenu,
+  openCreateBranch,
   handlePullLatest,
   isGitHubConnected,
   openWorktreeCreate,
@@ -108,7 +114,7 @@ export function useWorkspaceCommands({
         category: 'branch',
         when: 'project',
         keywords: ['checkout', 'change', 'git'],
-        run: () => setWorkspaceTab('branches'),
+        run: openBranchesMenu,
       },
       {
         id: 'branch.create',
@@ -117,7 +123,7 @@ export function useWorkspaceCommands({
         category: 'branch',
         when: 'project',
         keywords: ['new', 'git', 'checkout -b'],
-        run: () => setWorkspaceTab('branches'),
+        run: openCreateBranch,
       },
       {
         id: 'branch.submitReview',
@@ -183,6 +189,8 @@ export function useWorkspaceCommands({
       setShowSubmitReview,
       handleResolveConflicts,
       openPushDropdown,
+      openBranchesMenu,
+      openCreateBranch,
       handlePullLatest,
       isGitHubConnected,
       openWorktreeCreate,
