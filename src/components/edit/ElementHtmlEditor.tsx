@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../primitives/Button';
+import { SaveIcon } from '../icons/editor';
 import { CodeOverlayEditor } from './CodeOverlayEditor';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { resolveElementHtml, applyElementHtml } from '../../lib/edit-html';
@@ -116,6 +117,7 @@ export function ElementHtmlEditor({ projectPath, signature }: Props) {
             size="default"
             disabled={!dirty || saving}
             onClick={() => void save()}
+            leftIcon={!saving ? <SaveIcon size={14} /> : undefined}
           >
             {saving ? 'Saving…' : 'Save'}
           </Button>

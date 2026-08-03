@@ -26,7 +26,16 @@
 }
 
 .ss-cascade-chip[data-tone='media'] {
-  background: var(--color-pink-600);
+  background: var(--media-surface);
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ss-cascade-chip[data-tone='tag'] {
+  background: var(--tag-chip-surface);
+  color: var(--tag-chip-text);
   min-width: 0;
   max-width: 45%;
   overflow: hidden;
@@ -42,12 +51,17 @@
 }
 
 .ss-cascade-chip[data-tone='media'].is-interactive:hover {
-  background: var(--color-pink-500);
+  background: var(--media-surface-hover);
+}
+
+.ss-cascade-chip[data-tone='tag'].is-interactive:hover {
+  background: var(--tag-chip-surface-hover);
 }
 
 .ss-cascade-chip.is-editing {
-  flex: 1 1 auto;
-  max-width: none;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 100%;
   background: var(--surface-control);
 }
 
@@ -60,7 +74,7 @@
 }
 
 .ss-cascade-chip__input {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   width: auto;
   max-width: none;
@@ -81,16 +95,44 @@
 
 .ss-cascade-chip[data-tone='media'].is-editing .ss-cascade-chip__input,
 .ss-cascade-chip[data-tone='media'].is-editing .ss-cascade-chip__input::selection {
-  background: var(--color-pink-600);
+  background: var(--media-surface);
 }
 
-.ss-cascade-chip.is-editing,
-.ss-cascade-card__context .ss-cascade-chip[data-tone='media'] {
-  overflow: visible;
+.ss-cascade-chip[data-tone='tag'].is-editing .ss-cascade-chip__input,
+.ss-cascade-chip[data-tone='tag'].is-editing .ss-cascade-chip__input::selection {
+  background: var(--tag-chip-surface);
 }
 
+/* A media condition is shown inside the block-level context row. Give the chip
+   an explicit shrink-to-fit width there, and let its input measure its actual
+   glyphs instead of the HTML `size` attribute's fixed character-cell width. */
 .ss-cascade-card__context .ss-cascade-chip[data-tone='media'] {
   display: inline-flex;
-  max-width: none;
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: 100%;
   overflow: visible;
+  white-space: normal;
+}
+
+.ss-cascade-card__context .ss-cascade-chip[data-tone='media'].is-editing .ss-cascade-chip__input {
+  field-sizing: content;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.ss-cascade-chip.is-editing {
+  overflow: visible;
+}
+
+/* The static label must paint as inline text fragments. An inline-block still
+   takes the unwrapped string's intrinsic width, so its text can wrap inside a
+   box that reaches the context edge. Keep flex sizing exclusively for the
+   editor. */
+.ss-cascade-card__context .ss-cascade-chip[data-tone='media']:not(.is-editing) {
+  display: inline;
+  width: auto;
+  max-width: none;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }

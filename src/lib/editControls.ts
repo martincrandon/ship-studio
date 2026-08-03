@@ -66,8 +66,8 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     controls: [
       lengthRow('Width', 'w', 'width'),
       lengthRow('Height', 'h', 'height'),
-      lengthRow('Max width', 'max-w', 'max-width'),
-      lengthRow('Min height', 'min-h', 'min-height'),
+      lengthRow('Max W', 'max-w', 'max-width'),
+      lengthRow('Min H', 'min-h', 'min-height'),
       { kind: 'spacingBox', key: 'spacingBox' },
     ],
   },

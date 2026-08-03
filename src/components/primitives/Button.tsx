@@ -9,7 +9,7 @@ export type ButtonVariant =
   | 'warning'
   | 'variable';
 
-export type ButtonSize = 'default' | 'compact' | 'large';
+export type ButtonSize = 'default' | 'compact' | 'medium' | 'large';
 export type ButtonWidth = 'hug' | 'fill';
 
 export function buttonClassNames({
@@ -17,17 +17,22 @@ export function buttonClassNames({
   size = 'default',
   width = 'hug',
   className,
+  leftIcon,
+  rightIcon,
 }: {
   variant?: ButtonVariant;
   size?: ButtonSize;
   width?: ButtonWidth;
   className?: string;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
 } = {}) {
   return [
     'button',
     `button--${variant}`,
     `button--size-${size}`,
     `button--width-${width}`,
+    leftIcon || rightIcon ? 'button--has-icon' : null,
     width === 'fill' ? 'button--fill button--block' : 'button--hug',
     className,
   ]
@@ -80,6 +85,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     size,
     width: block ? 'fill' : width,
     className,
+    leftIcon,
+    rightIcon,
   });
 
   return (

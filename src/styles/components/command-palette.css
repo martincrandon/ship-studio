@@ -81,19 +81,26 @@
 .command-palette-tabs {
   display: flex;
   align-items: stretch;
-  gap: var(--spacing-lg);
-  padding: 0 var(--spacing-lg);
-  border-bottom: 1px solid var(--border-default);
+  width: 100%;
+}
+
+/* The workspace header supplies this separator around its tabs. The palette
+   needs the same full-width baseline because it has no surrounding toolbar. */
+.command-palette-tabs.tabs__list--appearance-underline {
+  border-bottom: var(--stroke-1) solid var(--border-default);
 }
 
 .command-palette-tab {
   position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
   background: transparent;
   border: none;
   border-radius: 0;
   appearance: none;
   -webkit-appearance: none;
-  padding: var(--spacing-md) 0;
+  padding: var(--spacing-lg) 0;
   font-size: var(--font-size-md);
   color: var(--text-muted);
   cursor: pointer;
@@ -101,6 +108,13 @@
   font-weight: 500;
   transition: color var(--transition);
   outline: none;
+}
+
+/* The shared tab primitive defaults to a compact fixed height. Let these
+   palette tabs grow with their larger vertical padding instead. */
+.command-palette-tabs .tabs__tab.button.command-palette-tab {
+  height: auto;
+  min-height: 0;
 }
 
 .command-palette-tab:hover,
@@ -114,17 +128,6 @@
 
 .command-palette-tab.is-active {
   color: var(--text-primary);
-}
-
-.command-palette-tab.is-active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 2px 2px 0 0;
 }
 
 /* ===== Result list ===== */

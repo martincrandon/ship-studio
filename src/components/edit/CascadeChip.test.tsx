@@ -29,6 +29,11 @@ describe('CascadeChip', () => {
     expect(screen.getByRole('combobox', { name: 'Rule selector' })).toHaveValue('.button');
   });
 
+  it('uses the media color family for plain tag selectors', () => {
+    render(<SelectorChip selector="button:hover" suggestions={[]} onCommit={vi.fn()} />);
+    expect(screen.getByRole('button')).toHaveAttribute('data-tone', 'tag');
+  });
+
   it('uses the same media-tone contract in display and editing states', () => {
     render(<RuleContextChips mediaText="(max-width: 768px)" onRenameAtRule={vi.fn()} />);
     const displayChip = screen.getByRole('button');

@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { PlusIcon, CopyIcon, TrashIcon } from '../icons';
+import { DuplicateIcon, PlusIcon, TrashIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
 import { InsertMenu } from './InsertMenu';
 import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
@@ -133,7 +133,7 @@ export function ElementToolbar({
               title="Duplicate element"
               onClick={onDuplicate}
             >
-              <CopyIcon size={12} />
+              <DuplicateIcon size={12} />
             </button>
             <button
               type="button"

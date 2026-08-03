@@ -171,6 +171,8 @@
   --size-control-large: 36px;
   --size-control-medium: 24px;
   --size-control-compact: 20px;
+  --font-size-micro: 7px;
+  --tracking-micro: 0.56px;
   --size-element-toolbar-selector: 140px;
 
   --size-sidebar-project-shortcut: 24px;
@@ -183,6 +185,8 @@
   --size-icon-button: 16px;
   --size-icon-md: 18px;
   --icon-size-full: 24px;
+  --size-icon-gallery-width: 480px;
+  --size-icon-gallery-column: 120px;
 
   --size-color-picker-width: 336px;
   --size-color-picker-surface: 212px;
@@ -291,23 +295,30 @@
 
   --tag-surface: color-mix(in oklch, var(--color-green-700) 15%);
   --tag-text: var(--color-green-400);
+  --tag-chip-surface: var(--color-green-700);
+  --tag-chip-surface-hover: var(--color-green-600);
+  --tag-chip-text: var(--text-inverse);
 
   --variable-surface: var(--color-purple-700);
   --variable-surface-hover: var(--color-purple-600);
   --variable-border: var(--color-purple-700);
   --variable-text: var(--color-purple-400);
+  --variable-text-hover: var(--color-purple-300);
   --variable-field-hover: var(--color-purple-500-o15);
   --variable-field-selected: var(--color-purple-500-o40);
 
   --class-text: var(--color-orange-400);
   --property-text-hover: var(--color-white);
   --function-text: var(--color-red-400);
+  --media-surface: var(--color-pink-600);
+  --media-surface-hover: var(--color-pink-500);
   --media-text: var(--color-pink-400);
 
   /* Buttons */
   --button-surface-default: var(--surface-control);
   --button-surface-hover: var(--surface-control-hover);
   --button-surface-selected: var(--surface-selected);
+  --button-surface-pressed: var(--overlay-50);
 
   --button-border-solid: transparent;
   --button-border: var(--border-default);
@@ -486,10 +497,42 @@
   /* Fullscreen preview overlay — above workspace chrome, below modals. */
   --z-preview-fullscreen: 900;
 
-  /* Visual editor panel width — shared by the panel itself (visual-editor.css)
-     and the preview grid column that hosts it when pinned (preview.css).
-     MUST match PANEL_WIDTH in VisualEditorPanel.tsx. */
+  /* Legacy preview panel width. The Visual Editor uses the Figma-aligned
+     --editor-panel-visual-w token below, leaving this stable for other surfaces. */
   --editor-panel-w: 264px;
+  /* Visual Editor's Figma-aligned panel is narrower than the legacy editor
+     column used by other preview surfaces. Keep the legacy token stable. */
+  --editor-panel-visual-w: 240px;
+  --editor-panel-inline-pad: var(--spacing-md);
+  --editor-panel-section-h: 40px;
+  --editor-panel-label-w: 72px;
+  --editor-panel-field-w: 100%;
+  --editor-panel-spacing-w: 224px;
+  --editor-panel-spacing-h: 112px;
+  --editor-panel-spacing-margin-inner-x: 36px;
+  --editor-panel-spacing-margin-inner-y: 22px;
+  --editor-panel-spacing-inner-x: 38px;
+  --editor-panel-spacing-inner-y: 24px;
+  --editor-panel-spacing-core-x: 36px;
+  --editor-panel-spacing-core-y: 22px;
+  --editor-panel-spacing-core-h: 20px;
+  --editor-panel-spacing-label: var(--color-gray-500);
+  --editor-panel-spacing-value: var(--color-gray-400);
+  --editor-panel-spacing-margin-top: var(--surface-selected);
+  --editor-panel-spacing-margin-top-hover: var(--color-gray-700);
+  --editor-panel-spacing-margin-side: var(--surface-control-hover);
+  --editor-panel-spacing-margin-side-hover: var(--surface-selected);
+  --editor-panel-spacing-margin-bottom: var(--surface-control);
+  --editor-panel-spacing-margin-bottom-hover: var(--surface-control-hover);
+  --editor-panel-spacing-padding-top: var(--surface-control);
+  --editor-panel-spacing-padding-top-hover: var(--surface-control-hover);
+  --editor-panel-spacing-padding-side: var(--surface-control-hover);
+  --editor-panel-spacing-padding-side-hover: var(--surface-selected);
+  --editor-panel-spacing-padding-bottom: var(--surface-selected);
+  --editor-panel-spacing-padding-bottom-hover: var(--color-gray-700);
+  --z-editor-spacing-band: 1;
+  --z-editor-spacing-surface: 2;
+  --z-editor-spacing-field: 3;
 
   /* Standard fixed panel-header height. Preview chrome and pinned editor
      headers share it so adjacent panels remain aligned. */
@@ -1088,7 +1131,7 @@ body.compact-mode-active html {
 .button--default:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']),
 .button--secondary:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']),
 .button--ghost:is([aria-pressed='true'], [aria-expanded='true'], [data-selected='true']) {
-  background: var(--button-surface-selected);
+  background: var(--button-surface-pressed);
   color: var(--button-text-hover);
 }
 
@@ -1109,6 +1152,17 @@ body.compact-mode-active html {
   min-height: var(--control-height-compact);
   gap: var(--space-04);
   padding: 0 var(--space-06);
+  font-size: var(--font-size-11);
+}
+
+.button--size-compact.button--has-icon:not(.button--icon-only) {
+  height: auto;
+  padding: var(--space-06);
+}
+
+.button--size-medium {
+  height: var(--size-control-medium);
+  min-height: var(--size-control-medium);
   font-size: var(--font-size-11);
 }
 

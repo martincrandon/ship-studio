@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "files": [
+    {
+      "path": "src/commands/useShopifyCommands.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/branches/BranchGraph.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/CommandPalette/CommandPalette.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/dashboard/AgentsPanel.tsx",
+      "count": 2,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/dashboard/CreateProject.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/dashboard/TemplateGallery.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/edit/DeclarationRow.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/edit/EditPopover.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/import-project/steps/Step1AccountSelection.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/import-project/steps/Step3ImportProgress.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/import-project/steps/Step3WorkspacePicker.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/preview/AgentActivityOverlay.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/preview/Preview.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/setup/agent-led/SetupChecklist.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/setup/CelebrationScreen.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/setup/SetupItem.tsx",
+      "count": 4,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/setup/steps/AgentStep.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/terminal/DevServerStatus.tsx",
+      "count": 1,
+      "classification": "intentional-graphic"
+    },
+    {
+      "path": "src/components/workspace/EnvEditor.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/workspace/NotificationSettingsModal.tsx",
+      "count": 1,
+      "classification": "reserved"
+    },
+    {
+      "path": "src/components/workspace/WorkspaceView.tsx",
+      "count": 1,
+      "classification": "reserved"
+    }
+  ]
+}

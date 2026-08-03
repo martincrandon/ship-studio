@@ -22,7 +22,7 @@ import { fileManagerName } from '../../lib/setup';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { ImageIcon, SlackIcon, PanelLeftIcon } from '../icons';
+import { ImageIcon, SidebarIcon, SlackIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { ToggleButton } from '../primitives/ToggleButton';
 // SupportPanel is hidden for now (the Support button links straight to Slack) but
@@ -198,7 +198,7 @@ export function WorkspaceHeader({
             title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
             aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
             data-education-id="toggle-sidebar"
-            leftIcon={<PanelLeftIcon size={16} />}
+            leftIcon={<SidebarIcon size={16} />}
           >
             <span className="toolbar-btn-label">{isSidebarHidden ? 'Show' : 'Hide'}</span>
           </ToggleButton>

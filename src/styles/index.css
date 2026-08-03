@@ -10,6 +10,8 @@
 @import './components/tabs.css';
 @import './components/text-button.css';
 @import './components/segmented-control.css';
+@import './components/icon-audit.css';
+@import './components/icon-gallery.css';
 
 /* Features */
 @import './features/setup.css';

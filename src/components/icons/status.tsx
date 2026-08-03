@@ -4,20 +4,26 @@
  * Success, error, bell, activity, history, shield check, puzzle, plug, and graduation cap icons.
  */
 
+import { NewDesignIcon } from './new-design';
+import { getIconData, ICON_STROKE_WIDTH, resolveIconSize } from './provenance';
+
 interface IconProps {
   size?: number;
   className?: string;
 }
 
 export function SuccessIcon({ size = 20 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('SuccessIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
     >
       <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
       <polyline points="22 4 12 14.01 9 11.01" />
@@ -26,14 +32,17 @@ export function SuccessIcon({ size = 20 }: IconProps) {
 }
 
 export function ErrorIcon({ size = 20 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('ErrorIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
     >
       <circle cx="12" cy="12" r="10" />
       <line x1="15" y1="9" x2="9" y2="15" />
@@ -42,15 +51,18 @@ export function ErrorIcon({ size = 20 }: IconProps) {
   );
 }
 
-export function BellIcon({ size = 14 }: IconProps) {
+export function BellIcon({ size = 16 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('BellIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -60,32 +72,24 @@ export function BellIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function ActivityIcon({ size = 14 }: IconProps) {
+export function ActivityIcon({ size = 16, className }: IconProps) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
+    <NewDesignIcon iconName="ActivityIcon" source="Active" size={size} className={className} />
   );
 }
 
-export function HistoryIcon({ size = 14 }: IconProps) {
+export function HistoryIcon({ size = 16 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('HistoryIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -96,15 +100,18 @@ export function HistoryIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function ShieldCheckIcon({ size = 14 }: IconProps) {
+export function ShieldCheckIcon({ size = 16 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('ShieldCheckIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -114,32 +121,22 @@ export function ShieldCheckIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function PuzzleIcon({ size = 14 }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 2c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.878.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.968 1.02Z" />
-    </svg>
-  );
+export function PuzzleIcon({ size = 16, className }: IconProps) {
+  return <NewDesignIcon iconName="PuzzleIcon" source="Plugin" size={size} className={className} />;
 }
 
-export function PlugIcon({ size = 14 }: IconProps) {
+export function PlugIcon({ size = 16 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('PlugIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -151,15 +148,18 @@ export function PlugIcon({ size = 14 }: IconProps) {
   );
 }
 
-export function GraduationCapIcon({ size = 14 }: IconProps) {
+export function GraduationCapIcon({ size = 16 }: IconProps) {
+  const renderedSize = resolveIconSize(size);
+
   return (
     <svg
-      width={size}
-      height={size}
+      {...getIconData('GraduationCapIcon')}
+      width={renderedSize}
+      height={renderedSize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
     >

@@ -10,7 +10,18 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { SearchIcon, ChevronIcon, ResetIcon, LayersIcon, PinIcon, ActivityIcon } from '../icons';
+import {
+  ActivityIcon,
+  ChevronIcon,
+  CloseIcon,
+  FolderOpenIcon,
+  HomeIcon,
+  NewWorkspaceIcon,
+  PinIcon,
+  ResetIcon,
+  SearchIcon,
+  SwitchWorkspaceIcon,
+} from '../icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
@@ -286,7 +297,11 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
             {
               id: 'workspace.switch',
               title: hasMultipleWorkspaces ? 'Switch workspace…' : 'New workspace…',
-              icon: <LayersIcon size={14} />,
+              icon: hasMultipleWorkspaces ? (
+                <SwitchWorkspaceIcon size={14} />
+              ) : (
+                <NewWorkspaceIcon size={14} />
+              ),
               category: 'action' as const,
               keywords: ['workspace', 'account', 'switch', 'new workspace', 'profile', 'org'],
               run: () => onSwitchAccount(),
@@ -750,19 +765,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
           data-selected={isHomeActive ? 'true' : undefined}
           leftIcon={
             <span className="workspace-sidebar-home-icon" aria-hidden="true">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
+              <HomeIcon size={12} />
             </span>
           }
         >
@@ -823,8 +826,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
           className="workspace-sidebar-add-project"
           onClick={onOpenProjectPicker}
           title="Open a project"
+          leftIcon={<FolderOpenIcon size={14} />}
         >
-          <span className="workspace-sidebar-add-icon">+</span>
           <span>Open project</span>
         </Button>
         {onSwitchAccount && activeAccount && hasMultipleWorkspaces && (
@@ -836,6 +839,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               className="workspace-sidebar-ws-switch"
               onClick={onSwitchAccount}
               title={`Switch workspace (${activeAccount.name})`}
+              leftIcon={<SwitchWorkspaceIcon size={14} />}
             >
               <span
                 className="workspace-switch-account-dot"
@@ -1089,16 +1093,7 @@ function ProjectGroup({
             className="sidebar-project-control sidebar-project-close"
             variant="ghost"
             size="compact"
-            icon={
-              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-                <path
-                  d="M1 1 L9 9 M9 1 L1 9"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                />
-              </svg>
-            }
+            icon={<CloseIcon size={10} />}
             onClick={(e) => {
               e.stopPropagation();
               onClose();

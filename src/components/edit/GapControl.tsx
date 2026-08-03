@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { Button } from '../primitives/Button';
+import { TextField } from '../primitives/TextField';
 import { ResettableLabel } from './ResettableLabel';
 import {
   spacingValue,
@@ -54,8 +55,9 @@ function GapField({
   };
 
   return (
-    <input
-      className={`ss-edit-panel__num${invalid ? ' ss-edit-panel__num--invalid' : ''}`}
+    <TextField
+      className="ss-edit-panel__num"
+      invalid={invalid}
       inputMode="text"
       autoCorrect="off"
       autoCapitalize="off"
@@ -110,7 +112,7 @@ export function GapControl({ currentClass, layer, onApplyEnum, onReset, onStepGa
       />
       <div className="ss-edit-panel__stepper">
         <Button
-          size="compact"
+          size="medium"
           variant="secondary"
           aria-label="Decrease gap"
           onClick={() => onStepGap(-1)}
@@ -123,7 +125,7 @@ export function GapControl({ currentClass, layer, onApplyEnum, onReset, onStepGa
           onStep={onStepGap}
         />
         <Button
-          size="compact"
+          size="medium"
           variant="secondary"
           aria-label="Increase gap"
           onClick={() => onStepGap(1)}

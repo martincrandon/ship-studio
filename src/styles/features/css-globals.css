@@ -84,7 +84,7 @@
   line-height: 1.5;
 }
 .ss-var-row:hover {
-  background: var(--variable-field-hover);
+  background: none;
 }
 
 .ss-var-row__swatch {
@@ -116,19 +116,38 @@
 .ss-var-row__value {
   min-width: 0;
   width: 100%;
-  padding: 0 var(--spacing-xs);
+  padding: 0;
   overflow-wrap: anywhere;
+}
+
+.ss-var-row__value.property-field {
+  border: 0;
+  background: transparent;
+  color: var(--variable-text);
+  border-radius: 0;
+  transition: color var(--transition);
+}
+.ss-var-row__value.property-field:hover,
+.ss-var-row__value.property-field[aria-expanded='true'] {
+  border-color: transparent;
+  background: transparent;
+  color: var(--variable-text-hover);
+}
+.ss-var-row__value.property-field:focus-visible {
+  border-color: transparent;
 }
 
 .ss-var-row__value--ro {
   cursor: default;
   color: var(--variable-text);
-  padding: 0 var(--spacing-xs);
-  border-radius: var(--radius-sm);
-  background: var(--variable-field-hover);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transition: color var(--transition);
 }
 .ss-var-row__value--ro:hover {
   background: none;
+  color: var(--variable-text-hover);
 }
 .ss-var-row__empty {
   color: var(--text-muted);
@@ -196,14 +215,4 @@
   color: var(--code-property);
   font-family: var(--font-code);
   font-size: var(--font-size-sm);
-}
-
-/* The fixed `@keyframes` keyword beside the editable animation name. */
-.ss-cascade-card__kf-at {
-  color: var(--media-text);
-}
-.ss-cascade-card__kf-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-xs);
 }

@@ -30,7 +30,7 @@ import { stripAnsi } from '../../lib/ansi';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
-import { FileIcon, CopyIcon, ResetIcon } from '../icons';
+import { CopyIcon, FileTextIcon, HelpIcon, ResetIcon } from '../icons';
 
 const CATEGORY_HINTS: Record<ScriptCategory, string> = {
   test: "Runs your project's test suite (vitest, jest, etc.) and reports pass/fail.",
@@ -138,7 +138,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
                   size="compact"
                   onClick={() => void health.handleShowPackageJson()}
                   disabled={health.isLoadingPackageJson}
-                  leftIcon={<FileIcon size={12} />}
+                  leftIcon={<FileTextIcon size={12} />}
                 >
                   View package.json
                 </Button>
@@ -206,7 +206,7 @@ export const HealthTabPanel = forwardRef<HealthTabPanelRef, HealthTabPanelProps>
               title="View package.json"
               aria-label="View package.json"
             >
-              {health.isLoadingPackageJson ? <Spinner size="sm" /> : <FileIcon size={12} />}
+              {health.isLoadingPackageJson ? <Spinner size="sm" /> : <FileTextIcon size={12} />}
             </button>
           </div>
         </div>
@@ -405,17 +405,7 @@ function HelpHint({ label }: { label: string }) {
       // Stop the click from bubbling into the row's "select" handler.
       onClick={(e) => e.stopPropagation()}
     >
-      <svg width={11} height={11} viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.2" />
-        <path
-          d="M5.8 6.2c0-1.2 1-2 2.2-2s2.2.8 2.2 2c0 .8-.5 1.3-1.1 1.6-.6.4-1.1.7-1.1 1.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-        />
-        <circle cx="8" cy="11.5" r="0.7" fill="currentColor" />
-      </svg>
+      <HelpIcon size={11} />
       <span className="health-tab-help-tooltip" role="tooltip">
         {label}
       </span>

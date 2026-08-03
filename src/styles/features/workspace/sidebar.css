@@ -278,6 +278,13 @@
   color: var(--text-primary);
 }
 
+/* Expanded state is represented by the rotated chevron, not a selected
+ * control surface. Keep the hit target visually quiet until it is hovered. */
+.sidebar-project-control[aria-expanded='true']:not(:hover) {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .sidebar-project-chevron svg {
   transition: transform var(--transition-fast);
 }
@@ -481,6 +488,19 @@
   position: relative;
 }
 
+/* Read-only sections in expanded, non-current projects have no add control.
+ * Remove their empty control slot so the instance count occupies the
+ * trailing position, aligned with the project's status dot above. */
+.sidebar-project:not(.is-current) .sidebar-section-meta {
+  grid-template-columns: var(--size-icon-md);
+}
+
+.sidebar-project:not(.is-current)
+  .sidebar-section-meta
+  > .sidebar-section-control-slot[aria-hidden='true'] {
+  display: none;
+}
+
 .sidebar-section-count {
   display: inline-flex;
   align-items: center;
@@ -584,7 +604,7 @@
   padding: var(--spacing-2xs) 0;
   color: var(--text-muted);
   font-size: var(--font-size-sm);
-  font-style: italic;
+  font-style: normal;
 }
 
 /* "Add new agent" affordance below the last item in a section.

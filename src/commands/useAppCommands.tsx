@@ -12,29 +12,14 @@ import { fileManagerName } from '../lib/setup';
 import {
   CodeIcon,
   CursorIcon,
-  FolderIcon,
+  FolderOpenIcon,
   GlobeIcon,
-  LayersIcon,
+  HomeIcon,
   PlusIcon,
+  ResetIcon,
+  SharedLibraryIcon,
   SettingsIcon,
 } from '../components/icons';
-
-/** Inline restart/refresh glyph — no equivalent in the icons/ lib yet. */
-const RestartGlyph = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="1 4 1 10 7 10" />
-    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-  </svg>
-);
 
 /**
  * End-to-end smoke-test commands — wired to the real AppContents handlers.
@@ -215,7 +200,7 @@ export function useAppCommands({
         id: `project.goto.${path}`,
         title: name,
         subtitle: path,
-        icon: <FolderIcon size={14} />,
+        icon: <FolderOpenIcon size={14} />,
         category: 'project' as const,
         keywords: [path],
         shortcut,
@@ -247,7 +232,7 @@ export function useAppCommands({
       {
         id: 'project.import.local',
         title: 'Import local folder',
-        icon: <FolderIcon size={14} />,
+        icon: <FolderOpenIcon size={14} />,
         category: 'action',
         when: 'home',
         keywords: ['import', 'folder', 'local', 'existing'],
@@ -281,7 +266,7 @@ export function useAppCommands({
       {
         id: 'modal.attachedLibraries',
         title: 'Shared libraries',
-        icon: <LayersIcon size={14} />,
+        icon: <SharedLibraryIcon size={14} />,
         category: 'settings',
         keywords: [
           'library',
@@ -313,7 +298,7 @@ export function useAppCommands({
       {
         id: 'nav.home',
         title: 'Go to Home',
-        icon: <FolderIcon size={14} />,
+        icon: <HomeIcon size={14} />,
         category: 'navigation' as const,
         when: 'project' as const,
         run: handleBackToProjects,
@@ -321,7 +306,7 @@ export function useAppCommands({
       {
         id: 'devserver.restart',
         title: 'Restart dev server',
-        icon: <RestartGlyph />,
+        icon: <ResetIcon size={14} />,
         category: 'action' as const,
         when: 'project' as const,
         keywords: ['dev', 'server', 'vite', 'next'],
@@ -330,7 +315,7 @@ export function useAppCommands({
       {
         id: 'ide.finder',
         title: `Reveal in ${fileManagerName()}`,
-        icon: <FolderIcon size={14} />,
+        icon: <FolderOpenIcon size={14} />,
         category: 'action' as const,
         when: 'project' as const,
         // Keep 'finder'/'explorer'/'files' all searchable regardless of platform.

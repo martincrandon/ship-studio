@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
-export type CascadeChipTone = 'selector' | 'media';
+export type CascadeChipTone = 'selector' | 'tag' | 'media';
 
 interface CascadeChipProps extends HTMLAttributes<HTMLSpanElement> {
   tone: CascadeChipTone;

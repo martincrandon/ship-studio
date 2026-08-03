@@ -17,7 +17,7 @@ import {
   CloseIcon,
   ImageIcon,
   EditIcon,
-  LayersIcon,
+  MoveToWorkspaceIcon,
 } from '../icons';
 import { Dropdown, DropdownItem, DropdownDivider } from '../primitives/Dropdown';
 
@@ -100,7 +100,7 @@ export function ProjectCardMenu({
           </DropdownItem>
         )}
         {onMoveToWorkspace && (
-          <DropdownItem icon={<LayersIcon size={14} />} onSelect={onMoveToWorkspace}>
+          <DropdownItem icon={<MoveToWorkspaceIcon size={14} />} onSelect={onMoveToWorkspace}>
             <span>Move to workspace</span>
           </DropdownItem>
         )}

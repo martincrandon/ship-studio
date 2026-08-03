@@ -10,7 +10,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { SearchIcon } from '../icons';
+import { SearchIcon, VercelIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
@@ -429,11 +429,7 @@ export function SkillsModal({
           <TextButton
             className="skills-footer-link"
             onClick={() => void openUrl('https://skills.sh')}
-            leftIcon={
-              <svg width={10} height={10} viewBox="0 0 76 65" fill="currentColor">
-                <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-              </svg>
-            }
+            leftIcon={<VercelIcon size={10} />}
           >
             Powered by skills.sh
           </TextButton>

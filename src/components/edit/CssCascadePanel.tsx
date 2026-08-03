@@ -250,7 +250,9 @@ export function CssCascadePanel({
         ) : (
           <>
             <div className="ss-cascade-target">
-              <code className="ss-cascade-target__tag">{selection.signature.tagName}</code>
+              <code className="ss-cascade-chip" data-tone="tag">
+                {selection.signature.tagName}
+              </code>
               {classes.length > 0 && (
                 <span className="ss-cascade-target__classes">
                   {classes.map((c) => (
@@ -422,15 +424,17 @@ function AddSelectorBar({
 
   if (!open) {
     return (
-      <Button
-        variant="secondary"
-        leftIcon={<PlusIcon size={11} />}
-        className="ss-cascade-action"
-        data-cascade-add-selector
-        onClick={() => setOpen(true)}
-      >
-        Add selector
-      </Button>
+      <div className="ss-cascade-action">
+        <Button
+          variant="default"
+          width="fill"
+          leftIcon={<PlusIcon size={11} />}
+          data-cascade-add-selector
+          onClick={() => setOpen(true)}
+        >
+          Add selector
+        </Button>
+      </div>
     );
   }
 

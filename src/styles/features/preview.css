@@ -271,7 +271,7 @@
    below it, spanning the canvas + inspect rows, so it matches the preview's
    height and can never overlap any bar. Works unchanged in fullscreen mode. */
 .preview-container--editor-pinned {
-  grid-template-columns: minmax(0, 1fr) var(--editor-panel-w);
+  grid-template-columns: minmax(0, 1fr) var(--editor-panel-visual-w);
 }
 
 /* Element tree (navigator) on the left in fullscreen edit mode. Composes with
@@ -282,7 +282,7 @@
 }
 
 .preview-container--tree.preview-container--editor-pinned {
-  grid-template-columns: var(--tree-panel-w) minmax(0, 1fr) var(--editor-panel-w);
+  grid-template-columns: var(--tree-panel-w) minmax(0, 1fr) var(--editor-panel-visual-w);
 }
 
 /* Code (markup-edit) view of the Elements panel: widen the left track so the
@@ -291,7 +291,7 @@
   grid-template-columns: var(--tree-code-w) minmax(0, 1fr);
 }
 .preview-container--tree.preview-container--tree-code.preview-container--editor-pinned {
-  grid-template-columns: var(--tree-code-w) minmax(0, 1fr) var(--editor-panel-w);
+  grid-template-columns: var(--tree-code-w) minmax(0, 1fr) var(--editor-panel-visual-w);
 }
 
 .preview-container--editor-pinned .preview-toolbar,

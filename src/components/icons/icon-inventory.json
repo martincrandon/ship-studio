@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 1,
+  "icons": [
+    { "name": "ClaudeIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "GitHubIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "VercelIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "CloudflareIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "VSCodeIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "CursorIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "CodexIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "OpencodeIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "SlackIcon", "status": "new-design", "kind": "brand", "source": "Slack.svg" },
+    { "name": "SafariIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "ChromeIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "FirefoxIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "ArcIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "BraveIcon", "status": "not-applicable", "kind": "brand" },
+    { "name": "EdgeIcon", "status": "not-applicable", "kind": "brand" },
+
+    { "name": "ChevronIcon", "status": "new-design", "kind": "ui", "source": "Chevron Down.svg" },
+    {
+      "name": "ChevronRightIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "Chevron Right.svg"
+    },
+    { "name": "CheckIcon", "status": "new-design", "kind": "ui", "source": "tick.svg" },
+    { "name": "WarningIcon", "status": "new-design", "kind": "ui", "source": "warning-alert.svg" },
+    { "name": "CloseIcon", "status": "new-design", "kind": "ui", "source": "Cancel.svg" },
+    { "name": "InfoIcon", "status": "legacy", "kind": "ui" },
+    { "name": "SearchIcon", "status": "new-design", "kind": "ui", "source": "Search.svg" },
+    { "name": "ArrowLeftIcon", "status": "new-design", "kind": "ui", "source": "Left.svg" },
+    { "name": "ArrowRightIcon", "status": "new-design", "kind": "ui", "source": "Right.svg" },
+    { "name": "GridIcon", "status": "new-design", "kind": "ui", "source": "grid.svg" },
+    { "name": "ListIcon", "status": "new-design", "kind": "ui", "source": "list.svg" },
+    {
+      "name": "AlignLeftIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-left.svg"
+    },
+    {
+      "name": "AlignCenterIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-center.svg"
+    },
+    {
+      "name": "AlignRightIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-right.svg"
+    },
+    {
+      "name": "JustifyStartIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "justify-start.svg"
+    },
+    {
+      "name": "JustifyCenterIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "justify-center.svg"
+    },
+    {
+      "name": "JustifyEndIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "justify-end.svg"
+    },
+    {
+      "name": "JustifyBetweenIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "justify-between.svg"
+    },
+    {
+      "name": "AlignItemsStartIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-items-start.svg"
+    },
+    {
+      "name": "AlignItemsCenterIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-items-center.svg"
+    },
+    {
+      "name": "AlignItemsEndIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-items-end.svg"
+    },
+    {
+      "name": "AlignItemsStretchIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "align-items-stretch.svg"
+    },
+    {
+      "name": "DisplayBlockIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "display-block.svg"
+    },
+    {
+      "name": "DisplayFlexIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "display-flex.svg"
+    },
+    {
+      "name": "DisplayGridIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "display-grid.svg"
+    },
+    {
+      "name": "DisplayInlineBlockIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "display-inline-block.svg"
+    },
+    {
+      "name": "DisplayInlineFlexIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "display-inline-flex.svg"
+    },
+    { "name": "ItalicsOffIcon", "status": "new-design", "kind": "ui", "source": "ItalicsOff.svg" },
+    { "name": "ItalicsOnIcon", "status": "new-design", "kind": "ui", "source": "ItalicsOn.svg" },
+    {
+      "name": "DecorationNoneIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "decoration-none.svg"
+    },
+    {
+      "name": "DecorationOverlineIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "decoration-overline.svg"
+    },
+    {
+      "name": "DecorationStrikeIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "decoration-strike.svg"
+    },
+    {
+      "name": "DecorationUnderlineIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "decoration-underline.svg"
+    },
+    {
+      "name": "OverflowScrollIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "overflow-scroll.svg"
+    },
+    { "name": "WrapDownIcon", "status": "new-design", "kind": "ui", "source": "wrap-down.svg" },
+
+    { "name": "CodeIcon", "status": "new-design", "kind": "ui", "source": "Code Block.svg" },
+    { "name": "TerminalIcon", "status": "legacy", "kind": "ui" },
+    { "name": "EditIcon", "status": "new-design", "kind": "ui", "source": "edit-mode.svg" },
+    { "name": "FileIcon", "status": "new-design", "kind": "ui", "source": "file.svg" },
+    { "name": "FileTextIcon", "status": "new-design", "kind": "ui", "source": "file-text.svg" },
+    { "name": "FolderIcon", "status": "new-design", "kind": "ui", "source": "folder.svg" },
+    {
+      "name": "FolderOpenIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "folder-open.svg"
+    },
+    {
+      "name": "FolderPlusIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "new-folder.svg"
+    },
+    { "name": "TrashIcon", "status": "new-design", "kind": "ui", "source": "Trash.svg" },
+    { "name": "UploadIcon", "status": "new-design", "kind": "ui", "source": "Up.svg" },
+    { "name": "DownloadIcon", "status": "new-design", "kind": "ui", "source": "Down.svg" },
+    { "name": "CopyIcon", "status": "new-design", "kind": "ui", "source": "Copy.svg" },
+    { "name": "DuplicateIcon", "status": "new-design", "kind": "ui", "source": "Duplicate.svg" },
+    { "name": "ResetIcon", "status": "new-design", "kind": "ui", "source": "Reload.svg" },
+    { "name": "ImageIcon", "status": "new-design", "kind": "ui", "source": "Image.svg" },
+    { "name": "SaveIcon", "status": "new-design", "kind": "ui", "source": "save.svg" },
+
+    { "name": "EyeIcon", "status": "new-design", "kind": "ui", "source": "Eye.svg" },
+    { "name": "EyeOffIcon", "status": "new-design", "kind": "ui", "source": "Closed Eye.svg" },
+    { "name": "PanelLeftIcon", "status": "legacy", "kind": "ui" },
+    { "name": "ExpandIcon", "status": "new-design", "kind": "ui", "source": "Expand.svg" },
+    { "name": "CompactIcon", "status": "new-design", "kind": "ui", "source": "Contract.svg" },
+    { "name": "PinIcon", "status": "new-design", "kind": "ui", "source": "pin.svg" },
+    { "name": "CameraIcon", "status": "new-design", "kind": "ui", "source": "Screenshot.svg" },
+    { "name": "CropIcon", "status": "new-design", "kind": "ui", "source": "Screenshot Crop 2.svg" },
+    { "name": "ExternalLinkIcon", "status": "new-design", "kind": "ui", "source": "External.svg" },
+    { "name": "HomeIcon", "status": "new-design", "kind": "ui", "source": "Home.svg" },
+    {
+      "name": "NewWorkspaceIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "new-workspace.svg"
+    },
+    {
+      "name": "SwitchWorkspaceIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "switch-workspace.svg"
+    },
+    {
+      "name": "MoveToWorkspaceIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "move-to-workspace.svg"
+    },
+    {
+      "name": "SharedLibraryIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "shared-library.svg"
+    },
+    { "name": "SidebarIcon", "status": "new-design", "kind": "ui", "source": "sidebar.svg" },
+
+    { "name": "SuccessIcon", "status": "legacy", "kind": "ui" },
+    { "name": "ErrorIcon", "status": "legacy", "kind": "ui" },
+    { "name": "BellIcon", "status": "legacy", "kind": "ui" },
+    { "name": "ActivityIcon", "status": "new-design", "kind": "ui", "source": "Active.svg" },
+    { "name": "HistoryIcon", "status": "legacy", "kind": "ui" },
+    { "name": "ShieldCheckIcon", "status": "legacy", "kind": "ui" },
+    { "name": "PuzzleIcon", "status": "new-design", "kind": "ui", "source": "Plugin.svg" },
+    { "name": "PlugIcon", "status": "legacy", "kind": "ui" },
+    { "name": "GraduationCapIcon", "status": "legacy", "kind": "ui" },
+
+    { "name": "PlusIcon", "status": "new-design", "kind": "ui", "source": "Plus.svg" },
+    { "name": "PullIcon", "status": "new-design", "kind": "ui", "source": "Down.svg" },
+    { "name": "BranchIcon", "status": "new-design", "kind": "ui", "source": "git-branch.svg" },
+    { "name": "PullRequestIcon", "status": "legacy", "kind": "ui" },
+    { "name": "SettingsIcon", "status": "new-design", "kind": "ui", "source": "Settings.svg" },
+    { "name": "GlobeIcon", "status": "legacy", "kind": "ui" },
+    { "name": "ZapIcon", "status": "new-design", "kind": "ui", "source": "AI.svg" },
+    { "name": "HelpIcon", "status": "legacy", "kind": "ui" },
+    { "name": "UndoIcon", "status": "new-design", "kind": "ui", "source": "Undo.svg" },
+    { "name": "RedoIcon", "status": "new-design", "kind": "ui", "source": "Redo.svg" },
+    { "name": "LayersIcon", "status": "legacy", "kind": "ui" },
+
+    {
+      "name": "FullBreakpointIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "breakpoint-full.svg"
+    },
+    { "name": "DesktopIcon", "status": "new-design", "kind": "ui", "source": "Desktop.svg" },
+    { "name": "LaptopIcon", "status": "new-design", "kind": "ui", "source": "Tablet.svg" },
+    {
+      "name": "TabletIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "Mobile Horizontal.svg"
+    },
+    { "name": "MobileIcon", "status": "new-design", "kind": "ui", "source": "Mobile.svg" }
+  ]
+}

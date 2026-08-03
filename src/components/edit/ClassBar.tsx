@@ -22,7 +22,7 @@ import { createPortal } from 'react-dom';
 import { PropertyField } from '../primitives/PropertyField';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { PlusIcon } from '../icons/utility';
-import { CheckIcon, SearchIcon } from '../icons/common';
+import { CheckIcon, ChevronIcon, SearchIcon } from '../icons/common';
 import type { CustomClass } from '../../lib/customClasses';
 import type { EditTarget } from '../../hooks/useVisualEditor';
 import { logger } from '../../lib/logger';
@@ -54,14 +54,6 @@ type Row =
   | { kind: 'applied'; id: string; cls: CustomClass }
   | { kind: 'available'; id: string; cls: CustomClass }
   | { kind: 'create'; id: string };
-
-function Chevron() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden>
-      <polyline points="6 9 12 15 18 9" strokeWidth="2.5" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 export function ClassBar({
   customClasses,
@@ -268,7 +260,7 @@ export function ClassBar({
         onClick={() => setOpen((v) => !v)}
       >
         <span className="ss-classedit__name">{activeName ?? 'This element'}</span>
-        <Chevron />
+        <ChevronIcon />
       </PropertyField>
 
       {open &&
