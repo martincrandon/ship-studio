@@ -15,7 +15,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { predictNextDeclaration } from '../../lib/cssPredict';
 import { ChevronIcon, CloseIcon } from '../icons/common';
-import { TrashIcon, FileIcon } from '../icons/editor';
+import { FileTextIcon, TrashIcon } from '../icons/editor';
 import { DeclarationRow } from './DeclarationRow';
 import { CssValueText } from './CssValueText';
 import { AddMenu } from './AddMenu';
@@ -23,7 +23,7 @@ import { isKeyframesSelector } from '../../lib/cssStructures';
 import { KeyframesNameChip, keyframesName } from './KeyframesNameChip';
 import { NestedSelectorInput } from './NestedSelectorInput';
 import { RuleContextChips } from './RuleContextChips';
-import { SelectorChip } from './SelectorChip';
+import { SelectorChip, selectorTone } from './SelectorChip';
 import {
   declarations,
   nestedRules,
@@ -137,7 +137,6 @@ export function CascadeRuleCard(props: Props) {
   // itself is never a keyframes container, even if oddly named.)
   const isKeyframes = !isStep && isKeyframesSelector(props.selector);
   const onRenameAtRule = props.editable ? props.onRenameAtRule : undefined;
-  const mediaQueryClass = props.mediaText ? ' is-media-query' : '';
 
   // Focus management after a destructive action (#14): the focused button unmounts, so
   // without intervention focus falls to <body>. Capture a stable target *before* mutating,
@@ -258,7 +257,10 @@ export function CascadeRuleCard(props: Props) {
             onWrap={props.onWrap}
           />
         ) : (
-          <code className="ss-cascade-card__selector-chip" title={props.selector}>
+          <code
+            className={`ss-cascade-chip ss-cascade-card__selector-chip${selectorTone(props.selector) === 'tag' ? ' ss-cascade-card__selector-chip--tag' : ''}`}
+            title={props.selector}
+          >
             {props.selector}
           </code>
         )}
@@ -295,7 +297,7 @@ export function CascadeRuleCard(props: Props) {
   if (!editable) {
     return (
       <section
-        className={`ss-cascade-card is-readonly${depth ? ' is-nested' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${mediaQueryClass}`}
+        className={`ss-cascade-card is-readonly${depth ? ' is-nested' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}`}
         data-testid="cascade-card"
       >
         <header className="ss-cascade-card__head">{headerContent}</header>
@@ -338,7 +340,7 @@ export function CascadeRuleCard(props: Props) {
   return (
     <section
       ref={sectionRef}
-      className={`ss-cascade-card${depth ? ' is-nested' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${props.draft ? ' is-draft' : ''}${props.unmatched ? ' is-unmatched' : ''}${mediaQueryClass}`}
+      className={`ss-cascade-card${depth ? ' is-nested' : ''}${isStep ? ' is-keyframe-step' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${props.draft ? ' is-draft' : ''}${props.unmatched ? ' is-unmatched' : ''}`}
       data-testid="cascade-card"
       onKeyDown={(e) => {
         // Tab accepts the ghost; Esc dismisses it. Portaled popovers (add-menu, value
@@ -440,8 +442,13 @@ export function CascadeRuleCard(props: Props) {
                   replaceItem(body, r.index, { kind: 'rule', selector: r.selector, body: nextBody })
                 )
               }
-              onSelectorChange={(sel) =>
-                onChange(replaceItem(body, r.index, { kind: 'rule', selector: sel, body: r.body }))
+              onSelectorChange={
+                isKeyframes
+                  ? undefined
+                  : (sel) =>
+                      onChange(
+                        replaceItem(body, r.index, { kind: 'rule', selector: sel, body: r.body })
+                      )
               }
               onDelete={() => onChange(removeItem(body, r.index))}
             />
@@ -459,7 +466,7 @@ export function CascadeRuleCard(props: Props) {
             />
             {props.file && (
               <span className="ss-cascade-card__src-chip" title={`${props.file}:${props.line}`}>
-                <FileIcon size={11} />
+                <FileTextIcon size={11} />
                 {fileLabel(props.file)}
               </span>
             )}

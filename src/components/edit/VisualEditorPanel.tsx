@@ -22,6 +22,9 @@ import { MultiSourceControl } from './MultiSourceControl';
 import { UsageScope } from './UsageScope';
 import { CodeIcon } from './CodeIcon';
 import { SlackIcon } from '../icons/brand';
+import { CheckIcon, InfoIcon } from '../icons/common';
+import { SaveIcon } from '../icons/editor';
+import { HelpIcon } from '../icons/utility';
 import { PinIcon } from '../icons/layout';
 import { PropSection } from './PropSection';
 import { ImageSection } from './ImageSection';
@@ -80,19 +83,7 @@ function StatusBadge({ saving }: { saving: boolean }) {
         'Saving…'
       ) : (
         <>
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+          <CheckIcon size={13} />
           Saved
         </>
       )}
@@ -104,17 +95,7 @@ function StatusBadge({ saving }: { saving: boolean }) {
 function HelpHint({ text }: { text: string }) {
   return (
     <span className="ss-edit-panel__help" tabIndex={0} role="img" aria-label={text}>
-      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.2" />
-        <path
-          d="M5.8 6.2c0-1.2 1-2 2.2-2s2.2.8 2.2 2c0 .8-.5 1.3-1.1 1.6-.6.4-1.1.7-1.1 1.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          strokeLinecap="round"
-        />
-        <circle cx="8" cy="11.5" r="0.7" fill="currentColor" />
-      </svg>
+      <HelpIcon size={12} />
       <span className="ss-edit-panel__help-tip" role="tooltip">
         {text}
       </span>
@@ -125,17 +106,7 @@ function HelpHint({ text }: { text: string }) {
 /** Empty-state intro shown before any element is selected — explains what the
  *  visual editor is and how it works, instead of a bare one-line hint. */
 function IntroCheck() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M20 6 9 17l-5-5"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  return <CheckIcon size={13} />;
 }
 
 function EditorIntro() {
@@ -272,17 +243,7 @@ function CustomCssHint() {
       role="img"
       aria-label="Styled by a custom CSS class — edits use !important so they take effect"
     >
-      <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.2" />
-        <circle cx="8" cy="4.6" r="0.8" fill="currentColor" />
-        <path
-          d="M8 7v4.4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
+      <InfoIcon size={13} />
       <span className="ss-edit-panel__csshint-tip" role="tooltip">
         Styled by a custom CSS class — edits use <code>!important</code> so they take effect.
       </span>
@@ -358,7 +319,7 @@ interface Props {
   onTogglePin?: () => void;
 }
 
-const PANEL_WIDTH = 264;
+const PANEL_WIDTH = 240;
 
 /** Initial top-right resting spot (clears the toolbar). Lazy so it reads the
  *  window once on mount; drag takes over from there. */
@@ -622,7 +583,7 @@ export function VisualEditorPanel({
         {controlsVisible && (
           <>
             {resolution?.status === 'resolved' && (
-              <>
+              <div className="ss-edit-panel__source-context">
                 <div className="ss-edit-panel__source">
                   {onOpenInCode ? (
                     <button
@@ -662,7 +623,7 @@ export function VisualEditorPanel({
                   instanceCount={selection?.instanceCount ?? 1}
                   onOpenInCode={onOpenInCode}
                 />
-              </>
+              </div>
             )}
             {resolution?.status === 'multi' && (
               <MultiSourceControl
@@ -673,7 +634,12 @@ export function VisualEditorPanel({
             )}
 
             {CONTROL_SECTIONS.map((section) => (
-              <PropSection key={section.id} title={section.title} defaultOpen={section.defaultOpen}>
+              <PropSection
+                key={section.id}
+                title={section.title}
+                sectionId={section.id}
+                defaultOpen={section.defaultOpen}
+              >
                 {section.controls.map((control) => (
                   <PropControlRenderer key={control.key} control={control} ctx={controlCtx} />
                 ))}
@@ -721,7 +687,7 @@ export function VisualEditorPanel({
           ) : autoSave ? (
             <StatusBadge saving={dirty} />
           ) : dirty ? (
-            <Button variant="primary" onClick={onCommit}>
+            <Button variant="primary" onClick={onCommit} leftIcon={<SaveIcon size={14} />}>
               Save to source
             </Button>
           ) : (

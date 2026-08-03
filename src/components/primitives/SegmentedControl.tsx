@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { ButtonSize } from './Button';
 import { ToggleButton } from './ToggleButton';
 
 export interface SegmentedControlOption<T extends string> {
@@ -15,6 +16,7 @@ export interface SegmentedControlProps<T extends string> {
   onValueChange: (value: T) => void;
   'aria-label': string;
   className?: string;
+  size?: ButtonSize;
 }
 
 /**
@@ -28,6 +30,7 @@ export function SegmentedControl<T extends string>({
   options,
   onValueChange,
   className,
+  size = 'compact',
   'aria-label': ariaLabel,
 }: SegmentedControlProps<T>) {
   return (
@@ -36,7 +39,7 @@ export function SegmentedControl<T extends string>({
         <ToggleButton
           key={option.value}
           variant="default"
-          size="compact"
+          size={size}
           pressed={value === option.value}
           disabled={option.disabled}
           aria-label={option.ariaLabel}

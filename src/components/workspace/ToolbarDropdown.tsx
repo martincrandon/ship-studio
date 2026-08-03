@@ -65,7 +65,6 @@ export function ToolbarDropdown({
     <Dropdown
       portal
       align="right"
-      side="top"
       menuClassName="toolbar-dropdown-menu"
       trigger={(p) => (
         <MenuButton

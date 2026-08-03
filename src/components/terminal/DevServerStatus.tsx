@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
+import { ChevronRightIcon } from '../icons';
 import { stripAnsi } from '../../lib/ansi';
 
 /** Last N log lines to show inline — enough to catch a compile error or an
@@ -231,20 +232,10 @@ export function DevServerStatus({
             onClick={() => setLogsOpen((v) => !v)}
             aria-expanded={logsOpen}
           >
-            <svg
+            <ChevronRightIcon
+              size={10}
               className={`preview-status__chevron${logsOpen ? ' open' : ''}`}
-              width="10"
-              height="10"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M6 4l4 4-4 4" />
-            </svg>
+            />
             Logs
           </button>
           {logsOpen && (

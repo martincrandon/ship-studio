@@ -16,7 +16,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { trackEvent } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
-import { UploadIcon } from '../icons';
+import { CheckIcon, CloseIcon, FileIcon, UploadIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
@@ -186,16 +186,7 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
               return (
                 <div key={step.id} className={`checklist-item ${status}`}>
                   {status === 'done' ? (
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <CheckIcon size={18} />
                   ) : status === 'active' ? (
                     <Spinner />
                   ) : (
@@ -247,17 +238,7 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
               <p>Select a starting point</p>
             </div>
             <button className="create-modal-close" onClick={onCancel} type="button">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <CloseIcon size={20} />
             </button>
           </div>
 
@@ -353,31 +334,11 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
               ) : (
                 <div className="template-zip-selected">
                   <div className="template-zip-info">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
+                    <FileIcon size={20} />
                     <span>{displayZipName}</span>
                   </div>
                   <button type="button" className="template-zip-remove" onClick={handleRemoveZip}>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
+                    <CloseIcon size={16} />
                   </button>
                 </div>
               )}
@@ -422,17 +383,7 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
             </p>
           </div>
           <button className="create-modal-close" onClick={onCancel} type="button">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <CloseIcon size={20} />
           </button>
         </div>
 

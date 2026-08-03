@@ -8,6 +8,7 @@
  */
 
 import { useId, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { TextField } from '../primitives/TextField';
 import { ResettableLabel } from './ResettableLabel';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
 import {
@@ -120,8 +121,9 @@ export function LengthControl({
         active={layer.bp}
         onReset={() => onReset(lengthResetSpec(prefix, css))}
       />
-      <input
-        className={`ss-edit-panel__text${invalid ? ' ss-edit-panel__num--invalid' : ''}`}
+      <TextField
+        className="ss-edit-panel__text"
+        invalid={invalid}
         inputMode="text"
         autoCorrect="off"
         autoCapitalize="off"

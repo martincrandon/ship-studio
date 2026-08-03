@@ -28,7 +28,7 @@ import { SubmitReviewModal } from '../branches/SubmitReviewModal';
 import { WorktreeCreateModal } from '../branches/WorktreeCreateModal';
 import { ConflictResolutionModal } from '../branches/ConflictResolutionModal';
 import { OnboardingTerminal } from '../setup';
-import { DownloadIcon, ZapIcon } from '../icons';
+import { DownloadIcon, VercelIcon, ZapIcon } from '../icons';
 import { ToastList } from '../primitives/ToastList';
 import type { Toast } from '../../hooks/useToasts';
 import type { NotificationSettings } from '../../lib/sounds';
@@ -312,9 +312,7 @@ export function WorkspaceModals({
         <div className="modal-overlay" onClick={onDismissPluginSuggestion}>
           <div className="modal plugin-suggestion-modal" onClick={(e) => e.stopPropagation()}>
             <div className="plugin-suggestion-icon">
-              <svg width={26} height={26} viewBox="0 0 76 65" fill="currentColor">
-                <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-              </svg>
+              <VercelIcon size={26} />
             </div>
             <h3>Plugin Available</h3>
             <p className="plugin-suggestion-desc">

@@ -7,6 +7,7 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { EyeOffIcon, SlackIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 
 interface DashboardCommunityBannerProps {
   onHide: () => void;
@@ -29,22 +30,23 @@ export function DashboardCommunityBanner({ onHide }: DashboardCommunityBannerPro
           the future of how we build for the web.
         </span>
       </div>
-      <Button
-        variant="secondary"
-        className="slack-cta-join"
-        onClick={() => void openUrl(SLACK_INVITE_URL)}
-      >
-        Join Slack
-      </Button>
-      <Button
-        variant="ghost"
-        className="slack-cta-hide"
-        onClick={onHide}
-        title="Hide"
-        aria-label="Hide community banner"
-      >
-        <EyeOffIcon size={14} />
-      </Button>
+      <div className="slack-cta-actions">
+        <Button
+          variant="secondary"
+          className="slack-cta-join"
+          onClick={() => void openUrl(SLACK_INVITE_URL)}
+        >
+          Join Slack
+        </Button>
+        <IconButton
+          variant="ghost"
+          className="slack-cta-hide"
+          icon={<EyeOffIcon size={14} />}
+          onClick={onHide}
+          title="Hide"
+          aria-label="Hide community banner"
+        />
+      </div>
     </div>
   );
 }

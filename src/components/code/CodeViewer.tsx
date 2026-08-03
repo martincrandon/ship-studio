@@ -20,7 +20,17 @@ import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { MenuButton } from '../primitives/MenuButton';
 import { ToggleButton } from '../primitives/ToggleButton';
-import { ChevronIcon, CodeIcon, FileIcon, VSCodeIcon, CursorIcon, CopyIcon } from '../icons';
+import {
+  ChevronIcon,
+  CodeIcon,
+  CopyIcon,
+  CursorIcon,
+  EditIcon,
+  FileIcon,
+  FileTextIcon,
+  SaveIcon,
+  VSCodeIcon,
+} from '../icons';
 import { trackEvent } from '../../lib/analytics';
 import { fileExtensionForAnalytics } from '../../lib/code';
 import { CodeFileEditor } from './CodeFileEditor';
@@ -314,7 +324,7 @@ export function CodeViewer({
   return (
     <div className="code-viewer">
       <div className="code-viewer-header">
-        <FileIcon size={14} />
+        <FileTextIcon size={14} />
         <span className="code-viewer-path">{filePath}</span>
         {isDirty && <span className="code-viewer-dirty" title="Unsaved changes" aria-hidden />}
         {fileContent && <span className="code-viewer-size">{formatSize(fileContent.size)}</span>}
@@ -330,6 +340,7 @@ export function CodeViewer({
                 variant="primary"
                 onClick={() => void handleSave()}
                 disabled={!isDirty || isSaving}
+                leftIcon={!isSaving ? <SaveIcon size={14} /> : undefined}
               >
                 {isSaving ? <Spinner size="sm" /> : 'Save'}
               </Button>
@@ -348,19 +359,7 @@ export function CodeViewer({
               }
               pressed={editModeEnabled}
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
-              </svg>
+              <EditIcon size={13} />
               <span>Edit</span>
               <span
                 className={`preview-edit-toggle-switch ${editModeEnabled ? 'is-on' : ''}`}

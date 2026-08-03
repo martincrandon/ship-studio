@@ -66,7 +66,22 @@ import { VisualEditorPanel } from '../edit/VisualEditorPanel';
 import { ElementTreePanel } from '../edit/ElementTreePanel';
 import { useElementTree } from '../../hooks/useElementTree';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
-import { CompactIcon, ExpandIcon, ResetIcon, UndoIcon, RedoIcon } from '../icons';
+import {
+  CompactIcon,
+  ChevronIcon,
+  CloseIcon,
+  DesktopIcon,
+  EditIcon,
+  ExpandIcon,
+  FullBreakpointIcon,
+  LaptopIcon,
+  MobileIcon,
+  RedoIcon,
+  ResetIcon,
+  TabletIcon,
+  TerminalIcon,
+  UndoIcon,
+} from '../icons';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
@@ -80,92 +95,12 @@ import type { ProjectType } from '../../lib/static-server';
 import type { DevServerUnexpectedExit } from '../../hooks/useDevServer';
 import { isEditorFramework, resolveEditorMode } from '../../lib/editorGate';
 
-// SVG icons for breakpoints
 const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
-  if (type === 'full') {
-    // Horizontal stretch-to-edges for full width — deliberately distinct from
-    // the diagonal expand arrows on the fullscreen toolbar button.
-    return (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <line x1="3" y1="4" x2="3" y2="20" />
-        <line x1="21" y1="4" x2="21" y2="20" />
-        <line x1="7" y1="12" x2="17" y2="12" />
-        <polyline points="10 9 7 12 10 15" />
-        <polyline points="14 9 17 12 14 15" />
-      </svg>
-    );
-  }
-  if (type === 'desktop') {
-    // Monitor with stand for desktop
-    return (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <line x1="8" y1="21" x2="16" y2="21" />
-        <line x1="12" y1="17" x2="12" y2="21" />
-      </svg>
-    );
-  }
-  if (type === 'laptop') {
-    // Laptop icon
-    return (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <line x1="2" y1="20" x2="22" y2="20" />
-      </svg>
-    );
-  }
-  if (type === 'tablet') {
-    return (
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <rect x="4" y="2" width="16" height="20" rx="2" />
-        <line x1="12" y1="18" x2="12" y2="18" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  // Mobile
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <rect x="7" y="2" width="10" height="20" rx="2" />
-      <line x1="12" y1="18" x2="12" y2="18" strokeLinecap="round" />
-    </svg>
-  );
+  if (type === 'full') return <FullBreakpointIcon />;
+  if (type === 'desktop') return <DesktopIcon />;
+  if (type === 'laptop') return <LaptopIcon />;
+  if (type === 'tablet') return <TabletIcon />;
+  return <MobileIcon />;
 };
 
 /** Props for the Preview component */
@@ -1200,19 +1135,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             title="Toggle visual editor"
             pressed={activeEditMode}
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
-            </svg>
+            <EditIcon size={13} />
             <span className="preview-toolbar-btn-label">Edit</span>
             <span
               className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
@@ -1229,19 +1152,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               aria-disabled="true"
               tabIndex={-1}
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
-              </svg>
+              <EditIcon size={13} />
               <span className="preview-toolbar-btn-label">Edit</span>
             </Button>
             <span className="preview-edit-tooltip" role="tooltip">
@@ -1263,22 +1174,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             pressed={showLogs}
             onClick={onToggleLogs}
             title={showLogs ? 'Hide inspector' : 'Show inspector'}
-            leftIcon={
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <polyline points="4 17 10 11 4 5" />
-                <line x1="12" y1="19" x2="20" y2="19" />
-              </svg>
-            }
+            leftIcon={<TerminalIcon size={14} />}
           >
             <span className="preview-toolbar-btn-label">Inspect</span>
             <span className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`} aria-hidden />
@@ -1307,19 +1203,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 expanded={triggerProps['aria-expanded']}
                 variant="default"
                 className="page-switcher-trigger"
-                rightIcon={
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                }
+                rightIcon={<ChevronIcon size={12} />}
               >
                 <span className="page-route">{conn.currentPage}</span>
                 {conn.currentPage === '/' && <span className="page-route-context">Home</span>}
@@ -1928,19 +1812,7 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
             title="Hide panel"
             aria-label="Hide panel"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <CloseIcon size={14} />
           </button>
         )}
       </div>

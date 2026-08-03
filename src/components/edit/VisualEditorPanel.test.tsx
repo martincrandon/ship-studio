@@ -90,6 +90,7 @@ describe('VisualEditorPanel', () => {
     expect(screen.getByText('components/Hero.tsx:11')).toBeInTheDocument();
     // Box-model spacing editor with per-side fields
     expect(screen.getByTestId('spacing-box')).toBeInTheDocument();
+    expect(document.querySelectorAll('.ss-box__band')).toHaveLength(8);
     expect(screen.getByLabelText('Padding top')).toBeInTheDocument();
     expect(screen.getByLabelText('Margin left')).toBeInTheDocument();
     // Gap stepper + enum controls
@@ -251,6 +252,18 @@ describe('VisualEditorPanel', () => {
     expect(inherited).toHaveClass('ss-box__field--inherited');
     expect(modified).toHaveAttribute('size', modified.value.length.toString());
     expect(inherited).toHaveAttribute('size', inherited.value.length.toString());
+  });
+
+  it('focuses a box-model value from its full grabbable panel', () => {
+    renderPanel(resolvedSelection, 'p-3');
+    const box = screen.getByTestId('spacing-box');
+    const marginTopPanel = box.querySelector<HTMLLabelElement>(
+      '.ss-box__margin .ss-box__band--top'
+    );
+
+    expect(marginTopPanel).not.toBeNull();
+    fireEvent.click(marginTopPanel!);
+    expect(screen.getByLabelText('Margin top')).toHaveFocus();
   });
 
   it('flags an invalid typed value and does not apply it', () => {

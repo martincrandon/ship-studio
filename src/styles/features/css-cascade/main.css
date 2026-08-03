@@ -30,17 +30,6 @@
   font-size: var(--font-size-sm);
 }
 
-.ss-cascade-target__tag {
-  padding: var(--spacing-xs); /* css-ok: chip padding below scale */
-  border-radius: var(--radius-sm);
-  background: var(--tag-surface);
-  color: var(--tag-text);
-  font-weight: 500;
-  line-height: 1;
-  min-width: 21px;
-  text-align: center;
-}
-
 .ss-cascade-target__classes {
   display: inline-flex;
   flex-wrap: wrap;
@@ -114,31 +103,17 @@
 
 /* ── Card ── */
 .ss-cascade-card {
-  border: var(--stroke-1) solid var(--border-subtle);
+  border: var(--stroke-1) solid var(--border-default);
   border-radius: var(--radius-control);
   background: var(--surface-panel);
   /* No `overflow: hidden` — autocomplete/at-rule menus must expand BEYOND the card. */
-  transition:
-    border-color var(--transition),
-    box-shadow var(--transition);
+  transition: border-color var(--transition);
 }
 .ss-cascade-card:hover {
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-button);
+  border-color: var(--border-strong);
 }
 .ss-cascade-card:focus-within {
   border-color: var(--border-strong);
-}
-.ss-cascade-card.is-media-query {
-  border: 0;
-  border-top: var(--stroke-1) dashed var(--border-subtle);
-  border-radius: 0;
-  background: var(--surface-app);
-  box-shadow: none;
-}
-.ss-cascade-card.is-media-query:hover {
-  border-top-color: var(--border-default);
-  box-shadow: none;
 }
 .ss-cascade-card.is-readonly {
   background: var(--surface-app);
@@ -146,6 +121,9 @@
 .ss-cascade-card.is-nested {
   margin-top: var(--spacing-xs);
   background: var(--surface-control);
+}
+.ss-cascade-card.is-keyframe-step {
+  background: transparent;
 }
 
 /* A rule whose @media/@container doesn't match the current preview size: dimmed,
@@ -212,24 +190,6 @@
   font-weight: 500;
 }
 
-/* Click-to-edit selector (top-level rules) — a subtle ring hints it's editable. */
-.ss-cascade-card__selector-chip--editable {
-  cursor: text;
-  transition: box-shadow var(--transition-fast);
-}
-.ss-cascade-card__selector-chip--editable:hover {
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.ss-cascade-card__selector-chip--input {
-  box-sizing: border-box;
-  display: inline-flex;
-  flex: 1 1 auto;
-  border: 0;
-  background: transparent;
-}
-.ss-cascade-card__selector-chip--input:focus {
-  outline: 0;
-}
 .ss-cascade-card__head-spacer {
   flex: 1 1 auto;
 }
@@ -239,7 +199,8 @@
    selector (past the collapse rail). A normal text block so the condition wraps like
    prose — at spaces only, never mid-word. */
 .ss-cascade-card__context {
-  padding: 0 var(--spacing-xs) var(--spacing-xs) calc(var(--cascade-rail) + var(--spacing-xs));
+  padding: var(--spacing-sm) var(--spacing-xs) var(--spacing-xs)
+    calc(var(--cascade-rail) + var(--spacing-xs));
   font-family: var(--font-code);
   font-size: var(--font-size-xs);
   line-height: 1.5;
@@ -259,11 +220,27 @@
 /* The condition flows as normal inline text — full, wrapping at spaces, never
    truncated and never broken inside a word like `@media`. (Overrides the inline-row
    chip's inline-flex + ellipsis defaults.) */
-.ss-cascade-card__context .ss-cascade-card__chip,
-.ss-cascade-card__context .ss-cascade-chip {
+.ss-cascade-card__context .ss-cascade-card__chip {
   display: inline;
   max-width: none;
   overflow: visible;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.ss-cascade-card__context .ss-cascade-chip[data-tone='media'] {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+  vertical-align: top;
+  white-space: normal;
+}
+.ss-cascade-card__context .ss-cascade-chip[data-tone='media'] .ss-cascade-chip__content {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
   white-space: normal;
   overflow-wrap: normal;
   word-break: normal;
@@ -286,32 +263,9 @@
 .is-nested .ss-cascade-card__chip {
   background: var(--surface-panel);
 }
-/* The neutral keyframe field still uses the legacy edit wrapper. */
-.ss-cascade-card__chip-edit {
-  position: relative;
-  display: inline-flex;
-  flex: 1 1 auto;
-}
-.ss-cascade-card__chip-edit .ss-cascade-card__selector-chip--input {
-  flex: 1 1 auto;
-  max-width: none;
-  width: auto;
-}
-
-/* Keyframe names keep their neutral editable-chip presentation. Selector and
-   media chips use the shared contract in chips.css. */
-.ss-cascade-card__selector-chip--editable {
-  align-items: center;
-  box-sizing: border-box;
-  padding: var(--space-04) var(--space-08);
-  border: 0;
-  border-radius: var(--radius-4);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-ui);
-  white-space: nowrap;
-  box-shadow: var(--shadow-button);
+.ss-cascade-card__selector-chip.ss-cascade-card__selector-chip--tag {
+  background: var(--tag-chip-surface);
+  color: var(--tag-chip-text);
 }
 
 /* The selector field takes the lead role in the header while editing. */

@@ -1,7 +1,14 @@
 import { useId, useState } from 'react';
 import { WRAP_ITEMS, searchStructures } from '../../lib/cssStructures';
-import { CascadeChip } from './CascadeChip';
+import { CascadeChip, type CascadeChipTone } from './CascadeChip';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
+
+const TAG_SELECTOR_PATTERN = /^[a-z][a-z\d-]*(?:(?::|::)[a-z-]+(?:\([^)]*\))?)*$/i;
+
+/** Keep plain HTML/custom-element selectors in the media pink family. */
+export function selectorTone(selector: string): CascadeChipTone {
+  return TAG_SELECTOR_PATTERN.test(selector.trim()) ? 'tag' : 'selector';
+}
 
 /** A top-level rule's selector as ONE intelligent field — just like writing real
  *  CSS. Type a selector (class names autocomplete from the project) to rename the
@@ -28,7 +35,7 @@ export function SelectorChip({
   if (!editing) {
     return (
       <CascadeChip
-        tone="selector"
+        tone={selectorTone(selector)}
         interactive
         title="Click to edit — type a selector, or @media (…) to scope this rule"
         role="button"
@@ -87,7 +94,7 @@ export function SelectorChip({
   };
 
   return (
-    <CascadeChip tone="selector" editing className="ss-cascade-card__selector-edit">
+    <CascadeChip tone={selectorTone(selector)} editing className="ss-cascade-card__selector-edit">
       <input
         className="ss-cascade-chip__input"
         autoFocus

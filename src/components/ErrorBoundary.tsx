@@ -4,6 +4,7 @@ import { logger } from '../lib/logger';
 import { lookupBlobOwner, markPluginCrashed } from '../lib/plugin-loader';
 import { uninstallPlugin } from '../lib/plugins';
 import { Button } from './primitives/Button';
+import { InfoIcon } from './icons';
 
 interface Props {
   children: ReactNode;
@@ -86,21 +87,8 @@ export class ErrorBoundary extends Component<Props, State> {
             textAlign: 'center',
           }}
         >
-          <div style={{ marginBottom: '24px' }}>
-            <svg
-              width="48"
-              height="48"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#f14c4c"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+          <div style={{ marginBottom: '24px', color: 'var(--accent-error)' }}>
+            <InfoIcon size={48} />
           </div>
           <h1 style={{ fontSize: '20px', fontWeight: 600, margin: '0 0 8px 0' }}>
             Something went wrong

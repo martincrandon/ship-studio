@@ -632,6 +632,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
       { label: 'Flex', token: 'flex', style: { display: 'flex' } },
       { label: 'Grid', token: 'grid', style: { display: 'grid' } },
       { label: 'Inline block', token: 'inline-block', style: { display: 'inline-block' } },
+      { label: 'Inline flex', token: 'inline-flex', style: { display: 'inline-flex' } },
       { label: 'Inline', token: 'inline', style: { display: 'inline' } },
       { label: 'Hidden', token: 'hidden', style: { display: 'none' } },
     ],
@@ -788,6 +789,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
     options: [
       { label: 'None', token: 'no-underline', style: { 'text-decoration-line': 'none' } },
       { label: 'Underline', token: 'underline', style: { 'text-decoration-line': 'underline' } },
+      { label: 'Overline', token: 'overline', style: { 'text-decoration-line': 'overline' } },
       {
         label: 'Line through',
         token: 'line-through',

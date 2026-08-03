@@ -271,9 +271,9 @@ export function CommandPalette({
       )}
 
       <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as TabId, 'click')}>
-        <TabsList className="command-palette-tabs">
+        <TabsList variant="stretch" appearance="underline" className="command-palette-tabs">
           {tabs.map((tab) => (
-            <TabsTab key={tab.id} value={tab.id} className="command-palette-tab">
+            <TabsTab key={tab.id} value={tab.id} width="fill" className="command-palette-tab">
               {tab.label}
             </TabsTab>
           ))}

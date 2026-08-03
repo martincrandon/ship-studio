@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { TextField } from '../primitives/TextField';
 import {
   tokensForVariant,
   listArbitraryProps,
@@ -69,8 +70,9 @@ export function CustomCssBox({ currentClass, layer, onApplyEnum, onReset }: Prop
         </ul>
       )}
       <div className="ss-custom-css__add">
-        <input
-          className={`ss-edit-panel__text${invalid ? ' ss-edit-panel__num--invalid' : ''}`}
+        <TextField
+          className="ss-edit-panel__text"
+          invalid={invalid}
           inputMode="text"
           autoCorrect="off"
           autoCapitalize="off"

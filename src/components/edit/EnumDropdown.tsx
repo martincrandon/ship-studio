@@ -7,9 +7,11 @@
  */
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { PropertyField } from '../primitives/PropertyField';
+import { ChevronIcon } from '../icons';
 
 interface Option {
   label: string;
@@ -19,12 +21,13 @@ interface Option {
 interface Props {
   label: string;
   options: Option[];
+  optionIcons?: Record<string, ReactNode>;
   /** Currently-active token, or null when none of the options is applied. */
   value: string | null;
   onChange: (token: string) => void;
 }
 
-export function EnumDropdown({ label, options, value, onChange }: Props) {
+export function EnumDropdown({ label, options, optionIcons, value, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(
     null
@@ -34,6 +37,7 @@ export function EnumDropdown({ label, options, value, onChange }: Props) {
   const listId = useId();
 
   const current = options.find((o) => o.token === value) ?? null;
+  const currentIcon = current ? optionIcons?.[current.token] : undefined;
 
   const reposition = useCallback(() => {
     const el = triggerRef.current;
@@ -78,17 +82,11 @@ export function EnumDropdown({ label, options, value, onChange }: Props) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={current ? '' : 'ss-edit-panel__muted'}>{current?.label ?? '—'}</span>
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          aria-hidden
-        >
-          <polyline points="6 9 12 15 18 9" strokeWidth="2.5" strokeLinecap="round" />
-        </svg>
+        <span className="ss-enum__current">
+          {currentIcon && <span className="ss-enum__option-icon">{currentIcon}</span>}
+          <span className={current ? '' : 'ss-edit-panel__muted'}>{current?.label ?? '—'}</span>
+        </span>
+        <ChevronIcon className="ss-enum__chevron" />
       </PropertyField>
       {open &&
         menuRect &&
@@ -112,6 +110,9 @@ export function EnumDropdown({ label, options, value, onChange }: Props) {
                   setOpen(false);
                 }}
               >
+                {optionIcons?.[o.token] && (
+                  <span className="ss-enum__option-icon">{optionIcons[o.token]}</span>
+                )}
                 {o.label}
               </button>
             ))}

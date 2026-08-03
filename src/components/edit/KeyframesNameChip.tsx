@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CascadeChip } from './CascadeChip';
 
 /** `@keyframes apply` → `apply`. */
 export function keyframesName(selector: string): string {
@@ -22,8 +23,9 @@ export function KeyframesNameChip({
 
   if (!editing) {
     return (
-      <code
-        className="ss-cascade-card__selector-chip ss-cascade-card__selector-chip--editable"
+      <CascadeChip
+        tone="media"
+        interactive
         title="Click to rename the animation"
         role="button"
         tabIndex={0}
@@ -39,8 +41,10 @@ export function KeyframesNameChip({
           }
         }}
       >
-        <span className="ss-cascade-card__kf-at">@keyframes</span> {name}
-      </code>
+        <span className="ss-cascade-chip__content">
+          <span className="ss-cascade-card__media-at">@keyframes</span> {name}
+        </span>
+      </CascadeChip>
     );
   }
 
@@ -51,12 +55,13 @@ export function KeyframesNameChip({
   };
 
   return (
-    <span className="ss-cascade-card__chip-edit ss-cascade-card__kf-edit">
-      <span className="ss-cascade-card__kf-at">@keyframes</span>
+    <CascadeChip tone="media" editing>
+      <span className="ss-cascade-card__media-at">@keyframes</span>
       <input
-        className="ss-cascade-card__selector-chip ss-cascade-card__selector-chip--input"
+        className="ss-cascade-chip__input"
         autoFocus
         value={text}
+        size={Math.max(text.length, 1)}
         spellCheck={false}
         autoComplete="off"
         aria-label="Animation name"
@@ -73,6 +78,6 @@ export function KeyframesNameChip({
         }}
         onBlur={commit}
       />
-    </span>
+    </CascadeChip>
   );
 }

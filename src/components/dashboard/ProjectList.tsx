@@ -69,7 +69,7 @@ import { useProjectBulkActions } from '../../hooks/useProjectBulkActions';
 import { useProjectViewModeCommands } from '../../hooks/useProjectViewModeCommands';
 import { useProjectRemovalActions } from '../../hooks/useProjectRemovalActions';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { ChevronRightIcon } from '../icons';
+import { SwitchWorkspaceIcon } from '../icons';
 import type { ProjectViewMode } from './ProjectGridView';
 
 /** Basic project info for selection callback */
@@ -656,7 +656,7 @@ export function ProjectList({
                   style={{ backgroundColor: activeAccount.color }}
                 />
                 <span className="dashboard-workspace-chip-name">{activeAccount.name}</span>
-                <ChevronRightIcon size={12} />
+                <SwitchWorkspaceIcon size={12} />
               </button>
             ) : undefined
           }

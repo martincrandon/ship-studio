@@ -20,6 +20,8 @@ import { Button } from '../primitives/Button';
 import { SegmentedControl } from '../primitives/SegmentedControl';
 import { EnumDropdown } from './EnumDropdown';
 import { PinIcon } from '../icons/layout';
+import { SaveIcon } from '../icons/editor';
+import { ChevronIcon } from '../icons/common';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { trackEvent } from '../../lib/analytics';
 import { buildCssPrepPrompt } from '../../lib/edit-css';
@@ -148,6 +150,7 @@ function CodeView({
             variant="primary"
             size="compact"
             disabled={!dirty}
+            leftIcon={<SaveIcon size={12} />}
             onClick={() => {
               const changes = diffDeclarations(declarations, parseCssText(text));
               if (changes.length) onSaveMany(changes);
@@ -434,20 +437,7 @@ export function CssEditorPanel({
                           {categoryCounts[cat.id] ? (
                             <span className="ss-css-section-count">{categoryCounts[cat.id]}</span>
                           ) : null}
-                          <svg
-                            className="ss-edit-panel__section-chevron"
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            aria-hidden="true"
-                          >
-                            <polyline points="6 9 12 15 18 9" />
-                          </svg>
+                          <ChevronIcon className="ss-edit-panel__section-chevron" />
                         </span>
                       </summary>
                       <div className="ss-edit-panel__section-body">
