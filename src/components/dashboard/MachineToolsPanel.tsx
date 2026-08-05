@@ -15,10 +15,9 @@
  * @module components/dashboard/MachineToolsPanel
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 import { CheckIcon, WarningIcon, ChevronIcon, ClaudeIcon, GitHubIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
-import { Button } from '../primitives/Button';
 import { getFullSetupStatus, SetupItem, SETUP_ITEM_ORDER, MACHINE_ITEM_IDS } from '../../lib/setup';
 import { logger } from '../../lib/logger';
 
@@ -85,18 +84,27 @@ export function MachineToolsPanel() {
     <WarningIcon size={14} className="integration-bar-status-icon warning" />
   );
 
+  const toggleExpanded = () => setIsExpanded((value) => !value);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleExpanded();
+    }
+  };
+
   return (
     <section
       className={`dashboard-card integration-bar ${isExpanded ? 'is-expanded' : ''}`}
       data-education-id="machine-tools"
+      role="button"
+      tabIndex={0}
+      aria-label="Tools on this Mac"
+      aria-expanded={isExpanded}
+      onClick={toggleExpanded}
+      onKeyDown={handleKeyDown}
     >
-      <Button
-        variant="ghost"
-        width="fill"
-        className="dashboard-card-header integration-bar-header-btn"
-        onClick={() => setIsExpanded((v) => !v)}
-        aria-expanded={isExpanded}
-      >
+      <div className="dashboard-card-header integration-bar-header">
         <div>
           <h3 className="dashboard-card-title text-style-heading">Tools on this Mac</h3>
           <div className="dashboard-card-subtitle integration-bar-subtitle text-style-control">
@@ -111,7 +119,7 @@ export function MachineToolsPanel() {
           size={14}
           className={`integration-bar-chevron ${isExpanded ? 'up' : 'down'}`}
         />
-      </Button>
+      </div>
 
       {isExpanded && (
         <div className="dashboard-card-rows">

@@ -13,7 +13,6 @@ import { CreateProject } from './CreateProject';
 import { ImportProject } from './ImportProject';
 import { ImportTypePicker } from './ImportTypePicker';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { UpdateBanner } from '../UpdateBanner';
 import { OnboardingTerminal } from '../setup';
 import type { Project } from '../../lib/project';
 import type { AuthTerminalConfig } from '../../hooks/useIntegrationStatus';
@@ -95,7 +94,6 @@ export const ProjectsView = memo(function ProjectsView({
   return (
     <>
       <div className="app">
-        <UpdateBanner />
         <div className="dashboard-with-changelog">
           <ProjectList
             onSelectProject={(project) => void onSelectProject(project)}

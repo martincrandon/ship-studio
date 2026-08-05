@@ -12,7 +12,7 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { ProjectGitHubStatus } from '../../lib/github';
 import { publishBranch } from '../../lib/branches';
-import { ChevronIcon, BranchIcon, SuccessIcon, ErrorIcon } from '../icons';
+import { ChevronIcon, BranchIcon, SuccessIcon, ErrorIcon, UploadIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { logger } from '../../lib/logger';
@@ -319,8 +319,11 @@ export function PublishBranchDropdown({
         data-education-id="publish-button"
         onClick={() => setOpen(!isOpen)}
       >
-        {isPublishing ? 'Pushing...' : 'Push'}
-        <ChevronIcon />
+        <span className="source-control-push-content">
+          <UploadIcon size={16} />
+          <span>{isPublishing ? 'Pushing...' : 'Push'}</span>
+        </span>
+        <ChevronIcon size={16} />
       </MenuButton>
 
       {isOpen && (

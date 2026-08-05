@@ -30,46 +30,6 @@
   flex-shrink: 0;
 }
 
-.terminal-agent-header__pin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: var(--spacing-xs);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.terminal-agent-header__pin:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
-.terminal-agent-header__pin.is-pinned {
-  color: var(--text-primary);
-}
-
-.terminal-agent-header__close {
-  flex-shrink: 0;
-  padding: 0 var(--spacing-xs);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: var(--font-size-2xl);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.terminal-agent-header__close:hover {
-  color: var(--text-primary);
-}
-
 .dockable-panel__surface--floating .terminal-agent-header {
   cursor: grab;
   user-select: none;

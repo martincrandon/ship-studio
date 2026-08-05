@@ -44,7 +44,6 @@ import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { extractTerminalError } from '../../lib/terminalDiagnostics';
 import {
-  CheckIcon,
   ClaudeIcon,
   CodexIcon,
   CursorIcon,
@@ -543,8 +542,8 @@ export function AgentsPanel() {
           const ready = agent.installed && agent.authed && !agent.needsReconnect;
           const isBusy = busy === agent.id;
           const menuOpen = openMenuId === agent.id;
-          // Stroke: red when attention needed, green when connected & valid,
-          // neutral otherwise (never-connected keeps today's plain border).
+          // A valid connection is shown by the outlined Installed status;
+          // attention still gets the red row state so a broken session is clear.
           const stateClass = agent.needsReconnect
             ? 'needs-reconnect'
             : agent.authed
@@ -605,39 +604,21 @@ export function AgentsPanel() {
                   </Button>
                 )}
 
-                {ready &&
-                  (() => {
-                    const isSwitchingToThis = busy === agent.id && !agent.isDefault;
-                    const anySwitching = busy !== null;
-                    return (
-                      <Button
-                        variant={agent.isDefault ? 'primary' : 'default'}
-                        width="hug"
-                        onClick={() => {
-                          if (!agent.isDefault) void handleSetDefault(agent.id);
-                        }}
-                        disabled={anySwitching || agent.isDefault}
-                        aria-pressed={agent.isDefault}
-                        aria-busy={isSwitchingToThis || undefined}
-                      >
-                        {isSwitchingToThis ? (
-                          <Spinner size="sm" />
-                        ) : agent.isDefault ? (
-                          <CheckIcon size={10} />
-                        ) : null}
-                        {isSwitchingToThis
-                          ? 'Switching…'
-                          : agent.isDefault
-                            ? 'Default'
-                            : 'Set default'}
-                      </Button>
-                    );
-                  })()}
+                {ready && (
+                  <Button
+                    variant="secondary"
+                    width="hug"
+                    className="agents-panel-status-button"
+                    disabled
+                  >
+                    Installed
+                  </Button>
+                )}
 
                 {agent.installed && (
                   <div className="agents-panel-menu-wrap">
                     <MenuButton
-                      variant="default"
+                      variant="ghost"
                       size="default"
                       width="hug"
                       leftIcon={<KebabGlyph />}
@@ -650,6 +631,11 @@ export function AgentsPanel() {
                     ></MenuButton>
                     {menuOpen && (
                       <div className="ss-dropdown__menu agents-panel-menu" role="menu">
+                        {ready && !agent.isDefault && (
+                          <DropdownItem onSelect={() => void handleSetDefault(agent.id)}>
+                            Set as default
+                          </DropdownItem>
+                        )}
                         {agent.installSupported && (
                           <DropdownItem onSelect={() => openTerminal(agent, 'install')}>
                             Update
@@ -749,9 +735,20 @@ export function AgentsPanel() {
                     )}
 
                     {connected && (
+                      <Button
+                        variant="secondary"
+                        width="hug"
+                        className="agents-panel-status-button"
+                        disabled
+                      >
+                        Connected
+                      </Button>
+                    )}
+
+                    {connected && (
                       <div className="agents-panel-menu-wrap">
                         <MenuButton
-                          variant="default"
+                          variant="ghost"
                           size="default"
                           width="hug"
                           leftIcon={<KebabGlyph />}

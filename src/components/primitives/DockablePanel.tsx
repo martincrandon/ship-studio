@@ -260,9 +260,12 @@ export function DockablePanel({
     minFloatingSize.height,
     window.innerHeight - position.top - VIEWPORT_GUTTER
   );
+  // Moving a floating panel can place part of it beyond the viewport. Keep its
+  // size unchanged in that case; the resize handles are the only interaction
+  // that should change the panel dimensions.
   const renderedFloatingSize = {
-    width: Math.max(minFloatingSize.width, Math.min(floatingPanelSize.width, maxFloatingWidth)),
-    height: Math.max(minFloatingSize.height, Math.min(floatingPanelSize.height, maxFloatingHeight)),
+    width: Math.max(minFloatingSize.width, floatingPanelSize.width),
+    height: Math.max(minFloatingSize.height, floatingPanelSize.height),
   };
 
   const resizeFloatingWidth = useCallback(

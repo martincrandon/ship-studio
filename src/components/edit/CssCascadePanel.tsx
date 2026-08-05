@@ -17,6 +17,8 @@ import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { CascadeRuleCard } from './CascadeRuleCard';
 import { ElementSettingsPanel } from './ElementSettingsPanel';
@@ -92,7 +94,7 @@ export function CssCascadePanel({
   variablesState,
   animationsState,
   onClose,
-  pinned,
+  pinned = false,
   onTogglePin,
   scope: controlledScope,
   onScopeChange,
@@ -146,18 +148,25 @@ export function CssCascadePanel({
         <span className="ss-edit-panel__title">CSS</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
-            <button
-              className={`ss-edit-panel__pin${pinned ? ' is-pinned' : ''}`}
+            <ToggleButton
+              variant="ghost"
+              size="compact"
+              className="button--icon-only"
               onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the preview' : 'Pin as sidebar'}
-              aria-pressed={pinned}
-            >
-              <PinIcon size={13} />
-            </button>
+              title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
+              aria-label={pinned ? 'Unpin CSS panel' : 'Pin CSS panel to the window'}
+              pressed={pinned}
+              leftIcon={<PinIcon size={13} />}
+            />
           )}
-          <button className="ss-edit-panel__close" onClick={onClose} aria-label="Exit edit mode">
-            <CloseIcon size={14} />
-          </button>
+          <IconButton
+            variant="ghost"
+            size="compact"
+            onClick={onClose}
+            title="Close CSS panel"
+            aria-label="Close CSS panel"
+            icon={<CloseIcon size={14} />}
+          />
         </span>
       </div>
 

@@ -13,7 +13,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
 }
 
 .agents-panel-title {
@@ -23,7 +23,7 @@
 
 .agents-panel-subtitle {
   color: var(--text-secondary);
-  margin: 2px 0 0 0;
+  margin: var(--spacing-xs) 0 0;
 }
 
 .agents-panel-spinner {
@@ -77,11 +77,6 @@
   transition: border-color var(--transition);
 }
 
-.agents-panel-row.is-default {
-  border-color: var(--accent-active);
-  box-shadow: inset 0 0 0 1px var(--accent-active);
-}
-
 .agents-panel-row-icon {
   display: flex;
   align-items: center;
@@ -119,7 +114,7 @@
 .agents-panel-row-actions {
   display: flex;
   align-items: center;
-  gap: var(--button-gap);
+  gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 
@@ -191,7 +186,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
 }
 
 .dashboard-card-title {
@@ -201,7 +196,7 @@
 
 .dashboard-card-subtitle {
   color: var(--text-secondary);
-  margin: 2px 0 0 0;
+  margin: var(--spacing-xs) 0 0;
 }
 
 .dashboard-card-rows {
@@ -319,18 +314,20 @@ button.dashboard-card-row {
   color: var(--text-muted);
 }
 
-/* ── Auth connection-state strokes ─────────────────────────────────────────
-   Green = connected & valid, red = needs attention (expired/needs reconnect).
-   A never-connected card keeps the plain neutral border (no class). These come
-   after .is-default so connection state wins the border color when both apply;
-   red (needs-reconnect) always trumps green. */
-.agents-panel-row.is-connected {
-  border-color: var(--accent-success);
-}
-
+/* A reconnect is the only account state that changes the row itself. Valid
+   connections use the same neutral surface as Figma, with an outlined label. */
 .agents-panel-row.needs-reconnect {
   border-color: var(--danger);
   box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+/* Figma's status control is the standard 30px secondary button with the card
+   border token, secondary text, and the shared button shadow. */
+.agents-panel-status-button.button:disabled {
+  opacity: 1;
+  cursor: default;
+  border-color: var(--border-subtle);
+  box-shadow: 0 calc(var(--stroke-1) / 2) var(--stroke-1) var(--color-black-o75);
 }
 
 /* Inline Reconnect button — red-tinted to read as "needs attention" without the

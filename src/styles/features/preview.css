@@ -428,28 +428,6 @@
   gap: var(--button-gap);
 }
 
-.ss-edit-panel__pin {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xs);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-.ss-edit-panel__pin:hover {
-  background: var(--surface-panel);
-  color: var(--text-primary);
-}
-.ss-edit-panel__pin.is-pinned {
-  color: var(--text-primary);
-}
-
 .breakpoint-btn {
   position: relative;
   padding: 0 var(--spacing-md);

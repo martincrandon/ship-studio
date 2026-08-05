@@ -26,6 +26,7 @@
     },
     { "name": "CheckIcon", "status": "new-design", "kind": "ui", "source": "tick.svg" },
     { "name": "WarningIcon", "status": "new-design", "kind": "ui", "source": "warning-alert.svg" },
+    { "name": "AlertIcon", "status": "new-design", "kind": "ui", "source": "alert.svg" },
     { "name": "CloseIcon", "status": "new-design", "kind": "ui", "source": "Cancel.svg" },
     { "name": "InfoIcon", "status": "legacy", "kind": "ui" },
     { "name": "SearchIcon", "status": "new-design", "kind": "ui", "source": "Search.svg" },

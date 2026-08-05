@@ -70,7 +70,7 @@ export function MainBranchBanner({ projectPath, onCreateBranch }: MainBranchBann
         </span>
         {onCreateBranch && (
           <Button
-            variant="secondary"
+            variant="default"
             className="main-branch-banner-action"
             onClick={onCreateBranch}
             leftIcon={<BranchIcon size={14} />}

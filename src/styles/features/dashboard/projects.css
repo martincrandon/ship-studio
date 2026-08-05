@@ -287,6 +287,11 @@
   /* Last card in the dashboard stack — extra room below so it doesn't
      butt up against the scroll edge. */
   margin-bottom: 0;
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition);
 }
 
 /* When collapsed, drop the header's bottom margin so the card reads as a
@@ -295,20 +300,47 @@
   margin-bottom: 0;
 }
 
-.integration-bar-header-btn {
+.integration-bar:hover {
+  background: var(--surface-control-hover);
+  border-color: var(--text-muted);
+}
+
+.integration-bar:focus-visible {
+  outline: var(--stroke-2) solid var(--accent-focus);
+  outline-offset: var(--space-04);
+}
+
+.integration-bar-header {
   width: 100%;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
+  padding: var(--spacing-lg);
+  box-sizing: border-box;
+  margin: 0;
+  background: transparent;
+  border: 0;
   color: inherit;
   text-align: left;
   font: inherit;
   align-items: center;
 }
 
-.integration-bar-header-btn:hover .dashboard-card-title {
+.integration-bar .dashboard-card-title {
+  color: var(--text-secondary);
+  transition: color var(--transition);
+}
+
+.integration-bar .dashboard-card-subtitle {
+  color: var(--text-muted);
+  transition: color var(--transition);
+}
+
+.integration-bar:hover .dashboard-card-title,
+.integration-bar:focus-visible .dashboard-card-title {
   color: var(--text-primary);
+}
+
+.integration-bar:hover .dashboard-card-subtitle,
+.integration-bar:focus-visible .dashboard-card-subtitle {
+  color: var(--text-secondary);
 }
 
 .integration-bar-subtitle {
@@ -336,6 +368,11 @@
   transition: transform var(--transition);
 }
 
+.integration-bar:hover .integration-bar-chevron,
+.integration-bar:focus-visible .integration-bar-chevron {
+  color: var(--text-primary);
+}
+
 .integration-bar-chevron.up {
   transform: rotate(180deg);
 }
@@ -358,6 +395,10 @@
   background: var(--accent-active);
   border-color: var(--accent-active);
   color: var(--text-inverse);
+}
+
+.integration-bar > .dashboard-card-rows {
+  padding: 0 var(--spacing-lg) var(--spacing-lg);
 }
 
 /* ============ Responsive Dashboard Styles ============ */

@@ -132,19 +132,6 @@
   font-size: var(--font-size-md);
 }
 
-.ss-edit-panel__close {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: var(--font-size-2xl);
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 var(--spacing-xs);
-}
-.ss-edit-panel__close:hover {
-  color: var(--text-primary);
-}
-
 /* The fixed context bar (breakpoint + edit target) lives in
    visual-editor-classes.css. */
 

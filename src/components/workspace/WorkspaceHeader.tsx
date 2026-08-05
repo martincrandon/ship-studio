@@ -21,7 +21,7 @@ import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { FolderIcon, ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
+import { FolderOpenIcon, ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ToggleButton } from '../primitives/ToggleButton';
@@ -164,6 +164,9 @@ export function WorkspaceHeader({
   pluginTheme,
 }: WorkspaceHeaderProps) {
   const [openSourceMenu, setOpenSourceMenu] = useState<'branches' | 'push' | null>(null);
+  const currentBranchIsLive =
+    currentBranch !== null &&
+    (branches.find((branch) => branch.name === currentBranch)?.isDefault ?? false);
   const projectPathContainerRef = useRef<HTMLDivElement>(null);
   const [expandedProjectPathWidth, setExpandedProjectPathWidth] = useState<number | null>(null);
   // Window dragging — only from the title bar (not the toolbar with plugins)
@@ -252,7 +255,7 @@ export function WorkspaceHeader({
           onBlur={handleProjectPathBlur}
         >
           <span className="project-path-expansion-measure" aria-hidden="true">
-            <FolderIcon size={14} />
+            <FolderOpenIcon size={14} />
             {projectPath}
           </span>
           <button
@@ -261,7 +264,7 @@ export function WorkspaceHeader({
             title="Open in Finder"
             aria-label={`Open ${projectPath} in Finder`}
           >
-            <FolderIcon size={14} />
+            <FolderOpenIcon size={14} />
             <MiddleTruncate text={projectPath} />
           </button>
         </div>
@@ -375,6 +378,7 @@ export function WorkspaceHeader({
                 isOpen={openSourceMenu === 'push'}
                 onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
                 opensPushMenu
+                isLive={currentBranchIsLive}
               />
             )}
             <PublishBranchDropdown
@@ -395,6 +399,7 @@ export function WorkspaceHeader({
               grouped={hasUncommittedChanges}
               changedFiles={changedFiles}
               onDiscardChanges={onDiscardChanges}
+              excludeClickOutsideSelector=".source-control-push"
               hostingControls={
                 pushHostingPlugins.length > 0 ? (
                   <PluginSlot

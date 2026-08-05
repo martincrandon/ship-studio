@@ -345,7 +345,13 @@
   --button-variable-hover: var(--color-purple-600);
 
   --button-warning-surface: var(--surface-warning);
+  --button-warning-surface-hover: color-mix(
+    in srgb,
+    var(--color-orange-600) 10%,
+    var(--surface-control-hover)
+  );
   --button-warning-text: var(--accent-warning);
+  --button-warning-text-hover: var(--color-orange-500);
 
   /* -----------------------------------------------------------------------
    * Spacing & Sizing

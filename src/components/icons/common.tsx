@@ -45,6 +45,10 @@ export function WarningIcon({ size = 16, className }: IconProps) {
   );
 }
 
+export function AlertIcon({ size = 16, className }: IconProps) {
+  return <NewDesignIcon iconName="AlertIcon" source="Alert" size={size} className={className} />;
+}
+
 export function CloseIcon({ size = 16, className }: IconProps) {
   return <NewDesignIcon iconName="CloseIcon" source="Cancel" size={size} className={className} />;
 }

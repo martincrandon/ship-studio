@@ -1,5 +1,6 @@
 import type { SVGAttributes } from 'react';
 import active from './assets/new-design/Active.svg?raw';
+import alert from './assets/new-design/alert.svg?raw';
 import ai from './assets/new-design/AI.svg?raw';
 import alignCenter from './assets/new-design/align-center.svg?raw';
 import alignItemsCenter from './assets/new-design/align-items-center.svg?raw';
@@ -80,6 +81,7 @@ import { getIconData, ICON_STROKE_WIDTH, resolveIconSize } from './provenance';
 
 const sources = {
   Active: active,
+  Alert: alert,
   AI: ai,
   AlignCenter: alignCenter,
   AlignItemsCenter: alignItemsCenter,

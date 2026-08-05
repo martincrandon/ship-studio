@@ -30,6 +30,7 @@ import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
+import { UpdateBanner } from '../UpdateBanner';
 import { useOpenPalette } from '../CommandPalette/paletteContext';
 import { useModal } from '../../contexts/ModalContext';
 import { ALL_AGENTS, TERMINAL, getAgentById, type AgentConfig } from '../../lib/agent';
@@ -858,6 +859,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         </div>
 
         <div className="workspace-sidebar-footer">
+          <UpdateBanner />
           <div className="workspace-sidebar-footer-actions">
             <Button
               variant="default"

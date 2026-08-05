@@ -17,12 +17,14 @@ import {
 } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button, buttonClassNames } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { EnumDropdown } from './EnumDropdown';
 import { MultiSourceControl } from './MultiSourceControl';
 import { UsageScope } from './UsageScope';
 import { CodeIcon } from './CodeIcon';
 import { SlackIcon } from '../icons/brand';
-import { CheckIcon, InfoIcon } from '../icons/common';
+import { CheckIcon, CloseIcon, InfoIcon } from '../icons/common';
 import { SaveIcon } from '../icons/editor';
 import { HelpIcon } from '../icons/utility';
 import { PinIcon } from '../icons/layout';
@@ -475,18 +477,25 @@ export function VisualEditorPanel({
         <span className="ss-edit-panel__title">Edit</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
-            <button
-              className={`ss-edit-panel__pin${pinned ? ' is-pinned' : ''}`}
+            <ToggleButton
+              variant="ghost"
+              size="compact"
+              className="button--icon-only"
               onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the preview' : 'Pin as sidebar'}
-              aria-pressed={pinned}
-            >
-              <PinIcon size={13} />
-            </button>
+              title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
+              aria-label={pinned ? 'Unpin Edit panel' : 'Pin Edit panel to the window'}
+              pressed={pinned}
+              leftIcon={<PinIcon size={13} />}
+            />
           )}
-          <button className="ss-edit-panel__close" onClick={onClose} aria-label="Exit edit mode">
-            ×
-          </button>
+          <IconButton
+            variant="ghost"
+            size="compact"
+            onClick={onClose}
+            title="Close Edit panel"
+            aria-label="Close Edit panel"
+            icon={<CloseIcon size={14} />}
+          />
         </span>
       </div>
 

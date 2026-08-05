@@ -6,12 +6,25 @@
 .publish-dropdown--grouped {
   display: flex;
   align-self: stretch;
+  position: relative;
+  z-index: var(--z-modal-overlay);
+  margin-left: calc(-1 * var(--space-08));
 }
 
 .publish-dropdown--grouped .source-control-push-button.button {
   height: 100%;
   min-height: 0;
   border-radius: var(--button-radius);
+}
+
+.source-control-push-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-04);
+}
+
+.publish-dropdown .source-control-push-button.button--primary {
+  border-color: var(--accent-active);
 }
 
 .publish-dropdown .button.publishing {

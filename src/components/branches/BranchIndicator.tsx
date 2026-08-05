@@ -28,6 +28,8 @@ interface BranchIndicatorProps {
   onOpenChange?: (open: boolean) => void;
   /** Opens the shared Push menu instead of rendering a second popover. */
   opensPushMenu?: boolean;
+  /** Whether the current branch is explicitly known to be the live/default branch. */
+  isLive?: boolean;
 }
 
 export function BranchIndicator({
@@ -39,6 +41,7 @@ export function BranchIndicator({
   isOpen: controlledOpen,
   onOpenChange,
   opensPushMenu = false,
+  isLive = false,
 }: BranchIndicatorProps) {
   const { showToast } = useOptionalToast();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -158,6 +161,7 @@ export function BranchIndicator({
             leftIcon={<BranchIcon size={14} />}
           >
             <span className="branch-name">{currentBranch}</span>
+            {isLive && <span className="branch-live-badge">Live</span>}
             <span className="branch-unsaved-label">{visibleStatus}</span>
           </Button>
         ) : (
@@ -171,6 +175,7 @@ export function BranchIndicator({
             leftIcon={<BranchIcon size={14} />}
           >
             <span className="branch-name">{currentBranch}</span>
+            {isLive && <span className="branch-live-badge">Live</span>}
             <span className="branch-unsaved-label">{visibleStatus}</span>
           </Button>
         )}

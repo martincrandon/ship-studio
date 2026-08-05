@@ -62,6 +62,18 @@ describe('dashboard home layout pieces', () => {
       'src',
       '/ship_studio_icon.png'
     );
+    const logoButton = screen.getByRole('button', { name: 'Pulse Ship Studio logo' });
+    fireEvent.click(logoButton);
+    expect(logoButton).toHaveClass('dashboard-hero-icon-button--hover-suppressed');
+    expect(screen.getByRole('img', { name: 'Ship Studio' })).toHaveClass(
+      'dashboard-hero-icon--click-pulsing'
+    );
+    fireEvent.animationEnd(screen.getByRole('img', { name: 'Ship Studio' }));
+    expect(screen.getByRole('img', { name: 'Ship Studio' })).not.toHaveClass(
+      'dashboard-hero-icon--click-pulsing'
+    );
+    fireEvent.mouseLeave(logoButton);
+    expect(logoButton).not.toHaveClass('dashboard-hero-icon-button--hover-suppressed');
     expect(screen.getByRole('heading', { name: 'What will you Ship today?' })).toBeInTheDocument();
   });
 

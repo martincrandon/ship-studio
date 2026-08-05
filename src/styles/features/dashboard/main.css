@@ -119,6 +119,50 @@
   object-fit: contain;
 }
 
+.dashboard-hero-icon-button {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.dashboard-hero-icon-button:focus-visible {
+  outline: var(--stroke-2) solid var(--accent-focus);
+  outline-offset: var(--space-04);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dashboard-hero-icon-button:not(.dashboard-hero-icon-button--hover-suppressed):hover
+    .dashboard-hero-icon {
+    animation: dashboard-hero-icon-pulse var(--transition-slow);
+  }
+
+  .dashboard-hero-icon--click-pulsing {
+    animation: dashboard-hero-icon-click-pulse var(--transition-slow);
+  }
+}
+
+@keyframes dashboard-hero-icon-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes dashboard-hero-icon-click-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.16);
+  }
+}
+
 .dashboard-hero-title {
   color: var(--text-primary);
 }

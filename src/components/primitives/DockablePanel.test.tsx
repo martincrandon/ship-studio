@@ -82,6 +82,37 @@ describe('DockablePanel', () => {
     });
   });
 
+  it('keeps its size when dragging a floating panel to the viewport edges', () => {
+    render(
+      <DockablePanel
+        docked={false}
+        ariaLabel="Moving panel"
+        positionKey="movingPanelPosition"
+        sizeKey="movingPanelSize"
+        floatingSize={{ width: 360, height: 520 }}
+        initialPosition={() => ({ left: 40, top: 60 })}
+      >
+        <div data-dockable-drag-handle>Panel header</div>
+      </DockablePanel>
+    );
+
+    const surface = screen.getByLabelText('Moving panel');
+    const header = screen.getByText('Panel header');
+    fireEvent.pointerDown(header, { pointerId: 1, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(surface, {
+      pointerId: 1,
+      clientX: window.innerWidth + 50,
+      clientY: window.innerHeight + 50,
+    });
+    fireEvent.pointerUp(surface, {
+      pointerId: 1,
+      clientX: window.innerWidth + 50,
+      clientY: window.innerHeight + 50,
+    });
+
+    expect(surface).toHaveStyle({ width: '400px', height: '600px' });
+  });
+
   it('keeps its child mounted while moving between the dock and a floating surface', () => {
     const mounted = vi.fn();
     const unmounted = vi.fn();

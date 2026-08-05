@@ -14,6 +14,8 @@ import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { IconButton } from '../primitives/IconButton';
+import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import type { ElementTreeNode } from '../../hooks/useElementTree';
 import type { ElementSignature } from '../../lib/edit';
@@ -233,26 +235,26 @@ export function ElementTreePanel({
               <TabsTab value="code">Code</TabsTab>
             </TabsList>
             {onTogglePin && (
-              <button
-                type="button"
-                className={`ss-tree-panel__pin${pinned ? ' is-pinned' : ''}`}
+              <ToggleButton
+                variant="ghost"
+                size="compact"
+                className="button--icon-only"
                 onClick={onTogglePin}
-                title={pinned ? 'Unpin — float over the workspace' : 'Pin to the preview'}
-                aria-label={pinned ? 'Float Elements panel' : 'Dock Elements panel'}
-                aria-pressed={pinned}
-              >
-                <PinIcon size={13} />
-              </button>
+                title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
+                aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}
+                pressed={pinned}
+                leftIcon={<PinIcon size={13} />}
+              />
             )}
             {onClose && (
-              <button
-                type="button"
-                className="ss-tree-panel__close"
+              <IconButton
+                variant="ghost"
+                size="compact"
                 onClick={onClose}
+                title="Close Elements panel"
                 aria-label="Close Elements panel"
-              >
-                <CloseIcon size={14} />
-              </button>
+                icon={<CloseIcon size={14} />}
+              />
             )}
           </div>
         </Tabs>
@@ -263,26 +265,26 @@ export function ElementTreePanel({
             <span className="ss-tree-panel__view-only">View only</span>
           </Tooltip>
           {onTogglePin && (
-            <button
-              type="button"
-              className={`ss-tree-panel__pin${pinned ? ' is-pinned' : ''}`}
+            <ToggleButton
+              variant="ghost"
+              size="compact"
+              className="button--icon-only"
               onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the workspace' : 'Pin to the preview'}
-              aria-label={pinned ? 'Float Elements panel' : 'Dock Elements panel'}
-              aria-pressed={pinned}
-            >
-              <PinIcon size={13} />
-            </button>
+              title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
+              aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}
+              pressed={pinned}
+              leftIcon={<PinIcon size={13} />}
+            />
           )}
           {onClose && (
-            <button
-              type="button"
-              className="ss-tree-panel__close"
+            <IconButton
+              variant="ghost"
+              size="compact"
               onClick={onClose}
+              title="Close Elements panel"
               aria-label="Close Elements panel"
-            >
-              <CloseIcon size={14} />
-            </button>
+              icon={<CloseIcon size={14} />}
+            />
           )}
         </div>
       )}

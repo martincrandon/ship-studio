@@ -50,7 +50,6 @@ import { markSetupComplete, getDefaultAgentId as fetchDefaultAgentId } from './l
 import { initDefaultAgent } from './lib/agent';
 import { sessionRegistry } from './lib/sessionRegistry';
 import { unregisterProjectSession } from './lib/projectSessions';
-import { UpdateBanner } from './components/UpdateBanner';
 import { MonorepoPickerModal } from './components/dashboard/MonorepoPickerModal';
 import { ThumbnailConsentModal } from './components/preview/ThumbnailConsentModal';
 import { ModalFrame } from './components/primitives/ModalFrame';
@@ -1105,7 +1104,6 @@ function AppContents({ initialProjectPath }: AppProps) {
     return (
       <>
         <div className="app">
-          <UpdateBanner />
           <OnboardingRouter onComplete={() => void handleOnboardingComplete()} />
         </div>
         {quitConfirmModal}

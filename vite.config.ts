@@ -45,7 +45,11 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Bind local development explicitly to IPv4. WebKit can resolve
+    // `localhost` to 127.0.0.1 before trying ::1, while Node/Vite's default
+    // listener may only bind ::1 on macOS. That leaves Tauri showing the
+    // static boot fallback even though the Vite server appears healthy.
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",

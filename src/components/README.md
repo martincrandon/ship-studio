@@ -31,7 +31,7 @@ Cross-cutting components mounted at the app level (by `App.tsx` or global hosts)
 - `EducationOverlay.tsx` — Education Mode x-ray overlay (hover any UI element to learn it)
 - `ErrorBoundary.tsx` — top-level crash recovery, including plugin-crash attribution/uninstall
 - `HelpModal.tsx` — slash-command glossary, shortcuts, and tips (openable from anywhere)
-- `UpdateBanner.tsx` — auto-update available/progress banner
+- `UpdateBanner.tsx` — sidebar update indicator and release-specific update modal
 
 ## Where does my new component go?
 

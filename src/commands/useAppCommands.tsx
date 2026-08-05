@@ -112,7 +112,7 @@ export function useAppCommands({
     try {
       const result = await checkForUpdate();
       if (!result) showToast("You're up to date", 'success');
-      // If there IS an update, the UpdateBanner already surfaces it.
+      // If there IS an update, the project sidebar indicator surfaces it.
     } catch (err) {
       logger.warn('[useAppCommands] checkForUpdate failed', { error: String(err) });
       showToast('Could not check for updates', 'error');

@@ -40,7 +40,6 @@ import { WorkspaceModals } from './WorkspaceModals';
 import { WorkspaceHeader, HOSTING_PLUGIN_IDS } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { UpdateBanner } from '../UpdateBanner';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { DockablePanel } from '../primitives/DockablePanel';
@@ -1124,7 +1123,6 @@ export const WorkspaceView = memo(function WorkspaceView({
   return (
     <>
       <div className="app workspace">
-        <UpdateBanner />
         {!isCompact && header.titlebar}
 
         {isCompact ? (
@@ -1262,32 +1260,32 @@ export const WorkspaceView = memo(function WorkspaceView({
                               </span>
                             </span>
                             <span className="terminal-agent-header__actions">
-                              <button
-                                type="button"
-                                className={`terminal-agent-header__pin${
-                                  agentPanelPinned ? ' is-pinned' : ''
-                                }`}
+                              <ToggleButton
+                                variant="ghost"
+                                size="compact"
+                                className="button--icon-only"
                                 onClick={toggleAgentPanelPinned}
                                 title={
                                   agentPanelPinned
                                     ? 'Unpin — float over the workspace'
-                                    : 'Pin to the left sidebar'
+                                    : 'Pin to the window'
                                 }
                                 aria-label={
-                                  agentPanelPinned ? 'Float Agent panel' : 'Dock Agent panel'
+                                  agentPanelPinned
+                                    ? 'Unpin Agent panel'
+                                    : 'Pin Agent panel to the window'
                                 }
-                                aria-pressed={agentPanelPinned}
-                              >
-                                <PinIcon size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                className="terminal-agent-header__close"
+                                pressed={agentPanelPinned}
+                                leftIcon={<PinIcon size={13} />}
+                              />
+                              <IconButton
+                                variant="ghost"
+                                size="compact"
                                 onClick={toggleAgentPanel}
+                                title="Close Agent panel"
                                 aria-label="Close Agent panel"
-                              >
-                                <CloseIcon size={14} />
-                              </button>
+                                icon={<CloseIcon size={14} />}
+                              />
                             </span>
                           </div>
                           <StaleEnvBanner projectPath={currentProject.path} />
