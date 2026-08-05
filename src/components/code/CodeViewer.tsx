@@ -432,6 +432,7 @@ export function CodeViewer({
         createPortal(
           <div className="code-selection-popover" ref={popoverRef} style={popoverStyle}>
             <button
+              type="button"
               className="code-selection-reference"
               onClick={() => setPreviewExpanded((p) => !p)}
             >

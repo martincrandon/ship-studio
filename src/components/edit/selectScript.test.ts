@@ -24,12 +24,20 @@ function nextSelect(): Promise<{
   signature: Record<string, unknown>;
   count: number;
   leafText?: boolean;
+  affectedNodeIds?: number[];
 }> {
   return new Promise((res) => {
     const handler = (e: MessageEvent) => {
       if ((e.data as { type?: string })?.type === 'ss:select') {
         window.removeEventListener('message', handler);
-        res(e.data as { signature: Record<string, unknown>; count: number; leafText?: boolean });
+        res(
+          e.data as {
+            signature: Record<string, unknown>;
+            count: number;
+            leafText?: boolean;
+            affectedNodeIds?: number[];
+          }
+        );
       }
     };
     window.addEventListener('message', handler);
@@ -157,6 +165,7 @@ it('reports the count of, and live-mutates, ALL elements sharing the class', asy
   document.querySelectorAll('.name')[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
   const msg = await selected;
   expect(msg.count).toBe(3);
+  expect(msg.affectedNodeIds).toHaveLength(2);
 
   // A mutation applies to every matching element, not just the clicked one.
   send({ type: 'ss:mutate', className: 'name font-bold' });

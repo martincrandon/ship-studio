@@ -30,6 +30,7 @@ import { stripAnsi } from '../../lib/ansi';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
+import { Tooltip } from '../primitives/Tooltip';
 import { CopyIcon, FileTextIcon, HelpIcon, ResetIcon } from '../icons';
 
 const CATEGORY_HINTS: Record<ScriptCategory, string> = {
@@ -392,24 +393,20 @@ function statusText(state: CheckState): string {
   }
 }
 
-/** Small "?" badge after a label. Custom CSS-only tooltip (instead of the
- *  native `title` attribute) so the popover appears instantly on hover —
- *  the OS-level title delay made these feel laggy. The tooltip itself is
- *  a non-interactive sibling span shown via `:hover` on the wrapper. */
+/** Small "?" badge after a label using the shared app tooltip surface. */
 function HelpHint({ label }: { label: string }) {
   return (
-    <span
-      className="health-tab-help"
-      role="img"
-      aria-label={label}
-      // Stop the click from bubbling into the row's "select" handler.
-      onClick={(e) => e.stopPropagation()}
-    >
-      <HelpIcon size={11} />
-      <span className="health-tab-help-tooltip" role="tooltip">
-        {label}
+    <Tooltip content={label}>
+      <span
+        className="health-tab-help"
+        role="img"
+        aria-label={label}
+        // Stop the click from bubbling into the row's "select" handler.
+        onClick={(e) => e.stopPropagation()}
+      >
+        <HelpIcon size={11} />
       </span>
-    </span>
+    </Tooltip>
   );
 }
 

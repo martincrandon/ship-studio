@@ -59,13 +59,19 @@ function FakeCloudflareControls() {
 function FakeVercelControls() {
   const [open, setOpen] = useState(false);
   return (
-    <div className="vercel-dropdown-wrapper" onMouseEnter={() => setOpen(true)}>
-      <button type="button">Vercel</button>
+    <div className="vercel-button-container" onMouseEnter={() => setOpen(true)}>
+      <button type="button" className="toolbar-icon-btn vercel-button">
+        Vercel
+      </button>
       {open && (
-        <div className="vercel-dropdown">
-          <div className="vercel-dropdown-inner">
+        <div className="vercel-site-dropdown">
+          <div className="vercel-site-dropdown-inner">
             <button type="button">Production</button>
             <button type="button">Dashboard</button>
+            <div className="vercel-dropdown-separator" />
+            <button type="button" className="vercel-dropdown-action">
+              Deploy now
+            </button>
           </div>
         </div>
       )}
@@ -167,6 +173,42 @@ describe('PublishBranchDropdown open panel', () => {
     expect(screen.getByText('Cloudflare deploy controls')).toBeInTheDocument();
   });
 
+  it('keeps the panel actions below the hosting section', () => {
+    const { container } = render(
+      <PublishBranchDropdown
+        {...makeProps()}
+        hostingControls={<button type="button">Cloudflare deploy controls</button>}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Push'));
+
+    const menu = container.querySelector('.publish-dropdown-menu');
+    const hostingSection = menu?.querySelector('.publish-hosting-section');
+    const actions = menu?.querySelector('.publish-actions');
+
+    expect(hostingSection).toBeInTheDocument();
+    expect(actions).toBeInTheDocument();
+    expect(menu?.lastElementChild).toBe(actions);
+  });
+
+  it('keeps Done below the hosting section when GitHub is up to date', () => {
+    const { container } = render(
+      <PublishBranchDropdown
+        {...makeProps({ hasChangesToSync: false })}
+        hostingControls={<button type="button">Cloudflare deploy controls</button>}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Push'));
+
+    const menu = container.querySelector('.publish-dropdown-menu');
+    const actions = menu?.querySelector('.publish-actions');
+
+    expect(screen.getByText('Done')).toBeInTheDocument();
+    expect(menu?.lastElementChild).toBe(actions);
+  });
+
   it('reveals Cloudflare production links by default', async () => {
     render(<PublishBranchDropdown {...makeProps()} hostingControls={<FakeCloudflareControls />} />);
 
@@ -184,6 +226,7 @@ describe('PublishBranchDropdown open panel', () => {
 
     expect(await screen.findByText('Production')).toBeInTheDocument();
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Deploy now')).toHaveClass('vercel-dropdown-action');
   });
 
   it('describes the GitHub push without inferring deployment state', () => {

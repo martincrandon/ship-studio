@@ -210,39 +210,6 @@
   color: var(--text-secondary);
 }
 
-/* Instant custom tooltip — no opacity transition, no enter delay. Sits above
-   the badge; if it would clip the top of the panel, the row layout still has
-   enough headroom for ~3 lines of text. */
-.health-tab-help-tooltip {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  width: max-content;
-  max-width: 280px;
-  padding: 6px 10px;
-  background: var(--surface-control);
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-  line-height: 1.4;
-  white-space: normal;
-  text-align: left;
-  pointer-events: none;
-  z-index: var(--z-tooltip);
-  opacity: 0;
-  visibility: hidden;
-}
-
-.health-tab-help:hover .health-tab-help-tooltip,
-.health-tab-help:focus-visible .health-tab-help-tooltip {
-  opacity: 1;
-  visibility: visible;
-}
-
 .health-tab-row-status {
   color: var(--text-secondary);
   font-size: var(--font-size-sm);

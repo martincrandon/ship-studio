@@ -149,15 +149,19 @@
 /* GitHub Calendar */
 .github-calendar-wrapper {
   position: relative;
-  margin-bottom: 24px;
-  padding: 20px;
+  margin-bottom: var(--dashboard-section-gap);
+  padding: var(--spacing-lg);
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  min-height: 168px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  /* Figma-specific one-off: normalize the 155/157px reference to 156px. */
+  min-height: 156px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .github-calendar-hide-btn {
@@ -199,35 +203,23 @@
   fill: var(--text-muted) !important;
 }
 
-/* Tooltip styling */
-.github-calendar-tooltip {
-  background: var(--surface-app) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: 6px !important;
-  padding: 6px 10px !important;
-  font-size: var(--font-size-base) !important;
-  color: var(--text-primary) !important;
-  box-shadow: var(--shadow) !important;
-  z-index: 1000 !important;
-}
-
 /* Skeleton loader */
 .github-calendar-skeleton {
   width: 100%;
-  padding-top: 20px;
 }
 
 .github-calendar-skeleton-grid {
   display: grid;
-  grid-template-columns: repeat(53, 1fr);
+  grid-template-columns: repeat(53, 12px);
   grid-template-rows: repeat(7, 12px);
-  gap: 4px;
+  gap: 2px;
+  justify-content: center;
 }
 
 .github-calendar-skeleton-block {
   width: 12px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: var(--radius-4);
   background: var(--surface-control);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }

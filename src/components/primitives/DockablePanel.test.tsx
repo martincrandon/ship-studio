@@ -1,15 +1,25 @@
 import { useEffect } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DockablePanel } from './DockablePanel';
 
+const resizeObserverCallbacks: Array<() => void> = [];
+const resizeObserverInstances: ResizeObserverMock[] = [];
+
 class ResizeObserverMock {
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserverInstances.push(this);
+    resizeObserverCallbacks.push(() => callback([], this as unknown as ResizeObserver));
+  }
+
   observe = vi.fn();
   disconnect = vi.fn();
 }
 
 describe('DockablePanel', () => {
   beforeEach(() => {
+    resizeObserverCallbacks.length = 0;
+    resizeObserverInstances.length = 0;
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('PointerEvent', MouseEvent);
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -24,6 +34,52 @@ describe('DockablePanel', () => {
       toJSON: () => ({}),
     });
     localStorage.clear();
+  });
+
+  it('tracks its dock container when surrounding panels resize', () => {
+    let dockRect = {
+      x: 120,
+      y: 80,
+      left: 120,
+      top: 80,
+      right: 520,
+      bottom: 680,
+      width: 400,
+      height: 600,
+      toJSON: () => ({}),
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => dockRect);
+
+    const { container } = render(
+      <div data-testid="dock-container">
+        <DockablePanel
+          docked
+          ariaLabel="Moving panel"
+          positionKey="movingPanelPosition"
+          sizeKey="movingPanelSize"
+          floatingSize={{ width: 360, height: 520 }}
+          initialPosition={() => ({ left: 40, top: 60 })}
+        >
+          <div>Panel contents</div>
+        </DockablePanel>
+      </div>
+    );
+
+    const placeholder = container.querySelector('.dockable-panel__placeholder');
+    const dockContainer = screen.getByTestId('dock-container');
+    const observer = resizeObserverInstances[0];
+    expect(observer.observe).toHaveBeenCalledWith(placeholder);
+    expect(observer.observe).toHaveBeenCalledWith(dockContainer);
+
+    dockRect = { ...dockRect, x: 220, left: 220, right: 620 };
+    act(() => resizeObserverCallbacks[0]());
+
+    expect(screen.getByLabelText('Moving panel')).toHaveStyle({
+      left: '220px',
+      top: '80px',
+      width: '400px',
+      height: '600px',
+    });
   });
 
   it('keeps its child mounted while moving between the dock and a floating surface', () => {

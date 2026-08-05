@@ -199,8 +199,8 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--surface-control);
-  border-top: none;
+  background: transparent;
+  border-top: var(--stroke-1) solid var(--border-default);
 }
 
 .publish-deployments-link {

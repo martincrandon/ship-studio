@@ -73,6 +73,7 @@ function FileTreeItem({
   return (
     <>
       <button
+        type="button"
         className={`file-tree-item ${isSelected ? 'selected' : ''}`}
         style={{ paddingLeft: `${12 + level * 16}px` }}
         onClick={handleClick}

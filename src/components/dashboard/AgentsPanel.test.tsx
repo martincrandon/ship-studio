@@ -83,11 +83,15 @@ vi.mock('./WorkspaceConnectTerminal', () => ({
 // Strip heavy icon SVGs; only need predictable DOM.
 vi.mock('../icons', () => ({
   CheckIcon: () => <span data-testid="check-icon" />,
+  CloseIcon: () => <span data-testid="close-icon" />,
   ClaudeIcon: () => <span data-testid="claude-icon" />,
   CodexIcon: () => <span data-testid="codex-icon" />,
   OpencodeIcon: () => <span data-testid="opencode-icon" />,
   CursorIcon: () => <span data-testid="cursor-icon" />,
+  DownloadIcon: () => <span data-testid="download-icon" />,
+  ExternalLinkIcon: () => <span data-testid="external-link-icon" />,
   GitHubIcon: () => <span data-testid="github-icon" />,
+  PlugIcon: () => <span data-testid="plug-icon" />,
   VercelIcon: () => <span data-testid="vercel-icon" />,
 }));
 
@@ -448,7 +452,7 @@ describe('AgentsPanel', () => {
     mockInvoke('list_accounts', [account]);
   }
 
-  it('names the active workspace and groups rows under Coding agents / Services', async () => {
+  it('names the active workspace and groups rows under AGENTS / SERVICES', async () => {
     mockInvoke('get_agents_status', [CLAUDE_DEFAULT]);
     mockWorkspace(CIRCA);
     render(<AgentsPanel />);
@@ -457,8 +461,8 @@ describe('AgentsPanel', () => {
     // Workspace badge names the active workspace.
     await waitFor(() => expect(screen.getAllByText(/Circa/).length).toBeGreaterThan(0));
     // The two section subheaders are present.
-    expect(screen.getByText('Coding agents')).toBeInTheDocument();
-    expect(screen.getByText('Services')).toBeInTheDocument();
+    expect(screen.getByText('AGENTS')).toBeInTheDocument();
+    expect(screen.getByText('SERVICES')).toBeInTheDocument();
     // The Services rows render for GitHub + Vercel.
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     expect(screen.getByText('Vercel')).toBeInTheDocument();

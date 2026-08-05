@@ -14,6 +14,7 @@ import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tooltip } from '../primitives/Tooltip';
 import type { ElementTreeNode } from '../../hooks/useElementTree';
 import type { ElementSignature } from '../../lib/edit';
 import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
@@ -31,6 +32,8 @@ interface Props {
   tree: ElementTreeNode | null;
   truncated: boolean;
   selectedId: number | null;
+  /** Same-source matches that will also change when the primary selection is edited. */
+  affectedIds?: readonly number[];
   onSelect: (id: number) => void;
   onHover: (id: number | null) => void;
   /** The currently-selected element (for the Code/HTML view). */
@@ -81,6 +84,7 @@ export function ElementTreePanel({
   tree,
   truncated,
   selectedId,
+  affectedIds = [],
   onSelect,
   onHover,
   projectPath,
@@ -112,6 +116,7 @@ export function ElementTreePanel({
   };
   const bodyRef = useRef<HTMLDivElement>(null);
   const visibleView = structure ? view : 'visual';
+  const affectedSet = useMemo(() => new Set(affectedIds), [affectedIds]);
 
   const ancestors = useMemo(() => (tree ? buildAncestors(tree) : null), [tree]);
 
@@ -168,13 +173,15 @@ export function ElementTreePanel({
 
   const renderNode = (node: ElementTreeNode, depth: number) => {
     const hasChildren = node.children.length > 0;
+    const isSelected = node.id === selectedId;
+    const isAffected = !isSelected && affectedSet.has(node.id);
     // Collapsed = explicitly collapsed, or deep and never explicitly expanded.
     // The `collapsed` set tracks explicit toggles both ways via presence.
     const isCollapsed = hasChildren && collapsedState(node.id, depth);
     return (
       <div key={node.id} className="ss-tree-node">
         <div
-          className={`ss-tree-row${node.id === selectedId ? ' selected' : ''}`}
+          className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
           style={{ paddingLeft: depth * 14 + 6 }}
           data-tree-id={node.id}
           onClick={() => onSelect(node.id)}
@@ -217,13 +224,44 @@ export function ElementTreePanel({
 
   return (
     <div ref={panelRef} className="ss-tree-panel" data-testid="element-tree-panel">
-      <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
+      {structure ? (
+        <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
+          <div className="ss-tree-panel__header" data-dockable-drag-handle>
+            <span className="ss-tree-panel__title">Elements</span>
+            <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
+              <TabsTab value="visual">Visual</TabsTab>
+              <TabsTab value="code">Code</TabsTab>
+            </TabsList>
+            {onTogglePin && (
+              <button
+                type="button"
+                className={`ss-tree-panel__pin${pinned ? ' is-pinned' : ''}`}
+                onClick={onTogglePin}
+                title={pinned ? 'Unpin — float over the workspace' : 'Pin to the preview'}
+                aria-label={pinned ? 'Float Elements panel' : 'Dock Elements panel'}
+                aria-pressed={pinned}
+              >
+                <PinIcon size={13} />
+              </button>
+            )}
+            {onClose && (
+              <button
+                type="button"
+                className="ss-tree-panel__close"
+                onClick={onClose}
+                aria-label="Close Elements panel"
+              >
+                <CloseIcon size={14} />
+              </button>
+            )}
+          </div>
+        </Tabs>
+      ) : (
         <div className="ss-tree-panel__header" data-dockable-drag-handle>
           <span className="ss-tree-panel__title">Elements</span>
-          <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
-            <TabsTab value="visual">Visual</TabsTab>
-            {structure && <TabsTab value="code">Code</TabsTab>}
-          </TabsList>
+          <Tooltip content="Turn on edit mode to select and edit elements.">
+            <span className="ss-tree-panel__view-only">View only</span>
+          </Tooltip>
           {onTogglePin && (
             <button
               type="button"
@@ -247,7 +285,7 @@ export function ElementTreePanel({
             </button>
           )}
         </div>
-      </Tabs>
+      )}
       {visibleView === 'visual' ? (
         <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
           {tree ? (

@@ -1,13 +1,11 @@
 /* Agents panel — dashboard surface for managing coding agents */
 
 .agents-panel {
-  /* First card after the project grid — double the default gap so the
-     stack reads as a separate section rather than crowding the projects. */
-  margin: var(--spacing-2xl) 0 var(--spacing-lg);
+  margin: 0 0 var(--dashboard-section-gap);
   padding: var(--spacing-lg);
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
 }
 
 .agents-panel-header {
@@ -19,14 +17,11 @@
 }
 
 .agents-panel-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
 .agents-panel-subtitle {
-  font-size: var(--font-size-base);
   color: var(--text-secondary);
   margin: 2px 0 0 0;
 }
@@ -35,19 +30,12 @@
   color: var(--text-muted);
 }
 
-/* Workspace badge in the header — names the workspace these logins belong to,
-   the single clearest "which account am I looking at?" cue. A compact tag, not
-   a stretched pill. */
-.agents-panel-badge {
+/* Inline workspace name in the subtitle — no bordered chip treatment. */
+.agents-panel-workspace-name {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: 1px var(--spacing-sm);
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-weight: 500;
+  color: inherit;
   vertical-align: baseline;
 }
 
@@ -60,10 +48,7 @@
 
 /* Subheader splitting the card into "Coding agents" and "Services" tiers. */
 .agents-section-title {
-  font-size: var(--font-size-xs);
-  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
   margin: var(--spacing-md) 0 var(--spacing-sm);
 }
@@ -84,9 +69,11 @@
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) var(--spacing-lg);
-  background: var(--surface-app);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  /* Figma-specific one-off: account rows use a 62px minimum rhythm. */
+  min-height: 62px;
+  background: var(--surface-control);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   transition: border-color var(--transition);
 }
 
@@ -116,8 +103,6 @@
 }
 
 .agents-panel-row-name {
-  font-size: var(--font-size-md);
-  font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -125,7 +110,6 @@
 }
 
 .agents-panel-row-status {
-  font-size: var(--font-size-base);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -195,11 +179,11 @@
    ============================================================ */
 
 .dashboard-card {
-  margin: 0 0 var(--spacing-lg);
+  margin: 0 0 var(--dashboard-section-gap);
   padding: var(--spacing-lg);
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
 }
 
 .dashboard-card-header {
@@ -211,14 +195,11 @@
 }
 
 .dashboard-card-title {
-  font-size: var(--font-size-md);
-  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
 .dashboard-card-subtitle {
-  font-size: var(--font-size-base);
   color: var(--text-secondary);
   margin: 2px 0 0 0;
 }
@@ -236,9 +217,11 @@
   gap: var(--spacing-md);
   width: 100%;
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) var(--spacing-lg);
-  background: var(--surface-app);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  /* Figma-specific one-off: preference/tool rows share the 62px account rhythm. */
+  min-height: 62px;
+  background: var(--surface-control);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   color: inherit;
   text-align: left;
   font: inherit;
@@ -253,10 +236,10 @@
    match the non-button agent/service rows exactly. */
 .button.dashboard-card-row {
   height: auto;
-  min-height: var(--control-height-standard);
+  min-height: 62px;
   justify-content: flex-start;
-  background: var(--surface-app);
-  border-color: var(--border-default);
+  background: var(--surface-control);
+  border-color: var(--border-subtle);
   box-shadow: none;
 }
 
@@ -277,8 +260,8 @@ button.dashboard-card-row {
 }
 
 .dashboard-card-row.is-static:hover {
-  border-color: var(--border-default);
-  background: var(--surface-app);
+  border-color: var(--border-subtle);
+  background: var(--surface-control);
 }
 
 .dashboard-card-row-icon {
@@ -306,8 +289,6 @@ button.dashboard-card-row {
 }
 
 .dashboard-card-row-name {
-  font-size: var(--font-size-md);
-  font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -315,7 +296,6 @@ button.dashboard-card-row {
 }
 
 .dashboard-card-row-status {
-  font-size: var(--font-size-base);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -329,6 +309,14 @@ button.dashboard-card-row {
 .dashboard-card-row-chevron {
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.dashboard-card-row-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
 }
 
 /* ── Auth connection-state strokes ─────────────────────────────────────────

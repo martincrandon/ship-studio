@@ -23,7 +23,7 @@ import { Button } from '../primitives/Button';
 import { MenuButton } from '../primitives/MenuButton';
 import { TextButton } from '../primitives/TextButton';
 import type { ChangedFile } from '../../lib/git';
-import { ChangedFilesSection } from './ChangedFilesSection';
+import { ChangedFilesActions, ChangedFilesSection } from './ChangedFilesSection';
 
 // Module-scoped so the metric spans dropdown re-mounts. Per-project would be
 // better but cross-project publish cadence is also useful and far simpler.
@@ -179,11 +179,11 @@ export function PublishBranchDropdown({
 
     const revealHostingLinks = () => {
       const wrappers = host.querySelectorAll<HTMLElement>(
-        '.cf-dropdown-wrapper, .vercel-dropdown-wrapper'
+        '.cf-dropdown-wrapper, .vercel-button-container'
       );
 
       wrappers.forEach((wrapper) => {
-        const menu = wrapper.querySelector('.cf-dropdown, .vercel-dropdown');
+        const menu = wrapper.querySelector('.cf-dropdown, .vercel-site-dropdown');
         if (!menu) {
           wrapper.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
         }
@@ -353,11 +353,6 @@ export function PublishBranchDropdown({
                   )}
                 </div>
               )}
-              <div className="publish-actions publish-actions-center">
-                <Button width="fill" onClick={handleDone}>
-                  Done
-                </Button>
-              </div>
             </>
           )}
 
@@ -375,14 +370,6 @@ export function PublishBranchDropdown({
                     ? 'Authentication failed. Please check your GitHub connection.'
                     : publishState.message}
               </div>
-              <div className="publish-actions">
-                <Button variant="secondary" onClick={handleDone}>
-                  Close
-                </Button>
-                <Button variant="primary" onClick={() => setPublishState({ status: 'idle' })}>
-                  Try Again
-                </Button>
-              </div>
             </>
           )}
 
@@ -392,11 +379,6 @@ export function PublishBranchDropdown({
               <div className="publish-in-progress-header">
                 <Spinner />
                 <span>Pushing to GitHub...</span>
-              </div>
-              <div className="publish-actions">
-                <Button variant="secondary" onClick={() => setOpen(false)}>
-                  Close
-                </Button>
               </div>
             </>
           )}
@@ -420,20 +402,7 @@ export function PublishBranchDropdown({
                 </div>
               </div>
 
-              <ChangedFilesSection
-                changedFiles={changedFiles}
-                projectPath={projectPath}
-                onDiscard={onDiscardChanges}
-                primaryAction={
-                  <Button
-                    variant="primary"
-                    onClick={() => void handlePublish()}
-                    disabled={isPublishing}
-                  >
-                    Push
-                  </Button>
-                }
-              />
+              <ChangedFilesSection changedFiles={changedFiles} projectPath={projectPath} />
             </>
           )}
 
@@ -443,11 +412,6 @@ export function PublishBranchDropdown({
               <div className="publish-success">
                 <SuccessIcon />
                 <span>Nothing to push — GitHub is up to date</span>
-              </div>
-              <div className="publish-actions publish-actions-center">
-                <Button width="fill" onClick={handleDone}>
-                  Done
-                </Button>
               </div>
             </>
           )}
@@ -461,6 +425,57 @@ export function PublishBranchDropdown({
                 {hostingControls}
               </div>
             </section>
+          )}
+
+          {publishState.status === 'success' && (
+            <div className="publish-actions publish-actions-center">
+              <Button width="fill" onClick={handleDone}>
+                Done
+              </Button>
+            </div>
+          )}
+
+          {publishState.status === 'error' && (
+            <div className="publish-actions">
+              <Button variant="secondary" onClick={handleDone}>
+                Close
+              </Button>
+              <Button variant="primary" onClick={() => setPublishState({ status: 'idle' })}>
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {publishState.status === 'publishing' && (
+            <div className="publish-actions">
+              <Button variant="secondary" onClick={() => setOpen(false)}>
+                Close
+              </Button>
+            </div>
+          )}
+
+          {publishState.status === 'idle' && canSync && (
+            <ChangedFilesActions
+              projectPath={projectPath}
+              onDiscard={onDiscardChanges}
+              primaryAction={
+                <Button
+                  variant="primary"
+                  onClick={() => void handlePublish()}
+                  disabled={isPublishing}
+                >
+                  Push
+                </Button>
+              }
+            />
+          )}
+
+          {publishState.status === 'idle' && !canSync && (
+            <div className="publish-actions publish-actions-center">
+              <Button width="fill" onClick={handleDone}>
+                Done
+              </Button>
+            </div>
           )}
         </div>
       )}

@@ -26,7 +26,7 @@
 }
 
 .ss-tree-panel__title {
-  min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -39,6 +39,17 @@
 .ss-tree-panel__modes {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.ss-tree-panel__view-only {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Compact the segmented control just enough for the title and both choices to
@@ -210,9 +221,14 @@
 }
 
 .ss-tree-row.selected {
-  background: var(--surface-selected);
-  color: var(--text-primary);
-  box-shadow: inset 2px 0 0 var(--accent-active);
+  background: var(--property-field-selected);
+  color: var(--property-text);
+  box-shadow: inset var(--stroke-2) 0 0 var(--color-white);
+}
+
+.ss-tree-row.affected {
+  background: var(--property-field-hover);
+  color: var(--property-text);
 }
 
 .ss-tree-chevron {
@@ -256,7 +272,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
-  font-style: italic;
+  font-style: normal;
 }
 
 .ss-tree-panel__empty,

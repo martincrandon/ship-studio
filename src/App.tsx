@@ -70,6 +70,7 @@ import {
 import { useAppCommands } from './commands/useAppCommands';
 import { useProjectNumberShortcuts } from './hooks/useProjectNumberShortcuts';
 import { ToastList } from './components/primitives/ToastList';
+import { TooltipProvider } from './components/primitives/Tooltip';
 import { IconAuditGallery } from './components/icons/IconAuditGallery';
 import { logger } from './lib/logger';
 import { asCommandError, formatCommandError } from './lib/errors';
@@ -102,18 +103,20 @@ interface AppProps {
  */
 function App({ initialProjectPath }: AppProps) {
   return (
-    <ToastProvider>
-      <ModalProvider>
-        <PaletteContextProvider>
-          <AgentBridgeProvider>
-            <AppContents initialProjectPath={initialProjectPath} />
-            <CommandPaletteHost />
-            <AppGlobalModals />
-            <IconAuditGallery />
-          </AgentBridgeProvider>
-        </PaletteContextProvider>
-      </ModalProvider>
-    </ToastProvider>
+    <TooltipProvider>
+      <ToastProvider>
+        <ModalProvider>
+          <PaletteContextProvider>
+            <AgentBridgeProvider>
+              <AppContents initialProjectPath={initialProjectPath} />
+              <CommandPaletteHost />
+              <AppGlobalModals />
+              <IconAuditGallery />
+            </AgentBridgeProvider>
+          </PaletteContextProvider>
+        </ModalProvider>
+      </ToastProvider>
+    </TooltipProvider>
   );
 }
 

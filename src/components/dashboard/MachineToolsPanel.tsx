@@ -98,14 +98,14 @@ export function MachineToolsPanel() {
         aria-expanded={isExpanded}
       >
         <div>
-          <h3 className="dashboard-card-title">Tools on this Mac</h3>
-          <p className="dashboard-card-subtitle integration-bar-subtitle">
+          <h3 className="dashboard-card-title text-style-heading">Tools on this Mac</h3>
+          <div className="dashboard-card-subtitle integration-bar-subtitle text-style-control">
             {statusIcon}
             <span>{subtitle}</span>
             <span className="machine-tools-shared-hint">
               · installed once, shared by every workspace
             </span>
-          </p>
+          </div>
         </div>
         <ChevronIcon
           size={14}
@@ -123,8 +123,12 @@ export function MachineToolsPanel() {
                   {getItemIcon(item.id)}
                 </div>
                 <div className="dashboard-card-row-main">
-                  <span className="dashboard-card-row-name">{item.friendlyName}</span>
-                  <span className={`dashboard-card-row-status ${isReady ? 'success' : ''}`}>
+                  <span className="dashboard-card-row-name text-style-body-medium">
+                    {item.friendlyName}
+                  </span>
+                  <span
+                    className={`dashboard-card-row-status text-style-control ${isReady ? 'success' : ''}`}
+                  >
                     {getStatusText(item)}
                   </span>
                 </div>

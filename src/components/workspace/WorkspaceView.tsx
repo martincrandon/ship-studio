@@ -1025,7 +1025,7 @@ export const WorkspaceView = memo(function WorkspaceView({
             value="preview"
             className="workspace-tab"
             leftIcon={<EyeIcon size={14} />}
-            title="Preview"
+            data-tooltip-disabled
           >
             <span>Preview</span>
           </TabsTab>

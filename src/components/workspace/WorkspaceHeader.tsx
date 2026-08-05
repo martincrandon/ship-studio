@@ -14,16 +14,16 @@
  * @module components/WorkspaceHeader
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { BranchIndicator } from '../branches/BranchIndicator';
 import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
-import { fileManagerName } from '../../lib/setup';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
+import { FolderIcon, ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
 import { Button } from '../primitives/Button';
+import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ToggleButton } from '../primitives/ToggleButton';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
@@ -164,6 +164,8 @@ export function WorkspaceHeader({
   pluginTheme,
 }: WorkspaceHeaderProps) {
   const [openSourceMenu, setOpenSourceMenu] = useState<'branches' | 'push' | null>(null);
+  const projectPathContainerRef = useRef<HTMLDivElement>(null);
+  const [expandedProjectPathWidth, setExpandedProjectPathWidth] = useState<number | null>(null);
   // Window dragging — only from the title bar (not the toolbar with plugins)
   const handleDrag = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
@@ -177,6 +179,27 @@ export function WorkspaceHeader({
     void win.isMaximized().then((maximized) => {
       void (maximized ? win.unmaximize() : win.maximize());
     });
+  }, []);
+
+  const expandProjectPath = useCallback(() => {
+    const measure = projectPathContainerRef.current?.querySelector<HTMLElement>(
+      '.project-path-expansion-measure'
+    );
+    if (!measure) return;
+    const rect = measure.getBoundingClientRect();
+    const width = rect.width || measure.scrollWidth;
+    if (width > 0) setExpandedProjectPathWidth(width);
+  }, []);
+
+  const collapseProjectPath = useCallback(() => {
+    const container = projectPathContainerRef.current;
+    if (container?.contains(document.activeElement)) return;
+    setExpandedProjectPathWidth(null);
+  }, []);
+
+  const handleProjectPathBlur = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setExpandedProjectPathWidth(null);
   }, []);
 
   // Split toolbar plugins: hosting plugins (vercel, etc.) go on the right side
@@ -213,14 +236,36 @@ export function WorkspaceHeader({
 
   const titlebar = (
     <div className="workspace-titlebar" onMouseDown={handleDrag} onDoubleClick={handleDoubleClick}>
-      <h1>{projectName}</h1>
-      <button
-        className="project-path"
-        onClick={() => projectPath && void openInFinder(projectPath)}
-        title={`Open in ${fileManagerName()}`}
-      >
-        {projectPath}
-      </button>
+      <div className="workspace-title-group">
+        <h1>{projectName}</h1>
+        <div
+          ref={projectPathContainerRef}
+          className="project-path-container"
+          style={
+            expandedProjectPathWidth !== null
+              ? { width: `${expandedProjectPathWidth}px` }
+              : undefined
+          }
+          onMouseEnter={expandProjectPath}
+          onMouseLeave={collapseProjectPath}
+          onFocus={expandProjectPath}
+          onBlur={handleProjectPathBlur}
+        >
+          <span className="project-path-expansion-measure" aria-hidden="true">
+            <FolderIcon size={14} />
+            {projectPath}
+          </span>
+          <button
+            className="project-path"
+            onClick={() => projectPath && void openInFinder(projectPath)}
+            title="Open in Finder"
+            aria-label={`Open ${projectPath} in Finder`}
+          >
+            <FolderIcon size={14} />
+            <MiddleTruncate text={projectPath} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 

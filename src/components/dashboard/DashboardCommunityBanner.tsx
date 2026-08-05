@@ -25,7 +25,7 @@ export function DashboardCommunityBanner({ onHide }: DashboardCommunityBannerPro
     <div className="slack-cta" data-education-id="slack-cta">
       <div className="slack-cta-content">
         <SlackIcon />
-        <span>
+        <span className="text-style-body-medium">
           <strong>Join the Slack</strong> — suggest features, share what you're building, and shape
           the future of how we build for the web.
         </span>
@@ -33,7 +33,7 @@ export function DashboardCommunityBanner({ onHide }: DashboardCommunityBannerPro
       <div className="slack-cta-actions">
         <Button
           variant="secondary"
-          className="slack-cta-join"
+          className="slack-cta-join text-style-control-semibold"
           onClick={() => void openUrl(SLACK_INVITE_URL)}
         >
           Join Slack

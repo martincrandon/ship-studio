@@ -20,23 +20,24 @@ import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { markdown } from '@codemirror/lang-markdown';
 
-/* github-dark token colors (the same palette the Code tab's Shiki theme uses). */
+/* Shared syntax palette, with semantic colors matching the visual editor. */
 export const ghDarkHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.operatorKeyword], color: '#ff7b72' },
   { tag: [t.propertyName], color: '#79c0ff' },
-  { tag: [t.variableName], color: '#ffa657' },
+  { tag: [t.variableName], color: 'var(--variable-text)' },
   { tag: [t.function(t.variableName), t.labelName], color: '#d2a8ff' },
   {
     tag: [t.number, t.bool, t.atom, t.color, t.constant(t.name), t.standard(t.name)],
     color: '#79c0ff',
   },
   {
-    tag: [t.typeName, t.className, t.namespace, t.changed, t.annotation, t.self],
+    tag: [t.typeName, t.namespace, t.changed, t.annotation, t.self],
     color: '#79c0ff',
   },
-  { tag: [t.string, t.special(t.string)], color: '#a5d6ff' },
+  { tag: [t.className], color: 'var(--class-text)' },
+  { tag: [t.string, t.special(t.string)], color: 'var(--text-primary)' },
   { tag: [t.comment, t.meta], color: '#8b949e', fontStyle: 'italic' },
-  { tag: [t.tagName], color: '#7ee787' },
+  { tag: [t.tagName], color: 'var(--tag-text)' },
   { tag: [t.attributeName], color: '#79c0ff' },
   { tag: [t.invalid], color: '#f85149' },
 ]);

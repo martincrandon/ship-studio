@@ -10,22 +10,22 @@ import { asCommandError, formatCommandError } from '../../lib/errors';
 interface ChangedFilesSectionProps {
   changedFiles: ChangedFile[];
   projectPath: string;
+}
+
+interface ChangedFilesActionsProps {
+  projectPath: string;
   onDiscard?: () => void;
   primaryAction: ReactNode;
 }
 
-export function ChangedFilesSection({
-  changedFiles,
+export function ChangedFilesActions({
   projectPath,
   onDiscard,
   primaryAction,
-}: ChangedFilesSectionProps) {
+}: ChangedFilesActionsProps) {
   const { showToast } = useOptionalToast();
   const [isDiscarding, setIsDiscarding] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<{ path: string; status: ChangeStatus } | null>(
-    null
-  );
   const confirmTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -57,6 +57,27 @@ export function ChangedFilesSection({
       setIsDiscarding(false);
     }
   };
+
+  return (
+    <div className="publish-actions publish-changes-actions">
+      <Button
+        variant="danger"
+        className={`branch-changes-discard-btn ${confirmDiscard ? 'confirming' : ''}`}
+        leftIcon={<TrashIcon size={12} />}
+        onClick={() => void handleDiscardAll()}
+        disabled={isDiscarding}
+      >
+        {isDiscarding ? 'Discarding...' : confirmDiscard ? 'Click to Confirm' : 'Discard All'}
+      </Button>
+      {primaryAction}
+    </div>
+  );
+}
+
+export function ChangedFilesSection({ changedFiles, projectPath }: ChangedFilesSectionProps) {
+  const [selectedFile, setSelectedFile] = useState<{ path: string; status: ChangeStatus } | null>(
+    null
+  );
 
   const getStatusIndicator = (status: ChangeStatus) => {
     switch (status) {
@@ -113,18 +134,6 @@ export function ChangedFilesSection({
             Git reports unsaved changes, but no changed-file details are available.
           </div>
         )}
-        <div className="publish-actions publish-changes-actions">
-          <Button
-            variant="danger"
-            className={`branch-changes-discard-btn ${confirmDiscard ? 'confirming' : ''}`}
-            leftIcon={<TrashIcon size={12} />}
-            onClick={() => void handleDiscardAll()}
-            disabled={isDiscarding}
-          >
-            {isDiscarding ? 'Discarding...' : confirmDiscard ? 'Click to Confirm' : 'Discard All'}
-          </Button>
-          {primaryAction}
-        </div>
       </section>
 
       {selectedFile && (

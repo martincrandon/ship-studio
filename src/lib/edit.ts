@@ -626,7 +626,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Display',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'Block', token: 'block', style: { display: 'block' } },
       { label: 'Flex', token: 'flex', style: { display: 'flex' } },
@@ -693,7 +693,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Direction',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'Row', token: 'flex-row', style: { 'flex-direction': 'row' } },
       {
@@ -711,7 +711,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Wrap',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'No wrap', token: 'flex-nowrap', style: { 'flex-wrap': 'nowrap' } },
       { label: 'Wrap', token: 'flex-wrap', style: { 'flex-wrap': 'wrap' } },
@@ -720,7 +720,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Overflow',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'Visible', token: 'overflow-visible', style: { overflow: 'visible' } },
       { label: 'Auto', token: 'overflow-auto', style: { overflow: 'auto' } },
@@ -767,7 +767,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Transform',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'None', token: 'normal-case', style: { 'text-transform': 'none' } },
       { label: 'Uppercase', token: 'uppercase', style: { 'text-transform': 'uppercase' } },
@@ -777,7 +777,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Style',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'Normal', token: 'not-italic', style: { 'font-style': 'normal' } },
       { label: 'Italic', token: 'italic', style: { 'font-style': 'italic' } },
@@ -785,7 +785,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
   },
   {
     label: 'Decoration',
-    variant: 'dropdown',
+    variant: 'icons',
     options: [
       { label: 'None', token: 'no-underline', style: { 'text-decoration-line': 'none' } },
       { label: 'Underline', token: 'underline', style: { 'text-decoration-line': 'underline' } },

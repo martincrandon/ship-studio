@@ -26,6 +26,7 @@ import { CheckIcon, InfoIcon } from '../icons/common';
 import { SaveIcon } from '../icons/editor';
 import { HelpIcon } from '../icons/utility';
 import { PinIcon } from '../icons/layout';
+import { Tooltip } from '../primitives/Tooltip';
 import { PropSection } from './PropSection';
 import { ImageSection } from './ImageSection';
 import { PropControlRenderer, type ControlRenderCtx } from './PropControlRenderer';
@@ -91,15 +92,14 @@ function StatusBadge({ saving }: { saving: boolean }) {
   );
 }
 
-/** Small "?" glyph that reveals a custom tooltip on hover/focus. */
+/** Small "?" glyph that reveals the shared tooltip on hover/focus. */
 function HelpHint({ text }: { text: string }) {
   return (
-    <span className="ss-edit-panel__help" tabIndex={0} role="img" aria-label={text}>
-      <HelpIcon size={12} />
-      <span className="ss-edit-panel__help-tip" role="tooltip">
-        {text}
+    <Tooltip content={text}>
+      <span className="ss-edit-panel__help" tabIndex={0} role="img" aria-label={text}>
+        <HelpIcon size={12} />
       </span>
-    </span>
+    </Tooltip>
   );
 }
 
@@ -237,17 +237,16 @@ function NoClassState({
  *  CSS class — its tooltip explains that edits use `!important` to win the cascade. */
 function CustomCssHint() {
   return (
-    <span
-      className="ss-edit-panel__csshint"
-      tabIndex={0}
-      role="img"
-      aria-label="Styled by a custom CSS class — edits use !important so they take effect"
-    >
-      <InfoIcon size={13} />
-      <span className="ss-edit-panel__csshint-tip" role="tooltip">
-        Styled by a custom CSS class — edits use <code>!important</code> so they take effect.
+    <Tooltip content="Styled by a custom CSS class — edits use !important so they take effect.">
+      <span
+        className="ss-edit-panel__csshint"
+        tabIndex={0}
+        role="img"
+        aria-label="Styled by a custom CSS class — edits use !important so they take effect"
+      >
+        <InfoIcon size={13} />
       </span>
-    </span>
+    </Tooltip>
   );
 }
 

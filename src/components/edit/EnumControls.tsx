@@ -18,6 +18,8 @@ import {
 import { EnumDropdown } from './EnumDropdown';
 import { ResettableLabel } from './ResettableLabel';
 import { SegmentedControl } from '../primitives/SegmentedControl';
+import { ArrowLeftIcon, ArrowRightIcon } from '../icons/common';
+import { EyeIcon, EyeOffIcon } from '../icons/layout';
 import {
   AlignItemsCenterIcon,
   AlignItemsEndIcon,
@@ -45,6 +47,14 @@ import {
   WrapDownIcon,
 } from '../icons/editor-controls';
 
+function EnumGlyph({ children }: { children: ReactNode }) {
+  return (
+    <span className="ss-enum-glyph" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
 /** Icon per option token (only icon-variant controls need these). */
 const ICONS: Record<string, ReactNode> = {
   'text-left': <AlignLeftIcon />,
@@ -58,32 +68,34 @@ const ICONS: Record<string, ReactNode> = {
   'items-center': <AlignItemsCenterIcon />,
   'items-end': <AlignItemsEndIcon />,
   'items-stretch': <AlignItemsStretchIcon />,
-};
-
-const DROPDOWN_ICONS: Record<string, Record<string, ReactNode>> = {
-  Display: {
-    block: <DisplayBlockIcon />,
-    flex: <DisplayFlexIcon />,
-    grid: <DisplayGridIcon />,
-    'inline-block': <DisplayInlineBlockIcon />,
-    'inline-flex': <DisplayInlineFlexIcon />,
-  },
-  Style: {
-    'not-italic': <ItalicsOffIcon />,
-    italic: <ItalicsOnIcon />,
-  },
-  Decoration: {
-    'no-underline': <DecorationNoneIcon />,
-    underline: <DecorationUnderlineIcon />,
-    overline: <DecorationOverlineIcon />,
-    'line-through': <DecorationStrikeIcon />,
-  },
-  Wrap: {
-    'flex-wrap': <WrapDownIcon />,
-  },
-  Overflow: {
-    'overflow-scroll': <OverflowScrollIcon />,
-  },
+  block: <DisplayBlockIcon />,
+  flex: <DisplayFlexIcon />,
+  grid: <DisplayGridIcon />,
+  'inline-block': <DisplayInlineBlockIcon />,
+  'inline-flex': <DisplayInlineFlexIcon />,
+  inline: <DisplayInlineBlockIcon />,
+  hidden: <EyeOffIcon />,
+  'flex-row': <ArrowRightIcon />,
+  'flex-row-reverse': <ArrowLeftIcon />,
+  'flex-col': <EnumGlyph>↓</EnumGlyph>,
+  'flex-col-reverse': <EnumGlyph>↑</EnumGlyph>,
+  'flex-nowrap': <EnumGlyph>↔</EnumGlyph>,
+  'flex-wrap': <WrapDownIcon />,
+  'flex-wrap-reverse': <EnumGlyph>↕</EnumGlyph>,
+  'overflow-visible': <EyeIcon />,
+  'overflow-auto': <EnumGlyph>⋯</EnumGlyph>,
+  'overflow-hidden': <EyeOffIcon />,
+  'overflow-scroll': <OverflowScrollIcon />,
+  'normal-case': <EnumGlyph>Ab</EnumGlyph>,
+  uppercase: <EnumGlyph>AB</EnumGlyph>,
+  lowercase: <EnumGlyph>ab</EnumGlyph>,
+  capitalize: <EnumGlyph>Aa</EnumGlyph>,
+  'not-italic': <ItalicsOffIcon />,
+  italic: <ItalicsOnIcon />,
+  'no-underline': <DecorationNoneIcon />,
+  underline: <DecorationUnderlineIcon />,
+  overline: <DecorationOverlineIcon />,
+  'line-through': <DecorationStrikeIcon />,
 };
 
 interface Props {
@@ -116,7 +128,6 @@ export function EnumControlRow({
         label={control.label}
         value={active}
         options={control.options}
-        optionIcons={DROPDOWN_ICONS[control.label]}
         onChange={(token) => {
           const opt = control.options.find((o) => o.token === token);
           if (opt) onApplyEnum(opt.token, opt.style);

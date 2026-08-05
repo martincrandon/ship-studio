@@ -99,6 +99,8 @@ describe('VisualEditorPanel', () => {
     expect(screen.getByText('Weight')).toBeInTheDocument();
     // Align renders icon buttons ("Left" is unique to Align)
     expect(screen.getByRole('button', { name: 'Left' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Uppercase' })).toHaveAttribute('title', 'Uppercase');
+    expect(screen.getByRole('button', { name: 'Row' })).toHaveAttribute('title', 'Row');
     // New properties
     expect(screen.getByText('Opacity')).toBeInTheDocument();
     // Color controls render as swatch buttons that open the picker popover
@@ -197,9 +199,15 @@ describe('VisualEditorPanel', () => {
 
   it('explains the mobile-first cascade contextually for the active breakpoint', () => {
     renderPanel(resolvedSelection, 'p-3', BASE_BREAKPOINT);
-    expect(screen.getByText(/apply to every screen size/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /apply to every screen size/i })).toHaveAttribute(
+      'data-tooltip-content',
+      expect.stringMatching(/apply to every screen size/i)
+    );
     renderPanel(resolvedSelection, 'p-3', MD);
-    expect(screen.getByText(/from 768px wide and up/i)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /from 768px wide and up/i })).toHaveAttribute(
+      'data-tooltip-content',
+      expect.stringMatching(/from 768px wide and up/i)
+    );
   });
 
   it('selecting a breakpoint from the dropdown asks to resize the canvas to that layer', () => {

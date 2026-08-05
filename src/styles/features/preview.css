@@ -35,8 +35,8 @@
   container-name: preview-pane;
 }
 
-/* Narrow pane: Edit / Inspect / Open drop their text and become icon
-   buttons. The little toggle switches stay — they carry the on/off state. */
+/* Narrow pane: Open drops its text and becomes an icon button. Edit and Inspect
+   are icon-only at every width; their little toggle switches carry the state. */
 @container preview-pane (max-width: 800px) {
   .preview-toolbar-btn-label {
     display: none;

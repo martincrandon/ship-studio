@@ -129,11 +129,12 @@ export function BranchesMenu({
             expanded={triggerProps['aria-expanded']}
             className={`branches-menu-trigger${isRepositoryViewActive ? ' is-active' : ''}`}
             data-education-id="branches-button"
+            title="Branches"
             leftIcon={<BranchIcon size={14} />}
             rightIcon={<ChevronIcon />}
             {...triggerProps}
           >
-            Branches
+            <span className="toolbar-btn-label">Branches</span>
           </MenuButton>
         )}
       >

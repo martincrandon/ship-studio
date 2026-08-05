@@ -85,7 +85,7 @@ export function CssVariablesPanel({
             {vars.map((v) => (
               <div key={`${selector}-${v.name}`} className="ss-var-row is-readonly">
                 <span className="ss-var-row__name">
-                  <Swatch value={v.value} />
+                  <VariableValueMarker value={v.value} />
                   <code>{v.name}</code>
                 </span>
                 <span className="ss-var-row__colon">:</span>
@@ -101,10 +101,44 @@ export function CssVariablesPanel({
   );
 }
 
-function Swatch({ value }: { value: string }) {
+function VariableValueMarker({ value }: { value: string }) {
   const c = colorSwatch(value);
-  if (!c) return null;
-  return <span className="ss-var-row__swatch" style={{ background: c }} aria-hidden="true" />;
+  if (c)
+    return <span className="ss-var-row__swatch" style={{ background: c }} aria-hidden="true" />;
+
+  const trimmed = value.trim();
+  const type = /^var\(/i.test(trimmed)
+    ? 'variable'
+    : /^url\(/i.test(trimmed)
+      ? 'url'
+      : /^[-+]?\d*\.?\d+(?:ms|s)$/i.test(trimmed)
+        ? 'time'
+        : /^[-+]?\d*\.?\d+(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|in|cm|mm|pt|pc)$/i.test(trimmed)
+          ? 'length'
+          : /^[-+]?\d*\.?\d+$/.test(trimmed)
+            ? 'number'
+            : /\(/.test(trimmed)
+              ? 'function'
+              : 'text';
+  const glyph =
+    type === 'variable'
+      ? '◆'
+      : type === 'url'
+        ? '↗'
+        : type === 'time'
+          ? '◷'
+          : type === 'length'
+            ? '↔'
+            : type === 'number'
+              ? '#'
+              : type === 'function'
+                ? 'ƒ'
+                : 'T';
+  return (
+    <span className="ss-var-row__type-icon" role="img" aria-label={`${type} variable`}>
+      {glyph}
+    </span>
+  );
 }
 
 function EditableVarRow({
@@ -126,7 +160,7 @@ function EditableVarRow({
   return (
     <div className="ss-var-row">
       <span className="ss-var-row__name">
-        <Swatch value={variable.value} />
+        <VariableValueMarker value={variable.value} />
         <code>{variable.name}</code>
       </span>
       <span className="ss-var-row__colon">:</span>

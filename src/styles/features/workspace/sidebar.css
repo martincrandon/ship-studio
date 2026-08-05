@@ -133,6 +133,16 @@
   color: var(--text-secondary);
 }
 
+.workspace-body.is-sidebar-hidden .workspace-sidebar-filter {
+  justify-content: center;
+  padding: 0;
+}
+
+.workspace-body.is-sidebar-hidden .workspace-sidebar-filter-placeholder,
+.workspace-body.is-sidebar-hidden .workspace-sidebar-filter-shortcut {
+  display: none;
+}
+
 .workspace-sidebar-filter-placeholder {
   flex: 1;
   color: currentColor;
@@ -210,8 +220,8 @@
 
 .workspace-body.is-sidebar-hidden .sidebar-project-row {
   justify-content: center;
-  height: calc(var(--control-height-standard) + (var(--space-2) * 2));
-  padding: var(--space-2);
+  height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  padding: var(--space-08);
 }
 
 .sidebar-group-marker {

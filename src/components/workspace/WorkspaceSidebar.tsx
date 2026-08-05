@@ -796,8 +796,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
             width="fill"
             className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
             onClick={onGoHome}
+            disabled={isHomeActive}
             aria-current={isHomeActive ? 'page' : undefined}
-            data-selected={isHomeActive ? 'true' : undefined}
             leftIcon={
               <span className="workspace-sidebar-home-icon" aria-hidden="true">
                 <HomeIcon size={12} />

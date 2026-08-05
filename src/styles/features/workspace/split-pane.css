@@ -141,6 +141,15 @@
   }
 }
 
+/* Floating Agent panels can be narrower than the app window that contains
+   them. Drop the settings label before the footer controls run out of room;
+   the trigger's title still provides its accessible name and tooltip. */
+@container terminal-pane (max-width: 320px) {
+  .terminal-pane-footer .toolbar-btn-label {
+    display: none;
+  }
+}
+
 .terminal-toolbar {
   display: flex;
   align-items: center;

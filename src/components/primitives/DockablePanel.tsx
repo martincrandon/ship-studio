@@ -165,6 +165,11 @@ export function DockablePanel({
     if (!placeholder) return;
     const observer = new ResizeObserver(measureDock);
     observer.observe(placeholder);
+    // The dock slot can keep the same dimensions while its containing pane
+    // moves (for example, when the project sidebar is resized). Observing the
+    // container makes the fixed, body-portaled surface remeasure its viewport
+    // position as the surrounding workspace layout changes.
+    if (placeholder.parentElement) observer.observe(placeholder.parentElement);
     window.addEventListener('resize', measureDock);
     return () => {
       observer.disconnect();

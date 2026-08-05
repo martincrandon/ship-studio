@@ -1,0 +1,17 @@
+/* Shared tooltip surface for native title affordances and explicit Tooltip triggers. */
+.ss-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: var(--size-source-control-popover);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--stroke-1) solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-app);
+  box-shadow: var(--shadow);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-ui);
+  text-align: left;
+  white-space: pre-wrap;
+  pointer-events: none;
+}

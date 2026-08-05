@@ -22,24 +22,6 @@
   text-decoration: line-through;
 }
 
-/* "Overridden by X" hover tooltip (portaled, fixed — never clipped by the panel). */
-.ss-decl-tip {
-  z-index: var(--z-tooltip);
-  max-width: 280px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  box-shadow: var(--shadow-md);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.ss-decl-tip__sel {
-  color: var(--property-text);
-  font-family: var(--font-code);
-}
 .ss-decl.is-readonly {
   white-space: normal;
   overflow-wrap: anywhere;

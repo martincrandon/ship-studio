@@ -1,84 +1,14 @@
 /**
- * DashboardHeader component for the main project list view.
- *
- * The search field is a button-styled trigger that opens the command palette;
- * typing happens inside the palette, not here.
+ * DashboardHeader — the presentation-only hero for the dashboard home screen.
  *
  * @module components/DashboardHeader
  */
 
-import { PlusIcon, SearchIcon } from '../icons';
-import { trackEvent } from '../../lib/analytics';
-import { Button } from '../primitives/Button';
-import { useModal } from '../../contexts/ModalContext';
-import { kbd } from '../../lib/shortcuts';
-
-interface DashboardHeaderProps {
-  onCreateProject: () => void;
-  onImportProject?: () => void;
-  /** Whether GitHub is authenticated (import requires GitHub) */
-  isGitHubAuthenticated?: boolean;
-  /** Callback when user tries to import without GitHub auth */
-  onGitHubConnectForImport?: () => void;
-}
-
-export function DashboardHeader({
-  onCreateProject,
-  onImportProject,
-  isGitHubAuthenticated = true,
-  onGitHubConnectForImport,
-}: DashboardHeaderProps) {
-  const palette = useModal('commandPalette');
-
+export function DashboardHeader() {
   return (
-    <div className="dashboard-header">
-      <button
-        type="button"
-        className="dashboard-search"
-        data-education-id="search-projects"
-        onClick={() => palette.open()}
-        title="Open command palette"
-        aria-label="Open command palette"
-      >
-        <SearchIcon />
-        <span className="dashboard-search-placeholder">Search projects, actions, settings…</span>
-        <span className="dashboard-search-shortcut">{kbd('mod', 'K')}</span>
-      </button>
-      <div className="dashboard-header-actions">
-        {onImportProject && (
-          <Button
-            variant="default"
-            size="default"
-            width="hug"
-            data-education-id="import-button"
-            onClick={() => {
-              void trackEvent('import_button_clicked', { $screen_name: 'Dashboard' });
-              if (isGitHubAuthenticated) {
-                onImportProject();
-              } else if (onGitHubConnectForImport) {
-                onGitHubConnectForImport();
-              }
-            }}
-            title={!isGitHubAuthenticated ? 'Connect GitHub to import repositories' : undefined}
-          >
-            Import
-          </Button>
-        )}
-
-        <Button
-          variant="primary"
-          size="default"
-          width="hug"
-          leftIcon={<PlusIcon size={16} />}
-          data-education-id="new-project-button"
-          onClick={() => {
-            void trackEvent('new_project_clicked', { $screen_name: 'Dashboard' });
-            onCreateProject();
-          }}
-        >
-          New Project
-        </Button>
-      </div>
-    </div>
+    <header className="dashboard-hero">
+      <img src="/ship_studio_icon.png" alt="Ship Studio" className="dashboard-hero-icon" />
+      <h1 className="dashboard-hero-title text-style-display">What will you Ship today?</h1>
+    </header>
   );
 }

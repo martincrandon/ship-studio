@@ -4,6 +4,7 @@
 :root {
   --dash-slack-grad-start: rgba(97, 31, 105, 0.15);
   --dash-slack-grad-end: rgba(78, 29, 129, 0.1);
+  --dashboard-section-gap: var(--spacing-lg);
 }
 
 /* Dashboard with changelog sidebar layout */
@@ -79,7 +80,7 @@
   flex-direction: column;
   /* Top padding accounts for macOS traffic lights in overlay mode;
      bottom padding keeps the last card (Integrations) off the scroll edge. */
-  padding: 44px 24px var(--spacing-2xl);
+  padding: 32px 24px var(--spacing-2xl);
   gap: 0;
   width: 100%;
   max-width: 900px;
@@ -96,8 +97,30 @@
    margin-bottom was not producing a visible gap. A physical block is
    deterministic. */
 .dashboard-bottom-spacer {
-  height: 24px;
+  height: 32px;
   flex-shrink: 0;
+}
+
+/* Figma-specific hero geometry: the 48px mark, 16px type gap, and 24px
+   vertical padding create the intended compact display block. */
+.dashboard-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl) 0;
+  margin-bottom: var(--dashboard-section-gap);
+  text-align: center;
+}
+
+.dashboard-hero-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.dashboard-hero-title {
+  color: var(--text-primary);
 }
 
 /* Slack Community CTA */
@@ -107,14 +130,14 @@
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: 12px 16px;
-  margin-bottom: 20px;
+  margin-bottom: var(--dashboard-section-gap);
   background: linear-gradient(
     135deg,
     var(--dash-slack-grad-start) 0%,
     var(--dash-slack-grad-end) 100%
   );
   border: 1px solid rgba(var(--purple-deep-rgb), 0.2);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 
 .slack-cta-content {
@@ -180,84 +203,69 @@
   background: var(--surface-control);
 }
 
-/* Dashboard Header */
-.dashboard-header {
-  --dashboard-header-control-height: calc(var(--spacing-xl) + var(--spacing-md));
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 24px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-default);
-}
-
+/* Standalone command-palette search. The inner well keeps the field visually
+   distinct from the surrounding panel while preserving one keyboard target. */
 .dashboard-search {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex: 1;
-  height: var(--dashboard-header-control-height);
-  padding: 0 var(--spacing-md);
+  /* Figma-specific one-off: normalize the 45px reference to an even 44px. */
+  display: block;
+  width: 100%;
+  height: 44px;
+  padding: var(--spacing-2xs);
   box-sizing: border-box;
   background: var(--surface-panel);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
   transition:
     border-color var(--transition),
     background-color var(--transition);
   font: inherit;
-  font-size: var(--font-size-md);
   text-align: left;
   cursor: pointer;
   color: var(--text-muted);
+  margin-bottom: var(--dashboard-section-gap);
 }
 
 .dashboard-search:hover,
 .dashboard-search:focus-visible {
   border-color: var(--text-muted);
-  background: var(--surface-control);
+  background: var(--surface-panel);
   outline: none;
+}
+
+.dashboard-search-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--spacing-sm) 0 var(--spacing-md);
+  background: var(--surface-app);
+  border-radius: var(--radius-4);
 }
 
 .dashboard-search svg {
   color: var(--text-muted);
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .dashboard-search-placeholder {
   flex: 1;
   color: var(--text-muted);
-  font-size: var(--font-size-md);
-  line-height: 1;
 }
 
 .dashboard-search-shortcut {
-  font-size: var(--font-size-sm);
   color: var(--text-muted);
   padding: 2px 5px;
   background: var(--surface-control);
   border-radius: var(--radius-sm);
-  font-family: var(--font-ui);
-  letter-spacing: 0.5px;
 }
 
-.dashboard-header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--button-gap);
-}
-
-/* Compact button styles for dashboard header - matches editor UI */
-.dashboard-header-actions .button {
-  height: var(--dashboard-header-control-height);
-  padding: 0 var(--spacing-md);
-  font-size: var(--font-size-base);
-}
-
-.dashboard-header-actions .button--secondary {
+.dashboard-projects-panel {
+  padding: var(--spacing-lg);
   background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  margin-bottom: var(--dashboard-section-gap);
 }

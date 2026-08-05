@@ -268,9 +268,9 @@ export function CascadeRuleCard(props: Props) {
         {props.editable && props.draft && (
           <span
             className="ss-cascade-card__chip ss-cascade-card__chip--new"
-            title="No rule yet — it's created in your stylesheet when you add the first property"
+            title="No rules applied — add a property to create this selector in your stylesheet"
           >
-            new
+            No rules applied
           </span>
         )}
         {!editable && (

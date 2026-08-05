@@ -87,9 +87,27 @@
 .ss-var-row__swatch {
   flex: 0 0 auto;
   align-self: center;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  border-radius: var(--radius-sm);
+}
+
+.ss-var-row__type-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
   width: 16px;
   height: 16px;
+  border: var(--stroke-1) solid var(--border-default);
   border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .ss-var-row__name {

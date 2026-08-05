@@ -94,6 +94,7 @@ import { logger } from '../../lib/logger';
 import type { ProjectType } from '../../lib/static-server';
 import type { DevServerUnexpectedExit } from '../../hooks/useDevServer';
 import { isEditorFramework, resolveEditorMode } from '../../lib/editorGate';
+import { Tooltip } from '../primitives/Tooltip';
 
 const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
   if (type === 'full') return <FullBreakpointIcon />;
@@ -229,8 +230,8 @@ const TREE_CODE_DEFAULT_WIDTH_PX = 420;
 const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
 const EDITOR_PANEL_MIN_WIDTH_PX = 220;
 const EDITOR_PANEL_MAX_WIDTH_PX = 560;
-const EDITOR_PANEL_DEFAULT_WIDTH_PX = 264;
-const EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTH_PX = 360;
+const EDITOR_PANEL_DEFAULT_WIDTH_PX = 300;
+const EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTHS_PX = [264, 360];
 const EDITOR_PANEL_DEFAULT_VERSION_KEY = 'cssPanelDockedWidthDefault';
 
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
@@ -788,7 +789,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     const defaultWasMigrated =
       localStorage.getItem(EDITOR_PANEL_DEFAULT_VERSION_KEY) ===
       String(EDITOR_PANEL_DEFAULT_WIDTH_PX);
-    if (!defaultWasMigrated && saved === EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTH_PX) {
+    if (!defaultWasMigrated && EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTHS_PX.includes(saved)) {
       return EDITOR_PANEL_DEFAULT_WIDTH_PX;
     }
     return Number.isFinite(saved) &&
@@ -1134,9 +1135,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             onClick={toggleActiveEditor}
             title="Toggle visual editor"
             pressed={activeEditMode}
+            aria-label="Edit"
           >
             <EditIcon size={13} />
-            <span className="preview-toolbar-btn-label">Edit</span>
             <span
               className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
               aria-hidden
@@ -1144,26 +1145,20 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           </ToggleButton>
         ) : (
           // Preview-capable but not editable: show the toggle grayed out with a
-          // tooltip explaining what visual editing is and where it works.
-          <span className="preview-edit-toggle-wrap preview-edit-control">
-            <Button
-              type="button"
-              className="preview-edit-toggle--disabled"
-              aria-disabled="true"
-              tabIndex={-1}
-            >
-              <EditIcon size={13} />
-              <span className="preview-toolbar-btn-label">Edit</span>
-            </Button>
-            <span className="preview-edit-tooltip" role="tooltip">
-              <strong>Visual editing</strong>
-              <span>
-                Click elements in the preview to edit their styles — no code. Works with Next.js,
-                Astro, Vite (React), and Shopify projects styled with Tailwind, and with Astro or
-                plain HTML/CSS projects styled with regular CSS.
-              </span>
+          // shared tooltip explaining why visual editing is unavailable.
+          <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
+            <span className="preview-edit-toggle-wrap preview-edit-control">
+              <Button
+                type="button"
+                className="preview-edit-toggle--disabled"
+                aria-disabled="true"
+                tabIndex={-1}
+                aria-label="Edit"
+              >
+                <EditIcon size={13} />
+              </Button>
             </span>
-          </span>
+          </Tooltip>
         )}
 
         {onToggleLogs && (
@@ -1174,9 +1169,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             pressed={showLogs}
             onClick={onToggleLogs}
             title={showLogs ? 'Hide inspector' : 'Show inspector'}
+            aria-label={showLogs ? 'Hide inspector' : 'Show inspector'}
             leftIcon={<TerminalIcon size={14} />}
           >
-            <span className="preview-toolbar-btn-label">Inspect</span>
             <span className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`} aria-hidden />
           </ToggleButton>
         )}
@@ -1393,7 +1388,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               ref={iframeRef}
               src={conn.serverReady ? conn.currentUrl : 'about:blank'}
               className="preview-iframe"
-              title="Preview"
+              title=""
+              data-tooltip-disabled
               onLoad={conn.handleIframeLoad}
               // Scale-to-fit (Chrome-DevTools style): lay the page out at the
               // true breakpoint width and shrink the rendering to the wrapper.
@@ -1569,6 +1565,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               tree={elementTree.tree}
               truncated={elementTree.truncated}
               selectedId={elementTree.selectedId}
+              affectedIds={elementTree.affectedIds}
               onSelect={elementTree.selectNode}
               onHover={elementTree.hoverNode}
               projectPath={projectPath}

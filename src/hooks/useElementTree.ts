@@ -54,6 +54,7 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
   const [tree, setTree] = useState<ElementTreeNode | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [affectedIds, setAffectedIds] = useState<number[]>([]);
 
   const post = useCallback(
     (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
@@ -81,7 +82,13 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
       // project content runs inside it).
       if (e.source !== iframeRef.current?.contentWindow) return;
       const d = e.data as
-        | { type?: string; tree?: WireNode; truncated?: boolean; nodeId?: number }
+        | {
+            type?: string;
+            tree?: WireNode;
+            truncated?: boolean;
+            nodeId?: number;
+            affectedNodeIds?: number[];
+          }
         | undefined;
       if (!d || typeof d.type !== 'string') return;
       if (d.type === 'ss:tree' && d.tree) {
@@ -92,6 +99,11 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
         requestUntilReady();
       } else if (d.type === 'ss:select') {
         setSelectedId(typeof d.nodeId === 'number' ? d.nodeId : null);
+        setAffectedIds(
+          Array.isArray(d.affectedNodeIds)
+            ? d.affectedNodeIds.filter((id): id is number => typeof id === 'number')
+            : []
+        );
       }
     };
     window.addEventListener('message', onMessage);
@@ -120,6 +132,7 @@ export function useElementTree({ iframeRef, enabled }: UseElementTreeParams) {
     tree: enabled ? tree : null,
     truncated,
     selectedId: enabled ? selectedId : null,
+    affectedIds: enabled ? affectedIds : [],
     selectNode,
     hoverNode,
   };

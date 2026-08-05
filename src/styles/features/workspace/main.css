@@ -19,6 +19,20 @@
   user-select: none;
   cursor: default;
   flex-shrink: 0;
+  position: relative;
+}
+
+.workspace-title-group {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  width: max-content;
+  max-width: calc(100% - var(--space-32));
+  min-width: 0;
+  transform: translateX(-50%);
 }
 
 .workspace-titlebar h1 {
@@ -31,21 +45,60 @@
   flex-shrink: 1;
 }
 
+.workspace-titlebar .project-path-container {
+  position: relative;
+  width: var(--size-titlebar-project-path);
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  transition: width var(--transition-fast);
+}
+
+.workspace-titlebar .project-path-expansion-measure {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-04);
+  width: max-content;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-code);
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.workspace-titlebar .project-path-expansion-measure > svg {
+  flex: 0 0 auto;
+}
+
 .workspace-titlebar .project-path {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
   font-family: var(--font-code);
+  display: flex;
+  align-items: center;
+  gap: var(--space-04);
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   min-width: 0;
-  flex-shrink: 1;
   background: transparent;
   border: none;
   padding: 0;
   cursor: pointer;
   text-align: left;
   transition: color var(--transition);
+}
+
+.workspace-titlebar .project-path > svg {
+  flex: 0 0 auto;
+}
+
+.workspace-titlebar .project-path > .middle-truncate {
+  width: auto;
+  flex: 1 1 auto;
 }
 
 .workspace-titlebar .project-path:hover {
@@ -102,14 +155,8 @@
    terminal toolbar's (workspace/terminal.css) so every label collapses in
    unison. */
 @media (max-width: 1600px) {
-  .workspace-header .toolbar-btn-label,
-  .workspace-header .workspace-tab > span {
+  .workspace-header .toolbar-btn-label {
     display: none;
-  }
-
-  /* Tighter tab padding once they're icon-only. */
-  .workspace-header .workspace-tab {
-    padding: 0 var(--spacing-sm);
   }
 }
 
@@ -127,11 +174,10 @@
 
 /* Collapse the project sidebar into a contained icon-only navigation rail. */
 .workspace-body.is-sidebar-hidden > .workspace-sidebar {
-  width: calc(var(--control-height-standard) + (var(--space-2) * 2)) !important;
+  width: calc(var(--control-height-standard) + (var(--space-08) * 2)) !important;
   border-right: var(--stroke-1) solid var(--border-default);
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-search-panel,
 .workspace-body.is-sidebar-hidden .workspace-sidebar-ws-switch,
 .workspace-body.is-sidebar-hidden .workspace-sidebar-footer-divider {
   display: none;

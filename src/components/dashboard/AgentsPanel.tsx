@@ -48,12 +48,15 @@ import {
   ClaudeIcon,
   CodexIcon,
   CursorIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
   GitHubIcon,
   OpencodeIcon,
+  PlugIcon,
   VercelIcon,
 } from '../icons';
 
-function KebabGlyph() {
+export function KebabGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
       <circle cx="2.5" cy="7" r="1.3" fill="currentColor" />
@@ -514,11 +517,11 @@ export function AgentsPanel() {
     <section className="agents-panel" ref={panelRef}>
       <header className="agents-panel-header">
         <div>
-          <h3 className="agents-panel-title">Workspace accounts</h3>
-          <p className="agents-panel-subtitle">
+          <h3 className="agents-panel-title text-style-heading">Workspace accounts</h3>
+          <p className="agents-panel-subtitle text-style-body-medium">
             Logins for{' '}
             {activeAccount && (
-              <span className="agents-panel-badge">
+              <span className="agents-panel-workspace-name">
                 <span
                   className="agents-panel-badge-dot"
                   style={{ background: activeAccount.color }}
@@ -532,7 +535,7 @@ export function AgentsPanel() {
         {loading && <Spinner size="sm" className="agents-panel-spinner" />}
       </header>
 
-      <p className="agents-section-title">Coding agents</p>
+      <p className="agents-section-title text-style-label">AGENTS</p>
       <div className="agents-panel-list">
         {agents.map((agent) => {
           // "Ready" (eligible to be the default agent) means connected AND valid.
@@ -556,8 +559,12 @@ export function AgentsPanel() {
               <div className="agents-panel-row-icon">{iconFor(agent.id)}</div>
 
               <div className="agents-panel-row-main">
-                <div className="agents-panel-row-name">{agent.displayName}</div>
-                <div className="agents-panel-row-status">{statusLine(agent)}</div>
+                <div className="agents-panel-row-name text-style-body-medium">
+                  {agent.displayName}
+                </div>
+                <div className="agents-panel-row-status text-style-control">
+                  {statusLine(agent)}
+                </div>
               </div>
 
               <div className="agents-panel-row-actions">
@@ -565,6 +572,7 @@ export function AgentsPanel() {
                   <Button
                     variant="primary"
                     width="hug"
+                    leftIcon={<DownloadIcon size={14} />}
                     onClick={() => openTerminal(agent, 'install')}
                     disabled={isBusy}
                   >
@@ -576,6 +584,7 @@ export function AgentsPanel() {
                   <Button
                     variant="primary"
                     width="hug"
+                    leftIcon={<ExternalLinkIcon size={14} />}
                     onClick={() => startAuth(agent, false)}
                     disabled={isBusy}
                   >
@@ -587,6 +596,7 @@ export function AgentsPanel() {
                   <Button
                     variant="default"
                     width="hug"
+                    leftIcon={<PlugIcon size={14} />}
                     className="agents-reconnect-btn"
                     onClick={() => startAuth(agent, true)}
                     disabled={isBusy}
@@ -681,7 +691,7 @@ export function AgentsPanel() {
 
       {activeAccount && (
         <>
-          <p className="agents-section-title">Services</p>
+          <p className="agents-section-title text-style-label">SERVICES</p>
           <div className="agents-panel-list">
             {(
               [
@@ -721,8 +731,8 @@ export function AgentsPanel() {
                   <div className="agents-panel-row-icon">{svc.icon}</div>
 
                   <div className="agents-panel-row-main">
-                    <div className="agents-panel-row-name">{svc.name}</div>
-                    <div className="agents-panel-row-status">{statusText}</div>
+                    <div className="agents-panel-row-name text-style-body-medium">{svc.name}</div>
+                    <div className="agents-panel-row-status text-style-control">{statusText}</div>
                   </div>
 
                   <div className="agents-panel-row-actions">
@@ -731,6 +741,7 @@ export function AgentsPanel() {
                         variant="primary"
                         size="default"
                         width="hug"
+                        leftIcon={<PlugIcon size={14} />}
                         onClick={() => connectService(svc.id)}
                       >
                         Connect

@@ -24,17 +24,11 @@
   top: calc(100% + 8px);
   right: 0;
   width: var(--popover-source-control-width);
-  max-height: calc(100vh - var(--spacing-2xl) - var(--panel-header-h));
-  overflow-y: auto;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
   border-radius: 10px;
   box-shadow: var(--shadow-md);
   z-index: var(--z-modal-overlay);
-}
-
-.publish-changes-section {
-  border-bottom: var(--stroke-1) solid var(--border-default);
 }
 
 .publish-changes-actions {
@@ -57,19 +51,19 @@
 
 .publish-hosting-plugins,
 .publish-hosting-plugins .cf-dropdown-wrapper,
-.publish-hosting-plugins .vercel-dropdown-wrapper {
+.publish-hosting-plugins .vercel-button-container {
   width: 100%;
 }
 
 .publish-hosting-plugins .cf-dropdown-wrapper,
 .publish-hosting-plugins .cf-dropdown,
-.publish-hosting-plugins .vercel-dropdown-wrapper,
-.publish-hosting-plugins .vercel-dropdown {
+.publish-hosting-plugins .vercel-button-container,
+.publish-hosting-plugins .vercel-site-dropdown {
   position: static;
 }
 
 .publish-hosting-plugins .cf-dropdown-wrapper > .toolbar-icon-btn,
-.publish-hosting-plugins .vercel-dropdown-wrapper > .toolbar-icon-btn {
+.publish-hosting-plugins .vercel-button-container > .toolbar-icon-btn {
   display: none;
 }
 
@@ -79,42 +73,55 @@
 }
 
 .publish-hosting-plugins .cf-dropdown,
-.publish-hosting-plugins .vercel-dropdown {
+.publish-hosting-plugins .vercel-site-dropdown {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: none;
+  max-height: none;
+  height: auto;
+  overflow: visible;
   background: var(--surface-panel);
   box-shadow: none;
 }
 
 .publish-hosting-plugins .cf-dropdown-inner,
-.publish-hosting-plugins .vercel-dropdown-inner {
+.publish-hosting-plugins .vercel-site-dropdown-inner {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: none;
+  max-height: none;
+  height: auto;
+  overflow: visible;
   box-shadow: none;
 }
 
 .publish-hosting-plugins .cf-dropdown-action,
 .publish-hosting-plugins .cf-dropdown-divider,
 .publish-hosting-plugins .vercel-dropdown-action,
-.publish-hosting-plugins .vercel-dropdown-divider {
+.publish-hosting-plugins .vercel-dropdown-separator:has(+ .vercel-dropdown-action) {
   display: none;
 }
 
-.publish-hosting-section:hover .cf-dropdown-action,
-.publish-hosting-section:focus-within .cf-dropdown-action,
-.publish-hosting-section:hover .vercel-dropdown-action,
-.publish-hosting-section:focus-within .vercel-dropdown-action {
+/* Expand the plugin's secondary action only while its visible card is
+   hovered/focused. The hosting section also contains the heading and inset
+   spacing, which should not activate the card's expanded state. */
+.publish-hosting-plugins .cf-dropdown-inner:hover .cf-dropdown-action,
+.publish-hosting-plugins .cf-dropdown-inner:focus-within .cf-dropdown-action,
+.publish-hosting-plugins .vercel-site-dropdown-inner:hover .vercel-dropdown-action,
+.publish-hosting-plugins .vercel-site-dropdown-inner:focus-within .vercel-dropdown-action {
   display: flex;
 }
 
-.publish-hosting-section:hover .cf-dropdown-divider,
-.publish-hosting-section:focus-within .cf-dropdown-divider,
-.publish-hosting-section:hover .vercel-dropdown-divider,
-.publish-hosting-section:focus-within .vercel-dropdown-divider {
+.publish-hosting-plugins .cf-dropdown-inner:hover .cf-dropdown-divider,
+.publish-hosting-plugins .cf-dropdown-inner:focus-within .cf-dropdown-divider,
+.publish-hosting-plugins
+  .vercel-site-dropdown-inner:hover
+  .vercel-dropdown-separator:has(+ .vercel-dropdown-action),
+.publish-hosting-plugins
+  .vercel-site-dropdown-inner:focus-within
+  .vercel-dropdown-separator:has(+ .vercel-dropdown-action) {
   display: block;
 }
 

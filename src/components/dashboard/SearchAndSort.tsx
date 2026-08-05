@@ -1,7 +1,6 @@
 /**
- * SearchAndSort — section header with title, sort dropdown, and new-folder
- * button. The search input itself lives in DashboardHeader; this component
- * handles the sort/section controls row beneath it.
+ * SearchAndSort — the two-row heading and actions area inside the projects
+ * panel.
  *
  * @module components/SearchAndSort
  */
@@ -10,7 +9,15 @@ import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
-import { ChevronIcon, CheckIcon, FolderPlusIcon, GridIcon, ListIcon } from '../icons';
+import {
+  ChevronIcon,
+  CheckIcon,
+  FolderPlusIcon,
+  GridIcon,
+  HomeIcon,
+  ListIcon,
+  PlusIcon,
+} from '../icons';
 import { trackEvent } from '../../lib/analytics';
 import type { ProjectViewMode } from './ProjectGridView';
 
@@ -31,6 +38,12 @@ export interface SearchAndSortProps {
   onSortChange: (option: SortOption) => void;
   onViewModeChange: (mode: ProjectViewMode) => void;
   onNewFolder: () => void;
+  onCreateProject: () => void;
+  onImportProject?: () => void;
+  /** Whether GitHub is authenticated (import requires GitHub). */
+  isGitHubAuthenticated?: boolean;
+  /** Callback when the user tries to import without GitHub auth. */
+  onGitHubConnectForImport?: () => void;
   /** Optional element rendered just after the title (e.g. a workspace chip). */
   titleAccessory?: React.ReactNode;
 }
@@ -47,81 +60,133 @@ export function SearchAndSort({
   onSortChange,
   onViewModeChange,
   onNewFolder,
+  onCreateProject,
+  onImportProject,
+  isGitHubAuthenticated = true,
+  onGitHubConnectForImport,
   titleAccessory,
 }: SearchAndSortProps) {
   return (
     <div className="dashboard-section-header">
       <div className="dashboard-section-heading">
-        <span className="dashboard-section-title">
-          {title} {totalCount > 0 && `(${totalCount})`}
-        </span>
+        <div className="dashboard-section-heading-title">
+          <span className="dashboard-section-title text-style-heading">{title}</span>
+          {totalCount > 0 && (
+            <span className="dashboard-section-count text-style-heading-bold">{totalCount}</span>
+          )}
+        </div>
         {titleAccessory}
       </div>
       <div className="dashboard-section-controls">
-        <Tabs value={viewMode} onValueChange={(next) => onViewModeChange(next as ProjectViewMode)}>
-          <TabsList variant="stretch" className="dashboard-view-toggle" aria-label="Project view">
-            <TabsTab
-              value="grid"
-              className="dashboard-view-toggle-btn"
-              leftIcon={<GridIcon size={16} />}
-              aria-label="Grid view"
-              title="Grid view"
-            >
-              <span className="dashboard-view-toggle-label">Grid</span>
-            </TabsTab>
-            <TabsTab
-              value="list"
-              className="dashboard-view-toggle-btn"
-              leftIcon={<ListIcon size={16} />}
-              aria-label="List view"
-              title="List view"
-            >
-              <span className="dashboard-view-toggle-label">List</span>
-            </TabsTab>
-          </TabsList>
-        </Tabs>
-        <Dropdown
-          align="right"
-          menuClassName="sort-dropdown-menu"
-          trigger={(p) => (
+        <div className="dashboard-section-actions-left">
+          <Button
+            variant="primary"
+            size="default"
+            width="hug"
+            className="dashboard-action-button text-style-control-semibold"
+            leftIcon={<PlusIcon size={14} />}
+            data-education-id="new-project-button"
+            onClick={() => {
+              void trackEvent('new_project_clicked', { $screen_name: 'Dashboard' });
+              onCreateProject();
+            }}
+          >
+            New Project
+          </Button>
+
+          {onImportProject && (
             <Button
               variant="default"
               size="default"
               width="hug"
-              className="sort-dropdown-btn"
-              data-education-id="sort-projects"
-              rightIcon={<ChevronIcon />}
-              {...p}
+              className="dashboard-action-button text-style-control-semibold"
+              leftIcon={<HomeIcon size={14} />}
+              data-education-id="import-button"
+              onClick={() => {
+                void trackEvent('import_button_clicked', { $screen_name: 'Dashboard' });
+                if (isGitHubAuthenticated) {
+                  onImportProject();
+                } else if (onGitHubConnectForImport) {
+                  onGitHubConnectForImport();
+                }
+              }}
+              title={!isGitHubAuthenticated ? 'Connect GitHub to import repositories' : undefined}
             >
-              {SORT_LABELS[sortBy]}
+              Import
             </Button>
           )}
-        >
-          {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
-            <DropdownItem
-              key={option}
-              active={sortBy === option}
-              onSelect={() => onSortChange(option)}
-            >
-              <span>{SORT_LABELS[option]}</span>
-              {sortBy === option && <CheckIcon />}
-            </DropdownItem>
-          ))}
-        </Dropdown>
-        <IconButton
-          variant="default"
-          size="default"
-          width="hug"
-          className="new-folder-btn"
-          data-education-id="new-folder-button"
-          onClick={() => {
-            void trackEvent('new_folder_clicked', { $screen_name: 'Dashboard' });
-            onNewFolder();
-          }}
-          title="New Folder"
-          aria-label="New Folder"
-          icon={<FolderPlusIcon size={14} />}
-        />
+
+          <IconButton
+            variant="default"
+            size="default"
+            width="hug"
+            className="new-folder-btn"
+            data-education-id="new-folder-button"
+            onClick={() => {
+              void trackEvent('new_folder_clicked', { $screen_name: 'Dashboard' });
+              onNewFolder();
+            }}
+            title="New Folder"
+            aria-label="New Folder"
+            icon={<FolderPlusIcon size={14} />}
+          />
+        </div>
+
+        <div className="dashboard-section-actions-right">
+          <Tabs
+            value={viewMode}
+            onValueChange={(next) => onViewModeChange(next as ProjectViewMode)}
+          >
+            <TabsList variant="stretch" className="dashboard-view-toggle" aria-label="Project view">
+              <TabsTab
+                value="grid"
+                className="dashboard-view-toggle-btn text-style-control-semibold"
+                leftIcon={<GridIcon size={14} />}
+                aria-label="Grid view"
+                title="Grid view"
+              >
+                <span className="dashboard-view-toggle-label">Grid</span>
+              </TabsTab>
+              <TabsTab
+                value="list"
+                className="dashboard-view-toggle-btn text-style-control-semibold"
+                leftIcon={<ListIcon size={14} />}
+                aria-label="List view"
+                title="List view"
+              >
+                <span className="dashboard-view-toggle-label">List</span>
+              </TabsTab>
+            </TabsList>
+          </Tabs>
+          <Dropdown
+            align="right"
+            menuClassName="sort-dropdown-menu"
+            trigger={(p) => (
+              <Button
+                variant="default"
+                size="default"
+                width="hug"
+                className="sort-dropdown-btn text-style-control-semibold"
+                data-education-id="sort-projects"
+                rightIcon={<ChevronIcon />}
+                {...p}
+              >
+                {SORT_LABELS[sortBy]}
+              </Button>
+            )}
+          >
+            {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
+              <DropdownItem
+                key={option}
+                active={sortBy === option}
+                onSelect={() => onSortChange(option)}
+              >
+                <span>{SORT_LABELS[option]}</span>
+                {sortBy === option && <CheckIcon />}
+              </DropdownItem>
+            ))}
+          </Dropdown>
+        </div>
       </div>
     </div>
   );
