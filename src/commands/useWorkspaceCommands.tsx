@@ -4,7 +4,7 @@ import {
   PlusIcon,
   PullIcon,
   PullRequestIcon,
-  UploadIcon,
+  PushIcon,
   WarningIcon,
 } from '../components/icons';
 
@@ -62,7 +62,7 @@ export function useWorkspaceCommands({
         id: 'git.push',
         title: 'Push to GitHub',
         subtitle: hasUncommittedChanges ? 'Commits your changes, then pushes' : undefined,
-        icon: <UploadIcon size={14} />,
+        icon: <PushIcon size={14} />,
         category: 'branch',
         when: ({ kind }) => kind === 'project' && isGitHubConnected,
         keywords: ['publish', 'sync', 'upload', 'commit', 'git'],

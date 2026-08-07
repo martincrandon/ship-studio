@@ -318,7 +318,7 @@
   --button-surface-default: var(--surface-control);
   --button-surface-hover: var(--surface-control-hover);
   --button-surface-selected: var(--surface-selected);
-  --button-surface-pressed: var(--overlay-50);
+  --button-surface-pressed: var(--button-surface-selected);
 
   --button-border-solid: transparent;
   --button-border: var(--border-default);

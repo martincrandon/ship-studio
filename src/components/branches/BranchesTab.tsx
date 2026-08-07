@@ -32,7 +32,7 @@ import {
 import { gitPull } from '../../lib/git';
 import { removeWorktree, pruneWorktrees, type WorktreeInfo } from '../../lib/worktrees';
 import { openProjectInNewWindow } from '../../lib/project';
-import { BranchIcon, PlusIcon, TrashIcon, ExternalLinkIcon } from '../icons';
+import { BranchIcon, PlusIcon, TrashIcon, ExternalLinkIcon, PullIcon, PushIcon } from '../icons';
 import { Spinner } from '../primitives/Spinner';
 import { BranchGraph } from './BranchGraph';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
@@ -535,6 +535,9 @@ export function BranchesTab({
                   onClick={() => setSendToGitHubBranch(currentBranchInfo.name)}
                   disabled={publishingBranch === currentBranchInfo.name}
                   title="Push this branch to GitHub (no pull request)"
+                  leftIcon={
+                    publishingBranch === currentBranchInfo.name ? undefined : <PushIcon size={14} />
+                  }
                 >
                   Send to GitHub
                 </Button>
@@ -545,6 +548,7 @@ export function BranchesTab({
                 onClick={() => setShowRevertConfirm(true)}
                 disabled={isReverting}
                 title="Discard local changes and pull from GitHub"
+                leftIcon={isReverting ? undefined : <PullIcon size={14} />}
               >
                 {isReverting ? 'Reverting...' : 'Revert to GitHub'}
               </Button>
@@ -968,6 +972,7 @@ export function BranchesTab({
               variant="primary"
               onClick={() => void handleSendToGitHub(sendToGitHubBranch)}
               disabled={!!publishingBranch}
+              leftIcon={publishingBranch ? undefined : <PushIcon size={14} />}
             >
               {publishingBranch ? 'Sending...' : 'Send to GitHub'}
             </Button>
@@ -1002,6 +1007,7 @@ export function BranchesTab({
               variant="danger"
               onClick={() => void handleRevertToGitHub()}
               disabled={isReverting}
+              leftIcon={isReverting ? undefined : <PullIcon size={14} />}
             >
               {isReverting ? 'Reverting...' : 'Revert'}
             </Button>
@@ -1155,7 +1161,13 @@ function BranchCard({
           </Button>
         )}
         {!branch.pushed && !branch.isDefault && (
-          <Button variant="secondary" size="compact" onClick={onPublish} disabled={isPublishing}>
+          <Button
+            variant="secondary"
+            size="compact"
+            onClick={onPublish}
+            disabled={isPublishing}
+            leftIcon={isPublishing ? undefined : <PushIcon size={14} />}
+          >
             Send to GitHub
           </Button>
         )}

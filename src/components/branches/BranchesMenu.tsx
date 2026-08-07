@@ -25,6 +25,7 @@ import { Button } from '../primitives/Button';
 import { Dropdown } from '../primitives/Dropdown';
 import { MenuButton } from '../primitives/MenuButton';
 import { Spinner } from '../primitives/Spinner';
+import { TextButton } from '../primitives/TextButton';
 import { GitHubButton } from './GitHubButton';
 
 interface BranchesMenuProps {
@@ -154,13 +155,30 @@ export function BranchesMenu({
           </div>
         ) : (
           <>
+            <div className="branches-menu-header">
+              <h3 id="branches-menu-title">Branches</h3>
+              {projectStatus.github_url && (
+                <TextButton
+                  className="branches-menu-repository-button"
+                  onClick={() => {
+                    close();
+                    void openUrl(projectStatus.github_url!);
+                  }}
+                  leftIcon={<GitHubIcon size={14} />}
+                  rightIcon={<ExternalLinkIcon size={12} />}
+                >
+                  Open repository on GitHub
+                </TextButton>
+              )}
+            </div>
+
             <section className="branches-menu-section" aria-labelledby="branches-menu-sync">
               <div className="branches-menu-section-title" id="branches-menu-sync">
                 Sync
               </div>
               <Button
                 width="fill"
-                variant="secondary"
+                variant="default"
                 onClick={onPullLatest}
                 disabled={isPulling}
                 leftIcon={isPulling ? <Spinner size="sm" /> : <PullIcon size={14} />}
@@ -169,12 +187,7 @@ export function BranchesMenu({
               </Button>
             </section>
 
-            <section className="branches-menu-section" aria-labelledby="branches-menu-branches">
-              <div className="branches-menu-section-heading">
-                <div className="branches-menu-section-title" id="branches-menu-branches">
-                  Branches
-                </div>
-              </div>
+            <section className="branches-menu-section" aria-label="Branches">
               {currentBranch && (
                 <button type="button" className="branches-menu-row is-current" disabled>
                   <CheckIcon size={14} />
@@ -201,10 +214,11 @@ export function BranchesMenu({
               <Button
                 width="fill"
                 variant="ghost"
+                className="branches-menu-action"
                 onClick={() => runAndClose(onCreateBranch)}
                 leftIcon={<PlusIcon size={14} />}
               >
-                New branch
+                <span className="branches-menu-row-label">New branch</span>
               </Button>
               <Button width="fill" variant="ghost" onClick={() => runAndClose(onViewBranches)}>
                 View all branches
@@ -234,9 +248,10 @@ export function BranchesMenu({
                   <ExternalLinkIcon size={12} />
                 </button>
               )}
-              <button
-                type="button"
-                className="branches-menu-row"
+              <Button
+                width="fill"
+                variant="ghost"
+                className="branches-menu-action"
                 disabled={!pullRequestBranch}
                 title={
                   pullRequestBranch
@@ -244,34 +259,17 @@ export function BranchesMenu({
                     : 'Create a feature branch first'
                 }
                 onClick={() => pullRequestBranch && runAndClose(() => onStartPR(pullRequestBranch))}
+                leftIcon={<PullRequestIcon size={14} />}
               >
-                <PullRequestIcon size={14} />
                 <span className="branches-menu-row-label">New pull request</span>
                 {pullRequestBranch && (
                   <span className="branches-menu-row-meta">{pullRequestBranch}</span>
                 )}
-              </button>
+              </Button>
               <Button width="fill" variant="ghost" onClick={() => runAndClose(onViewPRs)}>
                 View all pull requests
               </Button>
             </section>
-
-            {projectStatus.github_url && (
-              <section className="branches-menu-section branches-menu-repository">
-                <button
-                  type="button"
-                  className="branches-menu-row"
-                  onClick={() => {
-                    close();
-                    void openUrl(projectStatus.github_url!);
-                  }}
-                >
-                  <GitHubIcon size={14} />
-                  <span className="branches-menu-row-label">Open repository on GitHub</span>
-                  <ExternalLinkIcon size={12} />
-                </button>
-              </section>
-            )}
           </>
         )}
       </Dropdown>

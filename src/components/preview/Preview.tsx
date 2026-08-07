@@ -1130,54 +1130,70 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       }}
     >
       <div className="preview-toolbar">
-        {editorMode ? (
-          <ToggleButton
-            type="button"
-            className="preview-edit-control"
-            variant={activeEditMode ? 'secondary' : 'default'}
-            onClick={toggleActiveEditor}
-            title="Toggle visual editor"
-            pressed={activeEditMode}
-            aria-label="Edit"
-          >
-            <EditIcon size={13} />
-            <span
-              className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
-              aria-hidden
-            />
-          </ToggleButton>
-        ) : (
-          // Preview-capable but not editable: show the toggle grayed out with a
-          // shared tooltip explaining why visual editing is unavailable.
-          <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
-            <span className="preview-edit-toggle-wrap preview-edit-control">
-              <Button
-                type="button"
-                className="preview-edit-toggle--disabled"
-                aria-disabled="true"
-                tabIndex={-1}
-                aria-label="Edit"
-              >
-                <EditIcon size={13} />
-              </Button>
-            </span>
-          </Tooltip>
-        )}
+        <div className="preview-toolbar-actions">
+          {editorMode ? (
+            <ToggleButton
+              type="button"
+              className="preview-edit-control"
+              variant={activeEditMode ? 'secondary' : 'default'}
+              onClick={toggleActiveEditor}
+              title="Toggle visual editor"
+              pressed={activeEditMode}
+              aria-label="Edit"
+            >
+              <EditIcon size={13} />
+              <span
+                className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
+                aria-hidden
+              />
+            </ToggleButton>
+          ) : (
+            // Preview-capable but not editable: show the toggle grayed out with a
+            // shared tooltip explaining why visual editing is unavailable.
+            <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
+              <span className="preview-edit-toggle-wrap preview-edit-control">
+                <Button
+                  type="button"
+                  className="preview-edit-toggle--disabled"
+                  aria-disabled="true"
+                  tabIndex={-1}
+                  aria-label="Edit"
+                >
+                  <EditIcon size={13} />
+                </Button>
+              </span>
+            </Tooltip>
+          )}
 
-        {onToggleLogs && (
-          <ToggleButton
-            type="button"
-            className="preview-inspect-control"
-            variant={showLogs ? 'secondary' : 'default'}
-            pressed={showLogs}
-            onClick={onToggleLogs}
-            title={showLogs ? 'Hide inspector' : 'Show inspector'}
-            aria-label={showLogs ? 'Hide inspector' : 'Show inspector'}
-            leftIcon={<TerminalIcon size={14} />}
-          >
-            <span className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`} aria-hidden />
-          </ToggleButton>
-        )}
+          {onToggleLogs && (
+            <ToggleButton
+              type="button"
+              className="preview-inspect-control"
+              variant={showLogs ? 'secondary' : 'default'}
+              pressed={showLogs}
+              onClick={onToggleLogs}
+              title={showLogs ? 'Hide inspector' : 'Show inspector'}
+              aria-label={showLogs ? 'Hide inspector' : 'Show inspector'}
+              leftIcon={<TerminalIcon size={14} />}
+            >
+              <span
+                className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`}
+                aria-hidden
+              />
+            </ToggleButton>
+          )}
+
+          {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
+
+          {conn.serverReady && conn.externalUrl && (
+            <BrowserDropdown
+              url={conn.externalUrl}
+              className="preview-browser-control"
+              buttonClassName="preview-browser-control"
+              iconOnly
+            />
+          )}
+        </div>
 
         {/* Locale Switcher — only for projects with 2+ configured languages */}
         <PreviewLocaleSwitcher
@@ -1292,8 +1308,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           {isFullscreen ? <CompactIcon size={14} /> : <ExpandIcon size={14} />}
         </button>
 
-        {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
-
         <div className="preview-breakpoints" data-education-id="breakpoints">
           <Tabs
             value={resize.getActiveBreakpoint()}
@@ -1340,15 +1354,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               );
             })()}
         </div>
-
-        {conn.serverReady && conn.externalUrl && (
-          <BrowserDropdown
-            url={conn.externalUrl}
-            className="preview-browser-control"
-            buttonClassName="preview-browser-control"
-            iconOnly
-          />
-        )}
       </div>
       <div
         className="preview-viewport"

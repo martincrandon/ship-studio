@@ -136,12 +136,19 @@
   order: 13;
 }
 
-.preview-toolbar > .preview-edit-control {
+.preview-toolbar-actions {
   order: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--button-gap);
   margin-left: auto;
 }
 
-.preview-toolbar > .preview-inspect-control {
+.preview-toolbar-actions > .preview-edit-control {
+  order: 20;
+}
+
+.preview-toolbar-actions > .preview-inspect-control {
   order: 21;
 }
 
@@ -150,23 +157,25 @@
    engaged. The shared button primitive's pressed state is intentionally a
    filled surface for ordinary toggles, so keep this override local to these
    panel controls. */
-.preview-toolbar > .preview-edit-control.button--secondary[aria-pressed='true'],
-.preview-toolbar > .preview-inspect-control.button--secondary[aria-pressed='true'] {
+.preview-toolbar-actions > .preview-edit-control.button--secondary[aria-pressed='true'],
+.preview-toolbar-actions > .preview-inspect-control.button--secondary[aria-pressed='true'] {
   background: var(--surface-panel);
   color: var(--button-text-default);
   border-color: var(--button-border);
 }
 
 .preview-toolbar
+  .preview-toolbar-actions
   > .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
 .preview-toolbar
+  .preview-toolbar-actions
   > .preview-inspect-control.button--secondary[aria-pressed='true']:hover:not(:disabled) {
   background: var(--surface-panel);
   color: var(--button-text-hover);
   border-color: var(--button-border-outline);
 }
 
-.preview-toolbar > .preview-toolbar-plugins {
+.preview-toolbar-actions > .preview-toolbar-plugins {
   order: 22;
   display: flex;
   align-items: center;
@@ -176,11 +185,11 @@
 /* PluginSlot returns null when no preview plugins are installed, but the
    toolbar wrapper remains mounted. Remove that empty flex item so it cannot
    create an extra gap between Inspect and Open in Browser. */
-.preview-toolbar > .preview-toolbar-plugins:empty {
+.preview-toolbar-actions > .preview-toolbar-plugins:empty {
   display: none;
 }
 
-.preview-toolbar > .preview-browser-control {
+.preview-toolbar-actions > .preview-browser-control {
   order: 23;
 }
 

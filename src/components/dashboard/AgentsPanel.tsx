@@ -48,8 +48,8 @@ import {
   CodexIcon,
   CursorIcon,
   DownloadIcon,
-  ExternalLinkIcon,
   GitHubIcon,
+  LoginIcon,
   OpencodeIcon,
   PlugIcon,
   VercelIcon,
@@ -583,7 +583,7 @@ export function AgentsPanel() {
                   <Button
                     variant="primary"
                     width="hug"
-                    leftIcon={<ExternalLinkIcon size={14} />}
+                    leftIcon={<LoginIcon size={14} />}
                     onClick={() => startAuth(agent, false)}
                     disabled={isBusy}
                   >

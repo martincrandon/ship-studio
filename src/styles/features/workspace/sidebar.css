@@ -1057,16 +1057,4 @@
   gap: var(--spacing-sm);
 }
 
-.workspace-sidebar-add-icon {
-  width: 12px;
-  height: 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: var(--stroke-1) solid currentColor;
-  border-radius: var(--radius-4);
-  font-size: var(--font-size-11);
-  line-height: 1;
-}
-
 /* Project picker styles removed — replaced by the command palette (⌘O). */

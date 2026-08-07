@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   ActivityIcon,
+  AddIcon,
   ChevronIcon,
   CloseIcon,
   HomeIcon,
@@ -868,7 +869,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               onClick={onOpenProjectPicker}
               title="Open a project"
             >
-              <span className="workspace-sidebar-add-icon">+</span>
+              <AddIcon size={16} />
               <span>Open project</span>
             </Button>
             <IconButton

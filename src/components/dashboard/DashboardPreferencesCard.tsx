@@ -7,7 +7,6 @@
 import { trackEvent } from '../../lib/analytics';
 import { HistoryIcon, SettingsIcon } from '../icons';
 import { Button } from '../primitives/Button';
-import { KebabGlyph } from './AgentsPanel';
 
 interface DashboardPreferencesCardProps {
   onOpenSettings: () => void;
@@ -53,9 +52,6 @@ export function DashboardPreferencesCard({
               Dashboard widgets, compact mode, learn mode
             </div>
           </div>
-          <span className="dashboard-card-row-menu" aria-hidden="true">
-            <KebabGlyph />
-          </span>
         </Button>
         <Button
           variant="default"
@@ -76,9 +72,6 @@ export function DashboardPreferencesCard({
               Recent updates and downgrade to older versions
             </div>
           </div>
-          <span className="dashboard-card-row-menu" aria-hidden="true">
-            <KebabGlyph />
-          </span>
         </Button>
       </div>
     </section>

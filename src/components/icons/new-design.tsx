@@ -1,4 +1,5 @@
 import type { SVGAttributes } from 'react';
+import add from './assets/new-design/Add.svg?raw';
 import active from './assets/new-design/Active.svg?raw';
 import alert from './assets/new-design/alert.svg?raw';
 import ai from './assets/new-design/AI.svg?raw';
@@ -48,6 +49,7 @@ import justifyEnd from './assets/new-design/justify-end.svg?raw';
 import justifyStart from './assets/new-design/justify-start.svg?raw';
 import left from './assets/new-design/Left.svg?raw';
 import list from './assets/new-design/list.svg?raw';
+import login from './assets/new-design/login.svg?raw';
 import mobile from './assets/new-design/Mobile.svg?raw';
 import mobileHorizontal from './assets/new-design/Mobile Horizontal.svg?raw';
 import moveToWorkspace from './assets/new-design/move-to-workspace.svg?raw';
@@ -57,6 +59,8 @@ import overflowScroll from './assets/new-design/overflow-scroll.svg?raw';
 import pin from './assets/new-design/pin.svg?raw';
 import plugin from './assets/new-design/Plugin.svg?raw';
 import plus from './assets/new-design/Plus.svg?raw';
+import pull from './assets/new-design/Icon/Pull.svg?raw';
+import push from './assets/new-design/Icon/Push.svg?raw';
 import redo from './assets/new-design/Redo.svg?raw';
 import reload from './assets/new-design/Reload.svg?raw';
 import right from './assets/new-design/Right.svg?raw';
@@ -82,6 +86,7 @@ import wrapDown from './assets/new-design/wrap-down.svg?raw';
 import { getIconData, ICON_STROKE_WIDTH, resolveIconSize } from './provenance';
 
 const sources = {
+  Add: add,
   Active: active,
   Alert: alert,
   AI: ai,
@@ -134,6 +139,7 @@ const sources = {
   JustifyStart: justifyStart,
   Left: left,
   List: list,
+  Login: login,
   Mobile: mobile,
   MobileHorizontal: mobileHorizontal,
   MoveToWorkspace: moveToWorkspace,
@@ -143,6 +149,8 @@ const sources = {
   Pin: pin,
   Plugin: plugin,
   Plus: plus,
+  Pull: pull,
+  Push: push,
   Redo: redo,
   Reload: reload,
   Right: right,

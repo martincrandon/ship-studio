@@ -12,6 +12,14 @@ interface IconProps {
   className?: string;
 }
 
+export function LoginIcon({ size = 16, className }: IconProps) {
+  return <NewDesignIcon iconName="LoginIcon" source="Login" size={size} className={className} />;
+}
+
+export function AddIcon({ size = 16, className }: IconProps) {
+  return <NewDesignIcon iconName="AddIcon" source="Add" size={size} className={className} />;
+}
+
 export function PlusIcon({ size = 16, className }: IconProps) {
   return <NewDesignIcon iconName="PlusIcon" source="Plus" size={size} className={className} />;
 }
@@ -20,7 +28,14 @@ export function PlusIcon({ size = 16, className }: IconProps) {
  *  bring the remote's commits down into your working copy. */
 export function PullIcon({ size = 14, className }: IconProps) {
   return (
-    <NewDesignIcon iconName="PullIcon" source="Down" compact size={size} className={className} />
+    <NewDesignIcon iconName="PullIcon" source="Pull" compact size={size} className={className} />
+  );
+}
+
+/** Git push action: send local commits to the remote repository. */
+export function PushIcon({ size = 14, className }: IconProps) {
+  return (
+    <NewDesignIcon iconName="PushIcon" source="Push" compact size={size} className={className} />
   );
 }
 

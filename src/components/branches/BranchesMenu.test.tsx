@@ -73,6 +73,18 @@ describe('BranchesMenu', () => {
     expect(screen.getByText('New branch')).toBeInTheDocument();
     expect(screen.getByText('View all pull requests')).toBeInTheDocument();
     expect(screen.getByText('Open repository on GitHub')).toBeInTheDocument();
+
+    expect(screen.getByText('Pull latest from GitHub').closest('button')).toHaveClass(
+      'button--default'
+    );
+    expect(screen.getByText('New branch').closest('button')).toHaveClass('button--ghost');
+    expect(screen.getByText('New pull request').closest('button')).toHaveClass('button--ghost');
+
+    const header = screen.getByRole('heading', { name: 'Branches' }).parentElement;
+    expect(header).toHaveClass('branches-menu-header');
+    const repositoryButton = screen.getByRole('button', { name: /Open repository on GitHub/ });
+    expect(repositoryButton).toHaveClass('text-button');
+    expect(header).toContainElement(repositoryButton);
   });
 
   it('starts a pull request for the current feature branch', () => {
