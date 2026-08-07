@@ -207,23 +207,25 @@ export function CssCascadePanel({
               <code className="ss-cascade-chip" data-tone="tag">
                 {selection.signature.tagName}
               </code>
-              {classes.length > 0 && (
-                <span className="ss-cascade-target__classes">
-                  {classes.map((c) => (
-                    <code key={c} className="ss-cascade-target__class">
-                      .{c}
-                    </code>
-                  ))}
-                </span>
-              )}
-              {selection.instanceCount > 1 && (
-                <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
-              )}
+              <span className="ss-cascade-target__selector">
+                {classes.length > 0 && (
+                  <span className="ss-cascade-target__classes">
+                    {classes.map((c) => (
+                      <code key={c} className="ss-cascade-target__class">
+                        .{c}
+                      </code>
+                    ))}
+                  </span>
+                )}
+                {selection.instanceCount > 1 && (
+                  <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
+                )}
+              </span>
               <Button
+                className="ss-cascade-target__copy"
                 variant="ghost"
                 size="compact"
                 leftIcon={idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-                style={{ marginLeft: 'auto' }}
                 title={
                   settings.location
                     ? `Copy this element's source location (${settings.location.file}:${settings.location.line}) to paste into your agent`

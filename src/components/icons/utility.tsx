@@ -83,6 +83,10 @@ export function ZapIcon({ size = 16 }: IconProps) {
   return <NewDesignIcon iconName="ZapIcon" source="AI" size={size} />;
 }
 
+export function AgentsIcon({ size = 16 }: IconProps) {
+  return <NewDesignIcon iconName="AgentsIcon" source="AI" size={size} />;
+}
+
 export function HelpIcon({ size = 16 }: IconProps) {
   const renderedSize = resolveIconSize(size);
 

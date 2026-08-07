@@ -22,10 +22,18 @@ import {
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { Button } from '../primitives/Button';
+import { DockablePanel } from '../primitives/DockablePanel';
 import { EnumDropdown } from './EnumDropdown';
 import { ColorPicker } from './ColorPicker';
 import { CSS_CATEGORIES, cssValueOf, type CssControl, type SegOption } from '../../lib/cssControls';
 import type { CssDeclaration } from '../../lib/edit-css';
+import {
+  COLOR_PICKER_GUTTER,
+  COLOR_PICKER_HEIGHT,
+  COLOR_PICKER_POSITION_KEY,
+  COLOR_PICKER_SIZE_KEY,
+  COLOR_PICKER_WIDTH,
+} from '../../lib/color';
 
 function cssSupports(prop: string, value: string): boolean {
   try {
@@ -295,19 +303,21 @@ function ColorControl({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const W = 216;
-    const H = 250;
-    const M = 8;
+    const W = COLOR_PICKER_WIDTH;
+    const H = COLOR_PICKER_HEIGHT;
+    const M = COLOR_PICKER_GUTTER;
     let left = r.left - W - M;
     if (left < M) left = r.right + M;
-    left = Math.min(Math.max(M, left), window.innerWidth - W - M);
-    const top = Math.min(Math.max(M, r.top), window.innerHeight - H - M);
+    left = Math.min(Math.max(M, left), Math.max(M, window.innerWidth - W - M));
+    const maxTop = Math.max(M, window.innerHeight - H - M);
+    const top = Math.min(Math.max(M, r.top), maxTop);
     setRect({ top, left });
   }, []);
 
   const close = useCallback(() => {
     setOpen(false);
     if (latestRef.current !== value) onSave(prop, latestRef.current || null);
+    triggerRef.current?.focus({ preventScroll: true });
   }, [prop, value, onSave]);
 
   useLayoutEffect(() => {
@@ -322,11 +332,18 @@ function ColorControl({
   }, [open, reposition]);
 
   useDismissOnOutsidePointer(open, popRef, close, {
-    isOutside: (t) => !triggerRef.current?.contains(t) && !popRef.current?.contains(t),
+    isOutside: (t) =>
+      !triggerRef.current?.contains(t) &&
+      !popRef.current?.contains(t) &&
+      !(t as HTMLElement).closest?.('.ss-color-picker__format-menu'),
   });
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('.ss-color-picker__format-menu')) return;
+      close();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open, close]);
@@ -392,10 +409,18 @@ function ColorControl({
           }}
         />
       </div>
-      {open &&
-        rect &&
-        createPortal(
-          <div ref={popRef} className="ss-color-popover" style={{ top: rect.top, left: rect.left }}>
+      {open && rect && (
+        <DockablePanel
+          docked={false}
+          ariaLabel="Color picker"
+          positionKey={COLOR_PICKER_POSITION_KEY}
+          sizeKey={COLOR_PICKER_SIZE_KEY}
+          floatingSize={{ width: COLOR_PICKER_WIDTH, height: COLOR_PICKER_HEIGHT }}
+          initialPosition={() => ({ left: rect.left, top: rect.top })}
+          resizable={false}
+          surfaceClassName="ss-color-picker__floating-surface"
+        >
+          <div ref={popRef} className="ss-color-picker__floating-content">
             <ColorPicker
               value={local || '#000000'}
               onChange={(css) => {
@@ -403,10 +428,11 @@ function ColorControl({
                 latestRef.current = css;
                 onPreview(prop, css);
               }}
+              onClose={close}
             />
-          </div>,
-          document.body
-        )}
+          </div>
+        </DockablePanel>
+      )}
     </Field>
   );
 }

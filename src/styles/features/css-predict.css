@@ -7,8 +7,8 @@
 
 .ss-decl--ghost {
   display: block;
-  /* Separate the Tab affordance from the last authored declaration. */
-  margin-top: var(--spacing-xs);
+  /* Separate the Tab affordance from the "+ Add" control and last declaration. */
+  margin-top: var(--spacing-sm);
   padding-top: var(--control-height-compact);
   padding-left: var(--spacing-sm);
   opacity: 0.5;

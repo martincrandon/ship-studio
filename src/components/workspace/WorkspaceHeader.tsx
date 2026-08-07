@@ -21,7 +21,7 @@ import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { FolderOpenIcon, ImageIcon, PanelLeftIcon, TerminalIcon } from '../icons';
+import { AgentsIcon, ElementsIcon, FolderOpenIcon, ImageIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ToggleButton } from '../primitives/ToggleButton';
@@ -290,7 +290,7 @@ export function WorkspaceHeader({
                 ? 'Hide element tree'
                 : 'Show element tree'
           }
-          leftIcon={<PanelLeftIcon size={16} />}
+          leftIcon={<ElementsIcon size={16} />}
         >
           <span className="toolbar-btn-label">Elements</span>
         </ToggleButton>
@@ -300,7 +300,7 @@ export function WorkspaceHeader({
           pressed={agentPanelVisible}
           onClick={onToggleAgentPanel}
           title={agentPanelVisible ? 'Hide Agent panel' : 'Show Agent panel'}
-          leftIcon={<TerminalIcon size={16} />}
+          leftIcon={<AgentsIcon size={16} />}
         >
           <span className="toolbar-btn-label">Agent</span>
         </ToggleButton>

@@ -22,15 +22,6 @@
   pointer-events: none;
 }
 
-.dockable-panel__surface--docked {
-  z-index: var(--z-dropdown);
-}
-
-.dockable-panel__surface--floating,
-.dockable-panel__surface--preview {
-  z-index: var(--z-floating-panel);
-}
-
 .dockable-panel__surface--floating {
   border: var(--stroke-1) solid var(--border-subtle);
   border-radius: var(--radius-card);

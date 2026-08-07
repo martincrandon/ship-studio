@@ -1,5 +1,5 @@
 /* ── Declaration rows ── */
-/* Prop + value are plain WRAPPING text (clicking opens the edit popover), so a long
+/* Prop + value are plain WRAPPING text (clicking edits in place), so a long
    prop or value just wraps and is never cut off; a short one reads `prop: value`. */
 .ss-decl {
   position: relative;
@@ -8,7 +8,8 @@
   align-items: baseline;
   column-gap: var(--spacing-xs);
   padding: 0px 2px; /* css-ok: dense row */
-  margin: 0 -4px; /* css-ok: edge-to-edge row */
+  /* Keep field hover surfaces inside the card body's horizontal padding. */
+  margin: 0;
   border-radius: var(--radius-sm);
   font-family: var(--font-code);
   font-size: var(--font-size-sm);
@@ -25,11 +26,13 @@
 .ss-decl.is-readonly {
   white-space: normal;
   overflow-wrap: anywhere;
+  padding: var(--space-02) var(--space-08);
 }
 
 /* Clickable display text (button reset to read as plain text). */
 .ss-decl__edit {
   all: unset;
+  box-sizing: border-box;
   cursor: text;
   border-radius: var(--radius-sm);
   padding: 2px 6px;
@@ -108,14 +111,29 @@
   pointer-events: auto;
 }
 
-/* Edit popover (click a prop/value) */
+/* Shared value editor: floating by default, or fitted to the existing grid column. */
 .ss-value-pop {
+  position: fixed;
   z-index: var(--z-tooltip);
   padding: var(--spacing-xs);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
   box-shadow: var(--shadow-md);
+}
+.ss-value-pop--inline {
+  /* Let the declaration row own the autocomplete's positioning context. This
+     allows the menu to span the complete `property: value` row while keeping
+     its right edge aligned with the value field. */
+  position: static;
+  z-index: auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 /* Input row: optional drag-to-scrub handle + the text field. */
 .ss-value-pop__field {
@@ -126,6 +144,16 @@
 .ss-value-pop__field .ss-value-pop__input {
   flex: 1 1 auto;
   min-width: 0;
+}
+.ss-value-pop--inline .ss-value-pop__field {
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(var(--size-control-medium) - var(--space-02));
+  min-width: 0;
+  gap: 0;
+  border: 1px solid var(--accent-active);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
 }
 .ss-value-pop__scrub {
   flex: 0 0 auto;
@@ -143,6 +171,11 @@
   color: var(--text-primary);
   background: var(--tint-subtle);
 }
+.ss-value-pop--inline .ss-value-pop__scrub {
+  width: var(--size-control-compact);
+  height: var(--size-control-compact);
+  border-radius: calc(var(--radius-sm) - var(--stroke-1));
+}
 .ss-value-pop__input {
   all: unset;
   box-sizing: border-box;
@@ -155,13 +188,33 @@
   font-family: var(--font-code);
   font-size: var(--font-size-sm);
 }
+.ss-value-pop--inline .ss-value-pop__input {
+  padding: 0 var(--space-06);
+  border: 0;
+  background: transparent;
+  line-height: 1.5;
+}
 /* Autocomplete list under the value input (var(--…), keywords). */
 .ss-value-pop__menu {
   margin-top: var(--spacing-xs);
-  border: none;
-  background: none;
-  box-shadow: none;
+  border: 1px solid var(--border-default);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-md);
   max-height: 220px;
+}
+.ss-value-pop--inline .ss-value-pop__menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: var(--z-dropdown);
+}
+.ss-value-pop__menu .ss-add-menu__item {
+  /* The shared add menu also serves shrink-to-fit chip popovers, where an
+     explicit width can collapse the grid. The value menu is row-width-bound,
+     so make its hover target fill that width explicitly. */
+  align-self: stretch;
+  width: 100%;
 }
 
 /* Inline `!important` ghost completion, painted over the input (typed text is
@@ -183,6 +236,11 @@
   font-size: var(--font-size-sm);
   white-space: pre;
   overflow: hidden;
+}
+.ss-value-pop--inline .ss-value-pop__ghost {
+  padding: 0 var(--space-06);
+  border: 0;
+  line-height: 1.5;
 }
 .ss-value-pop__ghost-typed {
   color: transparent;

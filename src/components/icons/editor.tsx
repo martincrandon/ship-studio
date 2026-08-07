@@ -88,6 +88,17 @@ export function CopyIcon({ size = 14, className }: IconProps) {
   );
 }
 
+export function ColorPickerIcon({ size = 16, className }: IconProps) {
+  return (
+    <NewDesignIcon
+      iconName="ColorPickerIcon"
+      source="ColorPicker"
+      size={size}
+      className={className}
+    />
+  );
+}
+
 export function DuplicateIcon({ size = 14, className }: IconProps) {
   return (
     <NewDesignIcon

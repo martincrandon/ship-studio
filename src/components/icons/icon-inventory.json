@@ -28,6 +28,12 @@
     { "name": "WarningIcon", "status": "new-design", "kind": "ui", "source": "warning-alert.svg" },
     { "name": "AlertIcon", "status": "new-design", "kind": "ui", "source": "alert.svg" },
     { "name": "CloseIcon", "status": "new-design", "kind": "ui", "source": "Cancel.svg" },
+    {
+      "name": "ColorPickerIcon",
+      "status": "new-design",
+      "kind": "ui",
+      "source": "Color Picker.svg"
+    },
     { "name": "InfoIcon", "status": "legacy", "kind": "ui" },
     { "name": "SearchIcon", "status": "new-design", "kind": "ui", "source": "Search.svg" },
     { "name": "ArrowLeftIcon", "status": "new-design", "kind": "ui", "source": "Left.svg" },

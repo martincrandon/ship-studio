@@ -82,6 +82,26 @@ describe('DockablePanel', () => {
     });
   });
 
+  it('can elevate a docked portal above a fullscreen owner', () => {
+    render(
+      <DockablePanel
+        docked
+        dockedZIndex="var(--z-floating-panel)"
+        ariaLabel="Fullscreen dock"
+        positionKey="fullscreenDockPosition"
+        sizeKey="fullscreenDockSize"
+        floatingSize={{ width: 360, height: 520 }}
+        initialPosition={() => ({ left: 40, top: 60 })}
+      >
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+
+    expect(screen.getByLabelText('Fullscreen dock')).toHaveStyle({
+      zIndex: 'var(--z-floating-panel)',
+    });
+  });
+
   it('keeps its size when dragging a floating panel to the viewport edges', () => {
     render(
       <DockablePanel
@@ -111,6 +131,34 @@ describe('DockablePanel', () => {
     });
 
     expect(surface).toHaveStyle({ width: '400px', height: '600px' });
+  });
+
+  it('moves a fixed-size floating panel without adding resize handles', () => {
+    render(
+      <DockablePanel
+        docked={false}
+        ariaLabel="Color picker"
+        positionKey="colorPickerPosition"
+        sizeKey="colorPickerSize"
+        floatingSize={{ width: 336, height: 571 }}
+        initialPosition={() => ({ left: 40, top: 60 })}
+        resizable={false}
+      >
+        <div data-dockable-drag-handle>Color picker title</div>
+      </DockablePanel>
+    );
+
+    const surface = screen.getByLabelText('Color picker');
+    const header = screen.getByText('Color picker title');
+    fireEvent.pointerDown(header, { pointerId: 1, clientX: 50, clientY: 70 });
+    fireEvent.pointerMove(surface, { pointerId: 1, clientX: 150, clientY: 170 });
+    fireEvent.pointerUp(surface, { pointerId: 1, clientX: 150, clientY: 170 });
+
+    expect(surface).toHaveStyle({ width: '336px', height: '571px' });
+    expect(
+      screen.queryByRole('separator', { name: /Resize Color picker/ })
+    ).not.toBeInTheDocument();
+    expect(localStorage.getItem('colorPickerPosition')).toBe('{"left":220,"top":180}');
   });
 
   it('keeps its child mounted while moving between the dock and a floating surface', () => {
@@ -150,7 +198,13 @@ describe('DockablePanel', () => {
     const placeholder = container.querySelector('.dockable-panel__placeholder');
     expect(surface).toHaveClass('dockable-panel__surface--docked');
     expect(placeholder).toHaveClass('dockable-panel__placeholder--docked');
-    expect(surface).toHaveStyle({ left: '120px', top: '80px', width: '400px', height: '600px' });
+    expect(surface).toHaveStyle({
+      left: '120px',
+      top: '80px',
+      width: '400px',
+      height: '600px',
+      zIndex: 'var(--z-dropdown)',
+    });
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Pin' }), { pointerId: 2 });
     fireEvent.pointerUp(screen.getByRole('button', { name: 'Pin' }), { pointerId: 2 });
     fireEvent.click(screen.getByRole('button', { name: 'Pin' }));
@@ -165,7 +219,11 @@ describe('DockablePanel', () => {
     expect(screen.getByLabelText('Test panel')).toBe(surface);
     expect(surface).toHaveClass('dockable-panel__surface--floating');
     expect(placeholder).toHaveClass('dockable-panel__placeholder--floating');
-    expect(surface).toHaveStyle({ width: '400px', height: '600px' });
+    expect(surface).toHaveStyle({
+      width: '400px',
+      height: '600px',
+      zIndex: 'calc(var(--z-floating-panel) + 0)',
+    });
     expect(localStorage.getItem('testPanelSize')).toBe('{"width":400,"height":600}');
     expect(mounted).toHaveBeenCalledTimes(1);
     expect(unmounted).not.toHaveBeenCalled();

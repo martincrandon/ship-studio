@@ -1,27 +1,35 @@
 /**
  * Text + background color controls. Each is a swatch that opens a popover with
- * the full ColorPicker (HEX/RGB/HSL/OKLCH). The picked color is written back as
- * an arbitrary Tailwind value in the SAME format the element already used
- * (match-existing) — OKLCH stays OKLCH, everything else defaults to hex — and
+ * the full ColorPicker (HEX/RGB/HSL/HSB/OKLCH). The picked colour is written
+ * back as an arbitrary Tailwind value in the format selected in the picker and
  * previewed live via inline color/background-color.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import {
   arbitraryColorRaw,
   colorClassToken,
-  colorFormatOf,
   colorResetSpec,
   readLayer,
   type ColorPrefix,
   type LayerContext,
   type ResetSpec,
 } from '../../lib/edit';
-import { rgbaToCss, toFormat, toHex, toRgba, visibleHex } from '../../lib/color';
+import {
+  COLOR_PICKER_GUTTER,
+  COLOR_PICKER_HEIGHT,
+  COLOR_PICKER_POSITION_KEY,
+  COLOR_PICKER_SIZE_KEY,
+  COLOR_PICKER_WIDTH,
+  rgbaToCss,
+  toHex,
+  toRgba,
+  visibleHex,
+} from '../../lib/color';
 import { ColorPicker } from './ColorPicker';
 import { ResettableLabel } from './ResettableLabel';
+import { DockablePanel } from '../primitives/DockablePanel';
 
 interface Props {
   currentClass: string;
@@ -52,13 +60,12 @@ export function ColorField({
   css: string;
   prefix: ColorPrefix;
 } & Props) {
-  // Explicit arbitrary value at the active breakpoint (drives match-existing format
-  // on save); otherwise fall back to the element's rendered color for display/seeding.
+  // Explicit arbitrary value at the active breakpoint; otherwise fall back to
+  // the element's rendered color for display/seeding.
   const { value: explicit, definedAt } = readLayer(currentClass, layer, (s) =>
     arbitraryColorRaw(s, prefix)
   );
   const computedRaw = computed?.[css];
-  const raw = explicit;
   const seed = explicit ?? computedRaw ?? '#000000';
   // A parent-renderable color for the chip (alpha-aware): the explicit value if
   // parseable (a `var()` isn't), else the element's visible computed color.
@@ -76,15 +83,16 @@ export function ColorField({
     const el = triggerRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const W = 216;
-    const H = 250;
-    const M = 8;
+    const W = COLOR_PICKER_WIDTH;
+    const H = COLOR_PICKER_HEIGHT;
+    const M = COLOR_PICKER_GUTTER;
     // Prefer opening to the LEFT of the swatch (panel hugs the right edge); fall
     // back to the right, then clamp fully inside the viewport on both axes.
     let left = r.left - W - M;
     if (left < M) left = r.right + M;
-    left = Math.min(Math.max(M, left), window.innerWidth - W - M);
-    const top = Math.min(Math.max(M, r.top), window.innerHeight - H - M);
+    left = Math.min(Math.max(M, left), Math.max(M, window.innerWidth - W - M));
+    const maxTop = Math.max(M, window.innerHeight - H - M);
+    const top = Math.min(Math.max(M, r.top), maxTop);
     setRect({ top, left });
   }, []);
 
@@ -100,23 +108,28 @@ export function ColorField({
   }, [open, reposition]);
 
   useDismissOnOutsidePointer(open, popRef, () => setOpen(false), {
-    isOutside: (t) => !triggerRef.current?.contains(t) && !popRef.current?.contains(t),
+    isOutside: (t) =>
+      !triggerRef.current?.contains(t) &&
+      !popRef.current?.contains(t) &&
+      !(t as HTMLElement).closest?.('.ss-color-picker__format-menu'),
   });
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('.ss-color-picker__format-menu')) return;
+      setOpen(false);
+      triggerRef.current?.focus({ preventScroll: true });
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
   const handlePick = useCallback(
-    (hex: string) => {
-      // Match-existing: keep the element's current color format, else default hex.
-      const fmt = raw ? colorFormatOf(raw) : 'hex';
-      const cssColor = toFormat(hex, fmt);
+    (cssColor: string) => {
       onApplyEnum(colorClassToken(prefix, cssColor), { [css]: cssColor });
     },
-    [raw, prefix, css, onApplyEnum]
+    [prefix, css, onApplyEnum]
   );
 
   return (
@@ -143,14 +156,29 @@ export function ColorField({
           <span className="ss-color-swatch__empty">—</span>
         )}
       </button>
-      {open &&
-        rect &&
-        createPortal(
-          <div ref={popRef} className="ss-color-popover" style={{ top: rect.top, left: rect.left }}>
-            <ColorPicker value={seed} onChange={handlePick} />
-          </div>,
-          document.body
-        )}
+      {open && rect && (
+        <DockablePanel
+          docked={false}
+          ariaLabel="Color picker"
+          positionKey={COLOR_PICKER_POSITION_KEY}
+          sizeKey={COLOR_PICKER_SIZE_KEY}
+          floatingSize={{ width: COLOR_PICKER_WIDTH, height: COLOR_PICKER_HEIGHT }}
+          initialPosition={() => ({ left: rect.left, top: rect.top })}
+          resizable={false}
+          surfaceClassName="ss-color-picker__floating-surface"
+        >
+          <div ref={popRef} className="ss-color-picker__floating-content">
+            <ColorPicker
+              value={seed}
+              onChange={handlePick}
+              onClose={() => {
+                setOpen(false);
+                triggerRef.current?.focus({ preventScroll: true });
+              }}
+            />
+          </div>
+        </DockablePanel>
+      )}
     </div>
   );
 }

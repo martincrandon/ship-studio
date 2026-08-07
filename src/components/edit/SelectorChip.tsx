@@ -1,13 +1,98 @@
-import { useId, useState } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 import { WRAP_ITEMS, searchStructures } from '../../lib/cssStructures';
 import { CascadeChip, type CascadeChipTone } from './CascadeChip';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
 
 const TAG_SELECTOR_PATTERN = /^[a-z][a-z\d-]*(?:(?::|::)[a-z-]+(?:\([^)]*\))?)*$/i;
+const CLASS_SELECTOR_SEQUENCE_PATTERN = /^(?:\.[-_a-zA-Z][-_a-zA-Z\d]*\s*){2,}$/;
+
+/** Split a selector made only from class names, whether classes are compound
+ * (`.one.two`) or descendants (`.one .two`), into separate visual chips. Keep
+ * other CSS selectors intact: combinators, pseudo-classes, and escaped names
+ * have semantics that should remain visible as one literal selector. */
+export function splitCompoundClassSelector(selector: string): string[] | null {
+  const value = selector.trim();
+  if (!CLASS_SELECTOR_SEQUENCE_PATTERN.test(value)) return null;
+  return value.match(/\.[-_a-zA-Z][-_a-zA-Z\d]*/g);
+}
 
 /** Keep plain HTML/custom-element selectors in the media pink family. */
 export function selectorTone(selector: string): CascadeChipTone {
   return TAG_SELECTOR_PATTERN.test(selector.trim()) ? 'tag' : 'selector';
+}
+
+function SelectorParts({ selector }: { selector: string }) {
+  const parts = splitCompoundClassSelector(selector);
+  if (!parts) {
+    return <span className="ss-cascade-chip__content">{selector}</span>;
+  }
+
+  return (
+    <>
+      {parts.map((part, index) => (
+        <span className="ss-cascade-selector-display__part" key={part}>
+          {index > 0 && (
+            <span className="ss-cascade-selector-display__connector" aria-hidden="true">
+              <svg viewBox="0 0 32 24" preserveAspectRatio="none">
+                <path d="M0 0C7 0 8 8 16 8C24 8 25 0 32 0V24C25 24 24 16 16 16C8 16 7 24 0 24Z" />
+              </svg>
+            </span>
+          )}
+          <CascadeChip tone="selector">
+            <span className="ss-cascade-chip__content">{part}</span>
+          </CascadeChip>
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** Shared display for ordinary and compound selectors. */
+export function SelectorDisplay({
+  selector,
+  interactive = false,
+  onActivate,
+}: {
+  selector: string;
+  interactive?: boolean;
+  onActivate?: () => void;
+}) {
+  const parts = splitCompoundClassSelector(selector);
+  const title = interactive
+    ? 'Click to edit — type a selector, or @media (…) to scope this rule'
+    : selector;
+  const activate = interactive
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: onActivate,
+        onKeyDown: (e: KeyboardEvent<HTMLSpanElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onActivate?.();
+          }
+        },
+      }
+    : {};
+
+  if (!parts) {
+    return (
+      <CascadeChip
+        tone={selectorTone(selector)}
+        interactive={interactive}
+        title={title}
+        {...activate}
+      >
+        <span className="ss-cascade-chip__content">{selector}</span>
+      </CascadeChip>
+    );
+  }
+
+  return (
+    <span className="ss-cascade-selector-display" title={title} aria-label={selector} {...activate}>
+      <SelectorParts selector={selector} />
+    </span>
+  );
 }
 
 /** A top-level rule's selector as ONE intelligent field — just like writing real
@@ -34,28 +119,15 @@ export function SelectorChip({
 
   if (!editing) {
     return (
-      <CascadeChip
-        tone={selectorTone(selector)}
+      <SelectorDisplay
+        selector={selector}
         interactive
-        title="Click to edit — type a selector, or @media (…) to scope this rule"
-        role="button"
-        tabIndex={0}
-        onClick={() => {
+        onActivate={() => {
           setText(selector);
           setActive(0);
           setEditing(true);
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setText(selector);
-            setActive(0);
-            setEditing(true);
-          }
-        }}
-      >
-        <span className="ss-cascade-chip__content">{selector}</span>
-      </CascadeChip>
+      />
     );
   }
 

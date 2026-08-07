@@ -88,6 +88,7 @@ export function PropControlRenderer({
           label={control.label}
           prefix={control.prefix}
           css={control.css}
+          valueType={control.valueType}
           currentClass={ctx.currentClass}
           layer={ctx.layer}
           onApplyEnum={ctx.onApplyEnum}

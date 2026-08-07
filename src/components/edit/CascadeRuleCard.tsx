@@ -23,7 +23,7 @@ import { isKeyframesSelector } from '../../lib/cssStructures';
 import { KeyframesNameChip, keyframesName } from './KeyframesNameChip';
 import { NestedSelectorInput } from './NestedSelectorInput';
 import { RuleContextChips } from './RuleContextChips';
-import { SelectorChip, selectorTone } from './SelectorChip';
+import { SelectorChip, SelectorDisplay } from './SelectorChip';
 import {
   declarations,
   nestedRules,
@@ -257,12 +257,7 @@ export function CascadeRuleCard(props: Props) {
             onWrap={props.onWrap}
           />
         ) : (
-          <code
-            className={`ss-cascade-chip ss-cascade-card__selector-chip${selectorTone(props.selector) === 'tag' ? ' ss-cascade-card__selector-chip--tag' : ''}`}
-            title={props.selector}
-          >
-            {props.selector}
-          </code>
+          <SelectorDisplay selector={props.selector} />
         )}
         <span className="ss-cascade-card__head-spacer" />
         {props.editable && props.draft && (
@@ -289,6 +284,12 @@ export function CascadeRuleCard(props: Props) {
           >
             <TrashIcon size={12} />
           </button>
+        )}
+        {props.file && (
+          <span className="ss-cascade-card__src-chip" title={`${props.file}:${props.line}`}>
+            <FileTextIcon size={11} />
+            {fileLabel(props.file)}
+          </span>
         )}
       </div>
     </>
@@ -387,6 +388,18 @@ export function CascadeRuleCard(props: Props) {
             />
           ))}
 
+          <div className="ss-cascade-card__add-row">
+            <AddMenu
+              mode={isKeyframes ? 'keyframes' : isStep ? 'props' : 'full'}
+              autoOpen={props.editable && props.autoOpenAdd}
+              onAddProperty={(prop) => {
+                onChange(addDeclaration(body, { prop, value: '', important: false }));
+                setAutoEditProp(prop); // → the new row opens its value input
+              }}
+              onNest={(sel) => onChange(addNestedRule(body, sel))}
+            />
+          </div>
+
           {prediction && (
             <div
               className="ss-decl ss-decl--ghost"
@@ -453,24 +466,6 @@ export function CascadeRuleCard(props: Props) {
               onDelete={() => onChange(removeItem(body, r.index))}
             />
           ))}
-
-          <footer className="ss-cascade-card__foot">
-            <AddMenu
-              mode={isKeyframes ? 'keyframes' : isStep ? 'props' : 'full'}
-              autoOpen={props.editable && props.autoOpenAdd}
-              onAddProperty={(prop) => {
-                onChange(addDeclaration(body, { prop, value: '', important: false }));
-                setAutoEditProp(prop); // → the new row opens its value input
-              }}
-              onNest={(sel) => onChange(addNestedRule(body, sel))}
-            />
-            {props.file && (
-              <span className="ss-cascade-card__src-chip" title={`${props.file}:${props.line}`}>
-                <FileTextIcon size={11} />
-                {fileLabel(props.file)}
-              </span>
-            )}
-          </footer>
         </div>
       )}
     </section>

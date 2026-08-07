@@ -43,6 +43,12 @@ export function PanelLeftIcon({ size = 16 }: IconProps) {
   );
 }
 
+export function ElementsIcon({ size = 16, className }: IconProps) {
+  return (
+    <NewDesignIcon iconName="ElementsIcon" source="Elements" size={size} className={className} />
+  );
+}
+
 export function ExpandIcon({ size = 16, className }: IconProps) {
   return <NewDesignIcon iconName="ExpandIcon" source="Expand" size={size} className={className} />;
 }

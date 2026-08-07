@@ -1,7 +1,7 @@
 /**
  * One `property: value` row. The prop and value render as plain (wrapping) text;
- * clicking either opens an `EditPopover` next to it — the editing convention (a text
- * input now; a color picker / dragger later). `!` toggles `!important`, ✕ removes it.
+ * clicking either replaces that text with an editor in the same grid column.
+ * `!` toggles `!important`, ✕ removes it.
  * Overridden declarations render struck-through, with a tooltip naming what wins.
  */
 
@@ -59,25 +59,9 @@ function Swatch({ value }: { value: string }) {
 export function DeclarationRow(props: Props) {
   const { decl, overridden } = props;
   const tipProps = overriddenTooltipProps(overridden, props.overriddenBy);
-  // The anchor element is captured from the click event (never read from a ref
-  // during render). Clicking the same field again toggles the popover closed.
-  const [editing, setEditing] = useState<null | { field: 'prop' | 'value'; anchor: HTMLElement }>(
-    null
-  );
-  const toggle = (field: 'prop' | 'value') => (e: React.MouseEvent<HTMLButtonElement>) => {
-    const anchor = e.currentTarget;
-    setEditing((cur) => (cur?.field === field ? null : { field, anchor }));
-  };
-
-  // Editing-flow: when this row was just added, open its value editor on mount so the
-  // user lands straight in the value input (anchored to the value button).
-  const valueBtnRef = useRef<HTMLButtonElement>(null);
   const autoEditValue = props.editable && props.autoEditValue;
-  useEffect(() => {
-    if (autoEditValue && valueBtnRef.current) {
-      setEditing({ field: 'value', anchor: valueBtnRef.current });
-    }
-  }, [autoEditValue]);
+  // Editing-flow: a newly added row mounts directly into its inline value input.
+  const [editing, setEditing] = useState<null | 'prop' | 'value'>(autoEditValue ? 'value' : null);
 
   if (!props.editable) {
     return (
@@ -97,24 +81,61 @@ export function DeclarationRow(props: Props) {
 
   return (
     <div className={`ss-decl${overridden ? ' is-overridden' : ''}`} {...tipProps}>
-      <button type="button" className="ss-decl__prop ss-decl__edit" onClick={toggle('prop')}>
-        {decl.prop || <span className="ss-decl__ph">property</span>}
-      </button>
+      {editing === 'prop' ? (
+        <EditPopover
+          inline
+          anchor={null}
+          initial={decl.prop}
+          options={CSS_PROPERTIES}
+          enableColorPicker={false}
+          placeholder="property"
+          onCommit={(prop) => onChange({ ...decl, prop })}
+          onClose={() => setEditing(null)}
+        />
+      ) : (
+        <button
+          type="button"
+          className="ss-decl__prop ss-decl__edit"
+          onClick={() => setEditing('prop')}
+        >
+          {decl.prop || <span className="ss-decl__ph">property</span>}
+        </button>
+      )}
       <span className="ss-decl__colon">:</span>
-      <button
-        ref={valueBtnRef}
-        type="button"
-        className="ss-decl__value ss-decl__edit"
-        onClick={toggle('value')}
-      >
-        <Swatch value={decl.value} />
-        {decl.value ? (
-          <CssValueText value={decl.value} />
-        ) : (
-          <span className="ss-decl__ph">value</span>
-        )}
-        {decl.important && <span className="ss-decl__imp"> !important</span>}
-      </button>
+      {editing === 'value' ? (
+        <EditPopover
+          inline
+          anchor={null}
+          initial={decl.important ? `${decl.value} !important` : decl.value}
+          options={suggestValues(decl.prop, props.variables ?? [], props.animations ?? [])}
+          enableColorPicker={false}
+          placeholder="value"
+          onCommit={(raw) => {
+            // `!important` is typed inline (no toggle button) — split it back out.
+            const m = /\s*!\s*important\s*$/i.exec(raw);
+            onChange(
+              m
+                ? { ...decl, value: raw.slice(0, m.index).trim(), important: true }
+                : { ...decl, value: raw.trim(), important: false }
+            );
+          }}
+          onClose={() => setEditing(null)}
+        />
+      ) : (
+        <button
+          type="button"
+          className="ss-decl__value ss-decl__edit"
+          onClick={() => setEditing('value')}
+        >
+          <Swatch value={decl.value} />
+          {decl.value ? (
+            <CssValueText value={decl.value} />
+          ) : (
+            <span className="ss-decl__ph">value</span>
+          )}
+          {decl.important && <span className="ss-decl__imp"> !important</span>}
+        </button>
+      )}
 
       <span className="ss-decl__actions">
         <NestControl nestTargets={nestTargets} onNest={onNest} />
@@ -128,35 +149,6 @@ export function DeclarationRow(props: Props) {
           <CloseIcon size={11} />
         </button>
       </span>
-
-      {editing?.field === 'prop' && (
-        <EditPopover
-          anchor={editing.anchor}
-          initial={decl.prop}
-          options={CSS_PROPERTIES}
-          placeholder="property"
-          onCommit={(prop) => onChange({ ...decl, prop })}
-          onClose={() => setEditing(null)}
-        />
-      )}
-      {editing?.field === 'value' && (
-        <EditPopover
-          anchor={editing.anchor}
-          initial={decl.important ? `${decl.value} !important` : decl.value}
-          options={suggestValues(decl.prop, props.variables ?? [], props.animations ?? [])}
-          placeholder="value"
-          onCommit={(raw) => {
-            // `!important` is typed inline (no toggle button) — split it back out.
-            const m = /\s*!\s*important\s*$/i.exec(raw);
-            onChange(
-              m
-                ? { ...decl, value: raw.slice(0, m.index).trim(), important: true }
-                : { ...decl, value: raw.trim(), important: false }
-            );
-          }}
-          onClose={() => setEditing(null)}
-        />
-      )}
     </div>
   );
 }

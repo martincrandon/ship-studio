@@ -17,6 +17,7 @@
 @import './components/tooltip.css';
 @import './components/middle-truncate.css';
 @import './components/typography.css';
+@import './components/value-field.css';
 
 /* Features */
 @import './features/setup.css';

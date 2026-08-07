@@ -128,11 +128,6 @@
   margin-left: auto;
 }
 
-.preview-toolbar > .preview-size-wrap {
-  order: 11;
-  margin-left: var(--space-1);
-}
-
 .preview-toolbar > .preview-fullscreen-btn:not(.preview-history-btn) {
   order: 12;
 }
@@ -148,6 +143,27 @@
 
 .preview-toolbar > .preview-inspect-control {
   order: 21;
+}
+
+/* Preview toolbar toggles use the outlined active treatment: the panel remains
+   visible behind the control, while the border communicates that the tool is
+   engaged. The shared button primitive's pressed state is intentionally a
+   filled surface for ordinary toggles, so keep this override local to these
+   panel controls. */
+.preview-toolbar > .preview-edit-control.button--secondary[aria-pressed='true'],
+.preview-toolbar > .preview-inspect-control.button--secondary[aria-pressed='true'] {
+  background: var(--surface-panel);
+  color: var(--button-text-default);
+  border-color: var(--button-border);
+}
+
+.preview-toolbar
+  > .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
+.preview-toolbar
+  > .preview-inspect-control.button--secondary[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--surface-panel);
+  color: var(--button-text-hover);
+  border-color: var(--button-border-outline);
 }
 
 .preview-toolbar > .preview-toolbar-plugins {
@@ -428,45 +444,45 @@
   gap: var(--button-gap);
 }
 
-.breakpoint-btn {
-  position: relative;
-  padding: 0 var(--spacing-md);
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  color: var(--text-muted);
+.preview-breakpoints {
+  display: flex;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+  align-items: center;
+  height: calc(var(--control-height-standard) + var(--spacing-xs) + var(--stroke-2));
+  box-sizing: border-box;
+  padding: var(--spacing-2xs);
+  border: var(--stroke-1) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.preview-breakpoint-tabs {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: color var(--transition);
-  outline: none;
 }
 
-.breakpoint-btn svg {
-  display: block;
-}
-
-.breakpoint-btn:hover,
-.breakpoint-btn:focus-visible {
+.preview-breakpoint-tabs .tabs__list {
+  gap: var(--spacing-3xs);
+  padding: 0;
+  border: none;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-secondary);
 }
 
-.breakpoint-btn.active {
-  background: transparent;
-  color: var(--text-primary);
+.preview-breakpoint-tabs .preview-breakpoint-tab.button.button--icon-only {
+  width: var(--space-32);
+  min-width: var(--space-32);
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  padding: 0 var(--spacing-sm);
+  border-radius: var(--radius-control);
 }
 
-.breakpoint-btn.active::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 2px 2px 0 0;
+.preview-breakpoint-tabs .tabs__indicator {
+  border-radius: var(--radius-control);
+  background: var(--surface-control);
+  box-shadow: var(--shadow-button);
 }
 
 .preview-zoom {

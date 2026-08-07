@@ -1,8 +1,8 @@
 /**
  * Variables editor — the project's CSS custom properties as design tokens. `:root`
- * tokens are editable (click a value → color picker / drag-scrub / text, with live
- * preview as you go); tokens scoped to other selectors are listed read-only, grouped by
- * their scope, so the panel stays truthful about where each is defined.
+ * tokens are editable (click a value → text editor; click a color swatch → picker),
+ * with live preview as you go; tokens scoped to other selectors are listed read-only,
+ * grouped by their scope, so the panel stays truthful about where each is defined.
  */
 
 import { useMemo, useState } from 'react';
@@ -101,10 +101,29 @@ export function CssVariablesPanel({
   );
 }
 
-function VariableValueMarker({ value }: { value: string }) {
+function VariableValueMarker({
+  value,
+  onClick,
+}: {
+  value: string;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   const c = colorSwatch(value);
-  if (c)
-    return <span className="ss-var-row__swatch" style={{ background: c }} aria-hidden="true" />;
+  if (c) {
+    if (!onClick) {
+      return <span className="ss-var-row__swatch" style={{ background: c }} aria-hidden="true" />;
+    }
+    return (
+      <button
+        type="button"
+        className="ss-var-row__swatch ss-var-row__swatch--button"
+        style={{ background: c }}
+        aria-label="Open color picker"
+        title="Open color picker"
+        onClick={onClick}
+      />
+    );
+  }
 
   const trimmed = value.trim();
   const type = /^var\(/i.test(trimmed)
@@ -150,7 +169,14 @@ function EditableVarRow({
   variableNames: string[];
   onSetValue: (value: string) => void;
 }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [editing, setEditing] = useState<
+    null | { kind: 'value' } | { kind: 'color'; anchor: HTMLElement }
+  >(null);
+  const toggleColorPicker = (anchor: HTMLElement) => {
+    setEditing((current) =>
+      current?.kind === 'color' && current.anchor === anchor ? null : { kind: 'color', anchor }
+    );
+  };
   // Offer the other tokens as `var(--…)` so a token can alias another.
   const options = useMemo(
     () => variableNames.filter((n) => n !== variable.name).map((n) => `var(${n})`),
@@ -160,31 +186,47 @@ function EditableVarRow({
   return (
     <div className="ss-var-row">
       <span className="ss-var-row__name">
-        <VariableValueMarker value={variable.value} />
+        <VariableValueMarker
+          value={variable.value}
+          onClick={(event) => toggleColorPicker(event.currentTarget)}
+        />
         <code>{variable.name}</code>
       </span>
       <span className="ss-var-row__colon">:</span>
-      <PropertyField
-        variant="variable"
-        size="compact"
-        className="ss-var-row__value"
-        title="Click to edit"
-        onClick={(e) => setAnchor(e.currentTarget)}
-      >
-        {variable.value ? (
-          <CssValueText value={variable.value} />
-        ) : (
-          <span className="ss-var-row__empty">empty</span>
-        )}
-      </PropertyField>
-      {anchor && (
+      {editing?.kind === 'value' ? (
         <EditPopover
-          anchor={anchor}
+          inline
+          anchor={null}
           initial={variable.value}
           options={options}
+          enableColorPicker={false}
           placeholder="value"
           onCommit={onSetValue}
-          onClose={() => setAnchor(null)}
+          onClose={() => setEditing(null)}
+        />
+      ) : (
+        <PropertyField
+          variant="variable"
+          size="compact"
+          className="ss-var-row__value"
+          title="Click to edit"
+          onClick={() => setEditing({ kind: 'value' })}
+        >
+          {variable.value ? (
+            <CssValueText value={variable.value} />
+          ) : (
+            <span className="ss-var-row__empty">empty</span>
+          )}
+        </PropertyField>
+      )}
+      {editing?.kind === 'color' && (
+        <EditPopover
+          anchor={editing.anchor}
+          initial={variable.value}
+          enableColorPicker
+          placeholder="value"
+          onCommit={onSetValue}
+          onClose={() => setEditing(null)}
         />
       )}
     </div>

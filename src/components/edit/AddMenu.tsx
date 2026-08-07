@@ -57,7 +57,20 @@ interface Section {
   rows: MenuRow[];
 }
 
-const MENU_WIDTH = 288;
+interface MenuAnchor {
+  card: DOMRect;
+  trigger: DOMRect;
+}
+
+function getMenuAnchor(button: HTMLElement): MenuAnchor {
+  return {
+    card:
+      button.closest<HTMLElement>('.ss-cascade-card')?.getBoundingClientRect() ??
+      button.getBoundingClientRect(),
+    trigger: button.getBoundingClientRect(),
+  };
+}
+
 const SEL_START = /^[&:>+~.#[*]/;
 const LOOKS_PROP = /^[a-zA-Z-]+$/;
 
@@ -65,9 +78,9 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  // The trigger's rect is captured from the click event (never read from a ref
-  // during render) and used to position the portaled menu.
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  // The selector card's rect is captured when the menu opens (never read from a ref
+  // during render) and used to position and size the portaled menu.
+  const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const listId = useId();
@@ -77,7 +90,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
   // the user lands straight in property selection without a second click.
   useEffect(() => {
     if (autoOpen && btnRef.current) {
-      setAnchor(btnRef.current.getBoundingClientRect());
+      setAnchor(getMenuAnchor(btnRef.current));
       setOpen(true);
     }
     // One-shot on the autoOpen signal.
@@ -207,13 +220,15 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
   // Position under the trigger, clamped; flip up if it would overflow below.
   const pos = useMemo(() => {
     if (!open || !anchor) return null;
-    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - MENU_WIDTH - 8));
-    const below = window.innerHeight - anchor.bottom;
-    const flip = below < 300 && anchor.top > below;
+    const width = anchor.card.width;
+    const left = Math.max(8, Math.min(anchor.card.left, window.innerWidth - width - 8));
+    const below = window.innerHeight - anchor.trigger.bottom;
+    const flip = below < 300 && anchor.trigger.top > below;
     return {
       left,
-      top: flip ? undefined : anchor.bottom + 4,
-      bottom: flip ? window.innerHeight - anchor.top + 4 : undefined,
+      width,
+      top: flip ? undefined : anchor.trigger.bottom + 4,
+      bottom: flip ? window.innerHeight - anchor.trigger.top + 4 : undefined,
     };
   }, [open, anchor]);
 
@@ -246,7 +261,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
       onClick={(e) => {
         if (open) close();
         else {
-          setAnchor(e.currentTarget.getBoundingClientRect());
+          setAnchor(getMenuAnchor(e.currentTarget));
           setOpen(true);
         }
       }}
@@ -270,7 +285,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
             left: pos.left,
             top: pos.top,
             bottom: pos.bottom,
-            width: MENU_WIDTH,
+            width: pos.width,
           }}
         >
           <input

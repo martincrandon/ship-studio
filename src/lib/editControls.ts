@@ -24,12 +24,24 @@ export type RegistryControl =
   | { kind: 'opacity'; key: string }
   | { kind: 'enum'; key: string; control: EnumControl }
   | { kind: 'color'; key: string; label: string; css: string; prefix: ColorPrefix }
-  | { kind: 'length'; key: string; label: string; prefix: string; css: string }
+  | {
+      kind: 'length';
+      key: string;
+      label: string;
+      prefix: string;
+      css: string;
+      valueType: 'size' | 'min-size' | 'max-size';
+    }
   | { kind: 'custom'; key: string };
 
 /** A sizing (length) row: width / height / max-width / min-height. */
-function lengthRow(label: string, prefix: string, css: string): RegistryControl {
-  return { kind: 'length', key: `length:${prefix}`, label, prefix, css };
+function lengthRow(
+  label: string,
+  prefix: string,
+  css: string,
+  valueType: 'size' | 'min-size' | 'max-size' = 'size'
+): RegistryControl {
+  return { kind: 'length', key: `length:${prefix}`, label, prefix, css, valueType };
 }
 
 export interface ControlSection {
@@ -66,8 +78,10 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     controls: [
       lengthRow('Width', 'w', 'width'),
       lengthRow('Height', 'h', 'height'),
-      lengthRow('Max W', 'max-w', 'max-width'),
-      lengthRow('Min H', 'min-h', 'min-height'),
+      lengthRow('Min W', 'min-w', 'min-width', 'min-size'),
+      lengthRow('Min H', 'min-h', 'min-height', 'min-size'),
+      lengthRow('Max W', 'max-w', 'max-width', 'max-size'),
+      lengthRow('Max H', 'max-h', 'max-height', 'max-size'),
       { kind: 'spacingBox', key: 'spacingBox' },
     ],
   },

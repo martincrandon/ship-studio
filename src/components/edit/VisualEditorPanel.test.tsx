@@ -643,9 +643,27 @@ describe('VisualEditorPanel', () => {
     expect(width.value).toBe('full');
   });
 
-  // ── Length preset menu (styled SuggestionPopover, not the OS datalist) ──
+  // ── Length value and format controls ──
 
-  it('opens a styled preset menu on focus and picks with Enter', () => {
+  it('offers property-specific keywords in the format menu', () => {
+    const onApplyEnum = vi.fn();
+    render(
+      <VisualEditorPanel
+        {...mk()}
+        selection={resolvedSelection}
+        currentClass=""
+        onApplyEnum={onApplyEnum}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Width format' }));
+
+    expect(screen.getByRole('listbox', { name: 'Width formats' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('option', { name: 'AUTO' }));
+
+    expect(onApplyEnum).toHaveBeenCalledWith('w-auto', { width: 'auto' });
+  });
+
+  it('accepts a Tailwind sizing keyword typed directly', () => {
     const onApplyEnum = vi.fn();
     render(
       <VisualEditorPanel
@@ -656,29 +674,10 @@ describe('VisualEditorPanel', () => {
       />
     );
     const width = screen.getByLabelText<HTMLInputElement>('Width');
-    fireEvent.focus(width);
-
-    // The app's own listbox renders (portaled), showing the presets.
-    const menu = screen.getByRole('listbox');
-    expect(menu).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'full' })).toBeInTheDocument();
-
-    // Arrows navigate the menu while it's open; Enter picks the active preset.
-    fireEvent.keyDown(width, { key: 'ArrowDown' });
+    fireEvent.change(width, { target: { value: 'full' } });
     fireEvent.keyDown(width, { key: 'Enter' });
-    expect(onApplyEnum).toHaveBeenCalledTimes(1);
-    const [token] = onApplyEnum.mock.calls[0] as [string];
-    expect(token.startsWith('w-')).toBe(true);
-  });
 
-  it('filters presets while typing a keyword', () => {
-    render(<VisualEditorPanel {...mk()} selection={resolvedSelection} currentClass="" />);
-    const width = screen.getByLabelText<HTMLInputElement>('Width');
-    fireEvent.focus(width);
-    fireEvent.change(width, { target: { value: 'fu' } });
-
-    expect(screen.getByRole('option', { name: 'full' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'screen' })).not.toBeInTheDocument();
+    expect(onApplyEnum).toHaveBeenCalledWith('w-full', { width: '100%' });
   });
 
   it('suppresses the preset menu on numeric text so arrows keep stepping', () => {

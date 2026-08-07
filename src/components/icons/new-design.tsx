@@ -13,6 +13,7 @@ import breakpointFull from './assets/new-design/breakpoint-full.svg?raw';
 import cancel from './assets/new-design/Cancel.svg?raw';
 import chevronDown from './assets/new-design/Chevron Down.svg?raw';
 import chevronRight from './assets/new-design/Chevron Right.svg?raw';
+import colorPicker from './assets/new-design/Color Picker.svg?raw';
 import closedEye from './assets/new-design/Closed Eye.svg?raw';
 import codeBlock from './assets/new-design/Code Block.svg?raw';
 import contract from './assets/new-design/Contract.svg?raw';
@@ -29,6 +30,7 @@ import displayFlex from './assets/new-design/display-flex.svg?raw';
 import displayGrid from './assets/new-design/display-grid.svg?raw';
 import displayInlineBlock from './assets/new-design/display-inline-block.svg?raw';
 import displayInlineFlex from './assets/new-design/display-inline-flex.svg?raw';
+import elements from './assets/new-design/elements.svg?raw';
 import expand from './assets/new-design/Expand.svg?raw';
 import external from './assets/new-design/External.svg?raw';
 import eye from './assets/new-design/Eye.svg?raw';
@@ -94,6 +96,7 @@ const sources = {
   Cancel: cancel,
   ChevronDown: chevronDown,
   ChevronRight: chevronRight,
+  ColorPicker: colorPicker,
   ClosedEye: closedEye,
   CodeBlock: codeBlock,
   Contract: contract,
@@ -110,6 +113,7 @@ const sources = {
   DisplayGrid: displayGrid,
   DisplayInlineBlock: displayInlineBlock,
   DisplayInlineFlex: displayInlineFlex,
+  Elements: elements,
   EditMode: editMode,
   Expand: expand,
   External: external,

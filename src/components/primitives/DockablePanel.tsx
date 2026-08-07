@@ -35,12 +35,19 @@ interface DockablePanelProps {
   placeholderClassName?: string;
   surfaceClassName?: string;
   placeholderRef?: RefObject<HTMLDivElement | null>;
+  /** Floating panels such as the colour picker can be movable without being resizable. */
+  resizable?: boolean;
+  /** Optional layer override for a docked, body-portaled surface. */
+  dockedZIndex?: CSSProperties['zIndex'];
 }
 
 const VIEWPORT_GUTTER = 8;
 const MIN_VISIBLE_HEADER = 40;
 const DEFAULT_MIN_FLOATING_SIZE = { width: 240, height: 180 };
 const KEYBOARD_RESIZE_STEP = 10;
+// Floating panels must remain beneath the modal overlay and portaled menus
+// (which use the tooltip layer), regardless of how long the app stays open.
+const MAX_FLOATING_PANEL_STACK_ORDER = 49;
 let nextFloatingPanelOrder = 0;
 
 function readPosition(key: string, fallback: () => Point): Point {
@@ -104,6 +111,8 @@ export function DockablePanel({
   placeholderClassName,
   surfaceClassName,
   placeholderRef,
+  resizable = true,
+  dockedZIndex,
 }: DockablePanelProps) {
   const internalPlaceholderRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -203,7 +212,7 @@ export function DockablePanel({
   }, [floatingSize]);
 
   const bringToFront = useCallback(() => {
-    nextFloatingPanelOrder += 1;
+    nextFloatingPanelOrder = (nextFloatingPanelOrder % MAX_FLOATING_PANEL_STACK_ORDER) + 1;
     setStackOrder(nextFloatingPanelOrder);
   }, []);
 
@@ -264,8 +273,12 @@ export function DockablePanel({
   // size unchanged in that case; the resize handles are the only interaction
   // that should change the panel dimensions.
   const renderedFloatingSize = {
-    width: Math.max(minFloatingSize.width, floatingPanelSize.width),
-    height: Math.max(minFloatingSize.height, floatingPanelSize.height),
+    width: resizable
+      ? Math.max(minFloatingSize.width, floatingPanelSize.width)
+      : floatingSize.width,
+    height: resizable
+      ? Math.max(minFloatingSize.height, floatingPanelSize.height)
+      : floatingSize.height,
   };
 
   const resizeFloatingWidth = useCallback(
@@ -390,6 +403,12 @@ export function DockablePanel({
     height: renderedFloatingSize.height,
     zIndex: `calc(var(--z-floating-panel) + ${stackOrder})`,
   };
+  // Keep layer ownership tied to the panel's actual presentation state.
+  // Feature classes such as `--preview` must never promote a docked panel
+  // above a floating one merely because both surfaces share that feature.
+  const surfaceStyle: CSSProperties = docked
+    ? { ...dockStyle, zIndex: dockedZIndex ?? 'var(--z-dropdown)' }
+    : floatingStyle;
 
   return (
     <>
@@ -406,7 +425,7 @@ export function DockablePanel({
           className={`dockable-panel__surface ${
             docked ? 'dockable-panel__surface--docked' : 'dockable-panel__surface--floating'
           }${!visible ? ' is-hidden' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`}
-          style={docked ? dockStyle : floatingStyle}
+          style={surfaceStyle}
           aria-label={ariaLabel}
           aria-hidden={!visible}
           onPointerDown={handlePointerDown}
@@ -415,7 +434,7 @@ export function DockablePanel({
           onPointerCancel={handlePointerUp}
         >
           {children}
-          {!docked && (
+          {!docked && resizable && (
             <>
               <PanelResizeHandle
                 value={renderedFloatingSize.width}

@@ -1,7 +1,8 @@
 /**
- * A small popup editor anchored next to a clicked declaration prop/value. The
- * convention: click a value → this opens right beside it with the current value
- * pre-selected; type and press Enter to save, Escape cancels, click-away commits.
+ * The shared CSS value editor. Text values can render in place inside the value's
+ * existing column; color values can still open the dedicated floating picker.
+ * The current value is pre-selected; Enter saves, Escape cancels, and click-away
+ * commits.
  *
  * It's the seam for value-type-specific editors. When the value is a color it shows
  * the Tailwind editor's `ColorPicker`; otherwise a text input with a custom
@@ -12,21 +13,42 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
+import { DockablePanel } from '../primitives/DockablePanel';
 import { ColorPicker } from './ColorPicker';
 import { CssValueText } from './CssValueText';
 import { colorSwatch, parseNumericValue, formatNumericValue } from '../../lib/cssProperties';
+import {
+  COLOR_PICKER_GUTTER,
+  COLOR_PICKER_HEIGHT,
+  COLOR_PICKER_POSITION_KEY,
+  COLOR_PICKER_SIZE_KEY,
+  COLOR_PICKER_WIDTH,
+} from '../../lib/color';
 
 interface Props {
   anchor: HTMLElement | null;
+  /** Render the text editor in document flow instead of in a floating surface. */
+  inline?: boolean;
   initial: string;
   /** Autocomplete options (text mode) — filtered as you type. */
   options?: string[];
+  /** Keep color values in the text editor instead of opening the picker. */
+  enableColorPicker?: boolean;
   placeholder?: string;
   onCommit: (value: string) => void;
   onClose: () => void;
 }
 
-export function EditPopover({ anchor, initial, options, placeholder, onCommit, onClose }: Props) {
+export function EditPopover({
+  anchor,
+  inline = false,
+  initial,
+  options,
+  enableColorPicker = true,
+  placeholder,
+  onCommit,
+  onClose,
+}: Props) {
   const [text, setText] = useState(initial);
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,8 +60,8 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
     textRef.current = text;
   }, [text]);
 
-  const isColor = colorSwatch(initial) !== null;
-  const width = isColor ? 224 : 220;
+  const isColor = !inline && enableColorPicker && colorSwatch(initial) !== null;
+  const width = isColor ? COLOR_PICKER_WIDTH : 220;
 
   // Filter the options by what's typed; hide the menu when the sole match is exactly
   // the current text (nothing left to suggest).
@@ -67,19 +89,34 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
   // Position just below-left of the anchor, clamped into the viewport. Computed
   // from the anchor's measured rect at open time (anchor is stable while open).
   const pos = useMemo(() => {
+    if (inline) return { top: 0, left: 0 };
     if (!anchor) return null;
     const r = anchor.getBoundingClientRect();
+    if (isColor) {
+      let left = r.left - width - COLOR_PICKER_GUTTER;
+      if (left < COLOR_PICKER_GUTTER) left = r.right + COLOR_PICKER_GUTTER;
+      left = Math.min(
+        Math.max(COLOR_PICKER_GUTTER, left),
+        Math.max(COLOR_PICKER_GUTTER, window.innerWidth - width - COLOR_PICKER_GUTTER)
+      );
+      const maxTop = Math.max(
+        COLOR_PICKER_GUTTER,
+        window.innerHeight - COLOR_PICKER_HEIGHT - COLOR_PICKER_GUTTER
+      );
+      const top = Math.min(Math.max(COLOR_PICKER_GUTTER, r.top), maxTop);
+      return { top, left };
+    }
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
-    const top = Math.min(r.bottom + 4, window.innerHeight - (isColor ? 240 : 60));
+    const top = Math.min(r.bottom + 4, window.innerHeight - 60);
     return { top, left };
-  }, [anchor, width, isColor]);
+  }, [anchor, width, isColor, inline]);
 
   // Focus + select the current value on open (text mode).
   useEffect(() => {
     if (isColor) return;
     const el = inputRef.current;
     if (el) {
-      el.focus();
+      el.focus({ preventScroll: true });
       el.select();
     }
   }, [isColor]);
@@ -101,7 +138,12 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
         if (popRef.current?.contains(t)) return false;
         // Clicking the anchor again is a toggle — let its own onClick close us.
         if (anchor?.contains(t)) return false;
-        if (t.closest?.('.ss-enum__menu, .ss-color-popover')) return false;
+        if (
+          t.closest?.(
+            '.ss-enum__menu, .ss-color-picker__floating-surface, .ss-color-picker__format-menu'
+          )
+        )
+          return false;
         return true;
       },
     }
@@ -109,6 +151,7 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (document.querySelector('.ss-color-picker__format-menu')) return;
         e.stopPropagation();
         onClose();
       }
@@ -118,123 +161,144 @@ export function EditPopover({ anchor, initial, options, placeholder, onCommit, o
   }, [onClose]);
 
   if (!pos) return null;
-  return createPortal(
-    <div
-      ref={popRef}
-      className={`ss-value-pop${isColor ? ' ss-value-pop--color' : ''}`}
-      style={{ position: 'fixed', top: pos.top, left: pos.left, width }}
+  const editor = isColor ? (
+    <DockablePanel
+      docked={false}
+      ariaLabel="Color picker"
+      positionKey={COLOR_PICKER_POSITION_KEY}
+      sizeKey={COLOR_PICKER_SIZE_KEY}
+      floatingSize={{ width: COLOR_PICKER_WIDTH, height: COLOR_PICKER_HEIGHT }}
+      initialPosition={() => ({ left: pos.left, top: pos.top })}
+      resizable={false}
+      surfaceClassName="ss-color-picker__floating-surface"
     >
-      {isColor ? (
+      <div ref={popRef} className="ss-color-picker__floating-content">
         <ColorPicker
           value={text}
           onChange={(c) => {
             setText(c);
             onCommit(c); // live-apply as you drag
           }}
+          onClose={() => {
+            onClose();
+            anchor?.focus({ preventScroll: true });
+          }}
         />
-      ) : (
-        <>
-          <div className="ss-value-pop__field">
-            {parseNumericValue(text) && (
-              <ScrubHandle
-                value={text}
-                onScrub={(v) => {
-                  setText(v);
-                  onCommit(v); // live-apply as you drag
-                }}
-              />
+      </div>
+    </DockablePanel>
+  ) : (
+    <div
+      ref={popRef}
+      className={`ss-value-pop${inline ? ' ss-value-pop--inline' : ''}`}
+      style={inline ? undefined : { position: 'fixed', top: pos.top, left: pos.left, width }}
+    >
+      <>
+        <div className="ss-value-pop__field">
+          {parseNumericValue(text) && (
+            <ScrubHandle
+              value={text}
+              onScrub={(v) => {
+                setText(v);
+                onCommit(v); // live-apply as you drag
+              }}
+            />
+          )}
+          <span className="ss-value-pop__inputwrap">
+            {ghostSuffix && (
+              <span className="ss-value-pop__ghost" aria-hidden="true">
+                <span className="ss-value-pop__ghost-typed">{text}</span>
+                <span className="ss-value-pop__ghost-hint">{ghostSuffix}</span>
+              </span>
             )}
-            <span className="ss-value-pop__inputwrap">
-              {ghostSuffix && (
-                <span className="ss-value-pop__ghost" aria-hidden="true">
-                  <span className="ss-value-pop__ghost-typed">{text}</span>
-                  <span className="ss-value-pop__ghost-hint">{ghostSuffix}</span>
-                </span>
-              )}
-              <input
-                ref={inputRef}
-                className="ss-value-pop__input"
-                value={text}
-                spellCheck={false}
-                autoComplete="off"
-                role="combobox"
-                aria-expanded={showMenu}
-                aria-controls={listId}
-                aria-activedescendant={showMenu ? optionId(active) : undefined}
-                aria-autocomplete="list"
-                placeholder={placeholder}
-                onChange={(e) => {
-                  setText(e.target.value);
+            <input
+              ref={inputRef}
+              className="ss-value-pop__input"
+              value={text}
+              spellCheck={false}
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={showMenu}
+              aria-controls={listId}
+              aria-activedescendant={showMenu ? optionId(active) : undefined}
+              aria-autocomplete="list"
+              placeholder={placeholder}
+              onChange={(e) => {
+                setText(e.target.value);
+                setActive(0);
+              }}
+              onBlur={(e) => {
+                if (!inline || popRef.current?.contains(e.relatedTarget)) return;
+                onCommit(textRef.current);
+                onClose();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && ghostSuffix) {
+                  e.preventDefault();
+                  setText(text + ghostSuffix);
                   setActive(0);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab' && ghostSuffix) {
-                    e.preventDefault();
-                    setText(text + ghostSuffix);
-                    setActive(0);
+                  return;
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (ghostSuffix) {
+                    onCommit(text + ghostSuffix);
+                    onClose();
                     return;
                   }
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (ghostSuffix) {
-                      onCommit(text + ghostSuffix);
-                      onClose();
-                      return;
-                    }
-                    const pick = showMenu ? (matches[active] ?? text) : text;
-                    onCommit(pick);
+                  const pick = showMenu ? (matches[active] ?? text) : text;
+                  onCommit(pick);
+                  onClose();
+                } else if (e.key === 'ArrowDown' && showMenu) {
+                  e.preventDefault();
+                  setActive((a) => Math.min(a + 1, matches.length - 1));
+                } else if (e.key === 'ArrowUp' && showMenu) {
+                  e.preventDefault();
+                  setActive((a) => Math.max(a - 1, 0));
+                } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                  // Menu closed: step a numeric value (same conventions as
+                  // drag-to-scrub) and live-apply. Non-numeric values keep
+                  // the default caret behavior.
+                  const next = stepNumericValue(text, e.key === 'ArrowUp' ? 1 : -1, e);
+                  if (next === null) return;
+                  e.preventDefault();
+                  setText(next);
+                  setActive(0);
+                  onCommit(next); // live-apply, like scrubbing
+                }
+              }}
+            />
+          </span>
+        </div>
+        {showMenu && (
+          <div className="ss-add-menu ss-value-pop__menu">
+            <div className="ss-add-menu__list" role="listbox" id={listId}>
+              {matches.map((o, i) => (
+                <button
+                  key={o}
+                  type="button"
+                  role="option"
+                  id={optionId(i)}
+                  aria-selected={active === i}
+                  className={`ss-add-menu__item${active === i ? ' is-active' : ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onCommit(o);
                     onClose();
-                  } else if (e.key === 'ArrowDown' && showMenu) {
-                    e.preventDefault();
-                    setActive((a) => Math.min(a + 1, matches.length - 1));
-                  } else if (e.key === 'ArrowUp' && showMenu) {
-                    e.preventDefault();
-                    setActive((a) => Math.max(a - 1, 0));
-                  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                    // Menu closed: step a numeric value (same conventions as
-                    // drag-to-scrub) and live-apply. Non-numeric values keep
-                    // the default caret behavior.
-                    const next = stepNumericValue(text, e.key === 'ArrowUp' ? 1 : -1, e);
-                    if (next === null) return;
-                    e.preventDefault();
-                    setText(next);
-                    setActive(0);
-                    onCommit(next); // live-apply, like scrubbing
-                  }
-                }}
-              />
-            </span>
-          </div>
-          {showMenu && (
-            <div className="ss-add-menu ss-value-pop__menu">
-              <div className="ss-add-menu__list" role="listbox" id={listId}>
-                {matches.map((o, i) => (
-                  <button
-                    key={o}
-                    type="button"
-                    role="option"
-                    id={optionId(i)}
-                    aria-selected={active === i}
-                    className={`ss-add-menu__item${active === i ? ' is-active' : ''}`}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      onCommit(o);
-                      onClose();
-                    }}
-                  >
-                    <code className="ss-add-menu__label">
-                      <CssValueText value={o} />
-                    </code>
-                  </button>
-                ))}
-              </div>
+                  }}
+                >
+                  <code className="ss-add-menu__label">
+                    <CssValueText value={o} />
+                  </code>
+                </button>
+              ))}
             </div>
-          )}
-        </>
-      )}
-    </div>,
-    document.body
+          </div>
+        )}
+      </>
+    </div>
   );
+
+  return inline ? editor : createPortal(editor, document.body);
 }
 
 /** Per-pixel step scaled to the value's magnitude, so big numbers (700) move fast and

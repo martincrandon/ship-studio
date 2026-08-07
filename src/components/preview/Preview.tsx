@@ -104,6 +104,8 @@ const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
   return <MobileIcon />;
 };
 
+const PREVIEW_BREAKPOINTS = Object.keys(BREAKPOINTS) as Breakpoint[];
+
 /** Props for the Preview component */
 interface PreviewProps {
   /** Dev server port (default: 3000) */
@@ -1110,7 +1112,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         ...(showTree && elementTreePinned && treePanelWidth !== null
           ? {
               gridTemplateColumns: `${treePanelWidth}px minmax(0, 1fr)${
-                activeEditMode && editorPinned ? ' var(--editor-panel-w)' : ''
+                activeEditMode && editorPinned ? ' var(--editor-panel-visual-w)' : ''
               }`,
             }
           : undefined),
@@ -1132,6 +1134,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           <ToggleButton
             type="button"
             className="preview-edit-control"
+            variant={activeEditMode ? 'secondary' : 'default'}
             onClick={toggleActiveEditor}
             title="Toggle visual editor"
             pressed={activeEditMode}
@@ -1165,7 +1168,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           <ToggleButton
             type="button"
             className="preview-inspect-control"
-            variant="default"
+            variant={showLogs ? 'secondary' : 'default'}
             pressed={showLogs}
             onClick={onToggleLogs}
             title={showLogs ? 'Hide inspector' : 'Show inspector'}
@@ -1291,45 +1294,51 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
         {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
 
-        {iframeSize &&
-          iframeSize.w > 0 &&
-          iframeSize.h > 0 &&
-          (() => {
-            // The wrapper reports its VISUAL box; when the frame is scaled to
-            // fit, the page actually lays out at the true (unscaled) size —
-            // that's the honest number to show (and to let the user set).
-            const w = Math.round(iframeSize.w / resize.previewScale);
-            const h = Math.round(iframeSize.h / resize.previewScale);
-            return (
-              <PreviewSizeControl
-                width={w}
-                height={h}
-                hasCustomHeight={resize.customHeight !== null}
-                scalePercent={
-                  resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
-                }
-                onApply={resize.previewAtSize}
-                onFit={() => resize.handleBreakpointClick('full')}
-                openSignal={sizePopoverSignal}
-              />
-            );
-          })()}
-
         <div className="preview-breakpoints" data-education-id="breakpoints">
-          {(Object.keys(BREAKPOINTS) as Breakpoint[]).map((bp) => {
-            // Every preset is always available — one wider than the pane
-            // renders at true size and scales down to fit (previewScale).
-            return (
-              <button
-                key={bp}
-                className={`breakpoint-btn ${resize.getActiveBreakpoint() === bp ? 'active' : ''}`}
-                onClick={() => resize.handleBreakpointClick(bp)}
-                title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
-              >
-                <BreakpointIcon type={bp} />
-              </button>
-            );
-          })}
+          <Tabs
+            value={resize.getActiveBreakpoint()}
+            onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
+            className="preview-breakpoint-tabs"
+          >
+            <TabsList aria-label="Preview viewport sizes">
+              {PREVIEW_BREAKPOINTS.map((bp) => (
+                <TabsTab
+                  key={bp}
+                  value={bp}
+                  className="preview-breakpoint-tab button--icon-only"
+                  size="default"
+                  aria-label={BREAKPOINTS[bp].label}
+                  title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
+                >
+                  <BreakpointIcon type={bp} />
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
+
+          {iframeSize &&
+            iframeSize.w > 0 &&
+            iframeSize.h > 0 &&
+            (() => {
+              // The wrapper reports its VISUAL box; when the frame is scaled to
+              // fit, the page actually lays out at the true (unscaled) size —
+              // that's the honest number to show (and to let the user set).
+              const w = Math.round(iframeSize.w / resize.previewScale);
+              const h = Math.round(iframeSize.h / resize.previewScale);
+              return (
+                <PreviewSizeControl
+                  width={w}
+                  height={h}
+                  hasCustomHeight={resize.customHeight !== null}
+                  scalePercent={
+                    resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
+                  }
+                  onApply={resize.previewAtSize}
+                  onFit={() => resize.handleBreakpointClick('full')}
+                  openSignal={sizePopoverSignal}
+                />
+              );
+            })()}
         </div>
 
         {conn.serverReady && conn.externalUrl && (
@@ -1560,6 +1569,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             placeholderClassName="ss-tree-panel-dock"
             surfaceClassName="dockable-panel__surface--preview"
             placeholderRef={treePanelRef}
+            dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
           >
             <ElementTreePanel
               tree={elementTree.tree}
@@ -1665,15 +1675,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           return editorPinned ? (
             <div ref={editorPanelDockRef} className="ss-edit-panel-dock">
               {panel}
-              <PanelResizeHandle
-                value={editorPanelWidth}
-                min={EDITOR_PANEL_MIN_WIDTH_PX}
-                max={EDITOR_PANEL_MAX_WIDTH_PX}
-                label="Resize CSS panel"
-                className="ss-edit-panel-dock__resize"
-                onResize={resizeEditorPanel}
-                onResizeBy={resizeEditorPanelBy}
-              />
             </div>
           ) : (
             createPortal(panel, document.body)
@@ -1698,6 +1699,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 })}
                 placeholderClassName="ss-edit-panel-dock__slot"
                 surfaceClassName="dockable-panel__surface--preview"
+                dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
               >
                 <CssCascadePanel
                   selection={cssEditor.selection}

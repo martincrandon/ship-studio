@@ -177,6 +177,7 @@
   --font-size-micro: 7px;
   --tracking-micro: 0.56px;
   --size-element-toolbar-selector: 140px;
+  --size-preview-dimensions: 96px;
 
   --size-sidebar-project-shortcut: 24px;
   --size-sidebar-project: 214px;
@@ -191,8 +192,9 @@
   --size-icon-gallery-width: 480px;
   --size-icon-gallery-column: 120px;
 
-  --size-color-picker-width: 336px;
-  --size-color-picker-surface: 212px;
+  --size-color-picker-width: 320px;
+  --size-color-picker-height: 510px;
+  --size-color-picker-header: var(--panel-header-h);
   --size-source-control-popover: 320px;
   --size-source-control-branch: 140px;
 
@@ -378,7 +380,6 @@
   --popover-color-picker-width: var(--size-color-picker-width);
   --popover-source-control-width: var(--size-source-control-popover);
   --source-control-branch-max-width: var(--size-source-control-branch);
-  --color-picker-surface-height: var(--size-color-picker-surface);
 
   /* ========================================================================
    * Legacy Tokens
@@ -587,6 +588,7 @@
   --transition-fast: 0.1s ease;
   --transition: 0.15s ease;
   --transition-slow: 0.3s ease;
+  --transition-icon-swap: 0.3s cubic-bezier(0.2, 0, 0, 1);
 
   /* Type scale — dense desktop UI, hence 1px steps at the small end.
    * Off-scale sizes (9px, 15px, 17px…) are migration debt: round to the

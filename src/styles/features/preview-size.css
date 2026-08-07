@@ -3,22 +3,32 @@
  * the toolbar "1440 × 900" button and the width/height inputs it opens.
  */
 
-/* Wrapper anchors the size popover; owns the auto-margin push right. */
+/* Wrapper anchors the size popover inside the breakpoint control group. */
 .preview-size-wrap {
   position: relative;
   display: inline-flex;
-  margin-left: auto;
+  align-items: center;
+  flex-shrink: 0;
+  width: var(--size-preview-dimensions);
+  min-width: var(--size-preview-dimensions);
+  height: var(--control-height-standard);
 }
 
 .preview-dimensions {
-  padding: 2px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  width: 100%;
+  padding: 0 var(--spacing-sm);
+  border: var(--stroke-1) solid transparent;
+  border-radius: var(--radius-control);
   background: transparent;
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
+  color: var(--text-faint);
   user-select: none;
   white-space: nowrap;
   cursor: pointer;
@@ -28,9 +38,10 @@
     border-color var(--transition);
 }
 
-.preview-dimensions:hover:not(:disabled) {
+.preview-dimensions:hover:not(:disabled),
+.preview-dimensions:focus-visible {
   background: var(--surface-control);
-  border-color: var(--border-default);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
@@ -40,26 +51,6 @@
 
 .preview-dimensions:disabled {
   cursor: default;
-}
-
-.preview-breakpoints {
-  display: flex;
-  align-self: stretch;
-  align-items: stretch;
-  gap: 0;
-  /* Cancel the parent .preview-toolbar's 9px top/bottom padding so the
-     tabs span the full toolbar height — lets the active underline sit
-     flush with the toolbar's bottom border. */
-  margin-top: -9px;
-  margin-bottom: -9px;
-  margin-left: auto;
-  margin-right: 0;
-}
-
-/* When the dimensions readout precedes the breakpoints, it owns the
-   auto-margin push so the two sit together on the right edge. */
-.preview-size-wrap + .preview-breakpoints {
-  margin-left: auto;
 }
 
 /* Exact-size popover under the dimensions readout. */

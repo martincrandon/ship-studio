@@ -690,9 +690,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  /* Left padding is 0: the terminal content already has a left offset, so a
-     left pad here would double it and push the card right. */
-  padding: var(--spacing-md) var(--spacing-md) var(--spacing-md) 0;
+  /* Match the footer's horizontal gutter so the card aligns with the Undo /
+     Redo controls on the left and Agent Settings on the right. */
+  padding: var(--spacing-md);
   pointer-events: none;
 }
 
