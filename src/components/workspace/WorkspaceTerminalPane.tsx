@@ -46,6 +46,7 @@ interface TerminalSessionView {
   sessionEpoch: number;
 }
 
+/** Props for the agent terminal dock, tabs, splits, and session controls. */
 export interface WorkspaceTerminalPaneProps {
   currentProject: Project;
   allSessions: TerminalSessionView[];
@@ -107,6 +108,7 @@ export interface WorkspaceTerminalPaneProps {
 
 const AGENT_PANEL_FLOATING_SIZE = { width: 560, height: 680 };
 
+/** Renders and coordinates the workspace agent terminal pane. */
 export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
   const {
     currentProject,

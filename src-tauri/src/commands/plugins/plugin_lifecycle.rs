@@ -57,19 +57,56 @@ fn resolve_git() -> Result<PathBuf, CommandError> {
     })
 }
 
-/// `fs::rename` with a few retries. On Windows a rename briefly fails with a
-/// sharing violation while antivirus / the search indexer scan files git just
-/// wrote; a moment later the same rename succeeds.
+/// `fs::rename` with retries and a copy fallback. On Windows a rename fails
+/// with a sharing violation / "Access is denied" while antivirus or the search
+/// indexer scans files git just wrote. The old ~600ms retry window regularly
+/// lost that race — Defender scans of a fresh clone can hold locks for
+/// seconds (issue #244) — so back off up to ~5s, then fall back to
+/// copy+delete: copying only needs read access to the source files, not the
+/// exclusive lock on the whole tree that a rename requires.
 fn rename_with_retry(from: &Path, to: &Path) -> std::io::Result<()> {
     let mut result = fs::rename(from, to);
-    for _ in 0..4 {
+    let mut delay = std::time::Duration::from_millis(100);
+    for _ in 0..6 {
         if result.is_ok() {
             return Ok(());
         }
-        std::thread::sleep(std::time::Duration::from_millis(120));
+        std::thread::sleep(delay);
+        delay = (delay * 2).min(std::time::Duration::from_millis(1600));
         result = fs::rename(from, to);
     }
-    result
+    let Err(rename_err) = result else {
+        return Ok(());
+    };
+    tracing::warn!(
+        "rename {} -> {} still failing after retries ({rename_err}); falling back to copy",
+        from.display(),
+        to.display()
+    );
+    if let Err(copy_err) = copy_dir_recursive(from, to) {
+        // Don't leave a half-copied plugin behind — it would load broken.
+        let _ = remove_dir_all_relaxed(to);
+        return Err(copy_err);
+    }
+    // Source cleanup is best-effort: the plugin is installed either way, and
+    // the stale `.tmp-install` dir is cleared at the start of the next install.
+    let _ = remove_dir_all_relaxed(from);
+    Ok(())
+}
+
+/// Recursively copy a directory tree. Fallback path for `rename_with_retry`.
+fn copy_dir_recursive(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
 }
 
 /// `fs::remove_dir_all` that first clears read-only attributes. Git marks pack
@@ -239,16 +276,32 @@ pub async fn install_plugin(
         Ok(m) => m,
         Err(e) => {
             let _ = remove_dir_all_relaxed(&temp_dir);
-            return Err((format!("Invalid plugin: {e}")).into());
+            // Repo-content problems (manifest not at root, bad JSON) are the
+            // plugin author's input, not an app malfunction (issue #472).
+            return Err(CommandError::expected(format!("Invalid plugin: {e}")));
         }
     };
 
     warn_on_setup_items(&manifest);
 
+    // Validate the built bundle exists before registering anything — a repo
+    // without a committed dist/ otherwise installs "successfully" and only
+    // fails later with a confusing "Plugin bundle not found" when the app
+    // tries to load it (issue #381). Mirrors link_dev_plugin's check.
+    if !temp_dir.join("dist").join("index.js").exists() {
+        let _ = remove_dir_all_relaxed(&temp_dir);
+        return Err(CommandError::expected(
+            "This plugin can't be installed: its repository has no built bundle (dist/index.js). \
+             The plugin author needs to build it and commit the dist folder.",
+        ));
+    }
+
     // Validate manifest has required fields
     if manifest.id.is_empty() || manifest.name.is_empty() {
         let _ = remove_dir_all_relaxed(&temp_dir);
-        return Err(("Plugin manifest must have 'id' and 'name' fields".to_string()).into());
+        return Err(CommandError::expected(
+            "Plugin manifest must have 'id' and 'name' fields",
+        ));
     }
 
     // Validate plugin ID is safe for filesystem
@@ -258,19 +311,22 @@ pub async fn install_plugin(
         || manifest.id.starts_with('.')
     {
         let _ = remove_dir_all_relaxed(&temp_dir);
-        return Err(("Plugin ID contains invalid characters".to_string()).into());
+        return Err(CommandError::expected(
+            "Plugin ID contains invalid characters",
+        ));
     }
 
-    // Check min_app_version compatibility
+    // Check min_app_version compatibility — a version/content mismatch is a
+    // by-design refusal, not an app malfunction (issue #472).
     if let Err(e) = check_min_app_version(&manifest, &app) {
         let _ = remove_dir_all_relaxed(&temp_dir);
-        return Err(e.into());
+        return Err(CommandError::expected(e));
     }
 
-    // Validate required_commands are all in the allowed set
+    // Validate required_commands are all in the allowed set (same: #472).
     if let Err(e) = validate_required_commands(&manifest) {
         let _ = remove_dir_all_relaxed(&temp_dir);
-        return Err(e.into());
+        return Err(CommandError::expected(e));
     }
 
     // Read the commit hash and strip `.git` while still in the temp dir, BEFORE
@@ -432,6 +488,18 @@ pub async fn update_plugin(
         return Err((format!("Git clone failed: {stderr}")).into());
     }
 
+    // Validate the built bundle exists — same guard as install_plugin (issue
+    // #381). Without it an update from a repo whose dist/ was removed would
+    // leave a registered-but-unloadable plugin, exactly the broken state the
+    // self-heal path (issue #624) exists to repair.
+    if !plugin_dir.join("dist").join("index.js").exists() {
+        let _ = remove_dir_all_relaxed(&plugin_dir);
+        return Err(CommandError::expected(
+            "This plugin can't be updated: its repository has no built bundle (dist/index.js). \
+             The plugin author needs to build it and commit the dist folder.",
+        ));
+    }
+
     // Read commit hash before removing .git
     let commit_hash = read_git_head(&plugin_dir);
 
@@ -559,7 +627,9 @@ pub fn toggle_plugin(
         write_registry(&project_path, &registry)?;
         Ok(())
     } else {
-        Err((format!("Plugin '{plugin_id}' not found")).into())
+        Err(CommandError::expected(format!(
+            "Plugin '{plugin_id}' not found"
+        )))
     }
 }
 
@@ -669,6 +739,24 @@ mod tests {
         rename_with_retry(&from, &to).unwrap();
         assert!(!from.exists());
         assert!(to.join("f.txt").exists());
+    }
+
+    #[test]
+    fn copy_dir_recursive_copies_nested_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = tmp.path().join("src");
+        let to = tmp.path().join("dst");
+        fs::create_dir_all(from.join("a/b")).unwrap();
+        fs::write(from.join("top.txt"), b"1").unwrap();
+        fs::write(from.join("a/mid.txt"), b"2").unwrap();
+        fs::write(from.join("a/b/leaf.txt"), b"3").unwrap();
+
+        super::copy_dir_recursive(&from, &to).unwrap();
+        assert_eq!(fs::read(to.join("top.txt")).unwrap(), b"1");
+        assert_eq!(fs::read(to.join("a/mid.txt")).unwrap(), b"2");
+        assert_eq!(fs::read(to.join("a/b/leaf.txt")).unwrap(), b"3");
+        // Source is untouched by the copy itself.
+        assert!(from.join("a/b/leaf.txt").exists());
     }
 
     #[test]

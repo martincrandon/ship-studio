@@ -25,22 +25,42 @@ const COMMIT_MSG_CLI_TIMEOUT_SECS: u64 = 30;
 /// Fallback commit message used when AI generation is unavailable or fails.
 pub const DEFAULT_COMMIT_MESSAGE: &str = "Update from Ship Studio";
 
-/// Timeout for the local git context-gathering ops (branch/log/diff). Bounds a
-/// pathological repo (a huge diff) and keeps the work off the blocking path —
-/// these run via async tokio process, not std `.output()` on the executor.
+/// Timeout for the fast local git context-gathering ops (branch name, commit
+/// log) — always cheap regardless of repo size.
 const GIT_TIMEOUT_SECS: u64 = 60;
+
+/// Timeout for the diff-shaped ops (`git diff`, `git diff --stat`), whose cost
+/// scales with repo and diff size: a three-dot diff computes the merge-base
+/// and diffs the whole range, which can legitimately exceed 60s on a big repo
+/// on Windows (slower filesystem, antivirus scanning — issue #608, same theme
+/// as #421/#461/#527). The timed-out child is killed by run_with_timeout's
+/// kill_on_drop, so a slow diff can no longer leak a running git process.
+const GIT_DIFF_TIMEOUT_SECS: u64 = 180;
 
 /// How the active agent can answer a one-shot prompt without a TTY.
 enum HeadlessInvocation {
     /// A real print mode (Claude `--print -p`, Cursor `-p --print`): the
-    /// answer is the process' stdout.
-    PrintMode(Vec<String>),
+    /// answer is the process' stdout. When `stdin_prompt` is set the prompt is
+    /// fed via stdin instead of argv — a prompt carrying a ~40KB diff as a
+    /// single argv element can blow the OS's combined argv+env exec limit
+    /// (E2BIG, "Argument list too long", issue #595).
+    PrintMode {
+        args: Vec<String>,
+        stdin_prompt: Option<String>,
+    },
     /// Codex `exec`: stdout is a session transcript (which echoes the prompt —
     /// unsafe to parse), so the final message is captured via
-    /// `--output-last-message` into a temp file instead.
+    /// `--output-last-message` into a temp file instead. The prompt travels
+    /// via stdin (the positional argument is `-`, which `codex exec` documents
+    /// as "read instructions from stdin"): besides the E2BIG ceiling, on
+    /// Windows Codex resolves to a `.cmd` shim, and Rust's std refuses to
+    /// spawn a `.cmd` when an argument can't be safely cmd.exe-escaped —
+    /// a prompt embedding a raw git diff (quotes, newlines) failed the whole
+    /// generation with "batch file arguments are invalid" (issue #663).
     CodexExec {
         args: Vec<String>,
         output_file: PathBuf,
+        stdin_prompt: String,
     },
 }
 
@@ -55,8 +75,17 @@ fn headless_invocation(agent: &AgentConfig, prompt: &str) -> Option<HeadlessInvo
             .iter()
             .map(|f| f.to_string())
             .collect();
-        args.push(prompt.to_string());
-        return Some(HeadlessInvocation::PrintMode(args));
+        // Claude's `-p`/`--print` reads the query from stdin when no
+        // positional argument is given — use that to dodge the argv size
+        // ceiling (issue #595). Cursor's print mode isn't verified to accept
+        // a stdin prompt, so it keeps the positional argument.
+        let stdin_prompt = if agent.id == "claude-code" {
+            Some(prompt.to_string())
+        } else {
+            args.push(prompt.to_string());
+            None
+        };
+        return Some(HeadlessInvocation::PrintMode { args, stdin_prompt });
     }
     if agent.id == "codex" {
         let output_file = std::env::temp_dir().join(format!(
@@ -69,7 +98,9 @@ fn headless_invocation(agent: &AgentConfig, prompt: &str) -> Option<HeadlessInvo
         ));
         // --skip-git-repo-check: worktrees/external folders can trip Codex's
         // trusted-directory heuristic even though we always run in a validated
-        // project path.
+        // project path. The trailing `-` makes Codex read the prompt from
+        // stdin — never argv (issues #595's E2BIG class and #663's Windows
+        // .cmd escaping failure).
         let args = vec![
             "exec".to_string(),
             "--skip-git-repo-check".to_string(),
@@ -77,11 +108,101 @@ fn headless_invocation(agent: &AgentConfig, prompt: &str) -> Option<HeadlessInvo
             "never".to_string(),
             "--output-last-message".to_string(),
             output_file.to_string_lossy().to_string(),
-            prompt.to_string(),
+            "-".to_string(),
         ];
-        return Some(HeadlessInvocation::CodexExec { args, output_file });
+        return Some(HeadlessInvocation::CodexExec {
+            args,
+            output_file,
+            stdin_prompt: prompt.to_string(),
+        });
     }
     None
+}
+
+/// Known "environment, not our bug" failure states from the agent CLI itself,
+/// matched against the failure detail (stderr, or the exit-code + stdout
+/// snippet when stderr is empty — the session-limit refusal arrives on
+/// stdout). These are conditions Ship Studio can't fix and shouldn't
+/// telemetry-report as bugs; `Expected` keeps them out (same precedent as the
+/// missing-binary case above, issue #548).
+///
+/// - Subscription session/usage/rate limits — "You've hit your session limit
+///   · resets 4:40pm (Asia/Dubai)", usage-limit and rate-limit wordings
+///   (issue #653). The raw detail is appended so the CLI's reset time
+///   survives into the message.
+/// - Expired/missing sign-in — "OAuth token has expired · Please run /login"
+///   family (issue #653's session-expired sibling).
+/// - Untrusted workspace — Claude Code refusing headless runs in a folder the
+///   user never opened interactively: "this workspace has not been trusted.
+///   Run Claude Code interactively here once and accept the trust dialog, or
+///   set projects[…].hasTrustDialogAccepted: true in ~/.claude.json". The raw
+///   compound error (trust warning + stdin race + "--print needs input") is a
+///   confusing wall of text, so it gets a plain remedy instead (issue #660).
+/// - Codex's stale models cache — "failed to load models cache" (logged by
+///   `codex_models_manager::cache`): a corrupt/outdated local cache file the
+///   user can just delete (issue #689).
+///
+/// Callers must pass the FULL failure detail, never a truncated copy — Codex
+/// dumps a whole session transcript on failure and the matching line can sit
+/// anywhere in it (issues #665/#689). Substring matching handles mid-transcript
+/// hits; only the user-facing message is capped.
+fn classify_agent_cli_failure(agent_name: &str, detail: &str) -> Option<CommandError> {
+    let lower = detail.to_lowercase();
+    if lower.contains("session limit")
+        || lower.contains("usage limit")
+        || lower.contains("rate limit")
+        || lower.contains("quota exceeded")
+    {
+        // The raw detail carries the CLI's reset time — keep it, but capped
+        // (head+tail, since it may be a full transcript) so a user-facing
+        // message can't balloon.
+        let detail = crate::external_command::truncate_output_head_tail(detail);
+        return Some(CommandError::expected(format!(
+            "{agent_name} hit its usage limit, so AI generation isn't available right now. \
+             The limit resets automatically — try again later. ({detail})"
+        )));
+    }
+    if lower.contains("failed to load models cache")
+        || lower.contains("codex_models_manager::cache")
+    {
+        return Some(CommandError::expected(format!(
+            "{agent_name}'s local model cache is stale, so AI generation isn't available \
+             right now. Delete ~/.codex/models_cache.json and try again."
+        )));
+    }
+    if lower.contains("please run /login")
+        || lower.contains("oauth token has expired")
+        || lower.contains("session expired")
+    {
+        return Some(CommandError::expected(format!(
+            "{agent_name} isn't signed in anymore (its session expired). Open an agent \
+             terminal and sign in again — for Claude Code, run /login — then try again."
+        )));
+    }
+    if lower.contains("has not been trusted") || lower.contains("hastrustdialogaccepted") {
+        return Some(CommandError::expected(format!(
+            "{agent_name} hasn't trusted this project's folder yet, so it won't run \
+             non-interactively here. Open an agent terminal in this project once and accept \
+             the trust prompt, then try again."
+        )));
+    }
+    None
+}
+
+/// Remove the echoed prompt from an agent CLI's failure output.
+///
+/// `codex exec` writes a session transcript to stderr, which reproduces the
+/// prompt we fed it — including the user's entire git diff. The app built that
+/// prompt itself, so an exact-substring match is reliable: excise it rather
+/// than forwarding the user's own data back as an "error" (issue #665). The
+/// prompt is matched trimmed (transcripts may re-render it without the exact
+/// leading/trailing whitespace we sent).
+fn strip_prompt_echo(output: &str, prompt: &str) -> String {
+    let prompt = prompt.trim();
+    if prompt.is_empty() || !output.contains(prompt) {
+        return output.to_string();
+    }
+    output.replace(prompt, "[prompt omitted]")
 }
 
 /// Run the active agent headlessly with `prompt` in `cwd` and return its final
@@ -100,28 +221,41 @@ async fn run_agent_headless(
             agent.display_name
         )
     })?;
-    let (args, output_file) = match &invocation {
-        HeadlessInvocation::PrintMode(args) => (args.clone(), None),
-        HeadlessInvocation::CodexExec { args, output_file } => {
-            (args.clone(), Some(output_file.clone()))
+    let (args, output_file, stdin_prompt) = match &invocation {
+        HeadlessInvocation::PrintMode { args, stdin_prompt } => {
+            (args.clone(), None, stdin_prompt.clone())
         }
+        HeadlessInvocation::CodexExec {
+            args,
+            output_file,
+            stdin_prompt,
+        } => (
+            args.clone(),
+            Some(output_file.clone()),
+            Some(stdin_prompt.clone()),
+        ),
     };
 
     let mut cmd = create_command(agent_path);
     cmd.args(&args)
         .env("PATH", get_extended_path())
         .envs(extra_envs)
-        // No TTY here: an EOF'd stdin keeps agents that read it (Codex exec)
-        // from waiting on input that will never come.
-        .stdin(std::process::Stdio::null())
         .current_dir(cwd);
-    let tokio_cmd = tokio::process::Command::from(cmd);
-    let output = run_with_timeout(
-        tokio_cmd,
-        format!("{} CLI", agent.display_name),
-        timeout_secs,
-    )
-    .await;
+    let label = format!("{} CLI", agent.display_name);
+    let output = if let Some(prompt_data) = &stdin_prompt {
+        // The prompt travels via stdin (piped, written in full, then closed so
+        // the CLI sees EOF) instead of argv — see HeadlessInvocation::PrintMode
+        // (issue #595) and HeadlessInvocation::CodexExec (issue #663).
+        let tokio_cmd = tokio::process::Command::from(cmd);
+        crate::external_command::run_with_timeout_stdin(tokio_cmd, prompt_data, label, timeout_secs)
+            .await
+    } else {
+        // No TTY here: an EOF'd stdin keeps agents that read it from waiting
+        // on input that will never come.
+        cmd.stdin(std::process::Stdio::null());
+        let tokio_cmd = tokio::process::Command::from(cmd);
+        run_with_timeout(tokio_cmd, label, timeout_secs).await
+    };
 
     // The temp file must not outlive the call, success or not.
     let read_and_cleanup = |file: &Option<PathBuf>| -> Option<String> {
@@ -142,9 +276,46 @@ async fn run_agent_headless(
     let final_message = read_and_cleanup(&output_file);
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        error!("{} CLI failed: {}", agent.display_name, stderr);
-        return Err(format!("{} CLI failed: {}", agent.display_name, stderr).into());
+        // Codex `exec` fails with a full session transcript on stderr — and
+        // that transcript echoes the prompt we sent, git diff included. Excise
+        // the echo BEFORE any capping or classification: it's the user's own
+        // data reflected back as an "error", and it buries the real failure
+        // line (issue #665).
+        let stderr = strip_prompt_echo(&String::from_utf8_lossy(&output.stderr), prompt);
+        // A silent non-zero exit (empty stderr) used to surface as the
+        // undiagnosable "Claude Code CLI failed: " — fall back to the exit code
+        // and stdout so there's something to act on (issue #269).
+        let full_detail = if stderr.trim().is_empty() {
+            let stdout = strip_prompt_echo(&String::from_utf8_lossy(&output.stdout), prompt);
+            let stdout = stdout.trim();
+            if stdout.is_empty() {
+                format!("exit code {:?}, no output", output.status.code())
+            } else {
+                format!("exit code {:?}: {stdout}", output.status.code())
+            }
+        } else {
+            stderr
+        };
+        // Known environment states (usage limit, expired sign-in, untrusted
+        // workspace, stale Codex models cache) are the CLI working as designed
+        // — warn, not error, and Expected so they stay out of telemetry
+        // (issues #653/#660/#689). Classification sees the FULL detail: the
+        // matching line can sit anywhere in a transcript, so classifying a
+        // truncated copy would miss it (issue #689).
+        // What we forward/log stays capped — but head+tail, not head-only: in
+        // transcript-shaped output the actual error is the LAST line, so a
+        // head-only cap kept the banner and cut the one useful line
+        // (issues #578/#665).
+        let detail = crate::external_command::truncate_output_head_tail(&full_detail);
+        if let Some(err) = classify_agent_cli_failure(&agent.display_name, &full_detail) {
+            warn!(
+                "{} CLI failed with an expected condition: {}",
+                agent.display_name, detail
+            );
+            return Err(err);
+        }
+        error!("{} CLI failed: {}", agent.display_name, detail);
+        return Err(format!("{} CLI failed: {}", agent.display_name, detail).into());
     }
 
     match final_message {
@@ -167,11 +338,13 @@ pub async fn generate_pr_description(
     let validated_path = validate_project_path(&project_path)?;
 
     let agent = get_active_agent();
+    // A missing agent binary is an "install X first" environment state, not a
+    // malfunction — Expected keeps it out of telemetry (issue #548).
     let agent_path = find_agent_binary().ok_or_else(|| {
-        format!(
+        CommandError::expected(format!(
             "{} CLI is not installed. Install {} to use AI generation.",
             agent.display_name, agent.display_name
-        )
+        ))
     })?;
 
     info!(
@@ -223,9 +396,8 @@ pub async fn generate_pr_description(
 }
 
 async fn get_branch_name(path: &std::path::Path) -> Result<String, CommandError> {
-    let mut cmd = create_command("git");
-    cmd.args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(path);
+    let mut cmd = crate::utils::git_command_in(path)?;
+    cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]);
     let output = run_with_timeout(
         tokio::process::Command::from(cmd),
         "git rev-parse",
@@ -241,15 +413,14 @@ async fn get_branch_name(path: &std::path::Path) -> Result<String, CommandError>
 }
 
 async fn get_commit_messages(path: &std::path::Path, base: &str) -> Result<String, CommandError> {
-    let mut cmd = create_command("git");
+    let mut cmd = crate::utils::git_command_in(path)?;
     cmd.args([
         "--no-pager",
         "log",
         &format!("{base}..HEAD"),
         "--pretty=format:%s",
         "--no-merges",
-    ])
-    .current_dir(path);
+    ]);
     let output = run_with_timeout(
         tokio::process::Command::from(cmd),
         "git log",
@@ -262,13 +433,12 @@ async fn get_commit_messages(path: &std::path::Path, base: &str) -> Result<Strin
 }
 
 async fn get_diff_stat(path: &std::path::Path, base: &str) -> Result<String, CommandError> {
-    let mut cmd = create_command("git");
-    cmd.args(["--no-pager", "diff", &format!("{base}...HEAD"), "--stat"])
-        .current_dir(path);
+    let mut cmd = crate::utils::git_command_in(path)?;
+    cmd.args(["--no-pager", "diff", &format!("{base}...HEAD"), "--stat"]);
     let output = run_with_timeout(
         tokio::process::Command::from(cmd),
         "git diff --stat",
-        GIT_TIMEOUT_SECS,
+        GIT_DIFF_TIMEOUT_SECS,
     )
     .await?;
 
@@ -276,13 +446,12 @@ async fn get_diff_stat(path: &std::path::Path, base: &str) -> Result<String, Com
 }
 
 async fn get_diff(path: &std::path::Path, base: &str) -> Result<String, CommandError> {
-    let mut cmd = create_command("git");
-    cmd.args(["--no-pager", "diff", &format!("{base}...HEAD")])
-        .current_dir(path);
+    let mut cmd = crate::utils::git_command_in(path)?;
+    cmd.args(["--no-pager", "diff", &format!("{base}...HEAD")]);
     let output = run_with_timeout(
         tokio::process::Command::from(cmd),
         "git diff",
-        GIT_TIMEOUT_SECS,
+        GIT_DIFF_TIMEOUT_SECS,
     )
     .await?;
 
@@ -457,8 +626,11 @@ pub async fn generate_commit_message_for_path(
         .into());
     }
 
-    let agent_path = find_agent_binary()
-        .ok_or_else(|| format!("{} CLI is not installed", agent.display_name))?;
+    // Same "install X first" state as generate_pr_description — Expected,
+    // never telemetry (issue #548); resolve_commit_message falls back anyway.
+    let agent_path = find_agent_binary().ok_or_else(|| {
+        CommandError::expected(format!("{} CLI is not installed", agent.display_name))
+    })?;
 
     // Cheap guard: if nothing changed, skip the agent call entirely.
     let status = git_status_porcelain(path)?;
@@ -478,14 +650,31 @@ pub async fn generate_commit_message_for_path(
         HashMap::new(),
         COMMIT_MSG_CLI_TIMEOUT_SECS,
     )
-    .await?;
+    .await
+    .map_err(soften_commit_timeout)?;
     parse_commit_message(&response).map_err(CommandError::from)
 }
 
+/// The 30s commit-message budget covers the whole CLI run (spawn, the agent's
+/// own startup/auth checks, generation), so a cold start or slow disk can blow
+/// it even for a tiny prompt — and the publish flow already swallows the error
+/// and falls back to [`DEFAULT_COMMIT_MESSAGE`]. That's a best-effort feature
+/// degrading as designed, not a malfunction: map `Timeout` to `Expected` (kept
+/// out of telemetry) and log at warn (issue #565). Other errors pass through
+/// unchanged.
+fn soften_commit_timeout(err: CommandError) -> CommandError {
+    match err {
+        CommandError::Timeout { cmd, secs } => {
+            warn!(cmd = %cmd, secs, "commit-message generation timed out; falling back to the default message");
+            CommandError::expected(format!("`{cmd}` timed out after {secs}s"))
+        }
+        other => other,
+    }
+}
+
 fn git_status_porcelain(path: &std::path::Path) -> Result<String, CommandError> {
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(path)?
         .args(["status", "--porcelain"])
-        .current_dir(path)
         .output()
         .map_err(CommandError::from)?;
     if !output.status.success() {
@@ -498,9 +687,10 @@ fn git_status_porcelain(path: &std::path::Path) -> Result<String, CommandError> 
 /// unborn branch (no commits) `git diff HEAD` fails; we return whatever stdout
 /// it produced (empty) and let the porcelain file list carry the context.
 fn git_working_diff(path: &std::path::Path) -> String {
-    create_command("git")
-        .args(["--no-pager", "diff", "HEAD"])
-        .current_dir(path)
+    let Ok(mut cmd) = crate::utils::git_command_in(path) else {
+        return String::new();
+    };
+    cmd.args(["--no-pager", "diff", "HEAD"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
         .unwrap_or_default()
@@ -552,7 +742,14 @@ fn parse_commit_message(response: &str) -> Result<String, String> {
             "message:",
             "title:",
         ] {
-            if msg.len() >= prefix.len() && msg[..prefix.len()].eq_ignore_ascii_case(prefix) {
+            // `is_char_boundary` also rejects offsets past the end of the
+            // string, so it subsumes the length check. When `prefix.len()`
+            // lands inside a multi-byte character the message can't start
+            // with this ASCII prefix anyway — slicing there would panic
+            // ("byte index N is not a char boundary", issue #673).
+            if msg.is_char_boundary(prefix.len())
+                && msg[..prefix.len()].eq_ignore_ascii_case(prefix)
+            {
                 msg = msg[prefix.len()..].trim();
                 break;
             }
@@ -587,20 +784,47 @@ mod tests {
 
     #[test]
     fn headless_invocation_uses_print_mode_when_available() {
+        // Claude: the prompt must NOT be an argv element (E2BIG on large
+        // diffs, issue #595) — it travels via stdin.
         let inv = headless_invocation(&crate::agent::CLAUDE_CODE, "hello").unwrap();
         match inv {
-            HeadlessInvocation::PrintMode(args) => {
-                assert_eq!(args, vec!["--print", "-p", "hello"]);
+            HeadlessInvocation::PrintMode { args, stdin_prompt } => {
+                assert_eq!(args, vec!["--print", "-p"]);
+                assert_eq!(stdin_prompt.as_deref(), Some("hello"));
             }
             HeadlessInvocation::CodexExec { .. } => panic!("Claude should use print mode"),
         }
     }
 
     #[test]
-    fn headless_invocation_codex_captures_last_message_to_file() {
-        let inv = headless_invocation(&crate::agent::CODEX, "hello").unwrap();
+    fn headless_invocation_cursor_keeps_argv_prompt() {
+        // Cursor's print mode isn't verified to read the prompt from stdin,
+        // so it keeps the positional argument (and the E2BIG exposure —
+        // revisit if a report ever lands for Cursor).
+        let inv = headless_invocation(&crate::agent::CURSOR, "hello").unwrap();
         match inv {
-            HeadlessInvocation::CodexExec { args, output_file } => {
+            HeadlessInvocation::PrintMode { args, stdin_prompt } => {
+                assert_eq!(args, vec!["-p", "--print", "hello"]);
+                assert!(stdin_prompt.is_none());
+            }
+            HeadlessInvocation::CodexExec { .. } => panic!("Cursor should use print mode"),
+        }
+    }
+
+    #[test]
+    fn headless_invocation_codex_captures_last_message_to_file() {
+        // The prompt must NOT be an argv element: on Windows Codex is a .cmd
+        // shim, and Rust refuses to spawn a .cmd when an argument (a prompt
+        // embedding a raw diff) can't be safely cmd.exe-escaped — "batch file
+        // arguments are invalid" (issue #663). `-` tells `codex exec` to read
+        // the prompt from stdin instead.
+        let inv = headless_invocation(&crate::agent::CODEX, "hello \"quoted\"\nmultiline").unwrap();
+        match inv {
+            HeadlessInvocation::CodexExec {
+                args,
+                output_file,
+                stdin_prompt,
+            } => {
                 assert_eq!(args[0], "exec");
                 assert!(args.contains(&"--skip-git-repo-check".to_string()));
                 let file_arg = args
@@ -609,11 +833,134 @@ mod tests {
                     .map(|i| &args[i + 1])
                     .expect("has --output-last-message");
                 assert_eq!(file_arg, &output_file.to_string_lossy().to_string());
-                // Prompt is the final argument.
-                assert_eq!(args.last().unwrap(), "hello");
+                // The final argument is the stdin sentinel, never the prompt.
+                assert_eq!(args.last().unwrap(), "-");
+                assert!(!args.iter().any(|a| a.contains("hello")));
+                assert_eq!(stdin_prompt, "hello \"quoted\"\nmultiline");
             }
-            HeadlessInvocation::PrintMode(_) => panic!("Codex should use exec mode"),
+            HeadlessInvocation::PrintMode { .. } => panic!("Codex should use exec mode"),
         }
+    }
+
+    // The CLI's subscription session/usage-limit refusal is the environment,
+    // not a bug — Expected, with the reset time preserved (issue #653).
+    #[test]
+    fn classify_agent_cli_failure_session_limit_is_expected() {
+        let detail =
+            "exit code Some(1): You've hit your session limit · resets 4:40pm (Asia/Dubai)";
+        let err = classify_agent_cli_failure("Claude Code", detail).expect("must classify");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("usage limit"), "got: {msg}");
+        // The CLI's own reset time must survive into the message.
+        assert!(msg.contains("resets 4:40pm"), "got: {msg}");
+    }
+
+    #[test]
+    fn classify_agent_cli_failure_usage_and_rate_limit_wordings() {
+        assert!(
+            classify_agent_cli_failure("Claude Code", "Claude AI usage limit reached").is_some()
+        );
+        assert!(classify_agent_cli_failure("Codex", "Rate limit exceeded, retry later").is_some());
+    }
+
+    // Expired sign-in ("run /login") is user-fixable, not a malfunction.
+    #[test]
+    fn classify_agent_cli_failure_expired_login_is_expected() {
+        let err = classify_agent_cli_failure(
+            "Claude Code",
+            "OAuth token has expired · Please obtain a new token or run /login",
+        )
+        .expect("must classify");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(format!("{err}").contains("sign in again"));
+    }
+
+    // The untrusted-workspace compound error (trust warning + stdin race +
+    // "--print needs input") must become one plain remedy (issue #660).
+    #[test]
+    fn classify_agent_cli_failure_untrusted_workspace_is_expected() {
+        let detail = "Ignoring 16 permissions.allow entries from .claude/settings.local.json: \
+                      this workspace has not been trusted. Run Claude Code interactively here once \
+                      and accept the trust dialog, or set projects[\"<project>\"].hasTrustDialogAccepted: \
+                      true in ~/.claude.json.\nError: Input must be provided either through stdin or \
+                      as a prompt argument when using --print";
+        let err = classify_agent_cli_failure("Claude Code", detail).expect("must classify");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("trust"), "got: {msg}");
+        assert!(msg.contains("Open an agent terminal"), "got: {msg}");
+    }
+
+    // The #689 shape: Codex refusing to run because its local models cache is
+    // stale — the environment, user-fixable by deleting the cache file.
+    #[test]
+    fn classify_agent_cli_failure_codex_models_cache_is_expected() {
+        let detail = "ERROR codex_models_manager::cache: failed to load models cache: \
+                      missing field `slug` at line 1 column 2000";
+        let err = classify_agent_cli_failure("Codex", detail).expect("must classify");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("model cache is stale"), "got: {msg}");
+        assert!(msg.contains("~/.codex/models_cache.json"), "got: {msg}");
+
+        // Either marker alone must classify too.
+        assert!(classify_agent_cli_failure("Codex", "failed to load models cache").is_some());
+        assert!(
+            classify_agent_cli_failure("Codex", "WARN codex_models_manager::cache: boom").is_some()
+        );
+    }
+
+    // The matching line arrives as the FIRST stderr line of a transcript that
+    // continues for thousands of chars — classification runs on the full
+    // (untruncated) detail, so it must still fire (interplay with #665's cap).
+    #[test]
+    fn classify_agent_cli_failure_matches_mid_transcript() {
+        let transcript = format!(
+            "OpenAI Codex banner\n{}\nERROR codex_models_manager::cache: failed to load models cache\n{}",
+            "transcript filler\n".repeat(200),
+            "more filler\n".repeat(200)
+        );
+        assert!(classify_agent_cli_failure("Codex", &transcript).is_some());
+    }
+
+    // Genuine unexplained failures must keep flowing to telemetry.
+    #[test]
+    fn classify_agent_cli_failure_ignores_unknown_failures() {
+        assert!(
+            classify_agent_cli_failure("Claude Code", "exit code Some(1), no output").is_none()
+        );
+        assert!(classify_agent_cli_failure("Claude Code", "segmentation fault").is_none());
+        assert!(classify_agent_cli_failure("Claude Code", "").is_none());
+    }
+
+    // The #665 data-exposure shape: Codex's failure transcript echoes the
+    // prompt we sent — git diff included — and it must be excised before the
+    // text reaches an error message or telemetry.
+    #[test]
+    fn strip_prompt_echo_excises_echoed_prompt() {
+        let prompt = build_commit_prompt(
+            " M src/secret.rs",
+            "diff --git a/src/secret.rs b/src/secret.rs\n+const API_KEY: &str = \"sk-secret\";",
+        );
+        let stderr = format!(
+            "OpenAI Codex v0.30 banner\n--------\nuser\n{prompt}\n--------\nERROR: stream disconnected"
+        );
+        let cleaned = strip_prompt_echo(&stderr, &prompt);
+        assert!(!cleaned.contains("sk-secret"), "diff leaked: {cleaned}");
+        assert!(cleaned.contains("[prompt omitted]"), "got: {cleaned}");
+        // The surrounding transcript (banner + the actual error) survives.
+        assert!(cleaned.contains("OpenAI Codex v0.30 banner"));
+        assert!(cleaned.contains("ERROR: stream disconnected"));
+    }
+
+    #[test]
+    fn strip_prompt_echo_leaves_unrelated_output_alone() {
+        let stderr = "ERROR: stream disconnected before completion";
+        assert_eq!(strip_prompt_echo(stderr, "some prompt"), stderr);
+        // An empty/whitespace prompt must never trigger a replace.
+        assert_eq!(strip_prompt_echo(stderr, ""), stderr);
+        assert_eq!(strip_prompt_echo(stderr, "  \n "), stderr);
     }
 
     #[test]
@@ -621,6 +968,29 @@ mod tests {
         // Opencode has no headless mode — callers must show a friendly error
         // instead of spawning an interactive session ("stdin is not a terminal").
         assert!(headless_invocation(&crate::agent::OPENCODE, "hello").is_none());
+    }
+
+    // The #565 shape: a commit-message CLI timeout is best-effort noise (the
+    // caller falls back to the default message) — Expected, not telemetry.
+    #[test]
+    fn soften_commit_timeout_maps_timeout_to_expected() {
+        let softened = soften_commit_timeout(CommandError::Timeout {
+            cmd: "Claude Code CLI".into(),
+            secs: 30,
+        });
+        assert!(matches!(softened, CommandError::Expected { .. }));
+        assert_eq!(
+            softened.to_string(),
+            "`Claude Code CLI` timed out after 30s"
+        );
+    }
+
+    #[test]
+    fn soften_commit_timeout_passes_other_errors_through() {
+        let other = soften_commit_timeout(CommandError::Other {
+            message: "boom".into(),
+        });
+        assert!(matches!(other, CommandError::Other { .. }));
     }
 
     #[test]
@@ -694,6 +1064,41 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_commit_message_multibyte_at_prefix_boundary() {
+        // Regression for issue #673: the prefix-stripping loop sliced
+        // `msg[..prefix.len()]` without checking that the byte offset lands
+        // on a UTF-8 char boundary, panicking when a multi-byte character
+        // straddles one of the prefix lengths (6, 7, 8, or 15 bytes).
+
+        // 'á' (2 bytes) at bytes 7..9 — byte 8 straddles "subject:"/"message:"
+        // (len 8), the exact panic from the automated report.
+        assert_eq!(
+            parse_commit_message("Mejorasá bien").unwrap(),
+            "Mejorasá bien"
+        );
+        // 'á' at bytes 6..8 — byte 7 straddles "commit:" (len 7).
+        assert_eq!(
+            parse_commit_message("Refactá lo básico").unwrap(),
+            "Refactá lo básico"
+        );
+        // Emoji (4 bytes) at bytes 4..8 — straddles "title:" (6), "commit:"
+        // (7), and "subject:"/"message:" (8).
+        assert_eq!(
+            parse_commit_message("Fix 🎉 release flow").unwrap(),
+            "Fix 🎉 release flow"
+        );
+        // CJK (3 bytes each, boundaries at 0/3/6/9/12) — bytes 7 and 8 land
+        // mid-character.
+        assert_eq!(
+            parse_commit_message("修复构建脚本").unwrap(),
+            "修复构建脚本"
+        );
+        // A short multi-byte message where "commit message:" (15) exceeds the
+        // string length entirely and shorter prefixes land mid-character.
+        assert_eq!(parse_commit_message("ééé").unwrap(), "ééé");
+    }
+
+    #[test]
     fn test_parse_commit_message_empty() {
         assert!(parse_commit_message("").is_err());
         assert!(parse_commit_message("\n\n  \n").is_err());
@@ -734,9 +1139,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path();
         let git = |args: &[&str]| {
-            create_command("git")
+            crate::utils::git_command_in(dir)
+                .unwrap()
                 .args(args)
-                .current_dir(dir)
                 .output()
                 .unwrap()
         };
@@ -764,9 +1169,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let dir = tmp.path();
         let git = |args: &[&str]| {
-            create_command("git")
+            crate::utils::git_command_in(dir)
+                .unwrap()
                 .args(args)
-                .current_dir(dir)
                 .output()
                 .unwrap()
         };

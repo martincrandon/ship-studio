@@ -4,7 +4,13 @@ export type TerminalThemeVariant = 'normal' | 'onboarding' | 'build' | 'logs' | 
 
 type TerminalVisualOptions = Pick<
   ITerminalOptions,
-  'fontFamily' | 'fontSize' | 'lineHeight' | 'cursorBlink' | 'cursorStyle' | 'scrollback'
+  | 'fontFamily'
+  | 'fontSize'
+  | 'lineHeight'
+  | 'cursorBlink'
+  | 'cursorStyle'
+  | 'scrollback'
+  | 'minimumContrastRatio'
 >;
 
 /*
@@ -41,6 +47,8 @@ const STANDARD_TERMINAL_OPTIONS: TerminalVisualOptions = {
   cursorBlink: true,
   cursorStyle: 'block',
   scrollback: 5000,
+  // Match VS Code's default and keep dim ANSI text readable on dark cells.
+  minimumContrastRatio: 4.5,
 };
 
 const TERMINAL_VARIANT_OPTIONS: Record<TerminalThemeVariant, TerminalVisualOptions> = {

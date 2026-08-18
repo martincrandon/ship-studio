@@ -4,6 +4,20 @@
   min-width: 92px;
   font-size: var(--font-size-body-sm);
 }
+.ss-enum__trigger--compact {
+  flex: 0 0 var(--size-control-medium);
+  width: var(--size-control-medium);
+  min-width: var(--size-control-medium);
+  padding-inline: 0;
+  justify-content: center;
+}
+.ss-enum__compact-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+}
 .ss-enum__current {
   display: inline-flex;
   min-width: 0;
@@ -74,8 +88,17 @@
 
 .ss-edit-panel__slider {
   width: 100px;
+  height: var(--size-control-medium);
   accent-color: var(--accent-active);
   cursor: pointer;
+}
+
+.ss-edit-panel__slider::-webkit-slider-runnable-track {
+  height: var(--spacing-xs);
+}
+
+.ss-edit-panel__slider::-moz-range-track {
+  height: var(--spacing-xs);
 }
 
 /* Color swatch trigger + popover picker */
@@ -83,8 +106,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 34px;
-  height: 20px;
+  height: var(--size-control-medium);
   padding: 2px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);

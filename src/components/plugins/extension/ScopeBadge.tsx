@@ -1,5 +1,6 @@
 import type { HTMLAttributes } from 'react';
 
+/** Props for the user- or project-scope badge shown on extensions. */
 export interface ScopeBadgeProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
   scope: string;
 }

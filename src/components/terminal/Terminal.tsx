@@ -17,12 +17,12 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { createWebLinksAddon } from '../../lib/terminalLinks';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { WebglAddon } from '@xterm/addon-webgl';
+import { attachWebglRenderer } from '../../lib/terminalWebgl';
 import {
   openPtySession,
   attachPtySession,
   writePtySessionLogged,
-  resizePtySession,
+  resizePtySessionLogged,
   killPtySession,
   detachPtySession,
   onPtySessionData,
@@ -46,7 +46,7 @@ import { listen } from '@tauri-apps/api/event';
 import { homeDir } from '@tauri-apps/api/path';
 import { getShellPath, getSystemEnv } from '../../lib/project';
 import { loadNerdFonts } from '../../lib/fonts';
-import { isWindows } from '../../lib/setup';
+import { isWindows, resolveCliPath } from '../../lib/setup';
 import { isPasteChord, readClipboardText, stageClipboardImage } from '../../lib/clipboard';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
@@ -417,20 +417,20 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     // Use WebGL renderer for GPU-accelerated rendering (reduces flickering).
     // Gated by a user setting — some macOS beta / GPU-driver combinations render corrupted
     // glyphs through WebGL, so users can opt out via Settings → Preferences.
+    // attachWebglRenderer only keeps the addon loaded while the pane has
+    // layout — background panes stay mounted (and streaming) while zero-sized,
+    // which made the glyph atlas throw from getImageData (issue #383).
+    let disposeWebgl: (() => void) | null = null;
+    let webglTornDown = false;
     void (async () => {
       const gpuEnabled = await getTerminalGpuEnabled();
       if (!gpuEnabled) {
         logger.info('[Terminal] GPU rendering disabled by user, using canvas renderer');
         return;
       }
-      try {
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          webglAddon.dispose();
-        });
-        term.loadAddon(webglAddon);
-      } catch {
-        logger.warn('[Terminal] WebGL not available, using canvas renderer');
+      // The effect can tear down while the settings read is in flight.
+      if (!webglTornDown) {
+        disposeWebgl = attachWebglRenderer(term, container);
       }
     })();
 
@@ -688,8 +688,42 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         }
 
         // On Windows, agent may be a .cmd script - must run through cmd.exe
-        const spawnCmd = isWin ? 'cmd.exe' : agent.binaryName;
+        let spawnCmd = isWin ? 'cmd.exe' : agent.binaryName;
         const spawnArgs = isWin ? ['/C', agent.binaryName, ...agentArgs] : agentArgs;
+
+        // Resolve the bare binary name through the backend's thorough
+        // discovery (every NVM version, ~/.<agent>/bin, npm prefix -g …) the
+        // way OnboardingTerminal already does. The hand-built PATH above is a
+        // subset of what the status checks search, so "installed ✓ but Unable
+        // to spawn claude" was possible (issue #280). Resolution errors fail
+        // OPEN — the spawn proceeds with the bare name as before.
+        //
+        // Guard: only bare names go to the resolver. The raw Terminal tab's
+        // "binary" is an absolute path (/bin/zsh), which the backend rejects
+        // with a validation error on every open (issue #303).
+        const isBareName = !agent.binaryName.includes('/') && !agent.binaryName.includes('\\');
+        if (isBareName) {
+          try {
+            const resolved = await resolveCliPath(agent.binaryName);
+            if (resolved) {
+              const pathSep = isWin ? ';' : ':';
+              if (!env.PATH.split(pathSep).includes(resolved.dir)) {
+                env.PATH = `${env.PATH}${pathSep}${resolved.dir}`;
+              }
+              if (!isWin) {
+                // Spawn the resolved absolute path — deterministic, no PATH
+                // shadowing. (Windows keeps the cmd.exe wrapper; the appended
+                // PATH dir makes the shim resolvable there.)
+                spawnCmd = resolved.path;
+              }
+            }
+          } catch (err) {
+            logger.warn('[Terminal] resolveCliPath failed — spawning bare name', {
+              binary: agent.binaryName,
+              error: String(err),
+            });
+          }
+        }
 
         // The backend session id is the tab's sessionName UUID — it survives
         // component unmount/remount and project switches, so attach is
@@ -1099,10 +1133,22 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           return true; // Allow all other keys
         });
       } catch (err) {
-        logger.error('[Terminal] Failed to spawn PTY', {
+        const spawnError = formatCommandError(asCommandError(err));
+        // The backend classifies "agent binary can't be resolved" spawn
+        // failures as Expected (issue #329), but Expected serializes across
+        // IPC identically to Other, so re-check the same message patterns
+        // pty_session_open recognizes. The user already gets the friendly
+        // notFoundMessage/installHint below — logger.error would additionally
+        // file a bug report for a machine that simply lacks the CLI (#522).
+        const lower = spawnError.toLowerCase();
+        const binaryNotFound =
+          lower.includes('no viable candidates found in path') ||
+          lower.includes('does not exist') ||
+          lower.includes('not executable');
+        logger[binaryNotFound ? 'warn' : 'error']('[Terminal] Failed to spawn PTY', {
           agent: agent.id,
           binary: agent.binaryName,
-          error: formatCommandError(asCommandError(err)),
+          error: spawnError,
           retry: retryCount,
         });
 
@@ -1114,9 +1160,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           );
           setTimeout(() => void setupPty(retryCount + 1), 1000);
         } else {
-          term.write(
-            `\x1b[31m${agent.notFoundMessage}: ${formatCommandError(asCommandError(err))}\x1b[0m\r\n`
-          );
+          term.write(`\x1b[31m${agent.notFoundMessage}: ${spawnError}\x1b[0m\r\n`);
           term.write(`\x1b[33m${agent.installHint}\x1b[0m\r\n`);
         }
       }
@@ -1151,7 +1195,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         if (fitAddonRef.current && terminalRef.current && ptyRef.current) {
           fitAddonRef.current.fit();
           const { sessionId } = ptyRef.current;
-          void resizePtySession(sessionId, terminalRef.current.cols, terminalRef.current.rows);
+          resizePtySessionLogged(sessionId, terminalRef.current.cols, terminalRef.current.rows);
         }
       });
     });
@@ -1159,6 +1203,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
 
     return () => {
       mounted = false;
+      webglTornDown = true;
+      disposeWebgl?.();
       resizeObserver.disconnect();
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       if (startupTimer) clearTimeout(startupTimer);
@@ -1226,7 +1272,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         if (fitAddonRef.current && terminalRef.current && ptyRef.current) {
           fitAddonRef.current.fit();
           const { sessionId } = ptyRef.current;
-          void resizePtySession(sessionId, terminalRef.current.cols, terminalRef.current.rows);
+          resizePtySessionLogged(sessionId, terminalRef.current.cols, terminalRef.current.rows);
         }
       },
     }),

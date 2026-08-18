@@ -48,7 +48,7 @@ fn assets_root_dir(repo_root: &Path, workspace: &Path) -> PathBuf {
 /// Prevents path traversal attacks.
 fn validate_asset_path(root_dir: &Path, asset_path: &str) -> Result<PathBuf, String> {
     // Check for obvious path traversal attempts
-    if asset_path.contains("..") {
+    if crate::utils::has_parent_dir_component(asset_path) {
         return Err("Invalid path: path traversal not allowed".to_string());
     }
 
@@ -57,7 +57,7 @@ fn validate_asset_path(root_dir: &Path, asset_path: &str) -> Result<PathBuf, Str
     // Canonicalize to resolve any symlinks and ensure it's within the root.
     // For new files that don't exist yet, we need to check the parent
     let check_path = if full_path.exists() {
-        dunce::canonicalize(&full_path).map_err(|e| format!("Invalid path: {e}"))?
+        crate::utils::canonicalize_tagged(&full_path, "assets")?
     } else {
         // For non-existent paths, verify parent exists and is within the root
         let parent = full_path
@@ -66,10 +66,9 @@ fn validate_asset_path(root_dir: &Path, asset_path: &str) -> Result<PathBuf, Str
         if !parent.exists() {
             return Err("Parent directory does not exist".to_string());
         }
-        let canonical_parent =
-            dunce::canonicalize(parent).map_err(|e| format!("Invalid path: {e}"))?;
+        let canonical_parent = crate::utils::canonicalize_tagged(parent, "assets")?;
         let canonical_root = if root_dir.exists() {
-            dunce::canonicalize(root_dir).map_err(|e| format!("Invalid path: {e}"))?
+            crate::utils::canonicalize_tagged(root_dir, "assets")?
         } else {
             return Err("Assets folder does not exist".to_string());
         };
@@ -79,7 +78,7 @@ fn validate_asset_path(root_dir: &Path, asset_path: &str) -> Result<PathBuf, Str
         return Ok(full_path);
     };
 
-    let canonical_root = dunce::canonicalize(root_dir).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_root = crate::utils::canonicalize_tagged(root_dir, "assets")?;
 
     if !check_path.starts_with(&canonical_root) {
         return Err("Security error: path is outside the assets folder".to_string());
@@ -194,9 +193,8 @@ pub async fn set_assets_root(project_path: String, root: String) -> Result<Strin
 
     // Canonical containment check — the sanitizer blocks traversal lexically,
     // but symlinked folders could still escape the project.
-    let canonical_dir = dunce::canonicalize(&dir).map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_workspace =
-        dunce::canonicalize(&workspace).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_dir = crate::utils::canonicalize_tagged(&dir, "assets")?;
+    let canonical_workspace = crate::utils::canonicalize_tagged(&workspace, "assets")?;
     if !canonical_dir.starts_with(&canonical_workspace) {
         return Err(("Security error: folder is outside the project".to_string()).into());
     }
@@ -254,7 +252,8 @@ pub async fn upload_asset(
     }
 
     // Validate filename
-    if file_name.contains('/') || file_name.contains('\\') || file_name.contains("..") {
+    if file_name.contains('/') || file_name.contains('\\') || file_name == ".." || file_name == "."
+    {
         return Err(("Invalid filename: path separators not allowed".to_string()).into());
     }
 
@@ -264,7 +263,7 @@ pub async fn upload_asset(
     } else {
         // Validate and resolve destination path
         let dest = destination.trim_start_matches('/');
-        if dest.contains("..") {
+        if crate::utils::has_parent_dir_component(dest) {
             return Err(("Invalid destination: path traversal not allowed".to_string()).into());
         }
         let dest_path = root_dir.join(dest);
@@ -278,10 +277,8 @@ pub async fn upload_asset(
     let file_path = dest_dir.join(&file_name);
 
     // Ensure final path is within the assets folder
-    let canonical_root =
-        dunce::canonicalize(&root_dir).map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_dest =
-        dunce::canonicalize(&dest_dir).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_root = crate::utils::canonicalize_tagged(&root_dir, "assets")?;
+    let canonical_dest = crate::utils::canonicalize_tagged(&dest_dir, "assets")?;
     if !canonical_dest.starts_with(&canonical_root) {
         return Err(
             ("Security error: destination is outside the assets folder".to_string()).into(),
@@ -316,19 +313,29 @@ pub async fn delete_asset(project_path: String, asset_path: String) -> Result<()
     let full_path = validate_asset_path(&root_dir, &asset_path)?;
 
     // Double-check it's within the assets folder
-    let canonical_root =
-        dunce::canonicalize(&root_dir).map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_path =
-        dunce::canonicalize(&full_path).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_root = crate::utils::canonicalize_tagged(&root_dir, "assets")?;
+    let canonical_path = crate::utils::canonicalize_tagged(&full_path, "assets")?;
     if !canonical_path.starts_with(&canonical_root) {
         return Err(("Security error: path is outside the assets folder".to_string()).into());
     }
 
-    if full_path.is_dir() {
-        fs::remove_dir_all(&full_path).map_err(|e| format!("Failed to delete directory: {e}"))?;
-    } else {
-        fs::remove_file(&full_path).map_err(|e| format!("Failed to delete file: {e}"))?;
-    }
+    // Robust deletes (read-only clearing + transient-lock retries): on Windows
+    // an antivirus scan or the Search indexer briefly holding the file failed a
+    // bare fs::remove_dir_all/remove_file with "Access is denied (os error 5)"
+    // (issue #696). Blocking work (chmod walk, retry sleeps up to ~8s) — keep
+    // it off the async runtime, mirroring delete_project.
+    let is_dir = full_path.is_dir();
+    tokio::task::spawn_blocking(move || {
+        if is_dir {
+            crate::utils::remove_dir_all_robust(&full_path)
+                .map_err(|e| format!("Failed to delete directory: {e}"))
+        } else {
+            crate::utils::remove_file_robust(&full_path)
+                .map_err(|e| format!("Failed to delete file: {e}"))
+        }
+    })
+    .await
+    .map_err(|e| format!("Asset deletion task failed: {e}"))??;
 
     Ok(())
 }
@@ -347,7 +354,7 @@ pub async fn rename_asset(
     let old_path = validate_asset_path(&root_dir, &asset_path)?;
 
     // Validate new name
-    if new_name.contains('/') || new_name.contains('\\') || new_name.contains("..") {
+    if new_name.contains('/') || new_name.contains('\\') || new_name == ".." || new_name == "." {
         return Err(("Invalid name: path separators not allowed".to_string()).into());
     }
 
@@ -362,9 +369,8 @@ pub async fn rename_asset(
     let new_path = parent.join(&new_name);
 
     // Check new path is still within the assets folder
-    let canonical_root =
-        dunce::canonicalize(&root_dir).map_err(|e| format!("Invalid path: {e}"))?;
-    let canonical_parent = dunce::canonicalize(parent).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_root = crate::utils::canonicalize_tagged(&root_dir, "assets")?;
+    let canonical_parent = crate::utils::canonicalize_tagged(parent, "assets")?;
     if !canonical_parent.starts_with(&canonical_root) {
         return Err(("Security error: path is outside the assets folder".to_string()).into());
     }
@@ -398,7 +404,7 @@ pub async fn create_asset_folder(
     }
 
     // Validate folder path
-    if folder_path.contains("..") {
+    if crate::utils::has_parent_dir_component(&folder_path) {
         return Err(("Invalid path: path traversal not allowed".to_string()).into());
     }
 
@@ -410,14 +416,12 @@ pub async fn create_asset_folder(
     let full_path = root_dir.join(folder_name);
 
     // Ensure it's within the assets folder
-    let canonical_root =
-        dunce::canonicalize(&root_dir).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_root = crate::utils::canonicalize_tagged(&root_dir, "assets")?;
 
     // For the new folder, check parent is within the assets folder
     if let Some(parent) = full_path.parent() {
         if parent.exists() {
-            let canonical_parent =
-                dunce::canonicalize(parent).map_err(|e| format!("Invalid path: {e}"))?;
+            let canonical_parent = crate::utils::canonicalize_tagged(parent, "assets")?;
             if !canonical_parent.starts_with(&canonical_root) {
                 return Err(
                     ("Security error: path is outside the assets folder".to_string()).into(),

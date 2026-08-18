@@ -36,6 +36,7 @@ interface TabsContextValue {
 
 const TabsContext = createContext<TabsContextValue | null>(null);
 
+/** Props for the controlled tabs state shared by tab lists, tabs, and panels. */
 export interface TabsProps {
   value?: TabValue;
   defaultValue?: TabValue;
@@ -47,6 +48,7 @@ export interface TabsProps {
   className?: string;
 }
 
+/** Provides controlled tab state and keyboard-navigation registration to descendants. */
 export function Tabs({
   value: controlledValue,
   defaultValue,
@@ -151,6 +153,7 @@ function encodeTabValue(value: TabValue): string {
   );
 }
 
+/** Props for the labelled container that owns a set of tab controls. */
 export interface TabsListProps extends Omit<HTMLAttributes<HTMLDivElement>, 'aria-label'> {
   children: ReactNode;
   variant?: 'default' | 'stretch';
@@ -158,6 +161,7 @@ export interface TabsListProps extends Omit<HTMLAttributes<HTMLDivElement>, 'ari
   'aria-label': string;
 }
 
+/** Renders a tab list and coordinates directional keyboard navigation. */
 export function TabsList({
   children,
   className,
@@ -214,6 +218,7 @@ function tabsRefElement(value: TabValue, list: HTMLDivElement): HTMLButtonElemen
   );
 }
 
+/** Props for a single value-bound tab control. */
 export interface TabsTabProps extends Omit<ButtonProps, 'children' | 'value' | 'variant' | 'size'> {
   value: TabValue;
   children?: ReactNode;
@@ -221,6 +226,7 @@ export interface TabsTabProps extends Omit<ButtonProps, 'children' | 'value' | '
   variant?: ButtonVariant;
 }
 
+/** Renders a button-family tab linked to its corresponding panel. */
 export function TabsTab({
   value,
   children,
@@ -277,6 +283,7 @@ export function TabsTab({
   );
 }
 
+/** Props for tab content associated with a registered tab value. */
 export interface TabsPanelProps extends HTMLAttributes<HTMLDivElement> {
   value: TabValue;
   children?: ReactNode;
@@ -284,6 +291,7 @@ export interface TabsPanelProps extends HTMLAttributes<HTMLDivElement> {
   keepMounted?: boolean;
 }
 
+/** Renders the active tab panel and hides inactive panel content. */
 export function TabsPanel({
   value,
   children,

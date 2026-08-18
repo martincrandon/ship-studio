@@ -64,20 +64,20 @@ describe('ColorPicker', () => {
 
   it('exposes the primary format fields', () => {
     renderPicker('rgba(10, 20, 30, 0.5)');
-    expect(screen.getByRole('tab', { name: 'HSL' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'HSL' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('H')).toBeInTheDocument();
     expect(screen.getByLabelText('L')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Hex' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hex' }));
     expect(screen.getByLabelText('Hex')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Alpha' })).toHaveValue('50');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'RGB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RGB' }));
     expect(screen.getByLabelText('R')).toHaveValue('10');
     expect(screen.getByLabelText('G')).toHaveValue('20');
     expect(screen.getByLabelText('B')).toHaveValue('30');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'HSB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'HSB' }));
     expect(screen.getByLabelText('S')).toBeInTheDocument();
     expect(screen.getByLabelText('B')).toBeInTheDocument();
   });
@@ -85,13 +85,13 @@ describe('ColorPicker', () => {
   it('emits the CSS syntax selected in the format control', () => {
     const { onChange } = renderPicker('#ff0000');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Hex' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hex' }));
     expect(onChange).toHaveBeenLastCalledWith('#ff0000');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'RGB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RGB' }));
     expect(onChange).toHaveBeenLastCalledWith('rgb(255, 0, 0)');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'HSL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'HSL' }));
     expect(onChange).toHaveBeenLastCalledWith(expect.stringMatching(/^hsl\(/));
 
     fireEvent.click(screen.getByRole('button', { name: 'More color formats' }));
@@ -117,7 +117,7 @@ describe('ColorPicker', () => {
       'OKLCH',
     ]);
     fireEvent.click(screen.getByRole('menuitem', { name: 'OKLCH' }));
-    expect(screen.queryByRole('tab', { name: 'HSB' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'HSB' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Color format: OKLCH' })).toHaveTextContent('OKLCH');
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
     expect(screen.getByLabelText('C')).toBeInTheDocument();
@@ -129,12 +129,12 @@ describe('ColorPicker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Color format: OKLCH' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'RGB' }));
-    expect(screen.getByRole('tab', { name: 'RGB' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'RGB' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('clamps valid channel edits and restores invalid input', () => {
     const { onChange } = renderPicker();
-    fireEvent.click(screen.getByRole('tab', { name: 'RGB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RGB' }));
     onChange.mockClear();
     const red = screen.getByLabelText('R');
     fireEvent.change(red, { target: { value: '300' } });
@@ -193,7 +193,7 @@ describe('ColorPicker', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     renderPicker('#ff0000');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'RGB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RGB' }));
     fireEvent.click(screen.getByRole('button', { name: /Copy color|Copied color/ }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('rgb(255, 0, 0)'));
     expect(screen.getByRole('button', { name: 'Copied color' })).toHaveAttribute(
@@ -202,7 +202,7 @@ describe('ColorPicker', () => {
     );
     expect(screen.getByRole('button', { name: 'Copied color' })).toHaveClass('is-copied');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'HSB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'HSB' }));
     fireEvent.click(screen.getByRole('button', { name: /Copy color|Copied color/ }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('rgb(255, 0, 0)'));
   });

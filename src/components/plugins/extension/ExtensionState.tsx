@@ -3,6 +3,7 @@ import { Spinner } from '../../primitives/Spinner';
 
 export type ExtensionStateKind = 'loading' | 'empty' | 'error';
 
+/** Props for loading, empty, and error states in extension-manager surfaces. */
 export interface ExtensionStateProps {
   kind: ExtensionStateKind;
   children: ReactNode;

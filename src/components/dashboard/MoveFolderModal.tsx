@@ -107,7 +107,7 @@ export function MoveFolderModal({
       className="move-folder-modal"
       dismissable={!selecting}
     >
-      <div style={{ padding: 'var(--button-gap)' }}>
+      <div className="move-folder-modal-body">
         <p className="modal-subtitle">
           Move <strong>{projectName}</strong> to:
         </p>

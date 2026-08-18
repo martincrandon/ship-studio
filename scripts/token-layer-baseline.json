@@ -171,42 +171,6 @@
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
-      "path": "src/styles/global/typography.css",
-      "token": "--font-weight-bold",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/global/typography.css",
-      "token": "--font-weight-medium",
-      "count": 3,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/global/typography.css",
-      "token": "--font-weight-regular",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/global/typography.css",
-      "token": "--font-weight-semibold",
-      "count": 2,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/global/typography.css",
-      "token": "--line-height-default",
-      "count": 7,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/global/typography.css",
-      "token": "--tracking-display",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
       "path": "src/styles/components/value-field.css",
       "token": "--shadow",
       "count": 1,
@@ -227,25 +191,31 @@
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-06",
+      "count": 2,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/components/value-field.css",
+      "token": "--space-08",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-12",
-      "count": 1,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-16",
-      "count": 1,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-32",
-      "count": 1,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -413,7 +383,7 @@
     {
       "path": "src/styles/features/branches/main.css",
       "token": "--info",
-      "count": 2,
+      "count": 1,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
     {
@@ -421,12 +391,6 @@
       "token": "--info-light",
       "count": 1,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
-    },
-    {
-      "path": "src/styles/features/branches/main.css",
-      "token": "--line-height-medium",
-      "count": 2,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/branches/main.css",
@@ -958,12 +922,6 @@
     },
     {
       "path": "src/styles/features/element-tree.css",
-      "token": "--space-02",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/element-tree.css",
       "token": "--space-04",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
@@ -1317,12 +1275,6 @@
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
     {
-      "path": "src/styles/features/setup-agent-led.css",
-      "token": "--transition",
-      "count": 3,
-      "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
-    },
-    {
       "path": "src/styles/features/setup.css",
       "token": "--purple-deep-rgb",
       "count": 3,
@@ -1631,12 +1583,6 @@
     {
       "path": "src/styles/features/visual-editor/controls.css",
       "token": "--transition",
-      "count": 3,
-      "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
-    },
-    {
-      "path": "src/styles/features/visual-editor/controls.css",
-      "token": "--transition-icon-swap",
       "count": 3,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
@@ -2005,6 +1951,42 @@
       "token": "--transition",
       "count": 20,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--font-weight-bold",
+      "count": 1,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--font-weight-medium",
+      "count": 3,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--font-weight-regular",
+      "count": 1,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--font-weight-semibold",
+      "count": 2,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--line-height-default",
+      "count": 7,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/global/typography.css",
+      "token": "--tracking-display",
+      "count": 1,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/modes/code-mode.css",

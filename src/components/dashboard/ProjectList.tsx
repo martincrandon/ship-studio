@@ -23,7 +23,7 @@ import {
   renameProject,
   exportProjectAsTemplate,
 } from '../../lib/project';
-import { asCommandError, formatCommandError } from '../../lib/errors';
+import { asCommandError, formatCommandError, isProjectFolderGoneError } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import { trackEvent, trackError } from '../../lib/analytics';
 import {
@@ -183,16 +183,12 @@ export function ProjectList({
   const [calendarHidden, setCalendarHidden] = useState(false);
   const [slackCtaHidden, setSlackCtaHidden] = useState(false);
 
-  // Load visibility preferences
   useEffect(() => {
     void getDashboardHeaderHidden().then(setDashboardHeaderHidden);
     void getCalendarHidden().then(setCalendarHidden);
     void getSlackCtaHidden().then(setSlackCtaHidden);
   }, []);
 
-  // The app-level Settings modal is mounted outside this dashboard view, so
-  // mirror successful visibility changes here when settings are opened from
-  // the workspace sidebar instead of the dashboard Preferences card.
   useEffect(() => {
     const handleVisibilityChanged = (event: Event) => {
       const detail = (event as CustomEvent<DashboardVisibilityChangedDetail>).detail;
@@ -251,10 +247,23 @@ export function ProjectList({
             try {
               thumbnailData = await getProjectThumbnail(project.path);
             } catch (e) {
-              logger.error('Failed to load thumbnail', {
-                error: e instanceof Error ? e.message : String(e),
-                projectName: project.name,
-              });
+              // `get_project_thumbnail` rejects with a plain CommandError
+              // object (not an Error instance) — String() renders it as
+              // "[object Object]" (issue #685). A gone project folder is a
+              // by-design Expected state (canonicalize_tagged), not a bug:
+              // warn locally instead of auto-filing a report.
+              const message = formatCommandError(asCommandError(e));
+              if (isProjectFolderGoneError(e)) {
+                logger.warn('Thumbnail unavailable — project folder no longer exists', {
+                  error: message,
+                  projectName: project.name,
+                });
+              } else {
+                logger.error('Failed to load thumbnail', {
+                  error: message,
+                  projectName: project.name,
+                });
+              }
             }
           }
           return { ...project, thumbnailData };
@@ -268,7 +277,7 @@ export function ProjectList({
       }
     } catch (error) {
       logger.error('Failed to load projects', {
-        error: error instanceof Error ? error.message : String(error),
+        error: formatCommandError(asCommandError(error)),
       });
     }
   };
@@ -437,10 +446,17 @@ export function ProjectList({
       void trackEvent('project_renamed', { $screen_name: 'Dashboard' });
       await loadAll();
     } catch (error) {
-      trackError('project_rename', error, 'Dashboard');
-      logger.error('Failed to rename project', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const message = formatCommandError(asCommandError(error));
+      // Anticipated refusals (name taken, project open elsewhere) are rendered
+      // inline by the modal — they're user states, not malfunctions.
+      const isExpectedRefusal =
+        message.includes('already exists') || message.includes('Close this project');
+      if (isExpectedRefusal) {
+        logger.warn('Rename refused', { error: message });
+      } else {
+        trackError('project_rename', error, 'Dashboard');
+        logger.error('Failed to rename project', { error: message });
+      }
       throw error;
     }
   };
@@ -635,7 +651,6 @@ export function ProjectList({
         <DashboardSearch />
 
         <section className="dashboard-projects-panel">
-          {/* Folder breadcrumb stays inside the project shell when nested. */}
           {currentFolderId && currentFolder && (
             <FolderBreadcrumb
               folderName={currentFolder.name}
@@ -737,9 +752,6 @@ export function ProjectList({
 
         <MachineToolsPanel />
 
-        {/* Physical bottom spacer — guarantees the Integrations card never
-            butts up against the scroll edge, regardless of how the outer
-            flex/overflow containers resolve padding. */}
         <div className="dashboard-bottom-spacer" aria-hidden />
 
         {/* Hidden file picker reused across project cards for "Upload new

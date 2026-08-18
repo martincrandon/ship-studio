@@ -25,8 +25,14 @@ import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { asCommandError, formatCommandError } from '../../lib/errors';
 import { GitHubIcon } from '@/components/icons';
+import {
+  asCommandError,
+  formatCommandError,
+  humanizeGitError,
+  isRecognizedGitFailure,
+} from '../../lib/errors';
+import { logger } from '../../lib/logger';
 
 /** Props for the GitHubButton component */
 interface GitHubButtonProps {
@@ -56,7 +62,8 @@ export function GitHubButton({
   onModalClose,
 }: GitHubButtonProps) {
   const { showToast } = useOptionalToast();
-  const onToast = (message: string, type?: 'success' | 'error') => showToast(message, type);
+  const onToast = (message: string, type?: 'success' | 'error' | 'info') =>
+    showToast(message, type);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [repoName, setRepoName] = useState(projectName);
   const [isPrivate, setIsPrivate] = useState(true);
@@ -309,8 +316,26 @@ export function GitHubButton({
                     setIsCreatingRepo(false);
                   }, 3000);
                 } catch (e) {
-                  setError(formatCommandError(asCommandError(e)));
-                  onToast?.('Failed to create repository', 'error');
+                  // Include the humanized cause in the toast: a static string
+                  // collapses every failure mode (auth, name collision,
+                  // network…) into one undiagnosable telemetry fingerprint
+                  // (issue #511).
+                  const detail = humanizeGitError(e);
+                  setError(detail);
+                  if (isRecognizedGitFailure(e)) {
+                    // A known, by-design refusal (name collision, auth,
+                    // network, …) — the backend already classified these
+                    // Expected and skipped its report; an unconditional
+                    // 'error' toast would re-report the same incident through
+                    // the toast telemetry pipeline (issues #666/#667, same
+                    // pattern as SubmitReviewModal / issue #538).
+                    logger.warn('[GitHubButton] Repo creation refused for a recognized reason', {
+                      error: formatCommandError(asCommandError(e)),
+                    });
+                    onToast?.(`Failed to create repository: ${detail}`, 'info');
+                  } else {
+                    onToast?.(`Failed to create repository: ${detail}`, 'error');
+                  }
                   setIsLoading(false);
                   setIsCreatingRepo(false);
                 }

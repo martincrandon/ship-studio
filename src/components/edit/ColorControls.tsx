@@ -30,6 +30,8 @@ import {
 import { ColorPicker } from './ColorPicker';
 import { ResettableLabel } from './ResettableLabel';
 import { DockablePanel } from '../primitives/DockablePanel';
+import { ValueField, type ValueFieldVariable } from '../primitives/ValueField';
+import { toCss, toFormat, type ColorFormat } from '../../lib/color';
 
 interface Props {
   currentClass: string;
@@ -42,6 +44,15 @@ interface Props {
    *  'background-color'), used to seed the picker when there's no explicit
    *  arbitrary value in the class. */
   computed?: Record<string, string | undefined>;
+  variables?: ValueFieldVariable[];
+}
+
+function formatForValue(value: string): ColorFormat {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.startsWith('oklch')) return 'oklch';
+  if (normalized.startsWith('hsl')) return 'hsl';
+  if (normalized.startsWith('rgb')) return 'rgb';
+  return 'hex';
 }
 
 /** One color control (text / background / border …): a swatch + popover picker.
@@ -55,6 +66,7 @@ export function ColorField({
   onApplyEnum,
   onReset,
   computed,
+  variables,
 }: {
   label: string;
   css: string;
@@ -73,6 +85,7 @@ export function ColorField({
     (explicit && toHex(explicit) ? explicit : null) ??
     (computedRaw && visibleHex(computedRaw) ? computedRaw : null);
   const swatch = renderable ? rgbaToCss(toRgba(renderable)) : null;
+  const [format, setFormat] = useState<ColorFormat>(() => formatForValue(seed));
 
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
@@ -132,6 +145,29 @@ export function ColorField({
     [prefix, css, onApplyEnum]
   );
 
+  const handleTextCommit = useCallback(
+    (next: string) => {
+      const raw = next.trim();
+      if (!raw) return false;
+      const parsed = toCss(raw);
+      if (!parsed && !/^var\(/i.test(raw)) return false;
+      handlePick(parsed ? toFormat(raw, format) : raw);
+      return true;
+    },
+    [format, handlePick]
+  );
+
+  const handleFormatChange = useCallback(
+    (next: string) => {
+      const nextFormat = next as ColorFormat;
+      setFormat(nextFormat);
+      const raw = (explicit ?? computedRaw ?? '#000000').trim();
+      const parsed = toCss(raw);
+      handlePick(parsed ? toFormat(raw, nextFormat) : raw);
+    },
+    [computedRaw, explicit, handlePick]
+  );
+
   return (
     <div className="ss-edit-panel__control">
       <ResettableLabel
@@ -140,22 +176,36 @@ export function ColorField({
         active={layer.bp}
         onReset={() => onReset(colorResetSpec(prefix, css))}
       />
-      <button
-        ref={triggerRef}
-        type="button"
-        className="ss-color-swatch"
-        title={`${label} color`}
-        aria-label={`${label} color`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {swatch ? (
-          <span className="ss-color-swatch__chip" style={{ background: swatch }} />
-        ) : (
-          <span className="ss-color-swatch__empty">—</span>
-        )}
-      </button>
+      <div className="ss-color-field">
+        <ValueField
+          className="ss-edit-panel__text ss-color-field__value"
+          variant="color"
+          value={explicit ?? computedRaw ?? ''}
+          variables={variables}
+          format={format}
+          onFormatChange={handleFormatChange}
+          onCommit={handleTextCommit}
+          aria-label={`${label} value`}
+          placeholder="#000000"
+          title={`${label} value`}
+        />
+        <button
+          ref={triggerRef}
+          type="button"
+          className="ss-color-swatch"
+          title={`${label} color picker`}
+          aria-label={`${label} color`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {swatch ? (
+            <span className="ss-color-swatch__chip" style={{ background: swatch }} />
+          ) : (
+            <span className="ss-color-swatch__empty">—</span>
+          )}
+        </button>
+      </div>
       {open && rect && (
         <DockablePanel
           docked={false}

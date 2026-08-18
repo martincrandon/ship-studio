@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+/** Props for the shared extension-manager shell, search area, content, and footer. */
 export interface ExtensionManagerLayoutProps {
   /** The manager's tab list, kept separate from its scrollable panels. */
   tabs: ReactNode;

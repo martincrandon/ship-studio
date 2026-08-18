@@ -468,7 +468,7 @@ usePolling(async () => refreshStatus(path), { intervalMs: 3000, enabled: isFocus
 
 Full token + primitive reference: [docs/design-system.md](docs/design-system.md)
 
-The tokens live at the top of [src/styles/global/base.css](src/styles/global/base.css) under a documented block. Never use raw hex colors, raw spacing px, raw z-index numbers, or raw durations.
+Token import order is defined by [src/styles/global/token-manifest.json](src/styles/global/token-manifest.json). Definitions are split across core, semantic, component, and compatibility token files under `src/styles/global/`. Never use raw hex colors, raw spacing px, raw z-index numbers, or raw durations in consuming stylesheets.
 
 ```css
 /* ❌ Don't */
@@ -488,15 +488,15 @@ The tokens live at the top of [src/styles/global/base.css](src/styles/global/bas
   border-radius: var(--radius-md);
   z-index: var(--z-modal-overlay);
   box-shadow: var(--shadow-md);
-  transition: background var(--transition);
+  transition: background var(--transition-interaction);
 }
 ```
 
-Need a value that doesn't exist yet? Add the token to `:root` in [base.css](src/styles/global/base.css) first, then use it.
+Need a value that doesn't exist yet? Add it to the correct layer named by the token manifest: reusable literals in `tokens-core.css`, product intent in `tokens-semantic.css`, owner-specific contracts in `tokens-components.css`, and externally stable legacy aliases only in `tokens-compatibility.css`.
 
 **Raw color literals fail CI** (`pnpm check:patterns`). The rules:
 
-- Colors used in 2+ files or belonging to a semantic family (status, info, purple, ANSI) → global token in base.css. Alpha tints use the RGB-triplet companions: `rgba(var(--error-rgb), 0.1)`, white tints use `--tint/--tint-subtle/--tint-strong`, black scrims use `--overlay-30…80`.
+- Colors used in 2+ files or belonging to a semantic family (status, info, purple, ANSI) → define a core color primitive and expose it through a semantic role. Alpha tints use the RGB-triplet companions; white tints and black scrims use the existing semantic overlay roles.
 - Intentional one-off colors (brand hues, feature-specific accents) → a file-local token in a `:root` block at the top of that feature's CSS file, prefixed with the feature name (`--dm-failed-red`, `--setup-wizard-green`).
 - A raw value that genuinely must stay (e.g. backgrounds matching xterm's theme) → tag the line with a `/* css-ok: reason */` comment.
 - Font sizes use the type scale (`--font-size-xs` … `--font-size-3xl`). Off-scale sizes (15px, 17px…) are migration debt — round to the nearest token when touching that code.
@@ -509,7 +509,7 @@ CSS lives under this folder structure:
 
 ```
 src/styles/
-├── global/      base.css (tokens, primitives' styles, shared keyframes)
+├── global/      token layers and manifest, base rules, typography, shared keyframes
 ├── features/    branches/, plugins/, dashboard/, publish/, workspace/, …
 ├── modes/       compact-mode, education-mode, code-mode
 └── components/  modal, command-palette
@@ -603,7 +603,7 @@ CI (`pnpm check:patterns`, `pnpm check:loc`) and/or a reviewer.
 - **Raw `setInterval` polling** — use `usePolling`. Handles backoff on error and teardown.
 - **`Result<T, String>` on `#[tauri::command]` entry points** — use `Result<T, CommandError>` from `src-tauri/src/errors.rs`. String errors can't be discriminated by the frontend.
 - **Bare `.output().await` on network CLI calls** — use `run_with_timeout` from `src-tauri/src/external_command.rs`. Unbounded CLI calls can hang the UI forever.
-- **Raw hex colors, raw px spacing, raw z-index numbers in CSS** — use tokens from `src/styles/global/base.css`. Adding a new value? Add the token first.
+- **Raw hex colors, raw px spacing, raw z-index numbers in CSS** — use the manifest-ordered token layers under `src/styles/global/`. Adding a new value? Add it to the correct layer first.
 
 ## Known Gotchas
 

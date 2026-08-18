@@ -50,17 +50,9 @@ pub async fn set_custom_dev_command(
 
     metadata.custom_dev_command = command;
 
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir)
-            .map_err(|e| format!("Failed to create .shipstudio directory: {e}"))?;
-    }
-
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize project metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write project metadata: {e}"))?;
-
-    Ok(())
+    // classify_fs_error routing: TCC/access-denied/read-only failures
+    // classify Expected instead of paging telemetry (issue #625).
+    super::metadata::save_project_metadata(&project, &metadata)
 }
 
 /// Gets whether this project is forced to serve as a static site, overriding
@@ -104,17 +96,9 @@ pub async fn set_force_static_serve(project_path: String, force: bool) -> Result
 
     metadata.force_static_serve = if force { Some(true) } else { None };
 
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir)
-            .map_err(|e| format!("Failed to create .shipstudio directory: {e}"))?;
-    }
-
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize project metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write project metadata: {e}"))?;
-
-    Ok(())
+    // classify_fs_error routing: TCC/access-denied/read-only failures
+    // classify Expected instead of paging telemetry (issue #625).
+    super::metadata::save_project_metadata(&project, &metadata)
 }
 
 /// Gets the dev server port for a project (returns None if not configured, meaning use default 3000)
@@ -159,17 +143,9 @@ pub async fn set_dev_server_port(project_path: String, port: u16) -> Result<(), 
 
     metadata.dev_server_port = Some(port);
 
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir)
-            .map_err(|e| format!("Failed to create .shipstudio directory: {e}"))?;
-    }
-
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize project metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write project metadata: {e}"))?;
-
-    Ok(())
+    // classify_fs_error routing: TCC/access-denied/read-only failures
+    // classify Expected instead of paging telemetry (issue #625).
+    super::metadata::save_project_metadata(&project, &metadata)
 }
 
 /// Gets the active workspace subpath for a monorepo project, or None if the
@@ -237,17 +213,9 @@ pub async fn set_workspace_subpath(
 
     metadata.workspace_subpath = subpath;
 
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir)
-            .map_err(|e| format!("Failed to create .shipstudio directory: {e}"))?;
-    }
-
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize project metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write project metadata: {e}"))?;
-
-    Ok(())
+    // classify_fs_error routing: TCC/access-denied/read-only failures
+    // classify Expected instead of paging telemetry (issue #625).
+    super::metadata::save_project_metadata(&project, &metadata)
 }
 
 /// Result of checking whether a project's npm/pnpm/yarn dependencies are installed.
@@ -261,6 +229,14 @@ pub struct DependencyStatus {
     /// Lets the frontend tell "no install needed" (generic / static project)
     /// from "install needed, run pnpm install".
     pub has_package_json: bool,
+    /// True when a `package.json` exists at the resolved dev-server cwd —
+    /// the workspace subpath for monorepo projects, the repo root otherwise.
+    /// `has_package_json` is deliberately root-OR-workspace (right for the
+    /// "is an install needed" question) but wrong for "will `npm run dev` at
+    /// the cwd find a package.json" — a monorepo subpath without its own
+    /// package.json reported `true` and spawned a doomed dev server
+    /// (issue #656).
+    pub workspace_has_package_json: bool,
 }
 
 /// Check whether a project's dependencies are installed.
@@ -280,12 +256,13 @@ pub async fn check_dependencies_installed(
 
     // Workspaces install at the repo root; single-package projects install in
     // place. Either location is enough to consider deps present.
-    let has_package_json =
-        repo_root.join("package.json").exists() || workspace.join("package.json").exists();
+    let workspace_has_package_json = workspace.join("package.json").exists();
+    let has_package_json = repo_root.join("package.json").exists() || workspace_has_package_json;
     if !has_package_json {
         return Ok(DependencyStatus {
             installed: true,
             has_package_json: false,
+            workspace_has_package_json,
         });
     }
 
@@ -294,6 +271,7 @@ pub async fn check_dependencies_installed(
     Ok(DependencyStatus {
         installed,
         has_package_json: true,
+        workspace_has_package_json,
     })
 }
 

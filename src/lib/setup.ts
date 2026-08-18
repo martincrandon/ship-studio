@@ -709,6 +709,20 @@ export interface TerminalCommand {
   args: string[];
 }
 
+/**
+ * Network flags for every `npm install -g` we spawn during setup. npm's
+ * defaults let a stalled registry connection idle indefinitely with no output,
+ * which the onboarding terminal can't distinguish from a slow install — the
+ * flow just hangs (issue #245, Codex install stuck after one warn line).
+ * Bounding fetches makes a dead connection exit non-zero, which surfaces the
+ * error and the retry UI.
+ */
+const NPM_NETWORK_FLAGS = [
+  '--fetch-timeout=120000',
+  '--fetch-retries=3',
+  '--fetch-retry-maxtimeout=30000',
+];
+
 /** Get terminal commands based on current platform */
 export function getTerminalCommands(): Record<string, TerminalCommand> {
   const isWin = isWindows();
@@ -741,9 +755,15 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       claude: {
         // Official native installer for Windows (mirrors the macOS install.sh
         // path). `irm | iex` downloads and runs the install script in-session;
-        // it is not subject to the .ps1 script execution policy.
+        // it is not subject to the .ps1 script execution policy. The Write-Host
+        // first means the download is never silent — the onboarding terminal's
+        // zero-output watchdog would otherwise kill a healthy-but-slow
+        // download and report "did not respond" (issue #245).
         command: 'powershell',
-        args: ['-Command', 'irm https://claude.ai/install.ps1 | iex'],
+        args: [
+          '-Command',
+          'Write-Host "Downloading the Claude Code installer..." ; irm https://claude.ai/install.ps1 | iex',
+        ],
       },
       claude_auth: {
         // Dedicated sign-in flow (`claude auth login` — "Sign in to your
@@ -757,9 +777,11 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       },
       codex: {
         // --force clears EEXIST failures from stale/partial global installs,
-        // which npm otherwise reports opaquely (issue #164).
+        // which npm otherwise reports opaquely (issue #164). The fetch flags
+        // bound registry stalls so a hung download fails (and offers retry)
+        // instead of sitting silent forever (issue #245).
         command: 'npm',
-        args: ['install', '-g', '@openai/codex', '--force'],
+        args: ['install', '-g', '@openai/codex', '--force', ...NPM_NETWORK_FLAGS],
       },
       codex_auth: {
         // Dedicated login subcommand (`codex login` — "Manage login") instead
@@ -773,7 +795,7 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
         // via npm (Node is set up in step 1, same as Codex below).
         // --force clears EEXIST failures from stale/partial global installs.
         command: 'npm',
-        args: ['install', '-g', 'opencode-ai', '--force'],
+        args: ['install', '-g', 'opencode-ai', '--force', ...NPM_NETWORK_FLAGS],
       },
       opencode_auth: {
         command: 'opencode',
@@ -783,7 +805,10 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
         // Official Windows installer (downloads + runs the install script
         // in-session; not subject to the .ps1 execution policy).
         command: 'powershell',
-        args: ['-Command', "irm 'https://cursor.com/install?win32=true' | iex"],
+        args: [
+          '-Command',
+          "Write-Host 'Downloading the Cursor CLI installer...' ; irm 'https://cursor.com/install?win32=true' | iex",
+        ],
       },
       cursor_auth: {
         command: 'cursor-agent',
@@ -792,7 +817,7 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       vercel: {
         // --force clears EEXIST failures from stale/partial global installs.
         command: 'npm',
-        args: ['install', '-g', 'vercel', '--force'],
+        args: ['install', '-g', 'vercel', '--force', ...NPM_NETWORK_FLAGS],
       },
       vercel_auth: {
         command: 'vercel',
@@ -827,6 +852,12 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
             // Use command substitution instead of a pipe so stdin stays
             // connected to the terminal, allowing the Homebrew installer to
             // interactively prompt for sudo.
+            // The echo before the download matters: every install step must
+            // produce output IMMEDIATELY, so the onboarding terminal's 10s
+            // zero-output watchdog only fires on a genuinely wedged PTY —
+            // a silent curl on a slow connection used to get killed and
+            // respawned until "did not respond" (issue #245).
+            'echo "Downloading the Homebrew installer…"',
             'script="$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || { echo "Download failed — check your internet connection and try again."; exit 1; }',
             '[ -n "$script" ] || { echo "Download failed — empty installer. Check your internet connection and try again."; exit 1; }',
             'exec /bin/bash -c "$script"',
@@ -845,8 +876,14 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
         args: ['auth', 'login', '--web', '--git-protocol', 'https'],
       },
       claude: {
+        // Echo first + a curl progress bar: the download must never be
+        // silent, or the onboarding terminal's zero-output watchdog kills a
+        // healthy-but-slow download and reports "did not respond" (#245).
         command: '/bin/bash',
-        args: ['-c', 'curl -fsSL https://claude.ai/install.sh | bash'],
+        args: [
+          '-c',
+          'echo "Downloading the Claude Code installer…" && curl -fSL --progress-bar https://claude.ai/install.sh | bash',
+        ],
       },
       claude_auth: {
         // Dedicated sign-in flow (`claude auth login`) — see the Windows entry
@@ -856,9 +893,15 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       },
       codex: {
         // --force clears EEXIST failures from stale/partial global installs,
-        // which npm otherwise reports opaquely (issue #164).
+        // which npm otherwise reports opaquely (issue #164). The fetch flags
+        // bound registry stalls so a hung download fails (and offers retry)
+        // instead of sitting silent forever (issue #245); the echo keeps the
+        // zero-output watchdog from killing a quiet-but-healthy install.
         command: '/bin/bash',
-        args: ['-c', 'npm install -g @openai/codex --force'],
+        args: [
+          '-c',
+          `echo "Installing Codex via npm…" && npm install -g @openai/codex --force ${NPM_NETWORK_FLAGS.join(' ')}`,
+        ],
       },
       codex_auth: {
         // Dedicated login subcommand (`codex login`) — see the Windows entry
@@ -868,7 +911,10 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       },
       opencode: {
         command: '/bin/bash',
-        args: ['-c', 'curl -fsSL https://opencode.ai/install | bash'],
+        args: [
+          '-c',
+          'echo "Downloading the opencode installer…" && curl -fSL --progress-bar https://opencode.ai/install | bash',
+        ],
       },
       opencode_auth: {
         command: 'opencode',
@@ -876,7 +922,10 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       },
       cursor: {
         command: '/bin/bash',
-        args: ['-c', 'curl https://cursor.com/install -fsS | bash'],
+        args: [
+          '-c',
+          'echo "Downloading the Cursor CLI installer…" && curl https://cursor.com/install -fS --progress-bar | bash',
+        ],
       },
       cursor_auth: {
         command: 'cursor-agent',
@@ -885,7 +934,10 @@ export function getTerminalCommands(): Record<string, TerminalCommand> {
       vercel: {
         // --force clears EEXIST failures from stale/partial global installs.
         command: '/bin/bash',
-        args: ['-c', 'npm install -g vercel --force'],
+        args: [
+          '-c',
+          `echo "Installing the Vercel CLI via npm…" && npm install -g vercel --force ${NPM_NETWORK_FLAGS.join(' ')}`,
+        ],
       },
       vercel_auth: {
         command: 'vercel',

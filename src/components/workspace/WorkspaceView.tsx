@@ -43,7 +43,7 @@ import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
 import { PluginsDropdown } from '../plugins/PluginsDropdown';
 import type { AgentConfig } from '../../lib/agent';
 import type { Project } from '../../lib/project';
-import { isMobileProjectType, type ProjectType } from '../../lib/static-server';
+import { type ProjectType } from '../../lib/static-server';
 import { useShopifyTheme } from '../../hooks/useShopifyTheme';
 import { isMac } from '../../lib/setup';
 import { kbd } from '../../lib/shortcuts';
@@ -155,7 +155,7 @@ interface IntegrationProps {
   } | null;
   installTerminalExited: boolean;
   onCloseInstallTerminal: () => void;
-  onInstallTerminalExit: (exitCode: number | null) => void;
+  onInstallTerminalExit: (exitCode: number | null, outputTail: string) => void;
 }
 
 interface ScreenshotProps {
@@ -339,6 +339,9 @@ export interface WorkspaceViewProps {
   onOpenProjectPicker: () => void;
   /** Open the "Switch Workspace" picker from the sidebar footer. */
   onSwitchAccount: () => void;
+  /** Unpin a project from the sidebar (used for rows without a live session,
+   *  including pins whose folder no longer exists — issue #366). */
+  onUnpinProject?: (projectPath: string) => void;
   /** Predicate: is a dev server currently tracked for the given project path?
    *  Used by the sidebar to populate background projects' Commands section. */
   isProjectDevServerRunning: (projectPath: string) => boolean;
@@ -368,6 +371,7 @@ export const WorkspaceView = memo(function WorkspaceView({
   onSelectProjectTab,
   onGoHome,
   onSwitchAccount,
+  onUnpinProject,
   onOpenProjectPicker,
   isProjectDevServerRunning,
 }: WorkspaceViewProps) {
@@ -587,16 +591,20 @@ export const WorkspaceView = memo(function WorkspaceView({
     handleSaveDevCommand,
   } = lifecycle;
 
+  // Web frameworks always receive the iframe preview. Generic projects only
+  // receive it when they have a configured dev command (#691); native mobile
+  // projects use the device mirror when the platform supports it.
+  const { mobilePreviewAvailable, isWebProject, hasPreview } = workspacePreviewCapabilities(
+    projectType,
+    isMac(),
+    customDevCommand
+  );
+
   // Cmd+Shift+S — capture viewport screenshot, Cmd+Shift+C — toggle crop mode
   // Screenshot accelerators only make sense over the web iframe preview, not
-  // the device mirror (which captures a simulator, not localhost) or generic/
-  // unknown projects with no preview at all.
-  const previewVisible =
-    projectType !== 'generic' &&
-    projectType !== 'unknown' &&
-    !isMobileProjectType(projectType) &&
-    workspaceTab === 'preview' &&
-    !isPreviewHidden;
+  // the device mirror (which captures a simulator, not localhost) or projects
+  // with no preview at all.
+  const previewVisible = isWebProject && workspaceTab === 'preview' && !isPreviewHidden;
 
   // Listen for native menu accelerators (Cmd+Shift+S / Cmd+Shift+C).
   // Native accelerators work even when the cross-origin preview iframe has focus,
@@ -625,15 +633,6 @@ export const WorkspaceView = memo(function WorkspaceView({
     handleCaptureScreenshot,
     setIsCropMode,
   ]);
-
-  // Generic/unknown (Tauri, CLI) projects have no preview pane at all. Web
-  // projects get the iframe Preview; native mobile (RN/Expo, Flutter) gets the
-  // device mirror — but only on macOS, where the simulator/emulator toolchains are
-  // validated (mobile preview is untested on Windows, so we don't offer it there).
-  const { mobilePreviewAvailable, isWebProject, hasPreview } = workspacePreviewCapabilities(
-    projectType,
-    isMac()
-  );
 
   // Reset the preview-side tab to its default whenever the user switches
   // projects. Web projects land on Preview; generic/unknown projects land
@@ -921,7 +920,9 @@ export const WorkspaceView = memo(function WorkspaceView({
       const index = num - 1;
       const tab = terminalTabs[index];
       if (!tab) {
-        showToast(`No terminal tab ${num} — you have ${terminalTabs.length} open`, 'error');
+        // Guidance about a keystroke, not a malfunction — 'info' skips the
+        // error-report pipeline (issue #437).
+        showToast(`No terminal tab ${num} — you have ${terminalTabs.length} open`, 'info');
         return;
       }
       setActiveTerminalTab(tab.id);
@@ -1102,6 +1103,7 @@ export const WorkspaceView = memo(function WorkspaceView({
               }}
               projects={projectRows}
               onCloseProject={onCloseProject}
+              onUnpinProject={onUnpinProject}
               currentProjectPath={currentProject.path}
               currentProjectName={currentProject.name}
               onSelectProject={onSelectProject}

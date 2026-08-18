@@ -10,6 +10,7 @@ import { WorkspaceModals } from './WorkspaceModals';
 
 type ModalGroup<Key extends keyof WorkspaceModalsProps> = Pick<WorkspaceModalsProps, Key>;
 
+/** Props and handlers supplied to workspace-scoped modal flows. */
 export interface WorkspaceModalHostProps {
   projectPath: string;
   currentProjectPath: string | undefined;
@@ -70,6 +71,7 @@ export interface WorkspaceModalHostProps {
   >;
 }
 
+/** Mounts workspace-scoped modals while keeping their state out of the main view orchestrator. */
 export function WorkspaceModalHost({
   projectPath,
   currentProjectPath,

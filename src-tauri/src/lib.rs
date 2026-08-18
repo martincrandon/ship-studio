@@ -14,6 +14,7 @@ pub mod agent;
 pub mod agent_bridge;
 pub mod cache;
 pub mod commands;
+pub mod error_reporting;
 pub mod errors;
 pub mod external_command;
 pub mod logging;
@@ -81,6 +82,10 @@ fn cleanup_agent_processes() {
 pub fn run() {
     // Sentry must init before the tracing subscriber so its layer can attach.
     logging::init_sentry();
+
+    // Admin-agent panic reporting chains Sentry's panic hook, so it must come
+    // after init_sentry().
+    error_reporting::install_panic_hook();
 
     // Initialize logging first
     if let Err(e) = logging::init_logging() {
@@ -494,6 +499,7 @@ pub fn run() {
             commands::ide::check_preview_can_scroll,
             commands::ide::open_studio_window,
             commands::ide::capture_project_thumbnail,
+            commands::ide::capture_thumbnail_from_webview,
             commands::ide::capture_fullpage_playwright,
             commands::ide::capture_viewport_playwright,
             commands::ide::get_project_thumbnail,
@@ -610,6 +616,7 @@ pub fn run() {
             // Preview Proxy
             commands::proxy::start_preview_proxy,
             commands::proxy::stop_preview_proxy,
+            commands::proxy::probe_preview_status,
             // Static File Server
             commands::static_server::start_static_server,
             commands::static_server::stop_static_server,
@@ -740,6 +747,8 @@ pub fn run() {
             // Logging
             logging::get_log_path,
             logging::log_frontend_event,
+            // Error reporting (admin agent)
+            error_reporting::report_frontend_error,
             // Snapshots / Undo-Redo
             commands::snapshots::snapshot_start_watching,
             commands::snapshots::snapshot_stop_watching,
@@ -762,6 +771,18 @@ pub fn run() {
             commands::clipboard::read_clipboard_text,
             commands::clipboard::stage_clipboard_image,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                // The quit path calls exit(0) after preventDefault() on the
+                // close request, so WindowEvent::Destroyed cleanup never runs.
+                // This is the only hook that fires for every shutdown — dev
+                // servers and agent PTYs must die here or they outlive the app
+                // and keep their ports (issue #229: EADDRINUSE on relaunch).
+                let ptys = commands::pty::kill_all_pty_sync();
+                let sessions = commands::pty_session::kill_all_sessions_sync();
+                tracing::info!(ptys, sessions, "App exit: killed tracked PTY processes");
+            }
+        });
 }

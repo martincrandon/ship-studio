@@ -115,6 +115,51 @@ export function PluginManager({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Plugins already background-checked for updates this modal-open, so a
+  // refetch (toggle, uninstall, …) doesn't re-hit the network per plugin.
+  const autoCheckedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isOpen) autoCheckedRef.current = new Set();
+  }, [isOpen]);
+
+  // Proactively check installed plugins for updates in the background
+  // (issue #572): fixed plugin releases otherwise never reach users who
+  // don't think to click "Check for update" on each plugin — a stale broken
+  // bundle (e.g. the Vercel plugin's POSIX-only `cat` on Windows) kept
+  // failing indefinitely. Failures are silent: this is a nicety, and an
+  // offline machine shouldn't toast or file reports over it.
+  const autoCheckUpdates = useCallback(
+    async (installed: PluginInfo[]) => {
+      if (!projectPath) return;
+      const candidates = installed.filter(
+        (p) => !p.is_dev && p.source_url && !autoCheckedRef.current.has(p.manifest.id)
+      );
+      await Promise.allSettled(
+        candidates.map(async (p) => {
+          autoCheckedRef.current.add(p.manifest.id);
+          try {
+            const result = await checkPluginUpdate(projectPath, p.manifest.id);
+            setUpdateStates((prev) => {
+              // Never clobber an in-flight manual action.
+              const current = prev[p.manifest.id];
+              if (current === 'updating' || current === 'checking') return prev;
+              return {
+                ...prev,
+                [p.manifest.id]: result.has_update ? 'available' : 'up_to_date',
+              };
+            });
+          } catch (err) {
+            logger.warn('Background plugin update check failed', {
+              plugin: p.manifest.id,
+              error: formatCommandError(asCommandError(err)),
+            });
+          }
+        })
+      );
+    },
+    [projectPath]
+  );
+
   // Fetch installed plugins when modal opens
   const fetchPlugins = useCallback(async () => {
     if (!projectPath) {
@@ -125,16 +170,17 @@ export function PluginManager({
     try {
       const result = await listPlugins(projectPath);
       setPlugins(result);
+      void autoCheckUpdates(result);
     } catch (err) {
       trackError('plugin_list_load', err, 'Plugin Manager');
       logger.error('Failed to load plugins', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setPlugins([]);
     } finally {
       setIsLoading(false);
     }
-  }, [projectPath]);
+  }, [projectPath, autoCheckUpdates]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -150,7 +196,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_registry_load', err, 'Plugin Manager');
       logger.error('Failed to fetch plugin registry', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setRegistry([]);
     } finally {
@@ -178,7 +224,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_uninstall', err, 'Plugin Manager');
       logger.error('Failed to uninstall plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
     } finally {
       setRemovingId(null);
@@ -201,7 +247,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_toggle', err, 'Plugin Manager');
       logger.error('Failed to toggle plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
     } finally {
       setTogglingId(null);
@@ -221,7 +267,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_update_check', err, 'Plugin Manager');
       logger.error('Failed to check for update', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setUpdateStates((prev) => ({ ...prev, [pluginId]: 'idle' }));
     }
@@ -240,7 +286,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_update', err, 'Plugin Manager');
       logger.error('Failed to update plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setUpdateStates((prev) => ({ ...prev, [pluginId]: 'available' }));
     }
@@ -266,7 +312,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_install', err, 'Plugin Manager');
       logger.error('Failed to install plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       const msg = formatCommandError(asCommandError(err));
       setError(msg);
@@ -297,7 +343,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_install_url', err, 'Plugin Manager');
       logger.error('Failed to install plugin from URL', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       const msg = formatCommandError(asCommandError(err));
       setError(msg);
@@ -326,7 +372,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_dev_link', err, 'Plugin Manager');
       logger.error('Failed to link dev plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setError(formatCommandError(asCommandError(err)));
     } finally {
@@ -360,7 +406,7 @@ export function PluginManager({
     } catch (err) {
       trackError('plugin_dev_unlink', err, 'Plugin Manager');
       logger.error('Failed to unlink dev plugin', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
     } finally {
       setUnlinkingId(null);

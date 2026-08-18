@@ -76,6 +76,9 @@ jobs:
       - name: Run tests
         run: pnpm test:run
 
+      - name: Run tooling tests
+        run: pnpm test:scripts
+
       - name: Icon inventory check
         run: pnpm icons:check
 

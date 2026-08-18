@@ -40,7 +40,13 @@ import {
   type WorkspacePick,
 } from '../import-project/steps/Step3WorkspacePicker';
 import { logger } from '../../lib/logger';
-import { asCommandError, formatCommandError, friendlyProcessError } from '../../lib/errors';
+import {
+  asCommandError,
+  describeAccountsLoadError,
+  describeProcessError,
+  formatCommandError,
+  friendlyProcessError,
+} from '../../lib/errors';
 import { Spinner } from '../primitives/Spinner';
 
 /** Props for the ImportProject component */
@@ -88,10 +94,7 @@ export function ImportProject({ onComplete, onCancel }: ImportProjectProps) {
       setSelectedOwner(user);
     } catch (err) {
       trackError('github_accounts_load', err, 'Dashboard');
-      setError(
-        `Couldn't load your GitHub accounts: ${formatCommandError(asCommandError(err))}. ` +
-          'Try signing out and back into GitHub.'
-      );
+      setError(describeAccountsLoadError(err));
     } finally {
       setLoadingAccounts(false);
     }
@@ -162,13 +165,21 @@ export function ImportProject({ onComplete, onCancel }: ImportProjectProps) {
       await new Promise((r) => setTimeout(r, 800));
       onComplete(importedProjectPath);
     } catch (err) {
-      logger.error('[ImportProject] install retry failed', {
+      const info = describeProcessError(err);
+      // Recognized user-environment failures (stale npm login, SSH auth, …)
+      // log at warn — logger.error auto-files bug reports (issues #505/#531).
+      const logContext = {
         error: err instanceof Error ? err.message : String(err),
         projectPath: importedProjectPath,
         packageManager: importedPackageManager,
-      });
+      };
+      if (info.expected) {
+        logger.warn('[ImportProject] install retry failed', logContext);
+      } else {
+        logger.error('[ImportProject] install retry failed', logContext);
+      }
       trackError('project_install_retry', err, 'Dashboard');
-      setError(friendlyProcessError(err));
+      setError(info.message);
     }
   };
 
@@ -281,13 +292,22 @@ export function ImportProject({ onComplete, onCancel }: ImportProjectProps) {
 
       await finishImport(projectPath);
     } catch (err) {
-      logger.error('[ImportProject] import failed during clone/detect', {
+      const info = describeProcessError(err);
+      // Recognized user-environment failures (SSH keys not set up, stale
+      // auth, …) log at warn — logger.error auto-files bug reports
+      // (issue #531).
+      const logContext = {
         error: err instanceof Error ? err.message : String(err),
         repo: selectedRepo.name,
         safeName,
-      });
+      };
+      if (info.expected) {
+        logger.warn('[ImportProject] import failed during clone/detect', logContext);
+      } else {
+        logger.error('[ImportProject] import failed during clone/detect', logContext);
+      }
       trackError('project_import', err, 'Dashboard');
-      setError(friendlyProcessError(err));
+      setError(info.message);
     }
   };
 
@@ -322,13 +342,22 @@ export function ImportProject({ onComplete, onCancel }: ImportProjectProps) {
       await new Promise((r) => setTimeout(r, 800));
       onComplete(projectPath);
     } catch (err) {
-      logger.error('[ImportProject] import failed', {
+      const info = describeProcessError(err);
+      // Recognized user-environment failures (stale npm login, missing
+      // tool, …) log at warn — logger.error auto-files bug reports
+      // (issue #505).
+      const logContext = {
         error: err instanceof Error ? err.message : String(err),
         phase,
         projectPath,
-      });
+      };
+      if (info.expected) {
+        logger.warn('[ImportProject] import failed', logContext);
+      } else {
+        logger.error('[ImportProject] import failed', logContext);
+      }
       trackError('project_import', err, 'Dashboard');
-      setError(friendlyProcessError(err));
+      setError(info.message);
     }
   };
 

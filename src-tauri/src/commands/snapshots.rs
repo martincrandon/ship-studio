@@ -24,7 +24,7 @@
 //!   restoring files doesn't itself create a new snapshot.
 
 use crate::errors::CommandError;
-use crate::utils::{create_command, validate_project_path};
+use crate::utils::validate_project_path;
 use notify::{EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
@@ -137,19 +137,31 @@ fn is_relevant_path(p: &Path, project_root: &Path) -> bool {
             return false;
         }
     }
+    // Live log files (dev servers writing `.foo-dev.log` etc. into the
+    // project) churn constantly, and once swept into a snapshot tree they
+    // make undo/redo fail on Windows: `git read-tree -u` can't unlink a file
+    // another process holds open for writing (issue #478).
+    if let Some(name) = p.file_name().map(|n| n.to_string_lossy().to_lowercase()) {
+        if name.ends_with(".log") {
+            return false;
+        }
+    }
     true
 }
 
 /// Capture the current working tree as a stash commit. Returns the SHA, or
 /// empty string if the tree is clean (nothing to snapshot).
 fn capture_snapshot(project_path: &Path) -> Result<String, CommandError> {
-    let output = create_command("git")
-        .args(["stash", "create"])
-        .current_dir(project_path)
-        .output()
-        .map_err(|e| CommandError::Io {
-            message: format!("git stash create: {e}"),
-        })?;
+    // Retry on index.lock contention: this fires from the background watcher,
+    // so it routinely races user/agent-initiated git in the same repo (#377).
+    let output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(project_path)?
+            .args(["stash", "create"])
+            .output()
+            .map_err(|e| CommandError::Io {
+                message: format!("git stash create: {e}"),
+            })
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -177,9 +189,11 @@ fn diff_files(project_path: &Path, from_sha: &str, to_sha: &str) -> Vec<String> 
     if from_ref == to_ref {
         return Vec::new();
     }
-    let output = match create_command("git")
+    let Ok(mut diff_cmd) = crate::utils::git_command_in(project_path) else {
+        return Vec::new();
+    };
+    let output = match diff_cmd
         .args(["diff", "--name-only", from_ref, to_ref])
-        .current_dir(project_path)
         .output()
     {
         Ok(o) if o.status.success() => o,
@@ -199,9 +213,8 @@ fn diff_files(project_path: &Path, from_sha: &str, to_sha: &str) -> Vec<String> 
 fn apply_snapshot(project_path: &Path, sha: &str) -> Result<(), CommandError> {
     if sha.is_empty() {
         // Clean working tree: reset tracked files to HEAD.
-        let out = create_command("git")
+        let out = crate::utils::git_command_in(project_path)?
             .args(["checkout-index", "-a", "-f"])
-            .current_dir(project_path)
             .output()
             .map_err(|e| CommandError::Io {
                 message: format!("git checkout-index: {e}"),
@@ -219,18 +232,40 @@ fn apply_snapshot(project_path: &Path, sha: &str) -> Result<(), CommandError> {
     // `stash create` produces a merge commit whose first parent is HEAD and
     // whose tree is the working tree. Apply that tree to both the index and
     // the working directory.
-    let read_tree = create_command("git")
-        .args(["read-tree", "-u", "--reset", sha])
-        .current_dir(project_path)
-        .output()
-        .map_err(|e| CommandError::Io {
-            message: format!("git read-tree: {e}"),
-        })?;
+    let run_read_tree = || {
+        crate::utils::git_command_in(project_path)?
+            .args(["read-tree", "-u", "--reset", sha])
+            .output()
+            .map_err(|e| CommandError::Io {
+                message: format!("git read-tree: {e}"),
+            })
+    };
+    let mut read_tree = run_read_tree()?;
     if !read_tree.status.success() {
+        let stderr = String::from_utf8_lossy(&read_tree.stderr).to_string();
+        // A file in the snapshot tree is held open for writing by another
+        // process (dev server log, editor lock) — on Windows the unlink fails
+        // with a generic "Invalid argument". The lock is often transient, so
+        // retry once after a beat; if it persists, say what's actually wrong
+        // instead of a raw exit-128 dump (issue #478).
+        if stderr.contains("unable to unlink old") {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            read_tree = run_read_tree()?;
+            if read_tree.status.success() {
+                return Ok(());
+            }
+            let file = stderr
+                .lines()
+                .find_map(|l| l.split('\'').nth(1))
+                .unwrap_or("a file");
+            return Err(CommandError::expected(format!(
+                "Undo couldn't replace '{file}' because another program is still writing to it                  (often a dev server writing a log file). Stop that process or wait a moment,                  then try again."
+            )));
+        }
         return Err(CommandError::Process {
             cmd: "git read-tree".into(),
             exit_code: read_tree.status.code().unwrap_or(-1),
-            stderr: String::from_utf8_lossy(&read_tree.stderr).to_string(),
+            stderr,
         });
     }
     Ok(())

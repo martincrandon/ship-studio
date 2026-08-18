@@ -8,6 +8,7 @@ import { useModal } from '../../contexts/ModalContext';
 import { kbd } from '../../lib/shortcuts';
 import { SearchIcon } from '@/components/icons';
 
+/** Renders the dashboard search control backed by the shared dashboard filters. */
 export function DashboardSearch() {
   const palette = useModal('commandPalette');
 

@@ -12,8 +12,10 @@ import { EnumControlRow } from './EnumControls';
 import { ColorField } from './ColorControls';
 import { LengthControl } from './LengthControl';
 import { CustomCssBox } from './CustomCssBox';
+import { ValuePropertyControl } from './ValuePropertyControl';
 import type { RegistryControl } from '../../lib/editControls';
 import type { BoxType, Side, SpacingValue, LayerContext, ResetSpec } from '../../lib/edit';
+import type { ValueFieldVariable } from '../primitives/ValueField';
 
 /** Everything a control row needs to read its value and apply/reset edits. Built
  *  once by the panel and passed to every row. */
@@ -26,6 +28,7 @@ export interface ControlRenderCtx {
   onStepGap: (dir: 1 | -1, step?: number) => void;
   /** Rendered colors (getComputedStyle) keyed by CSS prop, to seed color pickers. */
   computed?: Record<string, string | undefined>;
+  variables?: ValueFieldVariable[];
 }
 
 export function PropControlRenderer({
@@ -59,6 +62,17 @@ export function PropControlRenderer({
           onReset={ctx.onReset}
         />
       );
+    case 'value':
+      return (
+        <ValuePropertyControl
+          kind={control.valueType}
+          currentClass={ctx.currentClass}
+          layer={ctx.layer}
+          onApplyEnum={ctx.onApplyEnum}
+          onReset={ctx.onReset}
+          variables={ctx.variables}
+        />
+      );
     case 'enum':
       return (
         <EnumControlRow
@@ -80,6 +94,7 @@ export function PropControlRenderer({
           onApplyEnum={ctx.onApplyEnum}
           onReset={ctx.onReset}
           computed={ctx.computed}
+          variables={ctx.variables}
         />
       );
     case 'length':
@@ -93,6 +108,7 @@ export function PropControlRenderer({
           layer={ctx.layer}
           onApplyEnum={ctx.onApplyEnum}
           onReset={ctx.onReset}
+          variables={ctx.variables}
         />
       );
     case 'custom':

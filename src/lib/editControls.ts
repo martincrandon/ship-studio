@@ -22,6 +22,18 @@ export type RegistryControl =
   | { kind: 'spacingBox'; key: string }
   | { kind: 'gap'; key: string }
   | { kind: 'opacity'; key: string }
+  | {
+      kind: 'value';
+      key: string;
+      valueType:
+        | 'border'
+        | 'radius'
+        | 'z-index'
+        | 'blur'
+        | 'font-size'
+        | 'line-height'
+        | 'letter-spacing';
+    }
   | { kind: 'enum'; key: string; control: EnumControl }
   | { kind: 'color'; key: string; label: string; css: string; prefix: ColorPrefix }
   | {
@@ -67,6 +79,19 @@ function colorRow(prefix: ColorPrefix): RegistryControl {
   return { kind: 'color', key: `color:${prefix}`, label: c.label, css: c.css, prefix: c.prefix };
 }
 
+function valueRow(
+  valueType:
+    | 'border'
+    | 'radius'
+    | 'z-index'
+    | 'blur'
+    | 'font-size'
+    | 'line-height'
+    | 'letter-spacing'
+): RegistryControl {
+  return { kind: 'value', key: `value:${valueType}`, valueType };
+}
+
 /** The panel's sections, in render order. Size & Spacing leads (the most-reached-for
  *  controls), then Layout / Typography; Backgrounds & Borders, Effects and Custom CSS
  *  collapse to keep the panel calm. */
@@ -98,7 +123,7 @@ export const CONTROL_SECTIONS: ControlSection[] = [
       enumRow('Align items'),
       { kind: 'gap', key: 'gap' },
       enumRow('Overflow'),
-      enumRow('Z-index'),
+      valueRow('z-index'),
     ],
   },
   {
@@ -106,10 +131,10 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     title: 'Typography',
     defaultOpen: true,
     controls: [
-      enumRow('Size'),
+      valueRow('font-size'),
       enumRow('Weight'),
-      enumRow('Line height'),
-      enumRow('Letter spacing'),
+      valueRow('line-height'),
+      valueRow('letter-spacing'),
       enumRow('Align'),
       enumRow('Transform'),
       enumRow('Style'),
@@ -123,9 +148,9 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     defaultOpen: false,
     controls: [
       colorRow('bg'),
-      enumRow('Border'),
+      valueRow('border'),
       colorRow('border'),
-      enumRow('Radius'),
+      valueRow('radius'),
       enumRow('Shadow'),
     ],
   },
@@ -133,7 +158,7 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     id: 'effects',
     title: 'Effects',
     defaultOpen: false,
-    controls: [{ kind: 'opacity', key: 'opacity' }, enumRow('Blur'), enumRow('Cursor')],
+    controls: [{ kind: 'opacity', key: 'opacity' }, valueRow('blur'), enumRow('Cursor')],
   },
   {
     id: 'custom',

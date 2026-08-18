@@ -18,17 +18,17 @@ describe('suggestValues', () => {
   it('suggests @keyframes names first for animation properties', () => {
     const out = suggestValues('animation', ['--accent'], ['reveal', 'spin']);
     expect(out.slice(0, 2)).toEqual(['reveal', 'spin']);
-    expect(out).toContain('var(--accent-active)');
+    expect(out).toContain('var(--accent)');
   });
 
   it('does not suggest animation names for non-animation properties', () => {
     const out = suggestValues('color', ['--accent'], ['reveal']);
     expect(out).not.toContain('reveal');
-    expect(out).toContain('var(--accent-active)');
+    expect(out).toContain('var(--accent)');
   });
 
   it('wraps bare variable names in var()', () => {
-    expect(suggestValues('color', ['--accent'])).toContain('var(--accent-active)');
+    expect(suggestValues('color', ['--accent'])).toContain('var(--accent)');
     expect(suggestValues('color', ['var(--accent-active)'])).toContain('var(--accent-active)');
   });
 });

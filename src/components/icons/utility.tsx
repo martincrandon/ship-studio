@@ -7,6 +7,7 @@ import BranchSvg from '../../assets/icons/git-branch.svg?react';
 import BranchEndSvg from '../../assets/icons/git-branch-end.svg?react';
 import BranchHorizontalSvg from '../../assets/icons/git-branch-horizontal.svg?react';
 import BranchMainSvg from '../../assets/icons/git-branch-main.svg?react';
+import BranchMainNoneSvg from '../../assets/icons/git-branch-main-none.svg?react';
 import BranchMidSvg from '../../assets/icons/git-branch-mid.svg?react';
 import PullRequestSvg from '../../assets/icons/git-pull-request.svg?react';
 import SettingsSvg from '../../assets/icons/settings.svg?react';
@@ -86,6 +87,14 @@ export const GitBranchHorizontalIcon = createIcon(BranchHorizontalSvg, {
 export const GitBranchMainIcon = createIcon(BranchMainSvg, {
   name: 'GitBranchMainIcon',
   source: 'icons/git-branch-main.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const GitBranchMainNoneIcon = createIcon(BranchMainNoneSvg, {
+  name: 'GitBranchMainNoneIcon',
+  source: 'icons/git-branch-main-none.svg',
   kind: 'ui',
   defaultSize: 14,
   compact: true,

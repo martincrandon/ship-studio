@@ -143,6 +143,19 @@ fn should_skip_path(relative: &Path) -> bool {
     })
 }
 
+/// Map a failed canonicalize of a project-relative file to an error that names
+/// the file. A plain NotFound is usually a benign race — the frontend holds a
+/// stale reference (open tab, file-tree entry) to a file that a build tool,
+/// branch switch, or external editor removed — so it's `Expected` and stays
+/// out of telemetry; anything else keeps full context (issue #314).
+pub(crate) fn resolve_error(file_path: &str, e: &std::io::Error) -> CommandError {
+    if e.kind() == std::io::ErrorKind::NotFound {
+        CommandError::expected(format!("File not found: {file_path}"))
+    } else {
+        CommandError::from(format!("Failed to resolve file '{file_path}': {e}"))
+    }
+}
+
 /// Read a single file from the project.
 #[tauri::command]
 #[tracing::instrument(fields(project = %project_path))]
@@ -150,14 +163,14 @@ pub fn read_project_file(project_path: &str, file_path: &str) -> Result<FileCont
     let project = validate_project_path(project_path)?;
 
     // Prevent path traversal
-    if file_path.contains("..") {
+    if crate::utils::has_parent_dir_component(file_path) {
         return Err(("Invalid path: path traversal not allowed".to_string()).into());
     }
 
     let full_path = project.join(file_path);
 
     // Verify the file is within the project
-    let canonical = dunce::canonicalize(&full_path).map_err(|e| format!("File not found: {e}"))?;
+    let canonical = dunce::canonicalize(&full_path).map_err(|e| resolve_error(file_path, &e))?;
     if !canonical.starts_with(&project) {
         return Err(("Security error: path is outside project directory".to_string()).into());
     }
@@ -229,7 +242,7 @@ pub fn save_project_file(
     let project = validate_project_path(project_path)?;
 
     // Prevent path traversal
-    if file_path.contains("..") {
+    if crate::utils::has_parent_dir_component(file_path) {
         return Err(("Invalid path: path traversal not allowed".to_string()).into());
     }
 
@@ -238,7 +251,7 @@ pub fn save_project_file(
     // Canonicalize the existing file and verify it stays within the project.
     // The editor only ever saves a file it already opened, so the target must
     // exist — this also resolves symlinks so we can reject escapes.
-    let canonical = dunce::canonicalize(&full_path).map_err(|e| format!("File not found: {e}"))?;
+    let canonical = dunce::canonicalize(&full_path).map_err(|e| resolve_error(file_path, &e))?;
     if !canonical.starts_with(&project) {
         return Err(("Security error: path is outside project directory".to_string()).into());
     }

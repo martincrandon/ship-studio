@@ -77,13 +77,23 @@
   --font-size-3xl: var(--font-size-24);
 
   --tracking-control: var(--tracking-04);
+  --tracking-heading: var(--tracking-display);
 
   --font-weight-body: var(--font-weight-regular);
   --font-weight-label: var(--font-weight-medium);
   --font-weight-heading: var(--font-weight-semibold);
+  --font-weight-title: var(--font-weight-medium);
 
   --line-height-body: var(--line-height-default);
+  --line-height-heading: var(--line-height-default);
+  --line-height-control: var(--line-height-default);
+  --line-height-compact: var(--line-height-medium);
   --line-height-help: var(--line-height-relaxed);
+
+  --transition-interaction-fast: var(--duration-fast) var(--ease-standard);
+  --transition-interaction: var(--duration-standard) var(--ease-standard);
+  --transition-interaction-slow: var(--duration-slow) var(--ease-standard);
+  --transition-icon-swap: var(--duration-slow) var(--ease-icon-swap);
 
   --shadow-button:
     0 var(--stroke-1) var(--space-02) var(--color-black-o75),

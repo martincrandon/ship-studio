@@ -18,6 +18,7 @@ interface ChangedFilesActionsProps {
   primaryAction: ReactNode;
 }
 
+/** Renders the bulk actions available for the current changed-file selection. */
 export function ChangedFilesActions({
   projectPath,
   onDiscard,
@@ -74,6 +75,7 @@ export function ChangedFilesActions({
   );
 }
 
+/** Presents changed files for a project with selection and discard controls. */
 export function ChangedFilesSection({ changedFiles, projectPath }: ChangedFilesSectionProps) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; status: ChangeStatus } | null>(
     null

@@ -22,6 +22,10 @@ import DecorationStrikeSvg from '../../assets/icons/decoration-strike.svg?react'
 import DecorationUnderlineSvg from '../../assets/icons/decoration-underline.svg?react';
 import OverflowScrollSvg from '../../assets/icons/overflow-scroll.svg?react';
 import WrapDownSvg from '../../assets/icons/wrap-down.svg?react';
+import OverflowAutoSvg from '../../assets/icons/overflow-auto.svg?react';
+import WrapUpSvg from '../../assets/icons/wrap-up.svg?react';
+import UpSvg from '../../assets/icons/up.svg?react';
+import DownSvg from '../../assets/icons/down.svg?react';
 import { createIcon } from './icon-base';
 
 export const AlignLeftIcon = createIcon(AlignLeftSvg, {
@@ -185,9 +189,37 @@ export const OverflowScrollIcon = createIcon(OverflowScrollSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const OverflowAutoIcon = createIcon(OverflowAutoSvg, {
+  name: 'OverflowAutoIcon',
+  source: 'icons/overflow-auto.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const WrapDownIcon = createIcon(WrapDownSvg, {
   name: 'WrapDownIcon',
   source: 'icons/wrap-down.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const WrapUpIcon = createIcon(WrapUpSvg, {
+  name: 'WrapUpIcon',
+  source: 'icons/wrap-up.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ArrowUpIcon = createIcon(UpSvg, {
+  name: 'ArrowUpIcon',
+  source: 'icons/up.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ArrowDownIcon = createIcon(DownSvg, {
+  name: 'ArrowDownIcon',
+  source: 'icons/down.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

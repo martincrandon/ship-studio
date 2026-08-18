@@ -1,5 +1,6 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
+/** Props for a standardized extension-manager result row and its trailing action. */
 export interface ExtensionListRowProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   /** Optional trailing action area; row content remains domain-owned. */

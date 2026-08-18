@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use tracing::{debug, error, info, instrument, warn};
 
 // Network git ops (fetch, push --delete) go through the workspace-scoped helper
-// in the parent module so they authenticate as the project's workspace login.
-use super::run_git_net;
+// in the parent module so they authenticate as the project's workspace login;
+// their failures classify through classify_git_net_error (issue #560).
+use super::{classify_git_net_error, run_git_net};
 
 /// Tracks the last time `git fetch` was run per project path.
 /// Prevents redundant network I/O when the frontend polls `list_branches` frequently.
@@ -58,15 +59,31 @@ pub async fn list_branches(project_path: String) -> Result<Vec<BranchInfo>, Comm
         });
     }
 
-    // Get all branches (local and remote)
-    let output = create_command("git")
-        .args(["branch", "-a", "--format=%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authorname)|%(HEAD)"])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    // Get all branches (local and remote). Labeled + EAGAIN-retried: this is
+    // polled frequently, so a transient spawn failure used to reach telemetry
+    // as a bare "os error 35" with no call-site context (issue #555).
+    let mut branch_cmd = crate::utils::git_command_in(&validated_path)?;
+    branch_cmd.args([
+        "branch",
+        "-a",
+        "--format=%(refname:short)|%(objectname:short)|%(committerdate:unix)|%(authorname)|%(HEAD)",
+    ]);
+    let output = crate::external_command::spawn_with_pressure_retry("git branch -a", || {
+        branch_cmd.output()
+    })?;
 
     if !output.status.success() {
-        return Err(("Failed to list branches".to_string()).into());
+        // Include git's stderr — a bare "Failed to list branches" is
+        // undiagnosable from telemetry (issue #252).
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Environment gaps (unaccepted Xcode license, missing CLT, macOS TCC
+        // denial) mean git itself can't run — an expected machine state with a
+        // user-side fix, not an app malfunction (issues #603/#546).
+        if let Some(gap) = crate::utils::git_environment_gap(&stderr) {
+            warn!(error = %stderr.trim(), "git blocked by an environment gap while listing branches");
+            return Err(gap);
+        }
+        return Err((format!("Failed to list branches: {}", stderr.trim())).into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -186,11 +203,10 @@ pub async fn get_current_branch(project_path: String) -> Result<String, CommandE
 
     let validated_path = validate_project_path(&project_path)?;
 
-    let output = create_command("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut head_cmd = crate::utils::git_command_in(&validated_path)?;
+    head_cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]);
+    let output =
+        crate::external_command::spawn_with_pressure_retry("git rev-parse", || head_cmd.output())?;
 
     if !output.status.success() {
         return Err(("Not a git repository".to_string()).into());
@@ -198,7 +214,10 @@ pub async fn get_current_branch(project_path: String) -> Result<String, CommandE
 
     let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if branch == "HEAD" {
-        return Err(("Detached HEAD state".to_string()).into());
+        // A normal git state (checked-out tag/commit, mid-rebase), not a
+        // malfunction — every caller already treats it as recoverable, so
+        // keep it out of telemetry (issue #317).
+        return Err(crate::errors::CommandError::expected("Detached HEAD state"));
     }
 
     // Cache the result
@@ -236,16 +255,17 @@ pub async fn switch_branch(
     let has_changes = git_has_any_changes(&validated_path)?;
 
     if has_changes && auto_stash {
-        let stash_output = create_command("git")
-            .args([
-                "stash",
-                "push",
-                "-m",
-                &format!("Auto-stash by Ship Studio (from {current_branch})"),
-            ])
-            .current_dir(&validated_path)
-            .output()
-            .map_err(|e| e.to_string())?;
+        let mut stash_cmd = crate::utils::git_command_in(&validated_path)?;
+        stash_cmd.args([
+            "stash",
+            "push",
+            "-m",
+            &format!("Auto-stash by Ship Studio (from {current_branch})"),
+        ]);
+        let stash_output =
+            crate::external_command::spawn_with_pressure_retry("git stash push", || {
+                stash_cmd.output()
+            })?;
 
         if stash_output.status.success() {
             let stdout = String::from_utf8_lossy(&stash_output.stdout);
@@ -278,18 +298,18 @@ pub async fn switch_branch(
     }
 
     // Try to checkout the branch
-    let checkout_output = create_command("git")
-        .args(["checkout", "--end-of-options", &branch_name])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut checkout_cmd = crate::utils::git_command_in(&validated_path)?;
+    checkout_cmd.args(["checkout", "--end-of-options", &branch_name]);
+    let checkout_output =
+        crate::external_command::spawn_with_pressure_retry("git checkout", || {
+            checkout_cmd.output()
+        })?;
 
     if !checkout_output.status.success() {
         // Checkout failed - restore the stash if we made one
         if stashed {
-            if let Err(e) = create_command("git")
+            if let Err(e) = crate::utils::git_command_in(&validated_path)?
                 .args(["stash", "pop"])
-                .current_dir(&validated_path)
                 .output()
             {
                 warn!("Failed to restore stash after checkout failure: {}", e);
@@ -303,12 +323,46 @@ pub async fn switch_branch(
         }
 
         let stderr = String::from_utf8_lossy(&checkout_output.stderr);
+        // Pre-2.24 git doesn't understand the `--end-of-options` injection
+        // guard and fails resolving it as a pathspec — turn that confusing
+        // two-line error into a clear "your git is too old" (issue #364).
+        let error_message = if stderr.contains("pathspec '--end-of-options'") {
+            // Remediation must match the OS the app is running on — telling a
+            // Windows user to `brew install git` is a dead end (issue #513).
+            let remediation = if cfg!(target_os = "windows") {
+                "run `winget install --id Git.Git` or download the installer from \
+                 git-scm.com/download/win"
+            } else if cfg!(target_os = "linux") {
+                "install it with your distribution's package manager (e.g. `apt install git`, \
+                 `dnf install git`, or `pacman -S git`)"
+            } else {
+                "update the Xcode Command Line Tools or run `brew install git`"
+            };
+            format!(
+                "Your installed Git is too old for Ship Studio (Git 2.24 from 2019 or newer \
+                 is required). Update Git — {remediation} — then try again."
+            )
+        } else if stderr.contains("resolve your current index first")
+            || stderr.contains("needs merge")
+        {
+            // An abandoned merge left unmerged entries in the index — the
+            // conflict-resolution flow deliberately leaves git mid-merge, and
+            // closing it without finishing strands the repo there. Git's raw
+            // "you need to resolve your current index first" says nothing a
+            // user can act on (issue #417).
+            "A merge with unresolved conflicts is still in progress in this project. Finish \
+             resolving the conflicts (or discard the merge) before switching branches — the \
+             Resolve Conflicts flow will pick up where it left off."
+                .to_string()
+        } else {
+            stderr.to_string()
+        };
         return Ok(SwitchResult {
             success: false,
             stashed_changes: false,
             pending_stash_from: None,
             stash_applied: false,
-            error: Some(stderr.to_string()),
+            error: Some(error_message),
         });
     }
 
@@ -320,9 +374,8 @@ pub async fn switch_branch(
         // If we're switching back to the branch where we stashed from, offer to apply
         if stash_info.from_branch == branch_name {
             // Try to auto-apply the stash
-            let pop_output = create_command("git")
+            let pop_output = crate::utils::git_command_in(&validated_path)?
                 .args(["stash", "pop"])
-                .current_dir(&validated_path)
                 .output();
 
             if let Ok(output) = pop_output {
@@ -345,9 +398,8 @@ pub async fn switch_branch(
     }
 
     // Pull latest changes from remote
-    if let Err(e) = create_command("git")
+    if let Err(e) = crate::utils::git_command_in(&validated_path)?
         .args(["pull", "--ff-only"])
-        .current_dir(&validated_path)
         .output()
     {
         warn!("Failed to pull latest changes after branch switch: {}", e);
@@ -403,11 +455,10 @@ pub async fn create_branch(
     }
 
     // Get the current branch name
-    let current_branch_output = create_command("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut head_cmd = crate::utils::git_command_in(&validated_path)?;
+    head_cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]);
+    let current_branch_output =
+        crate::external_command::spawn_with_pressure_retry("git rev-parse", || head_cmd.output())?;
 
     let current_branch = String::from_utf8_lossy(&current_branch_output.stdout)
         .trim()
@@ -425,11 +476,11 @@ pub async fn create_branch(
 
     if is_from_current {
         // Create branch from current HEAD (preserves local changes)
-        let output = create_command("git")
-            .args(["checkout", "-b", &branch_name])
-            .current_dir(&validated_path)
-            .output()
-            .map_err(|e| e.to_string())?;
+        let mut co_cmd = crate::utils::git_command_in(&validated_path)?;
+        co_cmd.args(["checkout", "-b", &branch_name]);
+        let output = crate::external_command::spawn_with_pressure_retry("git checkout -b", || {
+            co_cmd.output()
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -449,10 +500,9 @@ pub async fn create_branch(
         let explicit_remote = from_branch.starts_with("origin/");
 
         let local_exists = !explicit_remote
-            && create_command("git")
+            && crate::utils::git_command_in(&validated_path)?
                 .args(["show-ref", "--verify", "--quiet"])
                 .arg(format!("refs/heads/{plain}"))
-                .current_dir(&validated_path)
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false);
@@ -466,14 +516,43 @@ pub async fn create_branch(
             format!("origin/{plain}")
         };
 
-        let output = create_command("git")
-            .args(["checkout", "-b", &branch_name, &base_ref])
-            .current_dir(&validated_path)
-            .output()
-            .map_err(|e| e.to_string())?;
+        let mut co_cmd = crate::utils::git_command_in(&validated_path)?;
+        co_cmd.args(["checkout", "-b", &branch_name, &base_ref]);
+        let output = crate::external_command::spawn_with_pressure_retry("git checkout -b", || {
+            co_cmd.output()
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            // Uncommitted changes blocking the checkout is an everyday state
+            // the frontend already resolves with its commit-or-stash modal —
+            // error!() would page telemetry for it (issue #502). The raw
+            // stderr must still be returned: BranchesTab matches its wording.
+            if stderr.contains("overwritten by checkout")
+                || stderr.contains("commit your changes or stash")
+            {
+                warn!(error = %stderr, "Branch creation blocked by uncommitted changes");
+                // Everyday user state, not a malfunction — Expected keeps it
+                // out of telemetry while preserving the stderr text verbatim
+                // (BranchesTab/humanizeGitError match its wording). Covers
+                // both the tracked-file and untracked-file ("untracked working
+                // tree files would be overwritten") variants (issue #566).
+                return Err(crate::errors::CommandError::expected(stderr.to_string()));
+            }
+            // The base ref didn't resolve: "fatal: 'origin/Y' is not a commit
+            // and a branch 'X' cannot be created from it". The base branch was
+            // deleted or renamed on GitHub after the branch list loaded (or
+            // the fetch above failed) — a stale-state race with a user-side
+            // fix, not a malfunction (issue #692). The message wording is
+            // matched by isRecognizedGitFailure in src/lib/errors.ts — keep
+            // them byte-identical.
+            if is_missing_base_ref_error(&stderr) {
+                warn!(error = %stderr, "Branch creation base ref no longer exists");
+                return Err(crate::errors::CommandError::expected(
+                    "The branch this was based on no longer exists on GitHub. \
+                     Refresh your branches and try again.",
+                ));
+            }
             error!(error = %stderr, "Failed to create branch");
             return Err((stderr.to_string()).into());
         }
@@ -529,8 +608,17 @@ pub async fn push_branch(project_path: String, branch_name: String) -> Result<()
         let stderr = String::from_utf8_lossy(&output.stderr);
         // An already-published, unchanged branch is a success, not an error.
         if !stderr.contains("Everything up-to-date") {
+            // run_git_net routes credential resolution through gh, so auth
+            // and connectivity failures wear gh/git wording — classify them
+            // as the expected states they are instead of raw telemetry-
+            // reported stderr (issue #560). Classified = environment, so log
+            // at warn (error! auto-files bug reports).
+            if let Some(err) = classify_git_net_error(&stderr) {
+                warn!(error = %stderr, "Publishing branch hit an expected gh/git failure");
+                return Err(err);
+            }
             error!(error = %stderr, "Failed to publish branch");
-            return Err((stderr.to_string()).into());
+            return Err(crate::external_command::truncate_output(&stderr).into());
         }
     }
 
@@ -542,6 +630,25 @@ pub async fn push_branch(project_path: String, branch_name: String) -> Result<()
 
     info!("Branch published successfully");
     Ok(())
+}
+
+/// Git refusing `checkout -b <new> <base>` because the base ref doesn't
+/// resolve to a commit — "fatal: 'origin/Y' is not a commit and a branch 'X'
+/// cannot be created from it". Happens when the base branch was deleted or
+/// renamed on the remote after the branch list loaded (issue #692).
+fn is_missing_base_ref_error(stderr: &str) -> bool {
+    stderr.contains("is not a commit and a branch")
+}
+
+/// Git refusing `branch -D` because the branch is checked out in another
+/// worktree — a by-design guard, not a malfunction (issue #562). Wording
+/// varies across git versions: newer git says "cannot delete branch '…' used
+/// by worktree at '…'", older git says "Cannot delete branch '…' checked out
+/// at '…'".
+fn is_worktree_delete_refusal(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    lower.contains("cannot delete branch")
+        && (lower.contains("used by worktree") || lower.contains("checked out at"))
 }
 
 /// Delete a branch (local and optionally remote)
@@ -567,30 +674,41 @@ pub async fn delete_branch(
     }
 
     // Get current branch to make sure we're not on it
-    let current = create_command("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut head_cmd = crate::utils::git_command_in(&validated_path)?;
+    head_cmd.args(["rev-parse", "--abbrev-ref", "HEAD"]);
+    let current =
+        crate::external_command::spawn_with_pressure_retry("git rev-parse", || head_cmd.output())?;
 
     let current_branch = String::from_utf8_lossy(&current.stdout).trim().to_string();
     if current_branch == branch_name {
-        return Err(
-            "Cannot delete the current branch. Switch to another branch first."
-                .to_string()
-                .into(),
-        );
+        // By-design guard, not a malfunction — Expected keeps the (rare)
+        // post-merge-cleanup race out of telemetry (issue #458).
+        return Err(crate::errors::CommandError::expected(
+            "Cannot delete the current branch. Switch to another branch first.",
+        ));
     }
 
     // Delete local branch
-    let local_output = create_command("git")
-        .args(["branch", "-D", "--", &branch_name])
-        .current_dir(&validated_path)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut del_cmd = crate::utils::git_command_in(&validated_path)?;
+    del_cmd.args(["branch", "-D", "--", &branch_name]);
+    let local_output =
+        crate::external_command::spawn_with_pressure_retry("git branch -D", || del_cmd.output())?;
 
     if !local_output.status.success() {
         let stderr = String::from_utf8_lossy(&local_output.stderr);
+        // Git refuses to delete a branch that's checked out in another
+        // worktree — a by-design guard exactly like the current-branch case
+        // above, not a malfunction. Replace the raw stderr (which leaks the
+        // other worktree's absolute path into the toast) with a clear,
+        // actionable message naming the branch (issue #562).
+        if is_worktree_delete_refusal(&stderr) {
+            warn!(error = %stderr, "Branch delete blocked: checked out in another worktree");
+            return Err(crate::errors::CommandError::expected(format!(
+                "The branch '{branch_name}' is checked out in another worktree, so it can't be \
+                 deleted. Remove that worktree first (Branches → Worktrees), then delete the \
+                 branch."
+            )));
+        }
         if !stderr.contains("not found") {
             return Err((stderr.to_string()).into());
         }
@@ -608,8 +726,18 @@ pub async fn delete_branch(
         if !remote_output.status.success() {
             let stderr = String::from_utf8_lossy(&remote_output.stderr);
             if !stderr.contains("remote ref does not exist") {
+                // Same expected gh/git failure classification as push_branch
+                // (issue #560).
+                if let Some(err) = classify_git_net_error(&stderr) {
+                    warn!(error = %stderr, "Remote branch delete hit an expected gh/git failure");
+                    return Err(err);
+                }
                 error!(error = %stderr, "Failed to delete remote branch");
-                return Err((format!("Failed to delete remote branch: {stderr}")).into());
+                return Err(format!(
+                    "Failed to delete remote branch: {}",
+                    crate::external_command::truncate_output(&stderr)
+                )
+                .into());
             }
         }
 
@@ -620,9 +748,8 @@ pub async fn delete_branch(
         // surfaces remote-tracking refs as branches, that stale ref makes the branch
         // look undeleted (the reported "auto clean doesn't delete the branch anymore").
         // `-rD` is a harmless no-op when the ref is already gone or there's no remote.
-        let _ = create_command("git")
+        let _ = crate::utils::git_command_in(&validated_path)?
             .args(["branch", "-rD", &format!("origin/{branch_name}")])
-            .current_dir(&validated_path)
             .output();
     }
 
@@ -647,4 +774,53 @@ pub async fn delete_branch(
 
     info!("Branch deleted successfully");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_missing_base_ref_error, is_worktree_delete_refusal};
+
+    // The #562 shape: deleting a branch that another worktree has checked out.
+    #[test]
+    fn worktree_delete_refusal_matches_current_git_wording() {
+        let stderr = "error: cannot delete branch 'acss-prog/data-fetch-stats' used by worktree at '/Users/x/ShipStudio/acss-poc'";
+        assert!(is_worktree_delete_refusal(stderr));
+    }
+
+    #[test]
+    fn worktree_delete_refusal_matches_older_git_wording() {
+        let stderr =
+            "error: Cannot delete branch 'feature/x' checked out at '/Users/x/ShipStudio/proj'";
+        assert!(is_worktree_delete_refusal(stderr));
+    }
+
+    // The #692 shape: creating a branch from a base whose remote ref is gone.
+    #[test]
+    fn missing_base_ref_error_matches_git_wording() {
+        let stderr = "fatal: 'origin/feature-x' is not a commit and a branch 'my-branch' cannot be created from it";
+        assert!(is_missing_base_ref_error(stderr));
+    }
+
+    #[test]
+    fn missing_base_ref_error_ignores_other_checkout_failures() {
+        assert!(!is_missing_base_ref_error(
+            "error: Your local changes to the following files would be overwritten by checkout"
+        ));
+        assert!(!is_missing_base_ref_error(
+            "fatal: a branch named 'my-branch' already exists"
+        ));
+        assert!(!is_missing_base_ref_error(""));
+    }
+
+    #[test]
+    fn worktree_delete_refusal_ignores_other_delete_failures() {
+        assert!(!is_worktree_delete_refusal(
+            "error: branch 'ghost' not found."
+        ));
+        // Checkout refusal (a *switch* problem, not a delete refusal).
+        assert!(!is_worktree_delete_refusal(
+            "fatal: 'feature/x' is already used by worktree at '/tmp/w'"
+        ));
+        assert!(!is_worktree_delete_refusal(""));
+    }
 }

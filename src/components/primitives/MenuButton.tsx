@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { Button, type ButtonProps } from './Button';
 
+/** Props for a button-family menu trigger with controlled expanded state. */
 export interface MenuButtonProps extends Omit<ButtonProps, 'aria-expanded' | 'aria-haspopup'> {
   expanded: boolean;
 }

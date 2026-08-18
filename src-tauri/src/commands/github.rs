@@ -5,7 +5,7 @@
 use crate::cache::TtlCache;
 use crate::commands::git::git_stage_and_commit;
 use crate::errors::CommandError;
-use crate::external_command::run_with_timeout;
+use crate::external_command::{run_with_timeout, truncate_output};
 use crate::types::{
     GitHubCliStatus, GitHubLanguage, GitHubRepo, ProjectGitHubStatus, PushToGitHubOptions,
 };
@@ -38,12 +38,18 @@ const GITHUB_CLI_TIMEOUT_SECS: u64 = 15;
 
 /// Run a gh command with a timeout via the shared external_command helper.
 /// Returns CommandError so callers can discriminate timeout vs IO vs process.
+///
+/// `label` names the specific invocation ("gh auth status", "gh repo create
+/// --push", …): the timeout error message and its telemetry fingerprint are
+/// derived from it, so a bare "gh" would collapse every distinct hang into one
+/// undiagnosable bucket (issue #611).
 async fn run_command_with_timeout(
     cmd: Command,
+    label: &str,
     timeout_secs: u64,
 ) -> Result<std::process::Output, CommandError> {
     let tokio_cmd = tokio::process::Command::from(cmd);
-    run_with_timeout(tokio_cmd, "gh", timeout_secs).await
+    run_with_timeout(tokio_cmd, label, timeout_secs).await
 }
 
 /// Returns a Command for gh with extended PATH set, scoped to the globally
@@ -58,6 +64,11 @@ pub fn get_gh_command() -> Command {
     };
     cmd.env("PATH", get_extended_path());
     cmd.envs(crate::commands::accounts::get_env_vars_for_active_account());
+    // No caller feeds gh stdin, and a GUI-spawned gh has no tty — if gh ever
+    // decides to prompt (stale credential, ambiguous host) it must fail fast
+    // instead of blocking on input that can never arrive until the 60s network
+    // timeout kills it with a bare "timed out" (issue #259).
+    cmd.stdin(std::process::Stdio::null());
     cmd
 }
 
@@ -76,6 +87,8 @@ pub fn get_gh_command_for_project(project_path: &std::path::Path) -> Command {
     cmd.envs(crate::commands::accounts::get_env_vars_for_project(
         project_path,
     ));
+    // Fail fast instead of blocking on a prompt — see get_gh_command().
+    cmd.stdin(std::process::Stdio::null());
     cmd
 }
 
@@ -120,7 +133,13 @@ pub async fn check_github_cli_status() -> GitHubCliStatus {
     let start = std::time::Instant::now();
     let mut auth_cmd = get_gh_command();
     auth_cmd.args(["auth", "status"]);
-    let authenticated = match run_command_with_timeout(auth_cmd, GITHUB_CLI_TIMEOUT_SECS).await {
+    let authenticated = match run_command_with_timeout(
+        auth_cmd,
+        "gh auth status",
+        GITHUB_CLI_TIMEOUT_SECS,
+    )
+    .await
+    {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -170,6 +189,13 @@ fn gh_command_and_account(project_path: Option<&str>) -> Result<(Command, String
     }
 }
 
+/// User-facing message when a `gh api` call blows its time budget — a slow or
+/// flaky network, not an app malfunction (issue #686). `Expected` keeps it out
+/// of telemetry; ImportProject.tsx matches the "took too long" wording to
+/// suggest retrying instead of re-authenticating — keep them in sync.
+const GH_TIMEOUT_MESSAGE: &str =
+    "GitHub took too long to respond. Check your internet connection and try again.";
+
 #[tauri::command]
 #[tracing::instrument]
 pub async fn get_github_username(project_path: Option<String>) -> Result<String, CommandError> {
@@ -180,7 +206,14 @@ pub async fn get_github_username(project_path: Option<String>) -> Result<String,
     }
 
     cmd.args(["api", "user", "--jq", ".login"]);
-    let output = run_command_with_timeout(cmd, GITHUB_CLI_TIMEOUT_SECS).await?;
+    let output = match run_command_with_timeout(cmd, "gh api user", GITHUB_CLI_TIMEOUT_SECS).await {
+        // A blown time budget is the network, not a malfunction — same
+        // mapping pattern as mobile.rs's simctl timeouts (issue #686).
+        Err(CommandError::Timeout { .. }) => {
+            return Err(CommandError::expected(GH_TIMEOUT_MESSAGE))
+        }
+        other => other?,
+    };
 
     if !output.status.success() {
         return Err(CommandError::NotAuthenticated {
@@ -200,7 +233,15 @@ pub async fn get_github_orgs(project_path: Option<String>) -> Result<Vec<String>
     // login so org choices match the account the repo will be created under.
     let (mut cmd, _account_id) = gh_command_and_account(project_path.as_deref())?;
     cmd.args(["api", "user/orgs", "--jq", ".[].login"]);
-    let output = run_command_with_timeout(cmd, GITHUB_CLI_TIMEOUT_SECS).await?;
+    let output =
+        match run_command_with_timeout(cmd, "gh api user/orgs", GITHUB_CLI_TIMEOUT_SECS).await {
+            // Same network-not-malfunction mapping as get_github_username
+            // (issue #686).
+            Err(CommandError::Timeout { .. }) => {
+                return Err(CommandError::expected(GH_TIMEOUT_MESSAGE))
+            }
+            other => other?,
+        };
 
     if !output.status.success() {
         // Return empty list if we can't get orgs (user might not have any)
@@ -243,13 +284,20 @@ pub async fn get_project_github_status(project_path: String) -> ProjectGitHubSta
 
     // Get remote URL (with timeout)
     let step_start = std::time::Instant::now();
-    let mut remote_cmd = create_command("git");
+    let Ok(mut remote_cmd) = crate::utils::git_command_in(&project) else {
+        return not_a_repo;
+    };
     remote_cmd
         .args(["remote", "get-url", "origin"])
-        .current_dir(&project)
         .env("PATH", get_extended_path());
 
-    let remote_url = match run_command_with_timeout(remote_cmd, GITHUB_CLI_TIMEOUT_SECS).await {
+    let remote_url = match run_command_with_timeout(
+        remote_cmd,
+        "git remote get-url origin",
+        GITHUB_CLI_TIMEOUT_SECS,
+    )
+    .await
+    {
         Ok(output) if output.status.success() => {
             let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
             debug!(elapsed_ms = step_start.elapsed().as_millis() as u64, remote_url = %url, "git remote get-url origin completed");
@@ -298,7 +346,9 @@ pub async fn get_project_github_status(project_path: String) -> ProjectGitHubSta
         .args(["repo", "view", &github_repo, "--json", "url"])
         .current_dir(&project);
 
-    let result = match run_command_with_timeout(gh_cmd, GITHUB_CLI_TIMEOUT_SECS).await {
+    let result = match run_command_with_timeout(gh_cmd, "gh repo view", GITHUB_CLI_TIMEOUT_SECS)
+        .await
+    {
         Ok(output) if output.status.success() => {
             debug!(elapsed_ms = step_start.elapsed().as_millis() as u64, github_repo = %github_repo, "gh repo view completed successfully");
             // Parse the URL from JSON response
@@ -344,16 +394,14 @@ pub async fn get_project_github_status(project_path: String) -> ProjectGitHubSta
 /// Ensures git user.name and user.email are configured for the repo.
 /// If not set, fetches the user's identity from GitHub CLI and sets it locally.
 pub fn ensure_git_identity(repo_path: &std::path::Path) -> Result<(), CommandError> {
-    let has_name = create_command("git")
+    let has_name = crate::utils::git_command_in(repo_path)?
         .args(["config", "user.name"])
-        .current_dir(repo_path)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
 
-    let has_email = create_command("git")
+    let has_email = crate::utils::git_command_in(repo_path)?
         .args(["config", "user.email"])
-        .current_dir(repo_path)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -382,9 +430,8 @@ pub fn ensure_git_identity(repo_path: &std::path::Path) -> Result<(), CommandErr
 
     if !has_name {
         let display_name = name.unwrap_or(login);
-        create_command("git")
+        crate::utils::git_command_in(repo_path)?
             .args(["config", "user.name", display_name])
-            .current_dir(repo_path)
             .output()
             .map_err(|e| format!("Failed to set git user.name: {e}"))?;
     }
@@ -399,9 +446,8 @@ pub fn ensure_git_identity(repo_path: &std::path::Path) -> Result<(), CommandErr
         } else {
             user_email.to_string()
         };
-        create_command("git")
+        crate::utils::git_command_in(repo_path)?
             .args(["config", "user.email", &final_email])
-            .current_dir(repo_path)
             .output()
             .map_err(|e| format!("Failed to set git user.email: {e}"))?;
     }
@@ -424,9 +470,8 @@ pub async fn push_to_github(options: PushToGitHubOptions) -> Result<String, Comm
     // Check if it's already a git repo, if not initialize
     let git_dir = validated_path.join(".git");
     if !git_dir.exists() {
-        create_command("git")
+        crate::utils::git_command_in(&validated_path)?
             .args(["init"])
-            .current_dir(&validated_path)
             .output()
             .map_err(CommandError::from)?;
     }
@@ -444,30 +489,23 @@ pub async fn push_to_github(options: PushToGitHubOptions) -> Result<String, Comm
         } else {
             "Initial commit from Ship Studio"
         },
-    )
-    .map_err(|stderr| CommandError::Process {
-        cmd: "git commit".to_string(),
-        exit_code: 1,
-        stderr,
-    })?;
+    )?;
 
     // Ensure at least one commit exists (gh repo create --push requires it)
-    let has_commits = create_command("git")
+    let has_commits = crate::utils::git_command_in(&validated_path)?
         .args(["rev-parse", "HEAD"])
-        .current_dir(&validated_path)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
 
     if !has_commits {
-        let output = create_command("git")
+        let output = crate::utils::git_command_in(&validated_path)?
             .args([
                 "commit",
                 "--allow-empty",
                 "-m",
                 "Initial commit from Ship Studio",
             ])
-            .current_dir(&validated_path)
             .output()
             .map_err(CommandError::from)?;
 
@@ -476,7 +514,7 @@ pub async fn push_to_github(options: PushToGitHubOptions) -> Result<String, Comm
             return Err(CommandError::Process {
                 cmd: "git commit".to_string(),
                 exit_code: output.status.code().unwrap_or(-1),
-                stderr: stderr.to_string(),
+                stderr: truncate_output(&stderr),
             });
         }
     }
@@ -491,19 +529,258 @@ pub async fn push_to_github(options: PushToGitHubOptions) -> Result<String, Comm
         ])
         .current_dir(&validated_path);
     // Longer timeout: create+push can take a while for bigger repos.
-    let output = run_command_with_timeout(gh_cmd, 60).await?;
+    let output = run_command_with_timeout(gh_cmd, "gh repo create --push", 60).await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // A name collision is user input needing a different name, not a
+        // malfunction — surface it in plain language instead of GitHub's raw
+        // "GraphQL: Name already exists on this account (createRepository)"
+        // (issue #279). Expected: routine collisions aren't telemetry.
+        if stderr.contains("Name already exists on this account") {
+            return Err(CommandError::expected(format!(
+                "A repository named \"{repo_name}\" already exists on this account. Choose a different name."
+            )));
+        }
+        // Connectivity blips and GitHub's transient API 400s are the
+        // environment/GitHub, not a malfunction (#420, #602).
+        if let Some(err) = gh_common_error(&stderr) {
+            return Err(err);
+        }
         return Err(CommandError::Process {
             cmd: "gh repo create".to_string(),
             exit_code: output.status.code().unwrap_or(-1),
-            stderr: stderr.to_string(),
+            stderr: truncate_output(&stderr),
         });
     }
 
     // Return the repo URL
     Ok(format!("https://github.com/{repo_name}"))
+}
+
+/// gh's stderr when a subcommand needs auth and none is configured — "To get
+/// started with GitHub CLI, please run:  gh auth login" plus the GH_TOKEN
+/// hint. Modeled as the app's first-class NotAuthenticated state (skipped by
+/// telemetry, and the frontend shows its connect-GitHub UI) instead of
+/// surfacing the raw CLI text (issue #326).
+pub(crate) fn gh_auth_error(stderr: &str) -> Option<CommandError> {
+    let lower = stderr.to_lowercase();
+    // "gh auth login"/GH_TOKEN = no credential at all (issue #326);
+    // "gh auth refresh"/"Requires authentication" = a credential exists but
+    // GitHub rejected it (expired/revoked token, HTTP 401) — same reconnect
+    // UX applies (issue #470). "could not read Username/Password" = git fell
+    // back to an interactive credential prompt because no usable credential
+    // helper answered — no tty in a GUI-spawned process, so it dies with
+    // "Device not configured"/"terminal prompts disabled"; the same reconnect
+    // UX fixes it (issue #638, mirroring publishing.rs's push_auth_error).
+    if stderr.contains("gh auth login")
+        || stderr.contains("GH_TOKEN")
+        || stderr.contains("gh auth refresh")
+        || lower.contains("requires authentication")
+        || lower.contains("could not read username")
+        || lower.contains("could not read password")
+    {
+        return Some(CommandError::NotAuthenticated {
+            service: "github".to_string(),
+        });
+    }
+    None
+}
+
+/// gh's stderr when the machine simply can't reach GitHub (offline, DNS or
+/// firewall block, flaky network). Covers Go's `net/http` dial errors —
+/// including the Windows-specific `connectex: A connection attempt failed…`
+/// wording, which contains none of the usual "timed out"/"refused"
+/// substrings (issue #375). A connectivity blip is the environment, not a
+/// malfunction: `Expected` keeps it out of telemetry and the message is
+/// something the user can act on.
+pub(crate) fn gh_network_error(stderr: &str) -> Option<CommandError> {
+    let s = stderr.to_lowercase();
+    let unreachable = s.contains("dial tcp")
+        || s.contains("connectex")
+        || s.contains("could not resolve host")
+        || s.contains("no such host")
+        || s.contains("connection refused")
+        || s.contains("network is unreachable")
+        || s.contains("i/o timeout")
+        || s.contains("tls handshake timeout")
+        // Go's net/http error when the connection drops mid-request —
+        // flaky wifi, VPN/proxy interference (issue #434).
+        || s.contains("unexpected eof")
+        // Mid-request TCP reset ("read tcp …: read: connection reset by
+        // peer") — the read-time counterpart of "dial tcp"'s connect-time
+        // failures (issue #592).
+        || s.contains("connection reset by peer")
+        || s.contains("read tcp")
+        // gh's own top-level DNS-failure handler swallows the raw Go error
+        // and prints only "error connecting to <host>\ncheck your internet
+        // connection or https://githubstatus.com" (issue #473).
+        || s.contains("check your internet connection")
+        || s.contains("error connecting to ")
+        // Go's bare net/http `EOF` — the connection closed before any response
+        // byte, without the "unexpected" prefix #434 covered. A naked "eof"
+        // substring would false-positive on ordinary words ("thereof"), so
+        // match the error-position shape `…: EOF` at the end of a line
+        // (issue #642).
+        || s.lines().any(|l| l.trim_end().ends_with(": eof"));
+    unreachable.then(|| {
+        CommandError::expected(
+            "Couldn't reach GitHub. Check your internet connection and try again.",
+        )
+    })
+}
+
+/// Go's `crypto/tls`/`crypto/x509` error when gh can reach a server but can't
+/// verify the certificate chain it presents — "tls: failed to verify
+/// certificate: x509: certificate signed by unknown authority". Almost always
+/// a corporate proxy or antivirus doing TLS interception with a private CA
+/// the system doesn't trust, or a broken/outdated certificate store — the
+/// environment, not an app malfunction (issue #658). Deliberately NOT folded
+/// into gh_network_error's "check your internet connection" message: retrying
+/// or checking connectivity can't fix a trust chain — the user needs to
+/// install the intercepting proxy's CA cert or repair their trust store.
+pub(crate) fn gh_tls_error(stderr: &str) -> Option<CommandError> {
+    let s = stderr.to_lowercase();
+    // "x509:" prefixes every Go certificate-verification failure variant
+    // (unknown authority, expired, hostname mismatch, …) and appears nowhere
+    // in ordinary gh/GraphQL output.
+    let cert_unverifiable = s.contains("failed to verify certificate") || s.contains("x509:");
+    cert_unverifiable.then(|| {
+        CommandError::expected(
+            "GitHub's secure connection couldn't be verified. This usually means a corporate \
+             proxy, VPN, or antivirus is inspecting HTTPS traffic on this computer (its \
+             certificate isn't trusted yet), or the system's certificate store is out of date. \
+             Install your proxy's certificate or update your system, then try again.",
+        )
+    })
+}
+
+/// gh's passthrough of GitHub's generic HTTP 400 GraphQL response — "HTTP 400:
+/// We received a malformed request from your client. Sorry about that. Please
+/// try resubmitting your request…". GitHub emits this when the API can't parse
+/// the request body (e.g. odd Unicode in a PR title/body getting serialized
+/// into the GraphQL payload) — a transient API-side failure with a built-in
+/// retry suggestion, not an app malfunction (issue #602). `Expected` keeps it
+/// out of telemetry.
+pub(crate) fn gh_malformed_request_error(stderr: &str) -> Option<CommandError> {
+    stderr
+        .to_lowercase()
+        .contains("we received a malformed request")
+        .then(|| {
+            CommandError::expected(
+                "GitHub couldn't process the request (a temporary GitHub API error). \
+                 Try again in a moment.",
+            )
+        })
+}
+
+/// GitHub's API answering with a transient server-side 5xx — gh passes the
+/// response text through ("HTTP 504: We couldn't respond to your request in
+/// time…", "HTTP 502: Bad Gateway", …). The request reached GitHub and
+/// GitHub fell over; nothing the app did wrong and nothing the user can do
+/// but retry — the sibling of the HTTP 400 case below (issues #627/#602).
+/// `Expected` keeps it out of telemetry.
+pub(crate) fn gh_server_error(stderr: &str) -> Option<CommandError> {
+    let s = stderr.to_lowercase();
+    let is_5xx = s.contains("http 500")
+        || s.contains("http 502")
+        || s.contains("http 503")
+        || s.contains("http 504")
+        || s.contains("bad gateway")
+        || s.contains("service unavailable")
+        || s.contains("gateway timeout")
+        // The prose GitHub uses for its GraphQL 504s ("We couldn't respond to
+        // your request in time. Sorry about that. Please try resubmitting…").
+        || s.contains("respond to your request in time");
+    is_5xx.then(|| {
+        CommandError::expected(
+            "GitHub's API is temporarily unavailable (a GitHub server error). \
+             Try again in a moment.",
+        )
+    })
+}
+
+/// gh failing before it even runs a subcommand because it can't read its own
+/// config file — "failed to load config: open …/.config/gh/config.yml:
+/// permission denied" / "failed to create root command: failed to read
+/// configuration: …". A local file-permissions problem (typically a prior
+/// sudo run left the directory root-owned), not a Ship Studio bug and not a
+/// GitHub sign-in failure — reconnecting can't fix a file the OS won't let gh
+/// read (issue #631). Recurs on every gh call for the affected user, so
+/// `Expected` keeps it from flooding telemetry, and the message names the
+/// real fix (same precedent as the ~/.npm chown guidance in errors.ts).
+pub(crate) fn gh_config_error(stderr: &str) -> Option<CommandError> {
+    let s = stderr.to_lowercase();
+    let config_unreadable = (s.contains("failed to read configuration")
+        || s.contains("failed to load config"))
+        && s.contains("permission denied");
+    config_unreadable.then(|| {
+        CommandError::expected(
+            "The GitHub CLI (gh) can't read its own settings because of a file-permissions \
+             problem on this computer — this isn't a GitHub sign-in issue. Open a terminal and \
+             run `sudo chown -R $(whoami) ~/.config/gh`, then try again.",
+        )
+    })
+}
+
+/// gh (a Go binary) crashing with a Go runtime panic/fatal error — stderr is
+/// the runtime's full crash dump ("fatal error: …\n\nruntime stack:\n…" or
+/// "panic: …\n\ngoroutine N [running]:\n…"), dozens of stack-trace lines that
+/// are useless to a user. The known real-world case is the runtime failing to
+/// reserve its heap arena at startup on a memory-starved Windows machine
+/// (issue #610, the child-process sibling of errors.rs's
+/// `windows_out_of_memory` for our own spawns, #356). The environment killed
+/// the child, not the app — `Expected` keeps the dump out of telemetry and the
+/// message is something the user can act on. The matched literals are
+/// untranslated Go-runtime strings, stable across Go versions.
+pub(crate) fn gh_crash_error(stderr: &str) -> Option<CommandError> {
+    if stderr.contains("out of memory allocating heap arena map") {
+        return Some(CommandError::expected(
+            "The GitHub CLI (gh) couldn't start because the system is low on memory. \
+             Close some other apps (on Windows, increasing the paging file size can also help) \
+             and try again.",
+        ));
+    }
+    let go_crash = (stderr.contains("fatal error:") && stderr.contains("runtime stack:"))
+        || (stderr.contains("panic:") && stderr.contains("goroutine "));
+    go_crash.then(|| {
+        CommandError::expected(
+            "The GitHub CLI (gh) crashed unexpectedly. Try again — if it keeps happening, \
+             reinstalling the GitHub CLI may help.",
+        )
+    })
+}
+
+/// A `gh` invocation that hits GitHub can fail these ways regardless of which
+/// subcommand ran: a connectivity blip, GitHub's transient HTTP 400 or 5xx,
+/// an unreadable gh config file, or gh itself crashing. One-stop
+/// classification for the shared cases — call sites still layer their own
+/// auth / subcommand-specific checks on top.
+pub(crate) fn gh_common_error(stderr: &str) -> Option<CommandError> {
+    // TLS first: a cert-verification failure needs its trust-store guidance,
+    // not the generic "check your internet connection" message (issue #658).
+    gh_tls_error(stderr)
+        .or_else(|| gh_network_error(stderr))
+        .or_else(|| gh_malformed_request_error(stderr))
+        .or_else(|| gh_server_error(stderr))
+        .or_else(|| gh_config_error(stderr))
+        .or_else(|| gh_crash_error(stderr))
+}
+
+/// gh's own wrapper for a failing internal git call — "failed to run git:
+/// <git's stderr>" (gh's git/errors.go, GitError). Most commonly hit when gh
+/// can't resolve repo context because the project isn't a git repository. The
+/// underlying git fatal text is locale-dependent (e.g. Russian installs print
+/// a translated "not a git repository"), so matching git's own words — as
+/// report_command_error does for issue #254 — silently fails on non-English
+/// machines; gh's wrapper prefix is an untranslated Go literal and therefore
+/// stable (issue #403). A by-design refusal, not a malfunction.
+pub(crate) fn gh_git_repo_error(stderr: &str) -> Option<CommandError> {
+    stderr.contains("failed to run git:").then(|| {
+        CommandError::expected(
+            "This project isn't set up with git yet, so GitHub pull request actions aren't available.",
+        )
+    })
 }
 
 /// Lists GitHub repositories for a given owner (user or organization)
@@ -520,14 +797,22 @@ pub async fn list_github_repos(owner: String) -> Result<Vec<GitHubRepo>, Command
         "--limit",
         "100",
     ]);
-    let output = run_command_with_timeout(cmd, GITHUB_CLI_TIMEOUT_SECS).await?;
+    let output = run_command_with_timeout(cmd, "gh repo list", GITHUB_CLI_TIMEOUT_SECS).await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(err) = gh_auth_error(&stderr) {
+            return Err(err);
+        }
+        // Connectivity blips and GitHub's transient API 400s are the
+        // environment/GitHub, not a malfunction (#420, #602).
+        if let Some(err) = gh_common_error(&stderr) {
+            return Err(err);
+        }
         return Err(CommandError::Process {
             cmd: "gh repo list".to_string(),
             exit_code: output.status.code().unwrap_or(-1),
-            stderr: stderr.to_string(),
+            stderr: truncate_output(&stderr),
         });
     }
 
@@ -570,14 +855,23 @@ pub async fn list_collaborator_repos() -> Result<Vec<GitHubRepo>, CommandError> 
         "/user/repos?affiliation=collaborator&per_page=100&sort=updated",
         "--paginate",
     ]);
-    let output = run_command_with_timeout(cmd, GITHUB_CLI_TIMEOUT_SECS).await?;
+    let output =
+        run_command_with_timeout(cmd, "gh api user/repos", GITHUB_CLI_TIMEOUT_SECS).await?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(err) = gh_auth_error(&stderr) {
+            return Err(err);
+        }
+        // Connectivity blips and GitHub's transient API 400s are the
+        // environment/GitHub, not a malfunction (#420, #602).
+        if let Some(err) = gh_common_error(&stderr) {
+            return Err(err);
+        }
         return Err(CommandError::Process {
             cmd: "gh api /user/repos".to_string(),
             exit_code: output.status.code().unwrap_or(-1),
-            stderr: stderr.to_string(),
+            stderr: truncate_output(&stderr),
         });
     }
 
@@ -612,15 +906,32 @@ pub async fn list_collaborator_repos() -> Result<Vec<GitHubRepo>, CommandError> 
 pub async fn detect_package_manager(project_path: String) -> Result<String, CommandError> {
     let path = Path::new(&project_path);
 
+    // A lockfile names the repo's preferred manager, but the user may not have
+    // that tool: running it anyway dies with a raw "'bun' is not recognized"
+    // shell error (issues #454/#455). npm ships with Node (a hard app
+    // dependency), so fall back to it — npm can install from any repo even if
+    // it ignores the foreign lockfile.
+    fn or_npm(preferred: &str) -> String {
+        if crate::utils::find_executable(preferred).is_some() {
+            preferred.to_string()
+        } else {
+            tracing::warn!(
+                preferred,
+                "lockfile's package manager isn't installed; falling back to npm"
+            );
+            "npm".to_string()
+        }
+    }
+
     // Check in order of specificity
     if path.join("pnpm-lock.yaml").exists() {
-        return Ok("pnpm".to_string());
+        return Ok(or_npm("pnpm"));
     }
     if path.join("yarn.lock").exists() {
-        return Ok("yarn".to_string());
+        return Ok(or_npm("yarn"));
     }
     if path.join("bun.lockb").exists() {
-        return Ok("bun".to_string());
+        return Ok(or_npm("bun"));
     }
     // Default to npm
     Ok("npm".to_string())
@@ -635,6 +946,18 @@ mod tests {
     /// `invalidate_github_username_cache` clears the whole cache, so without this
     /// these tests race under cargo's default multi-threaded runner.
     static CACHE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    // The #686 contract: ImportProject.tsx special-cases the "took too long"
+    // wording to suggest retrying (not re-authenticating), and errors.ts's
+    // isRecognizedGitFailure matches "check your internet connection" — a
+    // rewording here silently breaks both.
+    #[test]
+    fn gh_timeout_message_keeps_the_frontend_matched_wording() {
+        assert!(GH_TIMEOUT_MESSAGE.contains("took too long"));
+        assert!(GH_TIMEOUT_MESSAGE
+            .to_lowercase()
+            .contains("check your internet connection"));
+    }
 
     #[test]
     fn parse_github_repo_https_with_git_suffix() {
@@ -855,5 +1178,219 @@ mod tests {
             updated_at: api.updated_at,
         };
         assert_eq!(converted.name, "alice/shared");
+    }
+
+    #[test]
+    fn gh_network_error_classifies_windows_connectex_as_expected() {
+        let stderr = r#"Post "https://api.github.com/graphql": dial tcp 20.207.73.85:443: connectex: A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond."#;
+        let err = gh_network_error(stderr).expect("should classify as network error");
+        assert!(matches!(err, CommandError::Expected { .. }));
+    }
+
+    #[test]
+    fn gh_network_error_classifies_dns_failure() {
+        assert!(
+            gh_network_error("error connecting to api.github.com: could not resolve host")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn gh_git_repo_error_matches_localized_git_fatal() {
+        // gh's "failed to run git:" prefix is stable English; git's own fatal
+        // text is localized (Russian here) — the classification must not
+        // depend on git's words (issue #403).
+        let stderr = "failed to run git: fatal: не найден git репозиторий (или один из родительских каталогов): .git";
+        let err = gh_git_repo_error(stderr).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+    }
+
+    #[test]
+    fn gh_git_repo_error_ignores_unrelated_stderr() {
+        assert!(gh_git_repo_error("GraphQL: something else went wrong").is_none());
+        assert!(gh_git_repo_error("").is_none());
+    }
+
+    #[test]
+    fn gh_network_error_ignores_unrelated_stderr() {
+        assert!(gh_network_error("GraphQL: name already exists on this account").is_none());
+        assert!(gh_network_error("").is_none());
+    }
+
+    // The #602 shape: GitHub's generic HTTP 400 GraphQL response passed
+    // through verbatim by gh — a transient API-side failure, not app text.
+    #[test]
+    fn gh_malformed_request_classifies_github_http_400_as_expected() {
+        let stderr = "HTTP 400: We received a malformed request from your client. Sorry about that. Please try resubmitting your request and contact us if the problem persists. (https://api.github.com/graphql)";
+        let err = gh_malformed_request_error(stderr).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        // The user-facing message must carry a retry suggestion.
+        assert!(err.to_string().contains("Try again"), "got: {err}");
+    }
+
+    #[test]
+    fn gh_malformed_request_ignores_unrelated_stderr() {
+        assert!(gh_malformed_request_error("HTTP 404: Not Found").is_none());
+        assert!(gh_malformed_request_error("").is_none());
+    }
+
+    // gh_common_error is the one-stop classifier every gh call site funnels
+    // through — it must cover each shared family and stay quiet otherwise.
+    #[test]
+    fn gh_common_error_covers_shared_families() {
+        assert!(gh_common_error("dial tcp 1.2.3.4:443: connect: connection refused").is_some());
+        assert!(
+            gh_common_error("HTTP 400: We received a malformed request from your client.")
+                .is_some()
+        );
+        assert!(gh_common_error("GraphQL: something app-specific went wrong").is_none());
+        assert!(gh_common_error("").is_none());
+    }
+
+    // The #610 shape: gh's Go runtime failing to reserve its heap arena at
+    // startup on a memory-starved Windows box — stderr is a full crash dump.
+    #[test]
+    fn gh_crash_error_classifies_heap_arena_oom_as_expected() {
+        let stderr = "fatal error: out of memory allocating heap arena map\n\nruntime stack:\nruntime.throw(...)\n\tC:/hostedtoolcache/windows/go/1.26.4/x64/src/runtime/panic.go:1229\nruntime.(*mheap).sysAlloc(...)\nruntime.cpuinit(...)\nruntime.schedinit(...)\nruntime.rt0_go()";
+        let err = gh_crash_error(stderr).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = err.to_string();
+        assert!(msg.contains("low on memory"), "got: {msg}");
+        assert!(!msg.contains("runtime stack"), "must not forward the dump");
+    }
+
+    #[test]
+    fn gh_crash_error_classifies_generic_go_panic() {
+        let stderr = "panic: runtime error: invalid memory address or nil pointer dereference\n\ngoroutine 1 [running]:\ngithub.com/cli/cli/v2/pkg/cmd/root.NewCmdRoot(...)";
+        let err = gh_crash_error(stderr).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let fatal =
+            "fatal error: concurrent map read and map write\n\nruntime stack:\nruntime.throw(...)";
+        assert!(gh_crash_error(fatal).is_some());
+    }
+
+    #[test]
+    fn gh_crash_error_ignores_non_crash_stderr() {
+        // git's "fatal:" prefix is not a Go "fatal error:" crash.
+        assert!(gh_crash_error("fatal: not a git repository").is_none());
+        // "panic:"/"fatal error:" alone without a runtime dump shouldn't match.
+        assert!(gh_crash_error("request failed: panic: see logs").is_none());
+        assert!(gh_crash_error("").is_none());
+    }
+
+    // The #592 shape: a mid-request TCP reset returned to gh's GraphQL client.
+    // "dial tcp" only covers connect-time failures; the read-time wording is
+    // distinct and must classify as the same connectivity blip.
+    #[test]
+    fn gh_network_error_classifies_connection_reset_by_peer() {
+        let stderr = r#"Post "https://api.github.com/graphql": read tcp 198.18.0.1:59334->140.82.121.6:443: read: connection reset by peer"#;
+        let err = gh_network_error(stderr).expect("should classify as network error");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(err.to_string().contains("Couldn't reach GitHub"));
+    }
+
+    // The #642 shape: Go's bare "EOF" (no "unexpected" prefix, which #434
+    // already covered) — the connection closed before any response byte.
+    #[test]
+    fn gh_network_error_classifies_bare_eof() {
+        let stderr = r#"Post "https://api.github.com/graphql": EOF"#;
+        let err = gh_network_error(stderr).expect("should classify as network error");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        // The "unexpected EOF" variant keeps matching too.
+        assert!(
+            gh_network_error(r#"Post "https://api.github.com/graphql": unexpected EOF"#).is_some()
+        );
+        // Bare "eof" inside an ordinary word must NOT match.
+        assert!(gh_network_error("GraphQL: field thereof is deprecated").is_none());
+    }
+
+    // The #627 shape: GitHub's API answering a transient 5xx (504 from the
+    // GraphQL endpoint) — server-side, retryable, not an app malfunction.
+    // TLS cert-verification failures (corporate proxy / AV interception,
+    // broken trust store) get their own trust-store guidance, kept out of
+    // telemetry (issue #658).
+    #[test]
+    fn gh_tls_error_classifies_cert_verification_failure_as_expected() {
+        let stderr = r#"Post "https://api.github.com/graphql": tls: failed to verify certificate: x509: certificate signed by unknown authority"#;
+        let err = gh_tls_error(stderr).expect("should classify as TLS trust failure");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("couldn't be verified"), "got: {msg}");
+        // Must NOT be the generic connectivity advice — retrying can't fix a
+        // trust chain.
+        assert!(!msg.to_lowercase().contains("internet connection"));
+        // gh_common_error routes it to the TLS message, not the network one.
+        let common = gh_common_error(stderr).expect("common classifier must cover TLS");
+        assert!(format!("{common}").contains("couldn't be verified"));
+    }
+
+    #[test]
+    fn gh_tls_error_ignores_unrelated_stderr() {
+        assert!(gh_tls_error("GraphQL: name already exists on this account").is_none());
+        assert!(gh_tls_error("dial tcp 1.2.3.4:443: connect: connection refused").is_none());
+        assert!(gh_tls_error("tls handshake timeout").is_none());
+        assert!(gh_tls_error("").is_none());
+    }
+
+    #[test]
+    fn gh_server_error_classifies_github_5xx_as_expected() {
+        let terse = "HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)";
+        let err = gh_server_error(terse).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(err.to_string().contains("Try again"), "got: {err}");
+        // The prose 504 variant GitHub sends for GraphQL timeouts.
+        let prose = "HTTP 504: We couldn't respond to your request in time. Sorry about that. Please try resubmitting your request and contact us if the problem persists. (https://api.github.com/graphql)";
+        assert!(gh_server_error(prose).is_some());
+        assert!(
+            gh_server_error("HTTP 502: Bad Gateway (https://api.github.com/graphql)").is_some()
+        );
+        assert!(gh_server_error("HTTP 503: Service Unavailable").is_some());
+    }
+
+    #[test]
+    fn gh_server_error_ignores_non_5xx_stderr() {
+        assert!(gh_server_error("HTTP 404: Not Found (https://api.github.com/graphql)").is_none());
+        assert!(gh_server_error("HTTP 400: We received a malformed request").is_none());
+        assert!(gh_server_error("GraphQL: name already exists on this account").is_none());
+        assert!(gh_server_error("").is_none());
+    }
+
+    // The #631 shape: gh dying at startup because its own config file is
+    // unreadable — a local file-permissions problem, not a sign-in failure.
+    #[test]
+    fn gh_config_error_classifies_unreadable_config_as_expected() {
+        let stderr = "warning: failed to load config: open /Users/x/.config/gh/config.yml: permission denied\nfailed to create root command: failed to read configuration: open /Users/x/.config/gh/config.yml: permission denied";
+        let err = gh_config_error(stderr).expect("should classify as expected");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        let msg = err.to_string();
+        assert!(msg.contains("chown"), "must name the real fix, got: {msg}");
+        assert!(
+            msg.contains("isn't a GitHub sign-in issue"),
+            "must steer away from the reconnect flow, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn gh_config_error_ignores_other_permission_or_config_errors() {
+        // A repo-access permission denial is auth, not a config-file problem.
+        assert!(gh_config_error("remote: Permission denied (publickey)").is_none());
+        // A config parse error without a permissions component stays unclassified.
+        assert!(gh_config_error("failed to read configuration: invalid yaml").is_none());
+        assert!(gh_config_error("").is_none());
+    }
+
+    // The #638 shape: git falling back to an interactive credential prompt in
+    // a tty-less GUI process — an auth-setup state, not an app bug.
+    #[test]
+    fn gh_auth_error_classifies_credential_prompt_failure() {
+        let stderr =
+            "fatal: could not read Username for 'https://github.com': Device not configured";
+        let err = gh_auth_error(stderr).expect("should classify as auth error");
+        assert!(matches!(err, CommandError::NotAuthenticated { .. }));
+        assert!(gh_auth_error(
+            "fatal: could not read Password for 'https://user@github.com': terminal prompts disabled"
+        )
+        .is_some());
+        assert!(gh_auth_error("fatal: not a git repository").is_none());
     }
 }

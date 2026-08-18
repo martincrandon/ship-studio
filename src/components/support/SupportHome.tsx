@@ -10,9 +10,7 @@ import type { SupportView } from './SupportPanel';
 import { trackEvent } from '../../lib/analytics';
 import { FileTextIcon, SearchIcon, SlackIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
-
-const SLACK_INVITE_URL =
-  'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g';
+import { SLACK_INVITE_URL } from '../../lib/links';
 
 interface SupportHomeProps {
   onNavigate: (view: SupportView) => void;

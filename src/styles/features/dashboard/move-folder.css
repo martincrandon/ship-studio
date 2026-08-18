@@ -206,3 +206,6 @@
   color: var(--accent-error);
   font-size: var(--font-size-body-lg);
 }
+.move-folder-modal-body {
+  padding: var(--button-gap);
+}

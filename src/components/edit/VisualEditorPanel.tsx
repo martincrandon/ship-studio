@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { Button, buttonClassNames } from '../primitives/Button';
@@ -24,7 +25,16 @@ import { MultiSourceControl } from './MultiSourceControl';
 import { UsageScope } from './UsageScope';
 import { CodeIcon } from './CodeIcon';
 import { SlackIcon } from '@/components/icons';
-import { CheckIcon, CloseIcon, InfoIcon } from '@/components/icons';
+import {
+  CheckIcon,
+  CloseIcon,
+  DesktopIcon,
+  FullBreakpointIcon,
+  InfoIcon,
+  LaptopIcon,
+  MobileIcon,
+  TabletIcon,
+} from '@/components/icons';
 import { SaveIcon } from '@/components/icons';
 import { HelpIcon } from '@/components/icons';
 import { PinIcon } from '@/components/icons';
@@ -32,6 +42,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { PropSection } from './PropSection';
 import { ImageSection } from './ImageSection';
 import { PropControlRenderer, type ControlRenderCtx } from './PropControlRenderer';
+import type { ValueFieldVariable } from '../primitives/ValueField';
 import { ClassBar } from './ClassBar';
 import type { CustomClass } from '../../lib/customClasses';
 import type { EditTarget } from '../../hooks/useVisualEditor';
@@ -51,9 +62,7 @@ import type {
 } from '../../lib/edit';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import type { Selection } from '../../hooks/useVisualEditor';
-
-const SLACK_INVITE_URL =
-  'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g';
+import { SLACK_INVITE_URL } from '../../lib/links';
 
 /** Build a ready-to-paste request for the coding agent to change text that's rendered
  *  from code/data (so it can't be edited inline). The user pastes it into the terminal
@@ -252,12 +261,22 @@ function CustomCssHint() {
   );
 }
 
+function breakpointIcon(bp: Breakpoint): ReactNode {
+  if (bp.minPx === 0) return <FullBreakpointIcon />;
+  if (bp.minPx < 768) return <MobileIcon />;
+  if (bp.minPx < 1024) return <TabletIcon />;
+  if (bp.minPx < 1280) return <LaptopIcon />;
+  return <DesktopIcon />;
+}
+
 interface Props {
   selection: Selection | null;
   /** Project root — the Image section's asset picker lists assets from it. */
   projectPath: string;
   /** The class string currently applied live (what "Save" will persist). */
   currentClass: string;
+  /** Project CSS custom properties available to value fields. */
+  variables?: ValueFieldVariable[];
   /** Text-editability of the selection. When read-only (dynamic text), the panel
    *  offers a copy-able request to hand the edit to the coding agent. */
   textResolution?: TextResolution | null;
@@ -268,7 +287,7 @@ interface Props {
   /** Bumps each time a double-click hits dynamic text — pulses the hand-off block
    *  so the user's eye is drawn to the panel after their click did nothing. */
   textBlockedNonce?: number;
-  /** All breakpoints (Base + detected), ascending by min-width. */
+  /** All breakpoints (Base + detected), supplied in cascade order. */
   breakpoints: Breakpoint[];
   /** The breakpoint layer currently being edited (derived from the canvas width). */
   activeBreakpoint: Breakpoint;
@@ -321,6 +340,7 @@ interface Props {
 }
 
 const PANEL_WIDTH = 240;
+const EMPTY_VALUE_FIELD_VARIABLES: ValueFieldVariable[] = [];
 
 /** Initial top-right resting spot (clears the toolbar). Lazy so it reads the
  *  window once on mount; drag takes over from there. */
@@ -333,6 +353,7 @@ export function VisualEditorPanel({
   selection,
   projectPath,
   currentClass,
+  variables = EMPTY_VALUE_FIELD_VARIABLES,
   textResolution,
   imageResolution,
   onReplaceImage,
@@ -394,6 +415,14 @@ export function VisualEditorPanel({
     () => ({ bp: activeBreakpoint, ordered: breakpoints, known: breakpointPrefixes(breakpoints) }),
     [activeBreakpoint, breakpoints]
   );
+  const breakpointIcons = useMemo(
+    () => Object.fromEntries(breakpoints.map((bp) => [bp.name, breakpointIcon(bp)])),
+    [breakpoints]
+  );
+  const breakpointOptions = useMemo(
+    () => [...breakpoints].sort((a, b) => b.minPx - a.minPx),
+    [breakpoints]
+  );
 
   // Shared render context for every control row (the registry renders generically).
   const controlCtx = useMemo<ControlRenderCtx>(
@@ -404,12 +433,13 @@ export function VisualEditorPanel({
       onReset,
       onSetSide,
       onStepGap,
+      variables,
       computed: {
         color: selection?.signature.computedColor,
         'background-color': selection?.signature.computedBackgroundColor,
       },
     }),
-    [currentClass, layer, onApplyEnum, onReset, onSetSide, onStepGap, selection]
+    [currentClass, layer, onApplyEnum, onReset, onSetSide, onStepGap, selection, variables]
   );
 
   // Contextual mobile-first explainer (shown in the "?" tooltip by the label).
@@ -516,10 +546,11 @@ export function VisualEditorPanel({
             <EnumDropdown
               label="Breakpoint"
               value={activeBreakpoint.name}
-              options={breakpoints.map((bp) => ({
+              options={breakpointOptions.map((bp) => ({
                 label: bp.minPx > 0 ? `${bp.name} · ≥${bp.minPx}px` : 'Base · all widths',
                 token: bp.name,
               }))}
+              optionIcons={breakpointIcons}
               onChange={(name) => {
                 const bp = breakpoints.find((b) => b.name === name);
                 if (bp) onSelectBreakpoint(bp);
@@ -552,7 +583,7 @@ export function VisualEditorPanel({
         </div>
       )}
 
-      <div className="ss-edit-panel__body">
+      <div className="ss-edit-panel__body" data-value-field-menu-boundary>
         {!selection && <EditorIntro />}
 
         {textResolution?.status === 'read_only' && selection && (

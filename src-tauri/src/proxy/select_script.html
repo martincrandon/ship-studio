@@ -54,9 +54,9 @@ var SS_TEXT_CAP=2000;
 
 function mk(c){var d=document.createElement('div');d.style.cssText='position:fixed;pointer-events:none;z-index:2147483646;border:1.5px solid '+c+';box-sizing:border-box;border-radius:0px';d.setAttribute('data-ss-overlay','1');document.body.appendChild(d);return d;}
 
-function ensureHover(){if(!hoverBox)hoverBox=mk('#007DF0');}
+function ensureHover(){if(!hoverBox||!hoverBox.isConnected)hoverBox=mk('#007DF0');}
 
-function ensureSel(n){while(selBoxes.length<n)selBoxes.push(mk(SEL_SIBLING_COLOR));}
+function ensureSel(n){for(var i=0;i<n;i++){if(!selBoxes[i]||!selBoxes[i].isConnected)selBoxes[i]=mk(SEL_SIBLING_COLOR);}}
 
 function editable(el){while(el&&el!==document.body){if(el.nodeType===1){var c=el.getAttribute&&el.getAttribute('class');if(c&&c.trim())return el;}el=el.parentElement;}return null;}
 
@@ -694,7 +694,12 @@ document.addEventListener('beforeinput',function(e){if(txtEditing&&e.data&&/[<{]
 /* Paste as plain text, stripping the two chars that would break JSX/Astro markup
    (rather than dropping the whole paste). */
 document.addEventListener('paste',function(e){if(!txtEditing)return;e.preventDefault();var t=((e.clipboardData||window.clipboardData).getData('text/plain')||'').replace(/[<{]/g,'');if(t)document.execCommand('insertText',false,t);},true);
-
+/* Dropped text takes the browser's default rich-HTML insertion path, bypassing the
+   beforeinput/paste guards above — the illegal markup then survives until save, where
+   the backend rejects it and the whole edit is lost (issue #267). Mirror the paste
+   handler: plain text only, same char stripping. */
+document.addEventListener('drop',function(e){if(!txtEditing)return;e.preventDefault();var t=((e.dataTransfer&&e.dataTransfer.getData('text/plain'))||'').replace(/[<{]/g,'');if(t)document.execCommand('insertText',false,t);},true);
+document.addEventListener('dragover',function(e){if(txtEditing)e.preventDefault();},true);
 /* Keep the blue editing box sized to the element, and reposition the format bubble. */
 document.addEventListener('input',function(){if(txtEditing){place(hoverBox,txtEl);updateFmtBar();}},true);
 document.addEventListener('selectionchange',function(){if(txtEditing)updateFmtBar();});

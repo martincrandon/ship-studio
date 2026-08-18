@@ -18,6 +18,11 @@ use super::{
     PluginInfo, RegistryEntry, ShellResult,
 };
 
+/// Hard ceiling on a plugin's requested shell timeout. Plugins pass
+/// `timeout_secs` straight through, so an accidental millisecond value
+/// (15000 as "15s") used to become a ~4-hour hang (issue #294).
+const MAX_PLUGIN_SHELL_TIMEOUT_SECS: u64 = 600;
+
 /// Read plugin storage data
 ///
 /// Storage is at {project}/.shipstudio/plugins/{plugin-id}/storage.json
@@ -39,8 +44,11 @@ pub fn read_plugin_storage(
         return Ok(serde_json::Value::Object(serde_json::Map::new()));
     }
 
-    let content = fs::read_to_string(&storage_path)
-        .map_err(|e| format!("Failed to read plugin storage: {e}"))?;
+    // classify_fs_error: macOS TCC's EPERM (project under Desktop/Documents/
+    // iCloud …) becomes an actionable Expected, not telemetry noise (#605).
+    let content = fs::read_to_string(&storage_path).map_err(|e| {
+        crate::utils::classify_fs_error("read this project's plugin storage", &storage_path, &e)
+    })?;
 
     serde_json::from_str(&content).map_err(|e| CommandError::Other {
         message: format!("Failed to parse plugin storage: {e}"),
@@ -66,16 +74,35 @@ pub fn write_plugin_storage(
 
     // Ensure parent directory exists
     if let Some(parent) = storage_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create storage directory: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            crate::utils::classify_fs_error(
+                "create this project's plugin storage folder",
+                parent,
+                &e,
+            )
+        })?;
     }
 
     let content = serde_json::to_string_pretty(&data)
         .map_err(|e| format!("Failed to serialize storage data: {e}"))?;
 
-    fs::write(&storage_path, content).map_err(|e| CommandError::Io {
-        message: format!("Failed to write plugin storage: {e}"),
+    fs::write(&storage_path, content).map_err(|e| {
+        crate::utils::classify_fs_error("write this project's plugin storage", &storage_path, &e)
     })
+}
+
+/// A plugin's shell command hitting its timeout. `Expected`, not `Other`: the
+/// host can't know whether a timeout is fatal to the plugin — plugins run
+/// background polls (e.g. the Vercel plugin's 3-second `git remote -v` /
+/// `git rev-parse` ticks) that deliberately `.catch(() => null)` a slow tick,
+/// yet `CommandError`'s Serialize hook auto-reported every timeout at the IPC
+/// boundary before any frontend `.catch()` could run (issues #661/#662). The
+/// plugin decides what's fatal; the message is unchanged so plugins that do
+/// surface it keep the same text.
+fn plugin_shell_timeout_error(plugin_id: &str, command: &str, timeout: u64) -> CommandError {
+    CommandError::expected(format!(
+        "Plugin '{plugin_id}' shell command '{command}' timed out after {timeout}s"
+    ))
 }
 
 /// Execute a shell command in a plugin's context
@@ -106,31 +133,110 @@ pub async fn exec_plugin_shell(
         false
     };
     if !plugin_exists {
-        return Err((format!("Plugin '{plugin_id}' not found")).into());
+        return Err(CommandError::expected(format!(
+            "Plugin '{plugin_id}' not found"
+        )));
     }
 
-    // Build and execute command with timeout
-    let timeout = timeout_secs.unwrap_or(120);
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(timeout),
-        tokio::task::spawn_blocking(move || {
-            create_command(&command)
-                .args(&args)
-                .current_dir(&validated_path)
-                .env("PATH", get_extended_path())
-                .env(
-                    "HOME",
-                    dirs::home_dir()
-                        .map(|h| h.to_string_lossy().to_string())
-                        .unwrap_or_default(),
-                )
-                .output()
-        }),
-    )
-    .await
-    .map_err(|_| format!("Plugin shell command timed out ({timeout}s)"))?
-    .map_err(|e| format!("Failed to spawn command: {e}"))?
-    .map_err(|e| format!("Failed to execute command: {e}"))?;
+    // Resolve the binary up front so a missing tool yields an actionable
+    // message naming the plugin and command, not a raw "No such file or
+    // directory (os error 2)" from Command::output() (issue #256). Mirrors
+    // resolve_git() in plugin_lifecycle.rs / get_gh_command() in github.rs.
+    let Some(resolved_command) = crate::utils::find_executable(&command) else {
+        return Err(CommandError::expected(format!(
+            "Plugin '{plugin_id}' tried to run '{command}', but it isn't installed or not on PATH."
+        )));
+    };
+
+    // Build and execute command with timeout. The timeout is clamped: a
+    // plugin passing e.g. a millisecond value as seconds (15000 → ~4 hours)
+    // must not hang the user for hours (issue #294).
+    let timeout = timeout_secs
+        .unwrap_or(120)
+        .min(MAX_PLUGIN_SHELL_TIMEOUT_SECS);
+    // Spawn the resolved path, not the bare name: Windows resolves the
+    // executable against the PARENT's PATH, so the .env("PATH", ...) below
+    // doesn't help resolution and a bare name can still fail with "program
+    // not found" even though find_executable just located it (issue #475).
+    let mut std_cmd = create_command(&resolved_command);
+    std_cmd
+        .args(&args)
+        .current_dir(&validated_path)
+        .env("PATH", get_extended_path())
+        .env(
+            "HOME",
+            dirs::home_dir()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or_default(),
+        );
+    // tokio Command with kill_on_drop: when the timeout fires, dropping the
+    // output future kills the child instead of leaking it to run invisibly
+    // to completion in the background (issue #294).
+    let mut cmd = tokio::process::Command::from(std_cmd);
+    cmd.kill_on_drop(true);
+    let mut attempt: u64 = 0;
+    let output = loop {
+        attempt += 1;
+        match tokio::time::timeout(std::time::Duration::from_secs(timeout), cmd.output()).await {
+            Err(_) => {
+                // Name the plugin and command — a bare "timed out (120s)" is the
+                // same message for every plugin on every platform, so telemetry
+                // can't tell a slow-but-legit install from a hung plugin (#379).
+                return Err(plugin_shell_timeout_error(&plugin_id, &command, timeout));
+            }
+            Ok(Ok(output)) => break output,
+            Ok(Err(e)) => {
+                let rendered = e.to_string();
+                // Transient EAGAIN (process-table pressure): retry briefly,
+                // and classify a persistent one as an Expected environment
+                // condition instead of telemetry noise (issue #573).
+                if crate::external_command::is_spawn_resource_pressure(&rendered) {
+                    if attempt < 3 {
+                        tracing::warn!(
+                            plugin_id = %plugin_id,
+                            command = %command,
+                            attempt,
+                            "plugin shell spawn hit transient resource pressure (EAGAIN); retrying"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(100 * attempt)).await;
+                        continue;
+                    }
+                    return Err(crate::external_command::spawn_resource_pressure_error(
+                        &command,
+                    ));
+                }
+                // Windows ERROR_FILENAME_EXCED_RANGE (os error 206): the
+                // resolved absolute path (#475) plus args can exceed the
+                // legacy MAX_PATH limit on long profiles (OneDrive-redirected
+                // homes, fnm multishell dirs). Environment limit with a
+                // user-side fix, so Expected (issue #549).
+                if crate::external_command::is_windows_path_too_long(&rendered) {
+                    return Err(CommandError::expected(format!(
+                        "Plugin '{plugin_id}' couldn't run '{command}' — Windows rejected the \
+                         command because its path or arguments exceed the path-length limit \
+                         (os error 206). Enable Windows long-path support, or move the \
+                         tool/project to a shorter path, then try again."
+                    )));
+                }
+                // Access denied (Windows os error 5 — localized text — or Unix
+                // EACCES/EPERM): typically antivirus briefly locking the
+                // binary. Environment, not an app malfunction (issue #596).
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    return Err(CommandError::expected(format!(
+                        "Plugin '{plugin_id}' couldn't run '{command}' — the operating system \
+                         denied access. This is usually security/antivirus software briefly \
+                         locking the program, or missing file permissions. Try again in a moment."
+                    )));
+                }
+                // Name the plugin and command here too — this final branch
+                // used to drop both, leaving a bare unattributable OS error
+                // as the only telemetry signal (issue #573).
+                return Err(CommandError::from(format!(
+                    "Plugin '{plugin_id}' shell command '{command}' failed to start: {rendered}"
+                )));
+            }
+        }
+    };
 
     Ok(ShellResult {
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
@@ -252,7 +358,9 @@ pub fn unlink_dev_plugin(project_path: String, plugin_id: String) -> Result<(), 
             return Err(("Plugin is not a dev plugin. Use uninstall instead.".to_string()).into());
         }
         None => {
-            return Err((format!("Plugin '{plugin_id}' not found")).into());
+            return Err(CommandError::expected(format!(
+                "Plugin '{plugin_id}' not found"
+            )));
         }
         _ => {}
     }
@@ -274,4 +382,24 @@ pub fn unlink_dev_plugin(project_path: String, plugin_id: String) -> Result<(), 
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Plugin shell timeouts must be Expected — the reporting hook fires the
+    /// moment the error serializes across IPC, before any plugin-side
+    /// `.catch()` runs, so anything else auto-reports background-poll ticks
+    /// as bugs (issues #661/#662). The message must stay byte-identical to
+    /// the pre-classification one for plugins that surface it.
+    #[test]
+    fn plugin_shell_timeout_error_is_expected_with_same_message() {
+        let err = plugin_shell_timeout_error("vercel", "git", 10);
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert_eq!(
+            format!("{err}"),
+            "Plugin 'vercel' shell command 'git' timed out after 10s"
+        );
+    }
 }

@@ -3,6 +3,7 @@ import { Button, type ButtonProps } from './Button';
 
 export type TextButtonVariant = 'default' | 'primary' | 'accent' | 'danger';
 
+/** Props for an inline text action that retains shared button semantics. */
 export interface TextButtonProps extends Omit<ButtonProps, 'variant' | 'size' | 'block'> {
   variant?: TextButtonVariant;
 }

@@ -13,10 +13,18 @@ import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { SegmentedControl } from '../primitives/SegmentedControl';
-import { type McpServer, listMcpServers, addMcpServer, removeMcpServer } from '../../lib/mcp';
+import {
+  type McpServer,
+  listMcpServers,
+  addMcpServer,
+  removeMcpServer,
+  validateMcpAddCommand,
+  isMcpUnsupportedCliError,
+  isMcpInvalidInputError,
+} from '../../lib/mcp';
 import { trackEvent, trackSearch } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
-import { asCommandError, formatCommandError } from '../../lib/errors';
+import { asCommandError, formatCommandError, isAgentNotInstalledError } from '../../lib/errors';
 import { useModal } from '../../contexts/ModalContext';
 import {
   ExtensionListRow,
@@ -81,8 +89,12 @@ export function McpModal({
       const result = await listMcpServers(projectPath, agentId);
       setServers(result);
     } catch (err) {
-      logger.error('Failed to load MCP servers', {
-        error: err instanceof Error ? err.message : String(err),
+      // "Agent CLI not installed" (backend marks it Expected, issue #594) and
+      // "CLI too old for mcp subcommands" (issue #550) are user-environment
+      // states — logger.error would auto-file a bug report for them.
+      const expected = isAgentNotInstalledError(err) || isMcpUnsupportedCliError(err);
+      logger[expected ? 'warn' : 'error']('Failed to load MCP servers', {
+        error: formatCommandError(asCommandError(err)),
       });
       setServers([]);
     } finally {
@@ -111,6 +123,18 @@ export function McpModal({
   const handleAdd = async () => {
     if (!addCommand.trim()) return;
 
+    // Validate before shelling out: a name with no command/URL would only
+    // fail at the CLI level with a raw "missing required argument
+    // 'commandOrUrl'" usage error (issue #588). Inline feedback, no toast,
+    // no log — the user just hasn't finished typing the command. The agentId
+    // selects OpenCode's stricter flag-unaware grammar (issue #655).
+    const validationError = validateMcpAddCommand(addCommand.trim(), agentBinaryName, agentId);
+    if (validationError) {
+      setAddError(validationError);
+      setAddSuccess(false);
+      return;
+    }
+
     setIsAdding(true);
     setAddError(null);
     setAddSuccess(false);
@@ -124,10 +148,34 @@ export function McpModal({
       await fetchServers();
       setActiveTab('connected');
     } catch (err) {
-      logger.error('Failed to add MCP server', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      setAddError(formatCommandError(asCommandError(err)));
+      const message = formatCommandError(asCommandError(err));
+      if (isMcpUnsupportedCliError(err)) {
+        // The installed CLI predates `mcp add` entirely (older Codex builds) —
+        // a friendly "update your CLI" beats clap's raw usage dump (issue #550).
+        logger.warn('Failed to add MCP server: agent CLI lacks mcp subcommands', {
+          error: message,
+        });
+        setAddError(
+          `Your ${agentDisplayName} CLI is too old to manage MCP servers — update ${agentDisplayName} to its latest version, then try again.`
+        );
+      } else if (isAgentNotInstalledError(err)) {
+        // Missing CLI is a user-environment state, not a bug (issue #594).
+        logger.warn('Failed to add MCP server: agent CLI not installed', { error: message });
+        setAddError(
+          `${agentDisplayName} doesn't appear to be installed on this computer, so its MCP servers can't be managed. Install ${agentDisplayName} first, then try again.`
+        );
+      } else if (isMcpInvalidInputError(err)) {
+        // The backend's own input-shape validation (OpenCode config path) —
+        // a user-input problem the frontend pre-flight didn't catch, not an
+        // app bug. Inline feedback + warn, no auto-filed report (issue #655).
+        logger.warn('Failed to add MCP server: input rejected by agent parser', {
+          error: message,
+        });
+        setAddError(message);
+      } else {
+        logger.error('Failed to add MCP server', { error: message });
+        setAddError(message);
+      }
     } finally {
       setIsAdding(false);
     }
@@ -143,9 +191,25 @@ export function McpModal({
       void trackEvent('mcp_server_removed', { scope: server.scope, $screen_name: 'MCP Modal' });
       await fetchServers();
     } catch (err) {
-      logger.error('Failed to remove MCP server', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const message = formatCommandError(asCommandError(err));
+      // CLI wording varies ("No MCP server named …", "No project-local MCP
+      // server found with name: …") — match the shape, not exact phrases
+      // (#295). The backend now also treats these as success (mcp.rs), so
+      // this is defense for wordings that slip through.
+      if (/no .*mcp server|not found|no such/i.test(message)) {
+        // Already gone (e.g. the preview bridge's remove-then-re-add cycle
+        // raced this click) — that's the outcome the user wanted, not an error.
+        // (This shape check also swallows "binary not found" — an uninstalled
+        // CLI has no servers to remove either way.)
+        await fetchServers();
+      } else if (isMcpUnsupportedCliError(err)) {
+        // CLI too old for `mcp remove` — environment state, not a bug (#550).
+        logger.warn('Failed to remove MCP server: agent CLI lacks mcp subcommands', {
+          error: message,
+        });
+      } else {
+        logger.error('Failed to remove MCP server', { error: message });
+      }
     } finally {
       setRemovingServer(null);
     }

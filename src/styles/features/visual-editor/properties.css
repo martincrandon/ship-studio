@@ -66,6 +66,7 @@
 }
 .ss-edit-panel__section--size .ss-box {
   grid-column: 1 / -1;
+  justify-self: center;
 }
 
 /* Section rows use the Figma form proportions. Context rows intentionally keep
@@ -122,7 +123,6 @@
   position: relative;
   box-sizing: border-box;
   width: 100%;
-  max-width: var(--editor-panel-spacing-w);
   height: var(--editor-panel-spacing-h);
   overflow: hidden;
   border: none;
@@ -504,6 +504,89 @@
    keyword or length. Shares the invalid flag with __num. */
 .ss-edit-panel__text {
   width: var(--editor-panel-field-w);
+}
+
+.ss-edit-panel__display-controls,
+.ss-edit-panel__range-value,
+.ss-color-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ss-edit-panel__display-controls {
+  width: 100%;
+  box-sizing: border-box;
+  gap: 0;
+  padding: var(--border-width-default);
+  overflow: hidden;
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-control);
+  box-shadow: var(--button-shadow);
+}
+
+.ss-edit-panel__display-controls > .segmented-control {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: var(--spacing-2xs);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ss-edit-panel__display-controls > .ss-enum__trigger {
+  flex: 0 0 var(--size-control-medium);
+  width: var(--size-control-medium);
+  min-width: var(--size-control-medium);
+  height: var(--size-control-medium);
+  min-height: var(--size-control-medium);
+  padding-inline: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+}
+
+.ss-edit-panel__display-controls > .ss-enum__trigger:hover {
+  background: var(--surface-control-hover);
+}
+
+.ss-edit-panel__range-value {
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  width: 100%;
+}
+
+.ss-edit-panel__range-value .ss-edit-panel__slider {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.ss-edit-panel__opacity-value {
+  flex: 0 0 calc(var(--spacing-2xl) + var(--spacing-lg));
+  width: calc(var(--spacing-2xl) + var(--spacing-lg));
+}
+
+.ss-color-field {
+  width: 100%;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.ss-color-field__value {
+  flex: 1 1 0;
+  width: calc(100% + var(--spacing-sm));
+  min-width: calc(var(--spacing-2xl) * 3);
+  margin-inline-start: calc(-1 * var(--spacing-xs));
+}
+
+.ss-color-field__value .value-field__unit {
+  min-width: var(--spacing-xl);
+  padding-inline: var(--spacing-xs);
 }
 
 /* Custom CSS box: a list of set arbitrary-property chips + a "prop: value" adder. */

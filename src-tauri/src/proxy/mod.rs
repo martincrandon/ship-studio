@@ -28,10 +28,24 @@ use tokio::task::JoinHandle;
 /// Maximum response body size to buffer for HTML injection (50 MB).
 const MAX_BODY_SIZE: usize = 50 * 1024 * 1024;
 
-/// Timeout for establishing the upstream TCP connection. Localhost either
-/// accepts immediately or refuses outright; a hang here means a firewalled or
-/// wedged port and should fail fast instead of holding the request forever.
+/// Overall connect budget (including retries) for the plain-HTTP path.
+/// Localhost either accepts immediately or refuses outright; a hang here means
+/// a firewalled or wedged port and should fail fast instead of holding the
+/// request forever. A refused connect retries within this budget instead of
+/// hard-failing the request — page loads land mid dev-server restart just like
+/// HMR upgrades do (issue #683).
 const UPSTREAM_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Overall connect budget for the WebSocket (HMR) upgrade's retry loop.
+/// Windows gets a longer budget: dev-server cold starts and restarts are
+/// measurably slower there (filesystem/AV overhead), and recurring reports
+/// showed the shared 5s budget being fully exhausted mid-restart even after
+/// the #353 per-attempt fix (issue #623). Waiting longer only delays the 502
+/// on a genuinely-down server — the browser-side HMR client retries after the
+/// 502 either way — while riding out a slow restart avoids the failure
+/// entirely.
+const WS_UPSTREAM_CONNECT_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(if cfg!(windows) { 12 } else { 5 });
 
 /// Timeout for the upstream response headers. Must be generous: dev servers
 /// compile routes on demand and hold the request open until the compile
@@ -562,6 +576,10 @@ async fn handle_request(
     match proxy_http_request(req, target_port).await {
         Ok(resp) => Ok(resp),
         Err(e) => {
+            // Connect failures never reach here — proxy_http_request handles
+            // them inline (retry + warn-level classification, issue #683).
+            // What's left is post-connect breakage (handshake, send, body
+            // timeouts): genuinely unexpected, so it keeps reporting.
             tracing::error!("[Proxy] Request failed: {}", e);
             let body = format!("Proxy error: {e}");
             Ok(Response::builder()
@@ -588,14 +606,55 @@ async fn proxy_http_request(
     req: Request<Incoming>,
     target_port: u16,
 ) -> Result<Response<ProxyBody>, Box<dyn std::error::Error + Send + Sync>> {
-    // Connect to target via hostname so both IPv4 and IPv6 are tried.
-    // Vite-based dev servers (Astro, SvelteKit, Nuxt) bind to `localhost` which
-    // resolves to `::1` (IPv6) on macOS -- hardcoding 127.0.0.1 fails for those.
-    let stream = tokio::time::timeout(
-        UPSTREAM_CONNECT_TIMEOUT,
-        TcpStream::connect(format!("localhost:{target_port}")),
-    )
-    .await??;
+    // Connect via connect_loopback so both IPv4 and IPv6 are tried: Vite-based
+    // dev servers (Astro, SvelteKit, Nuxt) bind to `localhost` which resolves
+    // to `::1` (IPv6) on macOS -- hardcoding 127.0.0.1 fails for those.
+    // Retry briefly on connection-refused, exactly like the WebSocket path
+    // (issues #258/#353): every preview request rides through here, and a page
+    // load landing mid dev-server restart used to hard-fail with a bare 502
+    // plus a telemetry error report (issue #683). The retry only engages after
+    // a failed connect — the happy path is a single racing connect.
+    let connect_deadline = tokio::time::Instant::now() + UPSTREAM_CONNECT_TIMEOUT;
+    let stream = match connect_upstream_with_retry(target_port, connect_deadline).await {
+        Ok(s) => s,
+        Err((e, attempts)) => {
+            if upstream_unavailable(e.kind()) {
+                // The whole connect budget elapsed with the port refusing or
+                // silent: the dev server is restarting slowly or stopped.
+                // Expected state — an environment condition, not a proxy bug —
+                // so this must not auto-file a bug report (issues #532/#683).
+                tracing::warn!(
+                    "[Proxy] HTTP target localhost:{} unavailable after {} connect attempts over {:?}: {} (dev server restarting or stopped)",
+                    target_port,
+                    attempts,
+                    UPSTREAM_CONNECT_TIMEOUT,
+                    e
+                );
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_GATEWAY)
+                    .header(hyper::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                    .header(hyper::header::CACHE_CONTROL, "no-store")
+                    .body(full_body(Bytes::from(format!(
+                        "The dev server on localhost:{target_port} isn't reachable right now — it may be restarting or stopped. Reload the preview once it's running again."
+                    ))))?);
+            }
+            // Genuinely unexpected connect failure (not refused/silent) —
+            // keep this at error level so it still reports.
+            tracing::error!(
+                "[Proxy] HTTP target connection failed (port {}, attempt {}): {}",
+                target_port,
+                attempts,
+                e
+            );
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .header(hyper::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                .header(hyper::header::CACHE_CONTROL, "no-store")
+                .body(full_body(Bytes::from(format!(
+                    "Proxy error: connecting to the dev server on localhost:{target_port} failed: {e}"
+                ))))?);
+        }
+    };
     let io = TokioIo::new(stream);
 
     let (mut sender, conn) = hyper::client::conn::http1::Builder::new()
@@ -658,7 +717,12 @@ async fn proxy_http_request(
         UPSTREAM_RESPONSE_TIMEOUT,
         sender.send_request(forwarded_req),
     )
-    .await??;
+    .await
+    .map_err(|_| {
+        format!(
+            "dev server on localhost:{target_port} didn't answer within {UPSTREAM_RESPONSE_TIMEOUT:?}"
+        )
+    })??;
 
     // Intercept auth-handshake redirect loops before they leave the proxy.
     // Forwarding the redirect would bounce the iframe through a third-party
@@ -714,7 +778,12 @@ async fn proxy_http_request(
                 status.as_u16()
             );
             let body_bytes = tokio::time::timeout(HTML_BODY_TIMEOUT, resp.collect())
-                .await??
+                .await
+                .map_err(|_| {
+                    format!(
+                        "reading error page body from localhost:{target_port} timed out after {HTML_BODY_TIMEOUT:?}"
+                    )
+                })??
                 .to_bytes();
             if body_bytes.len() < MAX_BODY_SIZE {
                 full_body(Bytes::from(inject_error_into_html(
@@ -794,24 +863,116 @@ async fn proxy_http_request(
     }
 }
 
+/// Connect failures that mean "the dev server isn't listening right now":
+/// refused (nothing bound to the port) or silent (SYN unanswered mid-restart,
+/// surfaced as a per-attempt timeout). Both are normal states while a dev
+/// server restarts or is stopped — an environment condition, not a proxy bug —
+/// so exhausting the retry budget on them logs at warn level instead of
+/// auto-filing an error report. Shared by the WebSocket (issue #532) and
+/// plain-HTTP (issue #683) upstream connects.
+fn upstream_unavailable(kind: std::io::ErrorKind) -> bool {
+    matches!(
+        kind,
+        std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::TimedOut
+    )
+}
+
+/// Race IPv4 and IPv6 loopback concurrently rather than connecting to
+/// "localhost": some dev servers (Vite notably) bind only one family, and
+/// the sequential address walk behind a hostname connect can burn a whole
+/// per-attempt timeout on the dead family before reaching the live one
+/// (observed on Windows CI). First successful connection wins; the error
+/// surfaces only when both families fail.
+async fn connect_loopback(port: u16) -> std::io::Result<TcpStream> {
+    use futures_util::future::select_ok;
+    let v4 = Box::pin(TcpStream::connect(("127.0.0.1", port)));
+    let v6 = Box::pin(TcpStream::connect(("::1", port)));
+    select_ok([v4, v6]).await.map(|(stream, _)| stream)
+}
+
+/// Connect to the dev server's loopback port, retrying briefly while the port
+/// refuses or stays silent (a request often lands mid dev-server restart —
+/// issues #258/#683), bounded by `connect_deadline` overall.
+///
+/// Each attempt gets its own short timeout (capped to what's left of the
+/// overall budget) rather than racing the whole deadline: an unready port
+/// doesn't always refuse the connection — on Windows especially, the SYN
+/// can just go unanswered — and a single hung attempt must not eat the
+/// entire retry window (issue #353).
+///
+/// Zero overhead on the happy path: a successful first connect returns
+/// immediately; retries and backoff only run after a connect failure. On
+/// failure, returns the last error plus the attempt count for logging.
+async fn connect_upstream_with_retry(
+    target_port: u16,
+    connect_deadline: tokio::time::Instant,
+) -> Result<TcpStream, (std::io::Error, u32)> {
+    let per_attempt = std::time::Duration::from_secs(1);
+    let mut attempts: u32 = 0;
+    loop {
+        let remaining = connect_deadline.saturating_duration_since(tokio::time::Instant::now());
+        let attempt =
+            tokio::time::timeout(remaining.min(per_attempt), connect_loopback(target_port))
+                .await
+                .map_err(std::io::Error::from)
+                .and_then(|r| r);
+        attempts += 1;
+        match attempt {
+            Ok(s) => return Ok(s),
+            Err(e) => {
+                let retryable = upstream_unavailable(e.kind())
+                    && tokio::time::Instant::now() + std::time::Duration::from_millis(250)
+                        < connect_deadline;
+                if retryable {
+                    // A timed-out attempt already consumed its slice of the
+                    // budget; only refused connections need the backoff pause.
+                    if e.kind() == std::io::ErrorKind::ConnectionRefused {
+                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    }
+                    continue;
+                }
+                return Err((e, attempts));
+            }
+        }
+    }
+}
+
 /// Handle WebSocket upgrade by forwarding the upgrade to the target and piping
 /// the upgraded connections bidirectionally.
 async fn handle_websocket_upgrade(
     req: Request<Incoming>,
     target_port: u16,
 ) -> Result<Response<ProxyBody>, hyper::Error> {
-    // Connect via hostname for IPv4/IPv6 compatibility (see proxy_http_request)
-    let target_stream = match tokio::time::timeout(
-        UPSTREAM_CONNECT_TIMEOUT,
-        TcpStream::connect(format!("localhost:{target_port}")),
-    )
-    .await
-    .map_err(std::io::Error::from)
-    .and_then(|r| r)
-    {
+    // Connect via connect_loopback (IPv4/IPv6 race — see its doc comment).
+    // Retry briefly on connection-refused: an HMR socket's upgrade often lands
+    // mid dev-server restart, and a single missed connect used to hard-fail the
+    // upgrade with BAD_GATEWAY instead of riding out the gap (issue #258). The
+    // retry loop stays bounded by WS_UPSTREAM_CONNECT_TIMEOUT overall.
+    let connect_deadline = tokio::time::Instant::now() + WS_UPSTREAM_CONNECT_TIMEOUT;
+    let target_stream = match connect_upstream_with_retry(target_port, connect_deadline).await {
         Ok(s) => s,
-        Err(e) => {
-            tracing::error!("[Proxy] WebSocket target connection failed: {}", e);
+        Err((e, attempts)) => {
+            if upstream_unavailable(e.kind()) {
+                // The whole connect budget elapsed with the port refusing
+                // or silent: the dev server is restarting slowly or
+                // stopped. Expected state — closing the upgrade with 502
+                // makes the browser-side HMR client retry on its own, so
+                // this must not auto-file a bug report (issue #532).
+                tracing::warn!(
+                    "[Proxy] WebSocket target localhost:{} unavailable after {} connect attempts over {:?}: {}",
+                    target_port,
+                    attempts,
+                    WS_UPSTREAM_CONNECT_TIMEOUT,
+                    e
+                );
+            } else {
+                tracing::error!(
+                    "[Proxy] WebSocket target connection failed (port {}, attempt {}): {}",
+                    target_port,
+                    attempts,
+                    e
+                );
+            }
             return Ok(Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(full_body(Bytes::from("WebSocket proxy error")))
@@ -851,32 +1012,42 @@ async fn handle_websocket_upgrade(
     // Extract the client's OnUpgrade from request extensions (set by hyper server)
     let client_on_upgrade = parts.extensions.remove::<hyper::upgrade::OnUpgrade>();
 
-    // Build request to forward to target
-    let mut builder = Request::builder()
-        .method(parts.method)
-        .uri(parts.uri.clone())
-        .version(parts.version);
-
-    for (key, value) in &parts.headers {
-        // Rewrite Host/Origin to the dev server's own port, exactly like the
-        // HTTP path. Vite host/origin-checks its HMR WebSocket upgrade; leaking
-        // the proxy's ephemeral port here gets the HMR socket rejected on
-        // stricter setups — the preview then silently stops receiving updates
-        // until the dev server is restarted.
-        if key == hyper::header::HOST {
-            builder = builder.header(key, format!("localhost:{target_port}"));
-            continue;
-        }
-        if key == hyper::header::ORIGIN {
-            if let Some(v) = rewrite_localhost_origin(value, target_port) {
-                builder = builder.header(key, v);
+    // Build request to forward to target. The header rewrite is shared with
+    // the one-shot retry below, so it lives in a closure.
+    // Rewrite Host/Origin to the dev server's own port, exactly like the
+    // HTTP path. Vite host/origin-checks its HMR WebSocket upgrade; leaking
+    // the proxy's ephemeral port here gets the HMR socket rejected on
+    // stricter setups — the preview then silently stops receiving updates
+    // until the dev server is restarted.
+    let method = parts.method.clone();
+    let uri = parts.uri.clone();
+    let version = parts.version;
+    let headers = parts.headers.clone();
+    let build_forward = |body: ProxyBody| -> Result<Request<ProxyBody>, hyper::http::Error> {
+        let mut builder = Request::builder()
+            .method(method.clone())
+            .uri(uri.clone())
+            .version(version);
+        for (key, value) in &headers {
+            if key == hyper::header::HOST {
+                builder = builder.header(key, format!("localhost:{target_port}"));
                 continue;
             }
+            if key == hyper::header::ORIGIN {
+                if let Some(v) = rewrite_localhost_origin(value, target_port) {
+                    builder = builder.header(key, v);
+                    continue;
+                }
+            }
+            builder = builder.header(key, value);
         }
-        builder = builder.header(key, value);
-    }
+        builder.body(body)
+    };
 
-    let forwarded_req = match builder.body(body) {
+    // A WS upgrade is a bodyless GET — collapse the incoming body to empty so
+    // the request can be rebuilt for the retry below.
+    drop(body);
+    let forwarded_req = match build_forward(empty_body()) {
         Ok(r) => r,
         Err(e) => {
             tracing::error!("[Proxy] Failed to build WS forward request: {}", e);
@@ -890,12 +1061,91 @@ async fn handle_websocket_upgrade(
     // Send upgrade request to target
     let target_resp = match sender.send_request(forwarded_req).await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::error!("[Proxy] WebSocket forward failed: {}", e);
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(full_body(Bytes::from("WebSocket proxy error")))
-                .unwrap());
+        Err(first_err) => {
+            // The TCP connect succeeded but the connection died before the
+            // upgrade completed ("connection closed before message
+            // completed"). Known dev-server-restart race: the OS accepts into
+            // the listen backlog, then the process exits before handling it —
+            // so the socket dies mid-request instead of ever refusing. The
+            // connect-refused path above already retries; give this the same
+            // grace with one reconnect + resend (issue #466).
+            tracing::warn!(
+                "[Proxy] WebSocket forward to 127.0.0.1:{} failed ({}); retrying once",
+                target_port,
+                first_err
+            );
+            // The reconnect's failure is kept as an io::Error so the final
+            // branch can classify refused/timed-out retries as the expected
+            // dev-server-restart state, exactly like the initial connect loop
+            // (issue #552). tokio's timeout Elapsed converts to ErrorKind::
+            // TimedOut — the same "SYN unanswered mid-restart" classification
+            // the loop above applies. Non-I/O arms (handshake, request build)
+            // are wrapped as ErrorKind::Other, which never classifies as
+            // expected.
+            let retried: Result<Response<hyper::body::Incoming>, std::io::Error> = async {
+                let remaining =
+                    connect_deadline.saturating_duration_since(tokio::time::Instant::now());
+                let remaining = remaining.max(std::time::Duration::from_millis(500));
+                let stream = tokio::time::timeout(
+                    remaining.min(std::time::Duration::from_secs(2)),
+                    connect_loopback(target_port),
+                )
+                .await
+                .map_err(std::io::Error::from)
+                .and_then(|r| r)?;
+                let (mut retry_sender, retry_conn) = hyper::client::conn::http1::Builder::new()
+                    .preserve_header_case(true)
+                    .title_case_headers(true)
+                    .handshake(TokioIo::new(stream))
+                    .await
+                    .map_err(std::io::Error::other)?;
+                tokio::spawn(async move {
+                    if let Err(e) = retry_conn.with_upgrades().await {
+                        tracing::debug!("[Proxy] WebSocket retry client conn error: {}", e);
+                    }
+                });
+                let req = build_forward(empty_body()).map_err(std::io::Error::other)?;
+                retry_sender
+                    .send_request(req)
+                    .await
+                    .map_err(std::io::Error::other)
+            }
+            .await;
+            match retried {
+                Ok(r) => r,
+                Err(e) if upstream_unavailable(e.kind()) => {
+                    // The retry's reconnect was refused or silent: the dev
+                    // server is still down/restarting — the same expected
+                    // state the initial connect loop logs at warn (issue
+                    // #532), so the retry path must not auto-file a bug
+                    // report either (issue #552). The browser-side HMR client
+                    // retries on its own after the 502.
+                    tracing::warn!(
+                        "[Proxy] WebSocket target 127.0.0.1:{} still unavailable on retry: {} (first attempt: {})",
+                        target_port,
+                        e,
+                        first_err
+                    );
+                    return Ok(Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body(full_body(Bytes::from("WebSocket proxy error")))
+                        .unwrap());
+                }
+                Err(e) => {
+                    // Include the upstream port: without it the report is
+                    // uncorrelatable (issue #293).
+                    tracing::error!(
+                        "[Proxy] WebSocket forward to 127.0.0.1:{} failed after retry: {} (first attempt: {})",
+                        target_port,
+                        e,
+                        first_err
+                    );
+                    return Ok(Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .body(full_body(Bytes::from("WebSocket proxy error")))
+                        .unwrap());
+                }
+            }
         }
     };
 
@@ -1030,11 +1280,104 @@ mod injector_tests {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_auth_redirect_loop, is_document_navigation, redact_handshake_values,
-        rewrite_localhost_origin, sanitize_csp_for_preview,
+        connect_upstream_with_retry, is_auth_redirect_loop, is_document_navigation,
+        redact_handshake_values, rewrite_localhost_origin, sanitize_csp_for_preview,
+        upstream_unavailable,
     };
     use hyper::header::HeaderValue;
     use hyper::StatusCode;
+
+    #[test]
+    fn upstream_connect_failure_classification() {
+        // Dev-server-restart states: expected, logged at warn — for both the
+        // WebSocket (issue #532) and plain-HTTP (issue #683) connect paths.
+        assert!(upstream_unavailable(std::io::ErrorKind::ConnectionRefused));
+        assert!(upstream_unavailable(std::io::ErrorKind::TimedOut));
+        // Anything else is a genuine proxy problem and stays at error level.
+        assert!(!upstream_unavailable(std::io::ErrorKind::PermissionDenied));
+        assert!(!upstream_unavailable(std::io::ErrorKind::AddrNotAvailable));
+        assert!(!upstream_unavailable(std::io::ErrorKind::Other));
+    }
+
+    // ── connect_upstream_with_retry (issues #258/#353/#683) ────────────────
+
+    #[tokio::test]
+    async fn connect_retry_succeeds_first_try_when_upstream_is_listening() {
+        // Happy path: one racing connect, no retries, no backoff sleeps.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        let started = std::time::Instant::now();
+        let result = connect_upstream_with_retry(port, deadline).await;
+        assert!(result.is_ok());
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "happy path must not pay any retry/backoff cost"
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_retry_exhausts_budget_with_refused_kind_for_dead_port() {
+        // Nothing listening: the loop retries until the deadline, then hands
+        // back the refused error so the caller classifies it at warn level
+        // instead of auto-filing a report (issue #683).
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // port is now closed (nothing rebinds it in this test)
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(400);
+        let (err, attempts) = connect_upstream_with_retry(port, deadline)
+            .await
+            .expect_err("connect to a closed port must fail");
+        assert!(
+            upstream_unavailable(err.kind()),
+            "refused connect must classify as expected/unavailable, got {:?}",
+            err.kind()
+        );
+        // Windows doesn't refuse a closed loopback port immediately — the
+        // TCP stack retries SYN for ~1s, so the whole 400ms budget can be
+        // spent inside the first attempt (which then reports TimedOut, still
+        // classified unavailable above). Only Unix gets the fast refusal
+        // needed to observe an actual retry within the budget.
+        #[cfg(unix)]
+        assert!(
+            attempts >= 2,
+            "must have retried, got {attempts} attempt(s)"
+        );
+        #[cfg(not(unix))]
+        assert!(attempts >= 1, "got {attempts} attempt(s)");
+    }
+
+    /// The one-shot WS retry path (issue #466) must feed the SAME
+    /// classification as the initial connect loop (issue #552): its error is
+    /// kept as an io::Error, with a refused reconnect keeping its kind, a
+    /// tokio timeout mapping to TimedOut, and non-I/O arms wrapped as Other
+    /// so they can never be misclassified as "expected".
+    #[tokio::test]
+    async fn ws_retry_errors_keep_their_classification() {
+        // A reconnect refusal keeps ConnectionRefused → expected (warn).
+        let refused = std::io::Error::from(std::io::ErrorKind::ConnectionRefused);
+        assert!(upstream_unavailable(refused.kind()));
+
+        // The retry's reconnect timeout (tokio Elapsed → io::Error, the same
+        // `map_err(std::io::Error::from)` the initial loop uses) → TimedOut →
+        // expected (warn).
+        let elapsed: Result<(), _> = tokio::time::timeout(
+            std::time::Duration::from_millis(1),
+            std::future::pending::<()>(),
+        )
+        .await
+        .map_err(std::io::Error::from);
+        assert_eq!(
+            elapsed.unwrap_err().kind(),
+            std::io::ErrorKind::TimedOut,
+            "tokio Elapsed must convert to TimedOut for the expected-state classification"
+        );
+
+        // Handshake / request-build failures are wrapped via io::Error::other
+        // → NOT classified as expected: they stay at error level.
+        let other = std::io::Error::other("handshake failed");
+        assert!(!upstream_unavailable(other.kind()));
+    }
 
     #[test]
     fn localhost_origin_is_rewritten_to_target_port() {

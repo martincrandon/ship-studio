@@ -631,10 +631,10 @@ export const ENUM_CONTROLS: EnumControl[] = [
       { label: 'Block', token: 'block', style: { display: 'block' } },
       { label: 'Flex', token: 'flex', style: { display: 'flex' } },
       { label: 'Grid', token: 'grid', style: { display: 'grid' } },
+      { label: 'None', token: 'hidden', style: { display: 'none' } },
       { label: 'Inline block', token: 'inline-block', style: { display: 'inline-block' } },
       { label: 'Inline flex', token: 'inline-flex', style: { display: 'inline-flex' } },
       { label: 'Inline', token: 'inline', style: { display: 'inline' } },
-      { label: 'Hidden', token: 'hidden', style: { display: 'none' } },
     ],
   },
   {
@@ -696,12 +696,12 @@ export const ENUM_CONTROLS: EnumControl[] = [
     variant: 'icons',
     options: [
       { label: 'Row', token: 'flex-row', style: { 'flex-direction': 'row' } },
+      { label: 'Column', token: 'flex-col', style: { 'flex-direction': 'column' } },
       {
         label: 'Row reverse',
         token: 'flex-row-reverse',
         style: { 'flex-direction': 'row-reverse' },
       },
-      { label: 'Column', token: 'flex-col', style: { 'flex-direction': 'column' } },
       {
         label: 'Column reverse',
         token: 'flex-col-reverse',
@@ -723,9 +723,9 @@ export const ENUM_CONTROLS: EnumControl[] = [
     variant: 'icons',
     options: [
       { label: 'Visible', token: 'overflow-visible', style: { overflow: 'visible' } },
-      { label: 'Auto', token: 'overflow-auto', style: { overflow: 'auto' } },
       { label: 'Hidden', token: 'overflow-hidden', style: { overflow: 'hidden' } },
       { label: 'Scroll', token: 'overflow-scroll', style: { overflow: 'scroll' } },
+      { label: 'Auto', token: 'overflow-auto', style: { overflow: 'auto' } },
     ],
   },
   {

@@ -64,6 +64,7 @@ function labCopy(content: LabContent) {
   return 'Open project';
 }
 
+/** Renders the development-only catalogue of live design-system primitives. */
 export function DesignSystemLab() {
   const [theme, setTheme] = useState<LabTheme>('application');
   const [density, setDensity] = useState<LabDensity>('comfortable');

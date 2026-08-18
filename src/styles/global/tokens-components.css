@@ -111,6 +111,7 @@
   --text-field-disabled-surface: var(--surface-recessed);
   --text-field-disabled-border: var(--border-default);
   --text-field-disabled-opacity: 0.55;
+  --value-field-variable-menu-max-height: 244px;
 
   --compact-topbar-height: var(--size-control-large);
   --compact-topbar-padding-inline: var(--spacing-sm);
@@ -172,6 +173,8 @@
   --popover-source-control-width: var(--size-source-control-popover);
   --source-control-branch-max-width: var(--size-source-control-branch);
   --z-dropdown: 100;
+  /* Header popovers must paint above preview error/status overlays. */
+  --z-workspace-header: 200;
   --z-preview-fullscreen: 900;
   --z-floating-panel: 950;
 

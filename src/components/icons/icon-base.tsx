@@ -8,11 +8,13 @@ import {
 
 export type IconKind = 'ui' | 'brand';
 
+/** Shared rendering and accessibility props accepted by every semantic icon. */
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> {
   size?: number;
   title?: string;
 }
 
+/** Build-time metadata connecting a semantic icon export to its source asset and sizing policy. */
 export interface IconMeta {
   name: `${string}Icon`;
   source: `icons/${string}.svg` | `icons/old-icons/${string}.svg`;
@@ -42,6 +44,7 @@ function isLabelled(props: IconProps): boolean {
   return Boolean(props.title || props['aria-label'] || props['aria-labelledby']);
 }
 
+/** Creates a ref-forwarding semantic icon component with consistent sizing and accessibility defaults. */
 export function createIcon(
   Asset: ComponentType<SVGProps<SVGSVGElement>>,
   meta: IconMeta

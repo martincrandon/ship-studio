@@ -406,10 +406,12 @@ and restores focus to the trigger. Inputs embedded inside a menu retain their ow
 
 ### ValueField — [ValueField.tsx](../src/components/primitives/ValueField.tsx)
 
-`ValueField` is an editable text input paired with a finite format picker. The picker is a
-select-only `listbox`, not an editable combobox: opening focuses the selected option, Arrow
-Up/Down and Home/End move the active option, Enter/Space selects it, Escape closes and restores
-the format trigger, and selecting a format returns focus to the text input.
+`ValueField` is an editable text input paired with a finite format picker. The format picker is a
+select-only `listbox`: opening focuses the selected option, Arrow Up/Down and Home/End move the
+active option, Enter/Space selects it, Escape closes and restores the format trigger, and selecting
+a format returns focus to the text input. When `variables` are supplied, typing `--`, selecting
+`VAR`, or focusing an existing `var(--token)` value opens a filtered variable listbox. The input
+shows the raw `--token` name while commits retain the CSS `var(--token)` wrapper.
 
 ### EmptyState — [EmptyState.tsx](../src/components/primitives/EmptyState.tsx)
 

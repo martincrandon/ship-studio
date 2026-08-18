@@ -4,7 +4,11 @@
  * complete pasted value (`480px`) and CSS keywords/functions.
  */
 
-import { ValueField, type ValueFieldOption } from '../primitives/ValueField';
+import {
+  ValueField,
+  type ValueFieldOption,
+  type ValueFieldVariable,
+} from '../primitives/ValueField';
 import { ResettableLabel } from './ResettableLabel';
 import {
   lengthValue,
@@ -22,6 +26,7 @@ interface Props {
   valueType: 'size' | 'min-size' | 'max-size';
   currentClass: string;
   layer: LayerContext;
+  variables?: ValueFieldVariable[];
   onApplyEnum: (token: string, style: Record<string, string>) => void;
   onReset: (spec: ResetSpec) => void;
 }
@@ -46,6 +51,7 @@ export function LengthControl({
   valueType,
   currentClass,
   layer,
+  variables,
   onApplyEnum,
   onReset,
 }: Props) {
@@ -72,6 +78,7 @@ export function LengthControl({
         className="ss-edit-panel__text"
         variant="length"
         keywords={keywordsFor(valueType)}
+        variables={variables}
         value={display}
         onCommit={commit}
         inputMode="text"

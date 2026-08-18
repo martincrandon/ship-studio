@@ -3,7 +3,7 @@
 use crate::cache::GIT_CACHE;
 use crate::errors::CommandError;
 use crate::types::{BranchStatus, ChangedFile};
-use crate::utils::{create_command, validate_project_path};
+use crate::utils::validate_project_path;
 use tracing::warn;
 
 // Network git ops (fetch) go through the workspace-scoped helper in the parent
@@ -11,6 +11,43 @@ use tracing::warn;
 use super::run_git_net;
 
 use super::git_has_uncommitted_changes;
+
+/// Cap git stderr carried inside an error message so a pathological failure
+/// (e.g. a hook dumping its whole log) can't flood the toast/telemetry, while
+/// keeping enough text to diagnose the actual cause (issue #547).
+fn truncate_stderr(stderr: &str) -> String {
+    const MAX: usize = 500;
+    if stderr.len() <= MAX {
+        return stderr.to_string();
+    }
+    // Cut on a char boundary at or below MAX so multi-byte text can't panic.
+    let cut = (0..=MAX)
+        .rev()
+        .find(|i| stderr.is_char_boundary(*i))
+        .unwrap_or(0);
+    format!("{}…", &stderr[..cut])
+}
+
+/// Failure message for a non-zero `git status` exit. Git can die with a
+/// completely silent stderr (killed by the OS, exec-level failure) — the old
+/// unconditional `: {stderr}` suffix then produced "Failed to get git
+/// status: " with zero diagnostic signal (issue #682). Fall back to the exit
+/// code so telemetry always carries *something*.
+fn git_status_failure_message(stderr_trimmed: &str, exit_code: Option<i32>) -> String {
+    if stderr_trimmed.is_empty() {
+        return match exit_code {
+            Some(code) => format!("Failed to get git status (exit {code})"),
+            None => "Failed to get git status (terminated by signal)".to_string(),
+        };
+    }
+    // Include (truncated) stderr — a bare "Failed to get git status" is
+    // undiagnosable and buckets unrelated root causes under one
+    // fingerprint (issue #547, same class as #252).
+    format!(
+        "Failed to get git status: {}",
+        truncate_stderr(stderr_trimmed)
+    )
+}
 
 #[tauri::command]
 #[tracing::instrument(fields(project = %project_path))]
@@ -35,9 +72,8 @@ pub async fn check_git_has_changes(project_path: String) -> Result<bool, Command
     }
 
     // Check for unpushed commits
-    let unpushed = create_command("git")
+    let unpushed = crate::utils::git_command_in(&project)?
         .args(["--no-pager", "log", "@{u}..", "--oneline"])
-        .current_dir(&project)
         .output();
 
     let result = match unpushed {
@@ -47,9 +83,8 @@ pub async fn check_git_has_changes(project_path: String) -> Result<bool, Command
         }
         Err(_) => {
             // No upstream set, check if we have commits
-            let commits = create_command("git")
+            let commits = crate::utils::git_command_in(&project)?
                 .args(["--no-pager", "log", "--oneline", "-1"])
-                .current_dir(&project)
                 .output()
                 .map_err(|e| e.to_string())?;
 
@@ -83,14 +118,21 @@ pub async fn get_changed_files(project_path: String) -> Result<Vec<ChangedFile>,
     }
 
     // Run git status --porcelain (include untracked files)
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(&project)?
         .args(["status", "--porcelain"])
-        .current_dir(&project)
         .output()
         .map_err(|e| e.to_string())?;
 
     if !output.status.success() {
-        return Err(("Failed to get git status".to_string()).into());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Environment gaps (unaccepted Xcode license, missing CLT, macOS TCC
+        // denial) are expected machine states with a user-side fix, not app
+        // malfunctions (issues #603/#546).
+        if let Some(gap) = crate::utils::git_environment_gap(&stderr) {
+            warn!(error = %stderr.trim(), "git blocked by an environment gap while getting status");
+            return Err(gap);
+        }
+        return Err(git_status_failure_message(stderr.trim(), output.status.code()).into());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -142,9 +184,8 @@ pub async fn get_file_diff(
     let validated_path = validate_project_path(&project_path)?;
 
     // Run git diff HEAD -- <filepath> to get all uncommitted changes
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(&validated_path)?
         .args(["diff", "HEAD", "--", &file_path])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -153,9 +194,8 @@ pub async fn get_file_diff(
     // If diff is empty, the file might be untracked (new file)
     if diff_content.trim().is_empty() {
         // Check if file is untracked
-        let status_output = create_command("git")
+        let status_output = crate::utils::git_command_in(&validated_path)?
             .args(["status", "--porcelain", "--", &file_path])
-            .current_dir(&validated_path)
             .output()
             .map_err(|e| e.to_string())?;
 
@@ -235,9 +275,8 @@ pub async fn get_branch_status(project_path: String) -> Result<BranchStatus, Com
     }
 
     // Check if staging branch exists on remote
-    let staging_check = create_command("git")
+    let staging_check = crate::utils::git_command_in(&validated_path)?
         .args(["ls-remote", "--heads", "origin", "staging"])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -247,14 +286,13 @@ pub async fn get_branch_status(project_path: String) -> Result<BranchStatus, Com
 
     // Get commits ahead/behind for staging
     let (staging_ahead, staging_behind) = if staging_exists {
-        let output = create_command("git")
+        let output = crate::utils::git_command_in(&validated_path)?
             .args([
                 "rev-list",
                 "--left-right",
                 "--count",
                 "HEAD...origin/staging",
             ])
-            .current_dir(&validated_path)
             .output()
             .map_err(|e| e.to_string())?;
 
@@ -270,9 +308,8 @@ pub async fn get_branch_status(project_path: String) -> Result<BranchStatus, Com
     };
 
     // Get commits ahead/behind for main
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(&validated_path)?
         .args(["rev-list", "--left-right", "--count", "HEAD...origin/main"])
-        .current_dir(&validated_path)
         .output();
 
     let (main_ahead, main_behind) = if let Ok(output) = output {
@@ -317,9 +354,8 @@ pub async fn reset_to_branch(project_path: String, branch: String) -> Result<(),
     }
 
     // Reset hard to the remote branch
-    let reset = create_command("git")
+    let reset = crate::utils::git_command_in(&validated_path)?
         .args(["reset", "--hard", remote_branch])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -329,9 +365,8 @@ pub async fn reset_to_branch(project_path: String, branch: String) -> Result<(),
     }
 
     // Clean untracked files
-    let clean = create_command("git")
+    let clean = crate::utils::git_command_in(&validated_path)?
         .args(["clean", "-fd"])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -340,4 +375,58 @@ pub async fn reset_to_branch(project_path: String, branch: String) -> Result<(),
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{git_status_failure_message, truncate_stderr};
+
+    #[test]
+    fn truncate_stderr_passes_short_text_through() {
+        let msg = "fatal: this repository is corrupt";
+        assert_eq!(truncate_stderr(msg), msg);
+        assert_eq!(truncate_stderr(""), "");
+    }
+
+    #[test]
+    fn truncate_stderr_caps_long_text_with_ellipsis() {
+        let long = "x".repeat(2000);
+        let out = truncate_stderr(&long);
+        assert!(out.len() < 600, "must be capped, got {} bytes", out.len());
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn truncate_stderr_respects_char_boundaries() {
+        // Multi-byte chars straddling the cap must not panic.
+        let long = "é".repeat(600);
+        let out = truncate_stderr(&long);
+        assert!(out.ends_with('…'));
+    }
+
+    #[test]
+    fn status_failure_keeps_stderr_when_present() {
+        assert_eq!(
+            git_status_failure_message("fatal: bad object HEAD", Some(128)),
+            "Failed to get git status: fatal: bad object HEAD"
+        );
+    }
+
+    // The #682 shape: non-zero exit with a silent stderr must carry the exit
+    // code instead of trailing off after a colon.
+    #[test]
+    fn status_failure_falls_back_to_exit_code_when_stderr_is_empty() {
+        assert_eq!(
+            git_status_failure_message("", Some(128)),
+            "Failed to get git status (exit 128)"
+        );
+    }
+
+    #[test]
+    fn status_failure_names_signal_death_when_no_exit_code() {
+        assert_eq!(
+            git_status_failure_message("", None),
+            "Failed to get git status (terminated by signal)"
+        );
+    }
 }

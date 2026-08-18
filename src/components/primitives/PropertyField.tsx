@@ -3,6 +3,7 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 export type PropertyFieldVariant = 'value' | 'select' | 'variable';
 export type PropertyFieldSize = 'default' | 'compact';
 
+/** Builds the canonical class list for property-field variants, sizes, and states. */
 export function propertyFieldClassNames({
   variant = 'value',
   size = 'default',
@@ -17,6 +18,7 @@ export function propertyFieldClassNames({
     .join(' ');
 }
 
+/** Props for an interactive value or variable field in editor property panels. */
 export interface PropertyFieldProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: PropertyFieldVariant;
   size?: PropertyFieldSize;

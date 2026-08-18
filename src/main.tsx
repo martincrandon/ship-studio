@@ -20,6 +20,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { exposeReactGlobals, lookupBlobOwner, markPluginCrashed } from './lib/plugin-loader';
 import { uninstallPlugin } from './lib/plugins';
 import { exposePluginContextRef } from './contexts/PluginContext';
+import { reportError } from './lib/errorReporting';
 import { OverlayScrollbars } from 'overlayscrollbars';
 import 'overlayscrollbars/overlayscrollbars.css';
 
@@ -37,7 +38,15 @@ window.addEventListener('error', (event) => {
     event.filename?.startsWith('blob:') ||
     msg.includes('Plugin context') ||
     msg.includes('plugin-sdk');
-  if (!isPluginError) return;
+  if (!isPluginError) {
+    // App bug (not third-party plugin code) — report to the admin agent.
+    reportError({
+      message: msg,
+      stack: event.error instanceof Error ? event.error.stack : undefined,
+      source: 'window-error',
+    });
+    return;
+  }
 
   event.preventDefault();
   console.error('[Ship Studio] Plugin error caught by global handler:', msg);
@@ -52,10 +61,23 @@ window.addEventListener('error', (event) => {
     );
   }
 });
+// Promises are often rejected with plain objects rather than Errors (Tauri
+// IPC error payloads especially) — String() renders those as "[object
+// Object]", which both destroys the diagnostic and collapses every such
+// rejection onto one dedupe fingerprint (issue #333). Serialize the shape.
+const describeRejectionReason = (r: unknown): string => {
+  if (typeof r === 'string') return r;
+  try {
+    return JSON.stringify(r) ?? String(r);
+  } catch {
+    return String(r); // circular structures etc.
+  }
+};
+
 window.addEventListener('unhandledrejection', (event) => {
   const reason: unknown = event.reason;
-  const stack = reason instanceof Error ? reason.stack || '' : String(reason);
-  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack || '' : describeRejectionReason(reason);
+  const message = reason instanceof Error ? reason.message : describeRejectionReason(reason);
 
   if (stack.includes('blob:')) {
     event.preventDefault();
@@ -76,7 +98,15 @@ window.addEventListener('unhandledrejection', (event) => {
     (message.includes('handlerId') && stack.includes('user-script'))
   ) {
     event.preventDefault();
+    return;
   }
+
+  // Genuine unhandled rejection from app code — report to the admin agent.
+  reportError({
+    message,
+    stack: reason instanceof Error ? reason.stack : undefined,
+    source: 'unhandled-rejection',
+  });
 });
 
 // Patch removeChild to handle nodes relocated by OverlayScrollbars.
@@ -130,6 +160,10 @@ const OS_SKIP_SELECTOR = [
   '.dashboard-scroll-container',
   '.changelog-list',
   '.support-panel',
+  // ValueField menus are fixed, body-portaled listboxes. OverlayScrollbars
+  // rewrites their children and collapses the menu's max-content width in
+  // WebKit, leaving an open listbox mounted but visually hidden.
+  '.value-field__menu',
   // Workspace sidebar scroll owns its own webkit scrollbar styling and
   // applies `!important` block layout to its direct children. Letting
   // OverlayScrollbars wrap it breaks the scrollbar entirely (the OS

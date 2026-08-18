@@ -6,8 +6,15 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { buildContext } from './PluginSlot';
-import type { PluginAppActions, PluginThemeData } from '../../contexts/PluginContext';
+import { render } from '@testing-library/react';
+import { buildContext, PluginSlot } from './PluginSlot';
+import { unloadPluginModule } from '../../lib/plugin-loader';
+import type {
+  PluginAppActions,
+  PluginContextValue,
+  PluginThemeData,
+} from '../../contexts/PluginContext';
+import type { LoadedPlugin } from '../../hooks/usePlugins';
 
 const theme: PluginThemeData = {
   bgPrimary: '',
@@ -96,6 +103,74 @@ describe('buildContext failure reporting', () => {
     expect(showToast.mock.calls[0][0]).toContain('Plugin "Sanity"');
   });
 
+  it('suppresses the toast for a call that raced a plugin unload (#288)', async () => {
+    const { actions, showToast } = makeActions();
+    const stale = { ...project, path: '/p/stale' };
+    const ctx = buildContext('vercel', 'Vercel', stale, actions, theme, []);
+
+    // Call goes out, then the plugin is unloaded (project switch/uninstall)
+    // before the rejection lands — no user-facing toast, but still re-throws.
+    const pending = ctx.shell.exec('vercel', ['whoami']);
+    unloadPluginModule(stale.path, 'vercel');
+    await expect(pending).rejects.toThrow('boom from backend');
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('one-shots the project-folder-gone toast as info instead of erroring every poll (#629)', async () => {
+    mockIPC(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- deliberately a plain CommandError object, the shape under test
+      throw {
+        type: 'Other',
+        message:
+          "The folder '/p/gone' no longer exists — it may have been moved, renamed, or deleted outside Ship Studio",
+      };
+    });
+    const { actions, showToast } = makeActions();
+    const gone = { ...project, path: '/p/gone' };
+    const ctx = buildContext('vercel', 'Vercel', gone, actions, theme, []);
+
+    // First background call: one friendly info toast (Expected condition —
+    // must not go through the error-toast telemetry pipeline).
+    await expect(ctx.shell.exec('vercel', ['ls'])).rejects.toBeTruthy();
+    expect(showToast).toHaveBeenCalledTimes(1);
+    expect(showToast.mock.calls[0][0]).toContain('no longer exists');
+    expect(showToast.mock.calls[0][1]).toBe('info');
+
+    // Subsequent polls for the same project: suppressed entirely.
+    await expect(ctx.storage.read()).rejects.toBeTruthy();
+    await expect(ctx.shell.exec('vercel', ['ls'])).rejects.toBeTruthy();
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses the toast for a plugin shell timeout — the plugin decides what is fatal (#661/#662)', async () => {
+    mockIPC(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- deliberately a plain CommandError object, the shape under test
+      throw {
+        type: 'Other',
+        message: "Plugin 'vercel' shell command 'git' timed out after 10s",
+      };
+    });
+    const { actions, showToast } = makeActions();
+    const ctx = buildContext('vercel', 'Vercel', project, actions, theme, []);
+
+    // Still re-throws so the plugin's own `.catch(() => null)` sees it, but
+    // no error toast (which would auto-file a telemetry report).
+    await expect(ctx.shell.exec('git', ['remote', '-v'])).rejects.toBeTruthy();
+    expect(showToast).not.toHaveBeenCalled();
+
+    // A different plugin's timeout message doesn't match this plugin's id —
+    // still toasts (the match is on the host's own message shape, per-plugin).
+    mockIPC(() => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- plain CommandError shape under test
+      throw {
+        type: 'Other',
+        message: "Plugin 'other' shell command 'git' timed out after 10s",
+      };
+    });
+    await expect(ctx.shell.exec('git', ['remote', '-v'])).rejects.toBeTruthy();
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
   it('does not toast when the call succeeds', async () => {
     mockIPC((cmd) => {
       if (cmd === 'read_plugin_storage') return { key: 'value' };
@@ -106,5 +181,61 @@ describe('buildContext failure reporting', () => {
 
     await expect(ctx.storage.read()).resolves.toEqual({ key: 'value' });
     expect(showToast).not.toHaveBeenCalled();
+  });
+});
+
+describe('legacy plugin context global (#389/#465/#695)', () => {
+  function makeLegacyPlugin(id: string, name: string, seen: Record<string, string>) {
+    // Mimics a pre-React-context SDK bundle: reads the single window global
+    // during render instead of using PluginContext.
+    function LegacySlotComponent() {
+      const ctx = (window as unknown as Record<string, unknown>).__SHIPSTUDIO_PLUGIN_CONTEXT__ as
+        | PluginContextValue
+        | undefined;
+      seen[id] = ctx?.pluginId ?? '(missing)';
+      return null;
+    }
+    const plugin: LoadedPlugin = {
+      info: {
+        manifest: {
+          id,
+          name,
+          version: '1.0.0',
+          description: '',
+          slots: ['toolbar'],
+          author: '',
+          repository: '',
+          setup: [],
+          min_app_version: '0.0.0',
+          icon: '',
+          required_commands: [],
+        },
+        enabled: true,
+        installed_at: 0,
+        source_url: '',
+        is_dev: false,
+        local_path: '',
+      },
+      module: { name, slots: { toolbar: LegacySlotComponent } },
+    };
+    return plugin;
+  }
+
+  it('each legacy plugin sees its own context during render, not the last-mounted one', () => {
+    const seen: Record<string, string> = {};
+    const { actions } = makeActions();
+    render(
+      <PluginSlot
+        name="toolbar"
+        plugins={[
+          makeLegacyPlugin('vercel', 'Vercel', seen),
+          makeLegacyPlugin('webflow-cloud', 'Webflow Cloud', seen),
+        ]}
+        project={project}
+        actions={actions}
+        theme={theme}
+      />
+    );
+    expect(seen).toEqual({ vercel: 'vercel', 'webflow-cloud': 'webflow-cloud' });
   });
 });

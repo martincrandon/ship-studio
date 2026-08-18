@@ -22,6 +22,14 @@ describe('workspace view state', () => {
     });
   });
 
+  it('exposes a generic project preview only when it has a custom dev command', () => {
+    expect(workspacePreviewCapabilities('generic', true).hasPreview).toBe(false);
+    expect(workspacePreviewCapabilities('generic', true, 'pnpm dev')).toMatchObject({
+      isWebProject: true,
+      hasPreview: true,
+    });
+  });
+
   it('only exposes mobile preview when the platform supports it', () => {
     expect(workspacePreviewCapabilities('reactnative', false)).toEqual({
       isMobileProject: true,

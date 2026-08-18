@@ -31,7 +31,9 @@ pub use window_registry::*;
 use crate::errors::CommandError;
 use crate::external_command::run_with_timeout;
 use crate::types::{DashboardProject, PageInfo, ProjectInfo, ProjectMetadata, ProjectType};
-use crate::utils::{create_command, validate_project_path};
+use crate::utils::{
+    create_command, is_retryable_delete_error, remove_dir_all_robust, validate_project_path,
+};
 use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -188,13 +190,34 @@ fn ensure_gitignore_has_shipstudio_sync(project: &std::path::Path) -> Result<(),
 /// Check if a directory is a valid project.
 /// Accepts any directory inside ~/ShipStudio that has project files,
 /// a .gitignore (blank projects), or a .shipstudio metadata folder.
+///
+/// The language-ecosystem markers match `looks_like_project_root` in
+/// external_projects.rs — the manual "Select Project Folder" picker used to
+/// reject a Rust/Go/Python/Ruby/Java/PHP project that the automatic
+/// registration path would happily accept (issue #251).
 pub(crate) fn is_valid_project(path: &std::path::Path) -> bool {
+    const ECOSYSTEM_MARKERS: &[&str] = &[
+        "Cargo.toml",
+        "go.mod",
+        "pyproject.toml",
+        "requirements.txt",
+        "Gemfile",
+        "pom.xml",
+        "build.gradle",
+        "composer.json",
+    ];
+    // A home directory very often carries a stray `.git`/`.gitignore`, but it
+    // must never count as a project — see is_forbidden_project_root (#345).
+    if crate::utils::is_forbidden_project_root(path) {
+        return false;
+    }
     path.is_dir()
         && (path.join("package.json").exists()
-            || detection::has_html_files(path)
+            || detection::static_site_dir(path).is_some()
             || path.join(".gitignore").exists()
             || path.join(".shipstudio").exists()
-            || path.join(".git").exists())
+            || path.join(".git").exists()
+            || ECOSYSTEM_MARKERS.iter().any(|m| path.join(m).exists()))
 }
 
 /// Counts app-managed git worktrees for a project: subdirectories of
@@ -396,6 +419,26 @@ pub(crate) fn restore_removed_project(canonical: &Path) -> Result<bool, CommandE
 
 // ============ Tauri Commands ============
 
+/// Open the projects root for scanning, naming the folder on failure. On
+/// macOS, TCC answers EPERM (os error 1) when the app lacks Files-and-Folders
+/// access to the folder (Desktop/Documents/iCloud/external volumes) — an
+/// environment gap with a user-side fix, not a malfunction (issue #307).
+fn read_projects_dir(dir: &std::path::Path) -> Result<std::fs::ReadDir, CommandError> {
+    std::fs::read_dir(dir).map_err(|e| {
+        if cfg!(target_os = "macos") && e.raw_os_error() == Some(1) {
+            CommandError::expected(format!(
+                "Ship Studio isn't allowed to read your projects folder ({}). Grant access in System Settings → Privacy & Security → Files & Folders (or Full Disk Access), then reload the dashboard.",
+                dir.display()
+            ))
+        } else {
+            CommandError::from(format!(
+                "Failed to read projects folder {}: {e}",
+                dir.display()
+            ))
+        }
+    })
+}
+
 #[tauri::command]
 #[tracing::instrument]
 pub async fn list_projects() -> Result<Vec<ProjectInfo>, CommandError> {
@@ -412,10 +455,15 @@ pub async fn list_projects() -> Result<Vec<ProjectInfo>, CommandError> {
     }
 
     let mut projects = Vec::new();
-    let entries = std::fs::read_dir(&shipstudio_dir).map_err(|e| e.to_string())?;
+    let entries = read_projects_dir(&shipstudio_dir)?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+        let entry = entry.map_err(|e| {
+            format!(
+                "Failed to read an entry in projects folder {}: {e}",
+                shipstudio_dir.display()
+            )
+        })?;
         let path = entry.path();
         if is_valid_project(&path) {
             let canonical = canonical_or_original(&path);
@@ -545,10 +593,15 @@ pub async fn get_dashboard_projects() -> Result<Vec<DashboardProject>, CommandEr
     // stall the whole dashboard (issue #168).
     let mut projects = Vec::new();
     let mut scan_paths: Vec<PathBuf> = Vec::new();
-    let entries = std::fs::read_dir(&shipstudio_dir).map_err(|e| e.to_string())?;
+    let entries = read_projects_dir(&shipstudio_dir)?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+        let entry = entry.map_err(|e| {
+            format!(
+                "Failed to read an entry in projects folder {}: {e}",
+                shipstudio_dir.display()
+            )
+        })?;
         let path = entry.path();
         if is_valid_project(&path) {
             let canonical = canonical_or_original(&path);
@@ -750,7 +803,10 @@ pub async fn list_pages(project_path: String) -> Result<Vec<PageInfo>, CommandEr
             Ok(Vec::new())
         }
         ProjectType::Statichtml => {
-            let mut pages = detection::scan_html_pages(&project, &project)?;
+            // Scan the directory the static server actually serves from (the
+            // root, or Vercel-style public/) so routes match served URLs.
+            let site_dir = detection::static_site_dir(&project).unwrap_or(project.clone());
+            let mut pages = detection::scan_html_pages(&site_dir, &site_dir)?;
             detection::sort_pages(&mut pages);
             Ok(pages)
         }
@@ -899,96 +955,32 @@ pub async fn remove_git_history(project_path: String) -> Result<(), CommandError
     Ok(())
 }
 
-fn make_writable_recursive(path: &Path) -> std::io::Result<()> {
-    let metadata = std::fs::symlink_metadata(path)?;
+// `make_writable_recursive` / `is_retryable_delete_error` /
+// `remove_dir_all_robust` were extracted to `crate::utils` so
+// `delete_asset` (assets.rs) can share the Windows lock-retry treatment
+// (issue #696). `rename_robust` stays here — it's only used by this module.
 
-    // Never follow symlinks. A project can link outside itself — pnpm's
-    // node_modules links into the machine-global content-addressable store,
-    // whose files are deliberately read-only and shared by every project —
-    // and chmod-ing through the link would mutate files the delete below
-    // never touches. remove_dir_all removes the link itself, not its target,
-    // so the link needs no permission help either.
-    if metadata.file_type().is_symlink() {
-        return Ok(());
-    }
-
-    if metadata.file_type().is_dir() {
-        for entry in std::fs::read_dir(path)? {
-            make_writable_recursive(&entry?.path())?;
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        let mut permissions = metadata.permissions();
-        if permissions.readonly() {
-            permissions.set_readonly(false);
-            std::fs::set_permissions(path, permissions)?;
-        }
-    }
-    #[cfg(unix)]
-    {
-        // Owner-write only — Permissions::set_readonly(false) would make the
-        // file world-writable on Unix (clippy::permissions_set_readonly_false).
-        use std::os::unix::fs::PermissionsExt;
-        let mode = metadata.permissions().mode();
-        if mode & 0o200 == 0 {
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode | 0o200))?;
-        }
-    }
-    Ok(())
-}
-
-/// Whether a failed `remove_dir_all` is worth retrying after a short wait.
-///
-/// ERROR_SHARING_VIOLATION (32) / ERROR_LOCK_VIOLATION (33) are Windows'
-/// "file open by another process" errors — the transient locks (antivirus,
-/// Search indexer, a just-killed PTY's children winding down) this retry
-/// exists for. ERROR_ACCESS_DENIED (5) covers in-use executables.
-fn is_retryable_delete_error(e: &std::io::Error) -> bool {
-    matches!(e.raw_os_error(), Some(5) | Some(32) | Some(33))
-        || e.kind() == std::io::ErrorKind::PermissionDenied
-}
-
-/// Blocking delete with read-only clearing and lock retries. Call from
-/// `spawn_blocking` — the chmod walk and retry sleeps can hold a thread for
-/// seconds on a large node_modules.
-fn remove_dir_all_robust(path: &Path) -> std::io::Result<()> {
-    if !path.exists() {
-        return Ok(());
-    }
-
-    // Fast path first: on a healthy tree remove_dir_all just works, and the
-    // chmod walk below stats every file — seconds of pure overhead on a large
-    // node_modules if paid unconditionally.
-    let first_err = match std::fs::remove_dir_all(path) {
-        Ok(()) => return Ok(()),
-        Err(e) => e,
-    };
-    tracing::info!(
-        "remove_dir_all failed ({}), retrying with read-only clearing: {}",
-        path.display(),
-        first_err
-    );
-
-    // Clear read-only attributes (Windows refuses to delete read-only files;
-    // git objects and some packages ship them). Best-effort: a partial chmod
-    // still lets most of the tree go.
-    if let Err(e) = make_writable_recursive(path) {
-        tracing::warn!(
-            "Failed to set write permissions recursively on {}: {}",
-            path.display(),
-            e
-        );
-    }
-
+/// Blocking rename with the same lock-retry treatment as
+/// [`remove_dir_all_robust`]: a transient Windows sharing violation
+/// (antivirus scan, Search indexer, a just-suspended session's child not
+/// fully exited) failed the single unretried `fs::rename` immediately with
+/// "os error 32" (issue #559). Call from `spawn_blocking` — the sleeps can
+/// hold a thread for seconds.
+fn rename_robust(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut delay = std::time::Duration::from_millis(100);
     let mut retries = 10;
     loop {
-        match std::fs::remove_dir_all(path) {
+        match std::fs::rename(from, to) {
             Ok(()) => return Ok(()),
             Err(e) if retries > 0 && is_retryable_delete_error(&e) => {
+                tracing::info!(
+                    "rename blocked by a file lock ({}), retrying: {}",
+                    from.display(),
+                    e
+                );
                 retries -= 1;
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(std::time::Duration::from_secs(1));
             }
             Err(e) => return Err(e),
         }
@@ -1008,13 +1000,13 @@ pub async fn delete_project(path: String) -> Result<(), CommandError> {
         message: format!("Couldn't resolve project path {path}: {e}"),
     })?;
 
-    // Check if this is an external project
+    // Check if this is an external project. A by-design guard with a
+    // user-side path forward, not a malfunction — Expected keeps it out of
+    // telemetry (issue #699).
     if crate::commands::external_projects::is_registered_external_path(&canonical)? {
-        return Err(
-            "Cannot delete external projects. Use 'Remove from Ship Studio' instead."
-                .to_string()
-                .into(),
-        );
+        return Err(CommandError::expected(
+            "Cannot delete external projects. Use 'Remove from Ship Studio' instead.",
+        ));
     }
 
     if !crate::utils::allowed_project_roots()
@@ -1192,13 +1184,13 @@ pub async fn rename_project(
     })?;
     let project_path = project_path.as_path();
 
-    // Reject external projects (their folders live outside ~/ShipStudio).
+    // Reject external projects (their folders live outside ~/ShipStudio). A
+    // by-design refusal with a user-side path forward, not a malfunction —
+    // Expected keeps it out of telemetry (issue #699).
     if crate::commands::external_projects::is_registered_external_path(project_path)? {
-        return Err(
-            "Renaming external projects isn't supported yet. Remove it from the list and re-add it under a new folder name."
-                .to_string()
-                .into(),
-        );
+        return Err(CommandError::expected(
+            "Renaming external projects isn't supported yet. Remove it from the list and re-add it under a new folder name.",
+        ));
     }
 
     // Must live inside an allowed projects root.
@@ -1254,11 +1246,26 @@ pub async fn rename_project(
         return Ok(old_path);
     }
     if new_path.exists() {
-        return Err((format!("A project named \"{new_name}\" already exists.")).into());
+        // A by-design validation refusal the user corrects by picking another
+        // name — Expected keeps it out of telemetry (issue #599).
+        return Err(CommandError::expected(format!(
+            "A project named \"{new_name}\" already exists."
+        )));
     }
 
-    std::fs::rename(project_path, &new_path)
-        .map_err(|e| format!("Failed to rename project: {e}"))?;
+    // Robust rename: retry transient Windows file locks (antivirus, Search
+    // indexer, a just-suspended session's children still winding down) with
+    // the same backoff schedule delete_project uses — a single unretried
+    // rename surfaced "os error 32" straight to the user (issues #253/#559).
+    // spawn_blocking keeps the retry sleeps off the async runtime.
+    {
+        let src = project_path.to_path_buf();
+        let dst = new_path.clone();
+        tokio::task::spawn_blocking(move || rename_robust(&src, &dst))
+            .await
+            .map_err(|e| format!("Project rename task failed: {e}"))?
+            .map_err(|e| format!("Failed to rename project: {e}"))?;
+    }
 
     let new_path_str = new_path.to_string_lossy().to_string();
 
@@ -1521,6 +1528,22 @@ mod tests {
         }
     }
 
+    /// Issue #251: the manual "Select Project Folder" picker must accept the
+    /// same language-ecosystem projects the automatic registration path does.
+    #[test]
+    fn is_valid_project_accepts_ecosystem_manifests() {
+        for marker in ["Cargo.toml", "go.mod", "pyproject.toml", "Gemfile"] {
+            let tmp = tempfile::tempdir().unwrap();
+            std::fs::write(tmp.path().join(marker), "").unwrap();
+            assert!(
+                is_valid_project(tmp.path()),
+                "{marker} alone should mark a valid project"
+            );
+        }
+        let empty = tempfile::tempdir().unwrap();
+        assert!(!is_valid_project(empty.path()));
+    }
+
     #[test]
     fn validate_project_name_accepts_normal_names() {
         assert_eq!(validate_project_name("my-app").unwrap(), "my-app");
@@ -1688,58 +1711,30 @@ mod tests {
     }
 
     #[test]
-    fn remove_dir_all_robust_deletes_readonly_files() {
+    fn rename_robust_renames_a_directory() {
         let tmp = tempfile::tempdir().unwrap();
-        let file_path = tmp.path().join("readonly_file.txt");
-        std::fs::write(&file_path, "test content").unwrap();
+        let src = tmp.path().join("old-name");
+        std::fs::create_dir(&src).unwrap();
+        std::fs::write(src.join("file.txt"), "hi").unwrap();
+        let dst = tmp.path().join("new-name");
 
-        // Set the file to read-only
-        let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
-        perms.set_readonly(true);
-        std::fs::set_permissions(&file_path, perms).unwrap();
+        rename_robust(&src, &dst).unwrap();
 
-        // Verify it is indeed read-only
-        assert!(std::fs::metadata(&file_path)
-            .unwrap()
-            .permissions()
-            .readonly());
-
-        // Use remove_dir_all_robust to delete the directory tree
-        remove_dir_all_robust(tmp.path()).unwrap();
-
-        // Verify the directory no longer exists
-        assert!(!tmp.path().exists());
+        assert!(!src.exists());
+        assert_eq!(std::fs::read_to_string(dst.join("file.txt")).unwrap(), "hi");
     }
 
-    #[cfg(unix)]
     #[test]
-    fn remove_dir_all_robust_never_chmods_through_symlinks() {
-        // pnpm-style layout: the project links to a shared store whose files
-        // are read-only on purpose. Deleting the project must remove the link
-        // itself without touching the store's permissions.
-        let store = tempfile::tempdir().unwrap();
-        let store_file = store.path().join("shared.txt");
-        std::fs::write(&store_file, "shared").unwrap();
-        let mut perms = std::fs::metadata(&store_file).unwrap().permissions();
-        perms.set_readonly(true);
-        std::fs::set_permissions(&store_file, perms).unwrap();
-
-        let project = tempfile::tempdir().unwrap();
-        std::os::unix::fs::symlink(store.path(), project.path().join("node_modules_link")).unwrap();
-
-        remove_dir_all_robust(project.path()).unwrap();
-
-        assert!(!project.path().exists());
-        assert!(
-            store_file.exists(),
-            "symlink target must survive the delete"
-        );
-        assert!(
-            std::fs::metadata(&store_file)
-                .unwrap()
-                .permissions()
-                .readonly(),
-            "store file must stay read-only — chmod escaped through the symlink"
-        );
+    fn rename_robust_surfaces_non_retryable_errors_immediately() {
+        let tmp = tempfile::tempdir().unwrap();
+        let missing = tmp.path().join("does-not-exist");
+        let dst = tmp.path().join("dst");
+        let err = rename_robust(&missing, &dst).unwrap_err();
+        // NotFound is not a lock — must not burn ~8s of retries.
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
+
+    // Tests for `is_retryable_delete_error` / `remove_dir_all_robust` /
+    // `remove_file_robust` moved to `crate::utils` alongside the extracted
+    // helpers (issue #696).
 }

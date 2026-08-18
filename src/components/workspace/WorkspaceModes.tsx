@@ -2,6 +2,7 @@ import { CodeIcon, EyeIcon, EyeOffIcon } from '@/components/icons';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { workspaceModeValue, type WorkspaceTab } from './workspaceViewState';
 
+/** Props for the workspace preview, focus, code, branches, and pull-request mode controls. */
 export interface WorkspaceModesProps {
   hasPreview: boolean;
   isPreviewHidden: boolean;
@@ -11,6 +12,7 @@ export interface WorkspaceModesProps {
   setWorkspaceTab: (tab: WorkspaceTab) => void;
 }
 
+/** Renders the workspace mode tabs and focus toggle. */
 export function WorkspaceModes({
   hasPreview,
   isPreviewHidden,

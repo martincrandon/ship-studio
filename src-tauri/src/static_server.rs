@@ -119,8 +119,15 @@ pub async fn start_static_server(
         ));
     }
 
+    // Serve from `public/` (Vercel's static-deploy convention) when the project
+    // root has no HTML of its own — the same rule `detect_project_type` uses to
+    // classify the project as static in the first place. Falls back to the root
+    // so force-static projects with unusual layouts still serve something.
+    let serve_root =
+        crate::commands::projects::static_site_dir(&project_root).unwrap_or(project_root.clone());
+
     // Canonicalize once at startup for path traversal checks
-    let canonical_root = dunce::canonicalize(&project_root)
+    let canonical_root = dunce::canonicalize(&serve_root)
         .map_err(|e| format!("Failed to canonicalize project path: {e}"))?;
 
     // Bind to a random available port on localhost
@@ -438,9 +445,88 @@ fn resolve_file_path(project_root: &Path, url_path: &str) -> Option<PathBuf> {
     None
 }
 
+/// Transient file-descriptor pressure: EMFILE (os error 24, this process's fd
+/// budget) or ENFILE (os error 23, the system-wide open-file table). Both are
+/// usually momentary — another process releases descriptors within
+/// milliseconds — so a read that fails with them deserves a retry, not an
+/// instant 500 (issue #575). The raw-code fallbacks are Unix-gated: on
+/// Windows os errors 23/24 mean unrelated things.
+fn is_fd_pressure(e: &std::io::Error) -> bool {
+    let rendered = e.to_string();
+    rendered.contains("Too many open files")
+        || (cfg!(unix) && matches!(e.raw_os_error(), Some(23) | Some(24)))
+}
+
+/// Run `op`, retrying a couple of times with a short backoff when it fails
+/// with transient fd pressure (see [`is_fd_pressure`]). Any other failure —
+/// and fd pressure that survives every retry — is returned unchanged.
+async fn with_fd_pressure_retry<T, F, Fut>(mut op: F) -> std::io::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = std::io::Result<T>>,
+{
+    const ATTEMPTS: u64 = 3;
+    for attempt in 1..=ATTEMPTS {
+        match op().await {
+            Err(e) if attempt < ATTEMPTS && is_fd_pressure(&e) => {
+                tracing::warn!(
+                    attempt,
+                    error = %e,
+                    "[StaticServer] read hit transient fd pressure (EMFILE/ENFILE); retrying"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(75 * attempt)).await;
+            }
+            other => return other,
+        }
+    }
+    unreachable!("loop returns on the final attempt")
+}
+
+/// Ceiling for a single static-asset read. `tokio::fs::read` pre-allocates
+/// the whole buffer from the metadata length, so a bogus length — a cloud
+/// placeholder (Dropbox/iCloud dataless file) or a corrupt directory entry —
+/// makes the allocation itself fail with `ErrorKind::OutOfMemory` (issue
+/// #697). No sane static preview asset approaches this; refuse up front with
+/// a clear message instead of attempting the allocation.
+const MAX_STATIC_FILE_BYTES: u64 = 512 * 1024 * 1024;
+
+/// True when a reported file length is beyond what the static server will
+/// buffer into memory (see [`MAX_STATIC_FILE_BYTES`]).
+fn exceeds_static_read_cap(len: u64) -> bool {
+    len > MAX_STATIC_FILE_BYTES
+}
+
+/// Allocation failure while buffering the file. With no OS error attached
+/// this is the pre-allocation from a bogus metadata length failing (issue
+/// #697) — a file-metadata/environment condition, not a server bug.
+fn is_allocation_failure(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::OutOfMemory
+}
+
 /// Read a file from disk and return it as an HTTP response with the correct MIME type.
 async fn serve_file(file_path: &Path) -> Result<Response<ServerBody>, hyper::Error> {
-    match tokio::fs::read(file_path).await {
+    // Cap reads before allocating: a metadata length beyond the ceiling is
+    // almost certainly bogus (cloud placeholder / corrupt entry) and would
+    // otherwise fail as OutOfMemory inside tokio::fs::read (issue #697).
+    // Metadata errors fall through — the read below reports them properly.
+    if let Ok(meta) = tokio::fs::metadata(file_path).await {
+        if exceeds_static_read_cap(meta.len()) {
+            tracing::warn!(
+                "[StaticServer] Refusing to serve {}: reported size {} bytes exceeds the {} MB static-asset ceiling (likely a cloud placeholder or corrupt metadata)",
+                file_path.display(),
+                meta.len(),
+                MAX_STATIC_FILE_BYTES / (1024 * 1024)
+            );
+            let body = "<html><body><h1>413 - File Too Large</h1><p>This file reports a size beyond what the static preview will serve. If it lives in cloud storage (Dropbox/iCloud), make sure it is fully downloaded locally.</p></body></html>";
+            return Ok(Response::builder()
+                .status(StatusCode::PAYLOAD_TOO_LARGE)
+                .header("Content-Type", "text/html; charset=utf-8")
+                .body(full_body(Bytes::from(body)))
+                .unwrap());
+        }
+    }
+
+    match with_fd_pressure_retry(|| tokio::fs::read(file_path)).await {
         Ok(contents) => {
             let mime = file_path
                 .extension()
@@ -457,11 +543,37 @@ async fn serve_file(file_path: &Path) -> Result<Response<ServerBody>, hyper::Err
                 .unwrap())
         }
         Err(e) => {
-            tracing::error!(
-                "[StaticServer] Failed to read file {}: {}",
-                file_path.display(),
-                e
-            );
+            // Log the raw os error code distinctly so fd-pressure failures
+            // (23/24) are easy to filter from other read failures (#575).
+            // Pressure that survived every retry is machine-wide fd
+            // exhaustion — an environment condition, not a server bug — so
+            // it logs at warn instead of auto-filing an error report.
+            if is_fd_pressure(&e) {
+                tracing::warn!(
+                    "[StaticServer] Failed to read file {} after fd-pressure retries (os error {:?}): {}",
+                    file_path.display(),
+                    e.raw_os_error(),
+                    e
+                );
+            } else if is_allocation_failure(&e) {
+                // A read that still hits OutOfMemory (racing metadata change,
+                // or genuine memory pressure) is a file-metadata/allocation
+                // condition of the environment, not an app bug — warn, don't
+                // auto-file a report (issue #697).
+                tracing::warn!(
+                    "[StaticServer] Failed to allocate for file {} (os error {:?}): {} — likely bogus metadata length (cloud placeholder / corrupt entry) or memory pressure",
+                    file_path.display(),
+                    e.raw_os_error(),
+                    e
+                );
+            } else {
+                tracing::error!(
+                    "[StaticServer] Failed to read file {} (os error {:?}): {}",
+                    file_path.display(),
+                    e.raw_os_error(),
+                    e
+                );
+            }
             let body = "<html><body><h1>500 - Internal Server Error</h1></body></html>";
             Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -477,6 +589,127 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    // ===== #575: fd-pressure classification + bounded read retry =====
+
+    #[test]
+    fn fd_pressure_matches_emfile_and_enfile_shapes() {
+        // ENFILE — the reported #575 shape (system-wide table exhausted).
+        assert!(is_fd_pressure(&std::io::Error::other(
+            "Too many open files in system (os error 23)"
+        )));
+        // EMFILE — per-process budget exhausted.
+        assert!(is_fd_pressure(&std::io::Error::other(
+            "Too many open files (os error 24)"
+        )));
+        // Raw-code fallback for localized strerror text (Unix only).
+        #[cfg(unix)]
+        {
+            assert!(is_fd_pressure(&std::io::Error::from_raw_os_error(23)));
+            assert!(is_fd_pressure(&std::io::Error::from_raw_os_error(24)));
+        }
+    }
+
+    #[test]
+    fn fd_pressure_rejects_other_errors() {
+        assert!(!is_fd_pressure(&std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No such file or directory (os error 2)"
+        )));
+        assert!(!is_fd_pressure(&std::io::Error::other(
+            "Operation not permitted (os error 1)"
+        )));
+    }
+
+    #[tokio::test]
+    async fn fd_retry_recovers_after_transient_pressure() {
+        let calls = std::cell::Cell::new(0u32);
+        let result = with_fd_pressure_retry(|| {
+            calls.set(calls.get() + 1);
+            let n = calls.get();
+            async move {
+                if n < 3 {
+                    Err(std::io::Error::other(
+                        "Too many open files in system (os error 23)",
+                    ))
+                } else {
+                    Ok(vec![1u8, 2, 3])
+                }
+            }
+        })
+        .await;
+        assert_eq!(result.unwrap(), vec![1, 2, 3]);
+        assert_eq!(calls.get(), 3);
+    }
+
+    #[tokio::test]
+    async fn fd_retry_gives_up_after_bounded_attempts() {
+        let calls = std::cell::Cell::new(0u32);
+        let result: std::io::Result<Vec<u8>> = with_fd_pressure_retry(|| {
+            calls.set(calls.get() + 1);
+            async { Err(std::io::Error::other("Too many open files (os error 24)")) }
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(calls.get(), 3, "must be bounded, not infinite");
+    }
+
+    #[tokio::test]
+    async fn fd_retry_does_not_retry_other_errors() {
+        let calls = std::cell::Cell::new(0u32);
+        let result: std::io::Result<Vec<u8>> = with_fd_pressure_retry(|| {
+            calls.set(calls.get() + 1);
+            async {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No such file or directory (os error 2)",
+                ))
+            }
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(calls.get(), 1);
+    }
+
+    // ===== #697: size cap + OutOfMemory classification =====
+
+    #[test]
+    fn static_read_cap_refuses_bogus_lengths_and_passes_real_assets() {
+        // Real static assets — even huge videos — sit under the ceiling.
+        assert!(!exceeds_static_read_cap(0));
+        assert!(!exceeds_static_read_cap(25 * 1024 * 1024));
+        assert!(!exceeds_static_read_cap(MAX_STATIC_FILE_BYTES));
+        // A cloud-placeholder / corrupt metadata length gets refused before
+        // tokio::fs::read pre-allocates from it.
+        assert!(exceeds_static_read_cap(MAX_STATIC_FILE_BYTES + 1));
+        assert!(exceeds_static_read_cap(u64::MAX));
+    }
+
+    #[test]
+    fn allocation_failure_is_classified_environmental() {
+        // The #697 shape: ErrorKind::OutOfMemory with no OS error attached —
+        // the pre-allocation from a bogus metadata length failing.
+        assert!(is_allocation_failure(&std::io::Error::from(
+            std::io::ErrorKind::OutOfMemory
+        )));
+        // Ordinary read failures keep the error-level path.
+        assert!(!is_allocation_failure(&std::io::Error::from(
+            std::io::ErrorKind::NotFound
+        )));
+        assert!(!is_allocation_failure(&std::io::Error::other(
+            "Too many open files (os error 24)"
+        )));
+    }
+
+    #[tokio::test]
+    async fn serve_file_still_serves_ordinary_files() {
+        // The new metadata pre-check must not break the normal path.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("index.html");
+        fs::write(&path, "<html>ok</html>").unwrap();
+        let resp = serve_file(&path).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
 
     #[test]
     fn test_get_mime_type() {
@@ -499,6 +732,24 @@ mod tests {
         let result = resolve_file_path(&canonical_root, "/");
         assert!(result.is_some());
         assert!(result.unwrap().ends_with("index.html"));
+    }
+
+    #[test]
+    fn test_serves_from_public_when_root_has_no_html() {
+        // Vercel-style layout: all site files under public/, nothing at root.
+        let dir = TempDir::new().unwrap();
+        let public = dir.path().join("public");
+        fs::create_dir_all(&public).unwrap();
+        fs::write(public.join("index.html"), "<html></html>").unwrap();
+        fs::write(public.join("styles.css"), "body {}").unwrap();
+
+        let serve_root = crate::commands::projects::static_site_dir(dir.path())
+            .expect("public/ html must yield a serve root");
+        let canonical = dunce::canonicalize(&serve_root).unwrap();
+        let index = resolve_file_path(&canonical, "/").unwrap();
+        assert!(index.ends_with("public/index.html"));
+        let css = resolve_file_path(&canonical, "/styles.css").unwrap();
+        assert!(css.ends_with("public/styles.css"));
     }
 
     #[test]

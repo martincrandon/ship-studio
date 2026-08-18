@@ -21,7 +21,12 @@ import {
 import { getChangedFiles, ChangedFile } from '../lib/git';
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '../lib/logger';
-import { asCommandError, formatCommandError } from '../lib/errors';
+import {
+  asCommandError,
+  formatCommandError,
+  humanizeGitError,
+  isRecognizedGitFailure,
+} from '../lib/errors';
 import { trackEvent, trackError } from '../lib/analytics';
 import type { PreviewHandle } from '../components/preview/Preview';
 import type { HealthTabPanelRef } from '../components/code/HealthTabPanel';
@@ -261,16 +266,22 @@ export function useBranchManagement({
         logger.warn('Pull produced merge conflicts', { message });
         setShowConflictResolution(true);
       } else if (/no tracking information|no such ref was fetched/i.test(message)) {
+        // Expected, by-design refusal (unpushed branch) — info toast + warn
+        // log, NOT the error channels: error toasts and logger.error both
+        // auto-file bug reports, and this isn't a bug (issue #600).
+        logger.warn('Pull skipped: branch has no upstream', { message });
         showToast(
           `This branch isn't on GitHub yet, so there's nothing to pull — push it first. (git said: ${message})`,
-          'error'
+          'info'
         );
       } else if (/would be overwritten by (merge|checkout)/i.test(message)) {
         // Git refused because the incoming commits touch files with local
         // uncommitted edits. Nothing was changed — the working tree is safe.
+        // Same expected classification as above (issue #600).
+        logger.warn('Pull refused: local changes would be overwritten', { message });
         showToast(
           `The pull would overwrite unsaved changes, so git stopped — nothing was touched. Push (or discard) your changes first, then pull again. (git said: ${message})`,
-          'error'
+          'info'
         );
       } else {
         logger.error('Pull failed', { message });
@@ -313,10 +324,13 @@ export function useBranchManagement({
           // Switch to the PR's head branch
           const switchResult = await switchBranch(currentProject.path, headBranch, true);
           if (!switchResult.success) {
-            // Keep whatever detail git gave us; only explain when it gave none.
-            const detail =
-              switchResult.error ||
-              '(git reported failure with no detail — check for uncommitted changes)';
+            // Humanize the raw git stderr — worktree collisions and friends
+            // must not surface as raw fatals (issue #607; humanizeGitError
+            // falls back to the raw detail when it recognizes nothing). Only
+            // explain ourselves when git gave no detail at all.
+            const detail = switchResult.error
+              ? humanizeGitError(switchResult.error, { branch: headBranch })
+              : '(git reported failure with no detail — check for uncommitted changes)';
             showToast(`Couldn't switch to "${headBranch}": ${detail}`, 'error');
             return;
           }
@@ -336,6 +350,18 @@ export function useBranchManagement({
             if (errorMsg.includes('MERGE_CONFLICT')) {
               // Conflicts created locally - show the UI
               setShowConflictResolution(true);
+            } else if (isRecognizedGitFailure(e, { branch: headBranch, base: baseBranch })) {
+              // A recognized, anticipated state — e.g. `origin/<base>` no
+              // longer resolving because the remote branch was deleted or the
+              // fetch didn't complete ("not something we can merge", issue
+              // #674). The backend classified it Expected; an 'error' toast
+              // here would re-report it through toast telemetry. Surface the
+              // humanized cause as info + warn log instead.
+              const humanized = humanizeGitError(e, { branch: headBranch, base: baseBranch });
+              logger.warn('Merge for conflict resolution refused for a recognized reason', {
+                message: errorMsg,
+              });
+              showToast(humanized, 'info');
             } else {
               showToast(`Failed to merge: ${errorMsg}`, 'error');
             }

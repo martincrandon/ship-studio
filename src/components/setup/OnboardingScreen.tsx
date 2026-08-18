@@ -49,6 +49,7 @@ import { checkGitHubCliStatus } from '../../lib/github';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { withTimeout, TimeoutError } from '../../lib/withTimeout';
 import { stripAnsi } from '../../lib/ansi';
+import { SLACK_INVITE_URL } from '../../lib/links';
 import {
   detectAlreadyLoggedIn,
   extractTerminalError,
@@ -791,14 +792,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <strong>Having problems getting set up?</strong> Join the Slack channel and we'll help
             you out!
           </span>
-          <Button
-            variant="variable"
-            onClick={() =>
-              void openUrl(
-                'https://join.slack.com/t/shipstudiocommunity/shared_invite/zt-41vbyaoo0-_pZWNPyMdvMoF6neuDYw7g'
-              )
-            }
-          >
+          <Button variant="variable" onClick={() => void openUrl(SLACK_INVITE_URL)}>
             Join Slack
           </Button>
         </div>

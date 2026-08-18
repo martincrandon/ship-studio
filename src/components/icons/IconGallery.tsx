@@ -7,6 +7,7 @@ function isIconComponent(value: unknown): value is IconComponent {
   return typeof value === 'object' && value !== null && 'iconMeta' in value;
 }
 
+/** Returns shared icon components in stable display-name order for the development gallery. */
 export function getGalleryIcons(): IconComponent[] {
   return Object.values(iconLibrary)
     .filter(isIconComponent)

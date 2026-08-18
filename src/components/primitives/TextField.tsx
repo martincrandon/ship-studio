@@ -1,5 +1,6 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 
+/** Props for the canonical single-line text input primitive. */
 export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   /** Adds the invalid class and aria-invalid state without feature-level duplication. */
   invalid?: boolean;

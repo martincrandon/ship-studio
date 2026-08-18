@@ -59,11 +59,34 @@ interface Params {
   projectPath: string;
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
-  onToast?: (message: string, type?: 'success' | 'error') => void;
+  onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 /** How long after a write the iframe `load` handler still replays the reselect. */
 const RESELECT_WINDOW_MS = 8000;
+
+/**
+ * The backend's element-resolution errors are worded for the raw-markup editor
+ * ("its markup becomes editable", "editing it here") — confusing when the user
+ * clicked insert/duplicate/delete on the canvas. Rephrase the known resolution
+ * failures for the structural-edit context (issues #318/#320); anything else
+ * passes through unchanged.
+ */
+export function structuralEditMessage(message: string): string {
+  if (message.includes('no class in source to anchor')) {
+    return 'This element has no class for Ship Studio to find it in your code. Add a class to it first (the Add class action), then try again.';
+  }
+  if (
+    message.includes('several places whose markup differs') ||
+    message.includes('several identical places')
+  ) {
+    return 'This element appears in several places in your code, so changing it from the canvas could affect the wrong one. Select a more specific element, or ask your agent to make this change.';
+  }
+  if (message.includes("can't be matched to its source markup")) {
+    return "This element can't be matched to its source code (its classes are generated dynamically). Ask your agent to make this change instead.";
+  }
+  return message;
+}
 
 export function useElementStructure({ iframeRef, projectPath, enabled, onToast }: Params) {
   const [selection, setSelection] = useState<StructureSelection | null>(null);
@@ -175,8 +198,23 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
         await action();
       } catch (err) {
         const message = formatCommandError(asCommandError(err));
-        logger.error('[ElementStructure] structural edit failed', { error: message });
-        onToast?.(message, 'error');
+        const friendly = structuralEditMessage(message);
+        if (friendly === message) {
+          // Unrecognized failure — a genuine bug candidate, report it.
+          logger.error('[ElementStructure] structural edit failed', { error: message });
+        } else {
+          // A known by-design refusal (ambiguous/unanchorable element). The
+          // user already gets an accurate toast; logger.error would ship it
+          // to the bug pipeline on every occurrence even though #299 already
+          // classified these as non-reportable on the Rust side (issue #402).
+          logger.warn('[ElementStructure] structural edit refused', { error: message });
+        }
+        // Recognized refusals also skip the 'error' toast type: error toasts
+        // re-enter telemetry through useToasts' `source: 'toast'` reporting
+        // path, re-reporting what the logger.warn branch above deliberately
+        // kept out (issues #437/#515). 'info' keeps the toast visible without
+        // filing a bug.
+        onToast?.(friendly, friendly === message ? 'error' : 'info');
       } finally {
         busyRef.current = false;
         setBusy(false);

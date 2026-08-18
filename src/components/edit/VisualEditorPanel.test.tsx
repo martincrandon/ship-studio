@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, within } from '@testing-library/react';
 import { VisualEditorPanel } from './VisualEditorPanel';
 import {
   BASE_BREAKPOINT,
@@ -195,6 +195,45 @@ describe('VisualEditorPanel', () => {
     renderPanel(resolvedSelection, 'p-3', MD);
     const trigger = screen.getByRole('button', { name: 'Breakpoint' });
     expect(trigger).toHaveTextContent('md · ≥768px');
+  });
+
+  it('lists breakpoints from largest to smallest with their device icons', () => {
+    renderPanel(resolvedSelection, 'p-3', BASE_BREAKPOINT);
+    fireEvent.click(screen.getByRole('button', { name: 'Breakpoint' }));
+    const options = screen.getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      '2xl · ≥1536px',
+      'xl · ≥1280px',
+      'lg · ≥1024px',
+      'md · ≥768px',
+      'sm · ≥640px',
+      'Base · all widths',
+    ]);
+    expect(options.every((option) => option.querySelector('svg'))).toBe(true);
+  });
+
+  it('renders typography dimensions as editable value fields', () => {
+    renderPanel(resolvedSelection, 'text-xl leading-tight tracking-wide');
+    expect(screen.getByRole('textbox', { name: 'Size' })).toHaveValue('1.25');
+    expect(screen.getByRole('button', { name: 'Size format' })).toHaveTextContent('REM');
+    expect(screen.getByRole('textbox', { name: 'Line height' })).toHaveValue('1.25');
+    expect(screen.getByRole('textbox', { name: 'Letter spacing' })).toHaveValue('0.025');
+    expect(screen.getByRole('button', { name: 'Letter spacing format' })).toHaveTextContent('EM');
+  });
+
+  it('surfaces an active overflowed Display value and moves None into the menu', () => {
+    renderPanel(resolvedSelection, 'inline-flex');
+
+    expect(screen.getByRole('button', { name: 'Inline flex' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'Display' })).queryByRole('button', {
+        name: 'None',
+      })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More display options' }));
+    expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Inline block' })).toBeInTheDocument();
   });
 
   it('explains the mobile-first cascade contextually for the active breakpoint', () => {

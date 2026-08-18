@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ButtonSize } from './Button';
 import { ToggleButton } from './ToggleButton';
 
+/** Describes one mutually exclusive choice in a segmented control. */
 export interface SegmentedControlOption<T extends string> {
   value: T;
   label: ReactNode;
@@ -11,6 +12,7 @@ export interface SegmentedControlOption<T extends string> {
   disabled?: boolean;
 }
 
+/** Props for a labelled, controlled group of mutually exclusive choices. */
 export interface SegmentedControlProps<T extends string> {
   value: T;
   options: readonly SegmentedControlOption<T>[];

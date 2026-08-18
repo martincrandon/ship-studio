@@ -22,6 +22,7 @@ interface Typography {
   direction: string;
 }
 
+/** Props for text that preserves both ends while truncating its middle to fit. */
 export interface MiddleTruncateProps extends HTMLAttributes<HTMLSpanElement> {
   text: string;
 }

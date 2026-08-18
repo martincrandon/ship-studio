@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { usePreviewConnection } from './usePreviewConnection';
 import { IFRAME_BLANK_TIMEOUT_MS } from './previewIframeWatchdog';
+import { logger } from '../lib/logger';
 
 // The hook reaches for Tauri IPC, the proxy, analytics, and a logger on the
 // readiness path; stub them all so the test exercises only the fetch-probe loop.
@@ -305,5 +306,212 @@ describe('usePreviewConnection blank-iframe watchdog', () => {
     expect(result.current.iframeBlank).toBe(true);
 
     await teardown(unmount);
+  });
+});
+
+describe('usePreviewConnection stale-404 detection (issue #243)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  /** Route probe_preview_status through a status script; other commands keep
+   *  their defaults. `statuses` is consumed one per health check; the last
+   *  value repeats once exhausted. */
+  async function installProbeStatuses(statuses: Array<number | null>) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === 'start_preview_proxy') return Promise.resolve(8080);
+      if (cmd === 'list_pages') return Promise.resolve([]);
+      if (cmd === 'probe_preview_status') {
+        const next = statuses.length > 1 ? statuses.shift() : statuses[0];
+        return Promise.resolve(next);
+      }
+      return Promise.resolve(undefined);
+    });
+  }
+
+  /** Drive the hook to serverReady via the readiness probe. */
+  async function reachReady(server: ReturnType<typeof installSlowServerFetch>) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await act(async () => {
+      server.finishCompile();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  it('flags the server stale after three consecutive 404s on a previously-healthy root', async () => {
+    const server = installSlowServerFetch();
+    await installProbeStatuses([200, 404, 404, 404]);
+    const { result, unmount } = renderHook(() => usePreviewConnection(baseParams));
+    await reachReady(server);
+    expect(result.current.serverReady).toBe(true);
+
+    // Check 1 (200): records the healthy root. Checks 2–3 (404): strikes, not
+    // yet a verdict.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(result.current.serverStale).toBe(false);
+    expect(result.current.serverReady).toBe(true);
+
+    // Check 4: third consecutive 404 — wedged, surface the error + restart.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10000);
+    });
+    expect(result.current.serverStale).toBe(true);
+    expect(result.current.hasError).toBe(true);
+    expect(result.current.serverReady).toBe(false);
+
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  it('never flags a root that was never healthy (projects with no "/" route)', async () => {
+    const server = installSlowServerFetch();
+    await installProbeStatuses([404]);
+    const { result, unmount } = renderHook(() => usePreviewConnection(baseParams));
+    await reachReady(server);
+    expect(result.current.serverReady).toBe(true);
+
+    // Many 404 checks in a row — without a prior healthy root this is the
+    // project's normal shape, not a wedged server.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+    expect(result.current.serverStale).toBe(false);
+    expect(result.current.serverReady).toBe(true);
+    expect(result.current.hasError).toBe(false);
+
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  it('treats an unreachable server as crashed after three failed checks', async () => {
+    const server = installSlowServerFetch();
+    await installProbeStatuses([200, null, null, null]);
+    const { result, unmount } = renderHook(() => usePreviewConnection(baseParams));
+    await reachReady(server);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40000);
+    });
+    expect(result.current.hasError).toBe(true);
+    expect(result.current.serverReady).toBe(false);
+    // Crashed, not stale — the restart affordance for stale is separate.
+    expect(result.current.serverStale).toBe(false);
+
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+});
+
+describe('usePreviewConnection page-list load failures (issue #541)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  it('logs the real CommandError message, not "[object Object]"', async () => {
+    // `list_pages` rejects with a plain tagged CommandError object — the shape
+    // Tauri delivers for Result<_, CommandError> rejections. It is NOT an
+    // Error instance, so naive String() would render "[object Object]".
+    const { invoke } = await import('@tauri-apps/api/core');
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === 'start_preview_proxy') return Promise.resolve(8080);
+      if (cmd === 'list_pages')
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- deliberately a plain CommandError object, the shape under test
+        return Promise.reject({ type: 'Io', message: 'permission denied walking pages dir' });
+      return Promise.resolve(undefined);
+    });
+    const server = installSlowServerFetch();
+    const { unmount } = renderHook(() => usePreviewConnection(baseParams));
+
+    // Reach serverReady so the page-list polling kicks in and hits the reject.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await act(async () => {
+      server.finishCompile();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the mock's calls, not invoking it bound
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    const pageCall = errorCalls.find(([msg]) => msg === 'Failed to load pages');
+    expect(pageCall).toBeDefined();
+    expect(pageCall?.[1]).toEqual({ error: 'I/O error: permission denied walking pages dir' });
+    // The regression this guards against: a useless opaque log line.
+    expect(JSON.stringify(errorCalls)).not.toContain('[object Object]');
+
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  it('warn-logs (not error-logs) the by-design gone-folder rejection (issue #698)', async () => {
+    // The backend's canonicalize_tagged classifies a moved/renamed/deleted
+    // project folder as Expected — but Expected serializes as Other over IPC,
+    // so the hook must recognize the message shape. loadPages runs on a 5s
+    // poll: at error level this auto-filed a bug report every tick.
+    const goneMessage =
+      "The folder '/path/to/project' no longer exists — it may have been moved, renamed, or deleted outside Ship Studio";
+    const { invoke } = await import('@tauri-apps/api/core');
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === 'start_preview_proxy') return Promise.resolve(8080);
+      if (cmd === 'list_pages')
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- deliberately a plain CommandError object, the shape under test
+        return Promise.reject({ type: 'Other', message: goneMessage });
+      return Promise.resolve(undefined);
+    });
+    const server = installSlowServerFetch();
+    const { unmount } = renderHook(() => usePreviewConnection(baseParams));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await act(async () => {
+      server.finishCompile();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the mock's calls, not invoking it bound
+    const warnCalls = vi.mocked(logger.warn).mock.calls;
+    const warned = warnCalls.find(([msg]) => msg.includes('Failed to load pages'));
+    expect(warned).toBeDefined();
+    expect(warned?.[1]).toEqual({ error: goneMessage });
+    // The whole point: nothing reaches the auto-bug-report channel.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the mock's calls, not invoking it bound
+    const errorCalls = vi.mocked(logger.error).mock.calls;
+    expect(errorCalls.find(([msg]) => msg.includes('Failed to load pages'))).toBeUndefined();
+
+    await act(async () => {
+      unmount();
+      await vi.advanceTimersByTimeAsync(0);
+    });
   });
 });

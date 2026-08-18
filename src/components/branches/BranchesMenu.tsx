@@ -18,6 +18,7 @@ import {
   GitBranchEndIcon,
   GitBranchHorizontalIcon,
   GitBranchMainIcon,
+  GitBranchMainNoneIcon,
   GitBranchMidIcon,
   GitHubIcon,
   PullIcon,
@@ -54,6 +55,7 @@ interface BranchesMenuProps {
   onModalClose?: () => void;
 }
 
+/** Renders the repository status menu and routes its branch, pull, and review actions. */
 export function BranchesMenu({
   githubState,
   projectStatus,
@@ -119,8 +121,15 @@ export function BranchesMenu({
     action();
   };
 
-  const branchIcon = (branchName: string, isLast: boolean) => {
-    if (branchName === 'main' || branchName === 'master') {
+  const branchIcon = (branchName: string, isLast: boolean, isOnlyCurrentBranch = false) => {
+    if (branchName === 'main') {
+      return isOnlyCurrentBranch ? (
+        <GitBranchMainNoneIcon size={24} />
+      ) : (
+        <GitBranchMainIcon size={24} />
+      );
+    }
+    if (branchName === 'master') {
       return <GitBranchMainIcon size={24} />;
     }
     return isLast ? <GitBranchEndIcon size={24} /> : <GitBranchMidIcon size={24} />;
@@ -220,7 +229,11 @@ export function BranchesMenu({
                   disabled
                 >
                   <span className="branches-menu-row-icon">
-                    {branchIcon(currentBranch, recentBranches.length === 0)}
+                    {branchIcon(
+                      currentBranch,
+                      recentBranches.length === 0,
+                      recentBranches.length === 0
+                    )}
                   </span>
                   <span className="branches-menu-row-content">
                     <span className="branches-menu-row-label">{currentBranch}</span>

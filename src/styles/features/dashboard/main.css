@@ -280,7 +280,7 @@
   transition:
     border-color var(--transition),
     background-color var(--transition),
-    color var(--transition-fast);
+    color var(--transition-interaction-fast);
   font: inherit;
   text-align: left;
   cursor: pointer;

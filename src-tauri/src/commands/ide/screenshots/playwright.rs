@@ -5,8 +5,14 @@ use crate::errors::CommandError;
 use crate::external_command::run_with_timeout;
 use crate::utils::validate_project_path;
 
-/// Ceiling for one capture-script run (page load + scroll + shot).
-const CAPTURE_TIMEOUT_SECS: u64 = 180;
+/// Ceiling for one capture-script run (page load + scroll + shot). Must cover
+/// the script's own worst-case inner budgets — a 60s first goto attempt plus
+/// the 120s retry (issue #606), the capped scroll pass, the 120s
+/// screenshot/stitch, and the short-budget CDP screenshot retries
+/// (issue #657: up to 2 × (2s beat + 30s attempt) ≈ 64s) — or we kill
+/// captures that were progressing legitimately and would have failed (or
+/// succeeded) with a far better error on their own (issue #527).
+const CAPTURE_TIMEOUT_SECS: u64 = 420;
 /// Ceiling for downloading Chromium during self-heal (~130MB).
 const BROWSER_INSTALL_TIMEOUT_SECS: u64 = 600;
 
@@ -60,6 +66,142 @@ async fn run_capture_script(
 
     // Other failures pass through — callers report status + stderr in detail.
     Ok(output)
+}
+
+/// True when stderr shows the process (Node itself, or a child) failing at
+/// the dynamic-linker level — the binary can spawn but can't resolve a shared
+/// library it was linked against. Classic case: Homebrew upgrades `icu4c` out
+/// from under a `node` that wasn't relinked, and every `node` invocation dies
+/// with a raw `dyld[...]: Library not loaded` dump (issue #645). A broken
+/// local toolchain, not an app malfunction.
+fn is_broken_loader_error(stderr: &str) -> bool {
+    stderr.contains("Library not loaded")
+        || stderr.contains("dyld[")
+        || stderr.contains("dyld: ")
+        || stderr.contains("error while loading shared libraries")
+}
+
+/// Map a failed capture-script run to a `CommandError`. A connection refused
+/// or invalid-HTTP-response that survived the in-script retry means the dev
+/// server went away mid-flight (crashed, restarted on another port) — an
+/// expected state exactly like the pre-capture readiness miss (#349), not an
+/// app malfunction (issues #514/#703).
+fn capture_script_error(what: &str, url: &str, output: &std::process::Output) -> CommandError {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("ERR_CONNECTION_REFUSED") {
+        return CommandError::expected(format!(
+            "The dev server at {url} stopped responding while the screenshot was being captured. Wait for the preview to finish reloading, then try again."
+        ));
+    }
+    // A malformed/empty HTTP response mid-navigation is the same dev-server
+    // restart race as the refused connection above, caught one step later:
+    // the server accepted the socket but died mid-answer (issue #703). The
+    // script already retried it once — persisting means the server is still
+    // down, an expected state, not an app bug.
+    if stderr.contains("ERR_INVALID_HTTP_RESPONSE") {
+        return CommandError::expected(format!(
+            "The dev server at {url} stopped responding while loading the page — it was probably restarting mid-request. Wait for the preview to finish reloading, then try again."
+        ));
+    }
+    // Node itself failing to start (dyld can't resolve a linked library) is a
+    // broken local Node install — e.g. Homebrew upgraded icu4c without node
+    // being relinked. Actionable for the user, not an app bug (issue #645).
+    if is_broken_loader_error(&stderr) {
+        return CommandError::expected(
+            "Your system Node.js installation appears broken (it failed to start because a \
+             library it depends on is missing). Reinstall Node.js — e.g. `brew reinstall node` \
+             — then try again.",
+        );
+    }
+    // The headless browser process dying at startup ("Target crashed" before
+    // any navigation) is an environment-level failure — GPU/driver quirks or
+    // security software killing the fresh Chromium process — that a retry
+    // usually clears. Persistent occurrences are still not app bugs
+    // (issue #558).
+    if stderr.contains("Target crashed") {
+        return CommandError::expected(
+            "The screenshot browser crashed while starting up. This is usually a one-off \
+             (graphics driver or security software interfering with the headless browser) — \
+             try again, and if it keeps happening, restarting your machine often clears it.",
+        );
+    }
+    // Chromium's CDP refusing the screenshot outright ("Page.captureScreenshot:
+    // Unable to capture screenshot") is a known transient renderer failure —
+    // GPU/memory pressure or backing-store limits (puppeteer#5341). The
+    // capture script already retries it in place; one that persists through
+    // those retries is still an environment-level condition, not an app bug
+    // (issue #657, same signature as #569 on the full-page path).
+    if stderr.contains("Unable to capture screenshot") {
+        return CommandError::expected(
+            "The screenshot browser couldn't render the capture (a transient graphics/memory \
+             hiccup in headless Chromium). Try again in a moment — if it keeps happening, \
+             closing other applications or restarting your machine usually clears it.",
+        );
+    }
+    // Both goto attempts exhausting their navigation timeout is a recurring,
+    // environmental condition on slow dev servers (Windows first-compile +
+    // antivirus overhead — issues #385/#606), not a malfunction: the route
+    // simply didn't finish loading inside the budget.
+    if stderr.contains("page.goto") && stderr.contains("Timeout") {
+        return CommandError::expected(format!(
+            "The page at {url} didn't finish loading in time for the screenshot — the dev \
+             server is probably still compiling this route. Wait for the preview to load \
+             fully, then try again."
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    (format!("{what} failed. stdout: {stdout} stderr: {stderr}")).into()
+}
+
+/// Parse the major version out of `node --version` output ("v16.17.0" -> 16).
+fn node_major_version(version_output: &str) -> Option<u32> {
+    version_output
+        .trim()
+        .trim_start_matches('v')
+        .split('.')
+        .next()?
+        .parse()
+        .ok()
+}
+
+/// Playwright 1.60+ requires Node 18+. A system Node that's too old fails the
+/// capture with Playwright's raw "You are running Node.js 16..." dump — check
+/// up front and return an actionable, expected error instead (issue #440).
+/// If the probe itself fails, let the capture proceed and surface its own error.
+async fn ensure_node_supports_playwright() -> Result<(), CommandError> {
+    let mut cmd = node_tool_command("node");
+    cmd.arg("--version");
+    let Ok(output) =
+        run_with_timeout(tokio::process::Command::from(cmd), "node --version", 10).await
+    else {
+        return Ok(());
+    };
+    if !output.status.success() {
+        // Even `node --version` failing means node itself can't run. When the
+        // stderr shows a dynamic-linker failure (Homebrew library upgraded out
+        // from under node), stop here with an actionable message instead of
+        // letting the capture re-hit the identical dyld dump and surface it
+        // raw (issue #645). Any other probe failure stays tolerated — the
+        // capture proceeds and reports its own, more specific error.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if is_broken_loader_error(&stderr) {
+            return Err(CommandError::expected(
+                "Your system Node.js installation appears broken (it failed to start because \
+                 a library it depends on is missing). Reinstall Node.js — e.g. `brew reinstall \
+                 node` — then try again.",
+            ));
+        }
+        return Ok(());
+    }
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if let Some(major) = node_major_version(&version) {
+        if major < 18 {
+            return Err(CommandError::expected(format!(
+                "Screenshots need Node.js 18 or newer, but your system has Node {version}.                  Update Node.js, then try again."
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Playwright versions below this hang forever in `playwright install` on
@@ -174,6 +316,19 @@ pub async fn capture_fullpage_playwright(
     width: Option<u32>,
 ) -> Result<String, CommandError> {
     let project = validate_project_path(&project_path)?;
+
+    // Fail fast with a clean, expected error when nothing is listening on the
+    // dev-server port — otherwise Playwright's page.goto dies with a raw
+    // ERR_CONNECTION_REFUSED stack trace (issue #349). An expected state:
+    // the server may still be booting or was just restarted on another port.
+    if !super::dev_server_listening(&url) {
+        return Err(CommandError::expected(format!(
+            "The dev server isn't accepting connections at {url} yet. Wait for the preview to finish loading, then try again."
+        )));
+    }
+
+    ensure_node_supports_playwright().await?;
+
     let screenshots_dir = project.join(".shipstudio").join("screenshots");
     // Match the preview's current viewport when given (agent bridge responsive
     // checks); clamp to sane bounds so a bad value can't wedge Chromium.
@@ -206,10 +361,51 @@ const {{ chromium }} = require('playwright');
 (async () => {{
     let browser;
     try {{
-        browser = await chromium.launch();
-        const page = await browser.newPage({{ viewport: {{ width: {viewport_width}, height: 800 }} }});
+        // Headless Chromium can crash at startup on some Windows GPU/driver
+        // combos ("Target crashed" on newPage, before any navigation) —
+        // disable the GPU like the Chrome CLI thumbnail fallback already
+        // does, and relaunch once if the fresh browser process still dies
+        // (issue #558).
+        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: 800 }} }};
+        browser = await chromium.launch({{ args: ['--disable-gpu'] }});
+        let page;
+        try {{
+            page = await browser.newPage(newPageOptions);
+        }} catch (err) {{
+            if (!String((err && err.message) || err).includes('Target crashed')) throw err;
+            await browser.close().catch(() => {{}});
+            browser = await chromium.launch({{ args: ['--disable-gpu'] }});
+            page = await browser.newPage(newPageOptions);
+        }}
 
-        await page.goto('{}', {{ waitUntil: 'networkidle', timeout: 30000 }});
+        // Dev servers keep HMR/live-reload connections open forever, so
+        // 'networkidle' may never arrive — wait for 'load', then settle
+        // best-effort without ever failing the capture on it (issues #309/#310).
+        // A TCP-accepting port can still take >30s to serve `load` when the dev
+        // server compiles the route on first request (issue #385): give the
+        // navigation a longer budget, and retry once on timeout — the compile
+        // keeps progressing server-side, so a warmed route answers quickly.
+        // The retry gets double the budget: 60s twice was still not enough on
+        // slow Windows dev servers (issue #606).
+        try {{
+            await page.goto('{}', {{ waitUntil: 'load', timeout: 60000 }});
+        }} catch (err) {{
+            const msg = String((err && err.message) || err);
+            // A refused connection here, right after the Rust-side TCP
+            // readiness check passed, means the dev server died or is
+            // restarting in the gap between check and capture (issue #514) —
+            // give it a short beat before the one retry. A malformed/empty
+            // HTTP response is the same race caught one step later: the
+            // server accepted the socket but died mid-answer while
+            // restarting (issue #703) — same beat, same retry.
+            if (msg.includes('ERR_CONNECTION_REFUSED') || msg.includes('ERR_INVALID_HTTP_RESPONSE')) {{
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }} else if (!msg.includes('Timeout')) {{
+                throw err;
+            }}
+            await page.goto('{}', {{ waitUntil: 'load', timeout: 120000 }});
+        }}
+        await page.waitForLoadState('networkidle', {{ timeout: 5000 }}).catch(() => {{}});
 
         // Hide dev tools and feedback overlays
         await page.evaluate(() => {{
@@ -230,14 +426,20 @@ const {{ chromium }} = require('playwright');
                     el.style.setProperty('visibility', 'hidden', 'important');
                 }});
             }});
-        }});
+        // Overlay hiding is cosmetic — a dev-server reload/redirect right
+        // after `load` destroys the execution context mid-evaluate, and that
+        // must not kill the whole capture (issue #438).
+        }}).catch(() => {{}});
 
-        // Scroll slowly through the page to trigger lazy content and animations
-        const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+        // Scroll slowly through the page to trigger lazy content and animations.
+        // Capped: an infinite-scroll page would otherwise walk forever and eat
+        // the whole outer budget (issue #527).
+        const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight).catch(() => 0);
         const viewportHeight = 800;
+        const maxScrollSteps = 40;
 
-        for (let y = 0; y < scrollHeight; y += viewportHeight / 2) {{
-            await page.evaluate((scrollY) => window.scrollTo(0, scrollY), y);
+        for (let step = 0, y = 0; y < scrollHeight && step < maxScrollSteps; step++, y += viewportHeight / 2) {{
+            await page.evaluate((scrollY) => window.scrollTo(0, scrollY), y).catch(() => {{}});
             await page.waitForTimeout(300); // Pause for animations to trigger
         }}
 
@@ -254,23 +456,56 @@ const {{ chromium }} = require('playwright');
                     el.style.setProperty('display', 'none', 'important');
                 }});
             }});
-        }});
+        }}).catch(() => {{}});
         await page.waitForTimeout(500);
 
+        // Chromium's CDP can refuse a screenshot outright ("Protocol error
+        // (Page.captureScreenshot): Unable to capture screenshot") under
+        // transient GPU/memory pressure — a known flaky Chromium failure,
+        // not a page problem. Retry that exact error up to twice after a
+        // short beat; anything else propagates unchanged (issue #657).
+        // Retries get a short budget: this failure mode errors out quickly,
+        // and the outer capture ceiling has already paid for one
+        // full-length attempt.
+        const screenshotWithRetry = async (options) => {{
+            for (let attempt = 0; ; attempt++) {{
+                try {{
+                    return await page.screenshot(attempt === 0 ? options : {{ ...options, timeout: 30000 }});
+                }} catch (err) {{
+                    const msg = String((err && err.message) || err);
+                    if (attempt >= 2 || !msg.includes('Unable to capture screenshot')) throw err;
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                }}
+            }}
+        }};
+
         // Take full-page screenshot
-        await page.screenshot({{ path: '{}', fullPage: true }});
+        // fullPage stitches the entire scrollable height — on tall pages
+        // that can exceed Playwright's default 30s action timeout, and the
+        // overall script budget leaves room for it, so give it real headroom
+        // (issue #461).
+        await screenshotWithRetry({{ path: '{}', fullPage: true, timeout: 120000 }});
         console.log('Screenshot saved successfully');
     }} finally {{
         if (browser) await browser.close();
     }}
-}})();
+}})().catch((err) => {{
+    // Surface a clean one-line failure instead of Node's uncaught-exception
+    // stack dump (issues #309/#310).
+    console.error(String((err && err.message) || err));
+    process.exit(1);
+}});
 "#,
+        url,
         url,
         screenshot_path_str.replace('\\', "\\\\")
     );
 
-    // Write script to the playwright env directory (where node_modules is)
-    let script_path = playwright_env.join("capture-script.js");
+    // Write script to the playwright env directory (where node_modules is).
+    // Unique name per invocation: a fixed filename let concurrent captures
+    // delete/overwrite each other's script mid-run — Node then died with
+    // MODULE_NOT_FOUND on the shared path (issue #282).
+    let script_path = playwright_env.join(format!("capture-script-{}.js", uuid::Uuid::new_v4()));
     std::fs::write(&script_path, &script)
         .map_err(|e| format!("Failed to write capture script: {e}"))?;
 
@@ -289,10 +524,7 @@ const {{ chromium }} = require('playwright');
         return Ok(screenshot_path_str);
     }
 
-    // If failed, return error with details
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Err((format!("Playwright screenshot failed. stdout: {stdout} stderr: {stderr}")).into())
+    Err(capture_script_error("Playwright screenshot", &url, &output))
 }
 
 /// Capture a viewport screenshot using Playwright.
@@ -306,6 +538,19 @@ pub async fn capture_viewport_playwright(
     width: Option<u32>,
 ) -> Result<String, CommandError> {
     let project = validate_project_path(&project_path)?;
+
+    // Fail fast with a clean, expected error when nothing is listening on the
+    // dev-server port — otherwise Playwright's page.goto dies with a raw
+    // ERR_CONNECTION_REFUSED stack trace (issue #349). An expected state:
+    // the server may still be booting or was just restarted on another port.
+    if !super::dev_server_listening(&url) {
+        return Err(CommandError::expected(format!(
+            "The dev server isn't accepting connections at {url} yet. Wait for the preview to finish loading, then try again."
+        )));
+    }
+
+    ensure_node_supports_playwright().await?;
+
     let screenshots_dir = project.join(".shipstudio").join("screenshots");
     // Match the preview's current viewport when given (agent bridge responsive
     // checks); clamp to sane bounds so a bad value can't wedge Chromium.
@@ -336,10 +581,50 @@ const {{ chromium }} = require('playwright');
 (async () => {{
     let browser;
     try {{
-        browser = await chromium.launch();
-        const page = await browser.newPage({{ viewport: {{ width: {viewport_width}, height: 800 }} }});
+        // Headless Chromium can crash at startup on some Windows GPU/driver
+        // combos ("Target crashed" on newPage, before any navigation) —
+        // disable the GPU like the Chrome CLI thumbnail fallback already
+        // does, and relaunch once if the fresh browser process still dies
+        // (issue #558).
+        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: 800 }} }};
+        browser = await chromium.launch({{ args: ['--disable-gpu'] }});
+        let page;
+        try {{
+            page = await browser.newPage(newPageOptions);
+        }} catch (err) {{
+            if (!String((err && err.message) || err).includes('Target crashed')) throw err;
+            await browser.close().catch(() => {{}});
+            browser = await chromium.launch({{ args: ['--disable-gpu'] }});
+            page = await browser.newPage(newPageOptions);
+        }}
 
-        await page.goto('{}', {{ waitUntil: 'networkidle', timeout: 30000 }});
+        // Same wait strategy as the full-page capture: 'networkidle' may never
+        // arrive on dev servers with persistent connections (issues #309/#310),
+        // and a cold route compiling on first request can need >30s to reach
+        // `load` — long budget plus one retry on timeout (issue #385). The
+        // retry gets double the budget: on slow Windows dev servers (first
+        // compile + antivirus overhead) 60s twice was still not enough, and
+        // the compile keeps progressing server-side while we wait
+        // (issue #606).
+        try {{
+            await page.goto('{}', {{ waitUntil: 'load', timeout: 60000 }});
+        }} catch (err) {{
+            const msg = String((err && err.message) || err);
+            // A refused connection here, right after the Rust-side TCP
+            // readiness check passed, means the dev server died or is
+            // restarting in the gap between check and capture (issue #514) —
+            // give it a short beat before the one retry. A malformed/empty
+            // HTTP response is the same race caught one step later: the
+            // server accepted the socket but died mid-answer while
+            // restarting (issue #703) — same beat, same retry.
+            if (msg.includes('ERR_CONNECTION_REFUSED') || msg.includes('ERR_INVALID_HTTP_RESPONSE')) {{
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }} else if (!msg.includes('Timeout')) {{
+                throw err;
+            }}
+            await page.goto('{}', {{ waitUntil: 'load', timeout: 120000 }});
+        }}
+        await page.waitForLoadState('networkidle', {{ timeout: 5000 }}).catch(() => {{}});
 
         // Hide dev tools and feedback overlays
         await page.evaluate(() => {{
@@ -360,24 +645,58 @@ const {{ chromium }} = require('playwright');
                     el.style.setProperty('visibility', 'hidden', 'important');
                 }});
             }});
-        }});
+        // Cosmetic — see the same guard in the full-page script (issue #438).
+        }}).catch(() => {{}});
 
         // Wait for animations to complete
         await page.waitForTimeout(3000);
 
-        // Take viewport screenshot (not full page)
-        await page.screenshot({{ path: '{}' }});
+        // Chromium's CDP can refuse a screenshot outright ("Protocol error
+        // (Page.captureScreenshot): Unable to capture screenshot") under
+        // transient GPU/memory pressure — a known flaky Chromium failure,
+        // not a page problem. Retry that exact error up to twice after a
+        // short beat; anything else propagates unchanged (issue #657).
+        // Retries get a short budget: this failure mode errors out quickly,
+        // and the outer capture ceiling has already paid for one
+        // full-length attempt.
+        const screenshotWithRetry = async (options) => {{
+            for (let attempt = 0; ; attempt++) {{
+                try {{
+                    return await page.screenshot(attempt === 0 ? options : {{ ...options, timeout: 30000 }});
+                }} catch (err) {{
+                    const msg = String((err && err.message) || err);
+                    if (attempt >= 2 || !msg.includes('Unable to capture screenshot')) throw err;
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                }}
+            }}
+        }};
+
+        // Take viewport screenshot (not full page). Explicit timeout replaces
+        // Playwright's 30s action default, which slow machines exceeded — the
+        // full-page capture already has this, the viewport one was missed
+        // (issue #568).
+        await screenshotWithRetry({{ path: '{}', timeout: 120000 }});
     }} finally {{
         if (browser) await browser.close();
     }}
-}})();
+}})().catch((err) => {{
+    // Surface a clean one-line failure instead of Node's uncaught-exception
+    // stack dump (issues #309/#310).
+    console.error(String((err && err.message) || err));
+    process.exit(1);
+}});
 "#,
+        url,
         url,
         screenshot_path_str.replace('\\', "\\\\")
     );
 
-    // Write script to the playwright env directory
-    let script_path = playwright_env.join("capture-viewport-script.js");
+    // Write script to the playwright env directory. Unique per invocation —
+    // see the same fix in capture_fullpage_playwright (issue #282).
+    let script_path = playwright_env.join(format!(
+        "capture-viewport-script-{}.js",
+        uuid::Uuid::new_v4()
+    ));
     std::fs::write(&script_path, &script)
         .map_err(|e| format!("Failed to write capture script: {e}"))?;
 
@@ -395,11 +714,202 @@ const {{ chromium }} = require('playwright');
         return Ok(screenshot_path_str);
     }
 
-    // If failed, return error with details
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Err(
-        (format!("Playwright viewport screenshot failed. stdout: {stdout} stderr: {stderr}"))
-            .into(),
-    )
+    Err(capture_script_error(
+        "Playwright viewport screenshot",
+        &url,
+        &output,
+    ))
+}
+
+#[cfg(test)]
+mod capture_error_tests {
+    use super::*;
+
+    /// A non-zero ExitStatus, built via the platform's own extension trait so
+    /// these tests compile and run on Windows CI too.
+    fn failed_status() -> std::process::ExitStatus {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(256)
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(1)
+        }
+    }
+
+    fn failed_output(stderr: &str) -> std::process::Output {
+        std::process::Output {
+            status: failed_status(),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn connection_refused_after_retry_is_expected_not_telemetry() {
+        // Issue #514: the server dying between readiness check and capture is
+        // an expected race, not an app bug.
+        let output =
+            failed_output("page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/");
+        match capture_script_error("Playwright screenshot", "http://localhost:3000", &output) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("stopped responding"), "got: {message}")
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invalid_http_response_after_retry_is_expected_not_telemetry() {
+        // Issue #703: the dev server accepting the socket but dying mid-answer
+        // (restart race) surfaces as ERR_INVALID_HTTP_RESPONSE — the same
+        // expected class as the refused-connection race (#514), and it must
+        // not dump raw stderr or auto-file a report.
+        let output = failed_output(
+            "page.goto: net::ERR_INVALID_HTTP_RESPONSE at http://localhost:3000/\nCall log:\n  - navigating to \"http://localhost:3000/\", waiting until \"load\"",
+        );
+        match capture_script_error("Playwright screenshot", "http://localhost:3000", &output) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("stopped responding"), "got: {message}");
+                assert!(message.contains("http://localhost:3000"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn other_failures_stay_real_errors_with_detail() {
+        let output = failed_output("SyntaxError: something broke");
+        let err = capture_script_error("Playwright screenshot", "http://localhost:3000", &output);
+        assert!(!matches!(err, CommandError::Expected { .. }));
+        assert!(format!("{err}").contains("something broke"));
+    }
+
+    #[test]
+    fn broken_node_dyld_error_is_expected_with_reinstall_guidance() {
+        // Issue #645: Homebrew upgraded icu4c without relinking node — node
+        // itself can't start. A broken local toolchain, not an app bug.
+        let output = failed_output(
+            "dyld[54199]: Library not loaded: /opt/homebrew/opt/icu4c/lib/libicui18n.74.dylib\n\
+             Referenced from: /opt/homebrew/Cellar/node/22.9.0/bin/node\n\
+             Reason: tried: '/opt/homebrew/opt/icu4c/lib/libicui18n.74.dylib' (no such file)",
+        );
+        match capture_script_error(
+            "Playwright viewport screenshot",
+            "http://localhost:3000",
+            &output,
+        ) {
+            CommandError::Expected { message } => {
+                assert!(
+                    message.contains("Node.js installation appears broken"),
+                    "got: {message}"
+                );
+                assert!(message.contains("Reinstall Node.js"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn linux_loader_error_is_also_classified_broken_node() {
+        assert!(is_broken_loader_error(
+            "node: error while loading shared libraries: libicui18n.so.74: cannot open shared object file"
+        ));
+        assert!(!is_broken_loader_error("SyntaxError: unexpected token"));
+    }
+
+    #[test]
+    fn target_crashed_is_expected_not_telemetry() {
+        // Issue #558: the headless browser process dying at startup is a
+        // GPU-driver / security-software environment failure.
+        let output = failed_output("browser.newPage: Target crashed");
+        match capture_script_error(
+            "Playwright viewport screenshot",
+            "http://localhost:3000",
+            &output,
+        ) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("browser crashed"), "got: {message}")
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cdp_unable_to_capture_screenshot_is_expected_not_telemetry() {
+        // Issue #657 (same signature as #569 on the full-page path): CDP
+        // refusing Page.captureScreenshot is a known transient Chromium
+        // failure. The script retries it in place; one that persists is an
+        // environment-level condition, not an app bug.
+        let output = failed_output(
+            "page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot\n\
+             Call log:\n  - taking page screenshot\n  - waiting for fonts to load...\n  - fonts loaded",
+        );
+        match capture_script_error(
+            "Playwright viewport screenshot",
+            "http://localhost:3000",
+            &output,
+        ) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("couldn't render"), "got: {message}");
+                assert!(message.contains("Try again"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn goto_timeout_after_both_attempts_is_expected() {
+        // Issue #606: both navigation attempts exhausting their budget on a
+        // slow first compile is a recurring environmental condition.
+        let output = failed_output(
+            "page.goto: Timeout 120000ms exceeded.\nCall log:\n  - navigating to \"http://localhost:59973/\", waiting until \"load\"",
+        );
+        match capture_script_error(
+            "Playwright viewport screenshot",
+            "http://localhost:59973",
+            &output,
+        ) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("didn't finish loading"), "got: {message}");
+                assert!(message.contains("http://localhost:59973"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_goto_timeouts_are_not_swallowed_as_expected() {
+        // A timeout elsewhere (e.g. the screenshot action) isn't the
+        // slow-compile navigation shape — keep it a real, detailed error.
+        let output = failed_output("page.screenshot: Timeout 120000ms exceeded.");
+        let err = capture_script_error(
+            "Playwright viewport screenshot",
+            "http://localhost:3000",
+            &output,
+        );
+        assert!(!matches!(err, CommandError::Expected { .. }));
+    }
+}
+
+#[cfg(test)]
+mod node_version_tests {
+    use super::*;
+
+    #[test]
+    fn parses_standard_node_version_output() {
+        assert_eq!(node_major_version("v16.17.0\n"), Some(16));
+        assert_eq!(node_major_version("v18.20.4"), Some(18));
+        assert_eq!(node_major_version("v22.1.0"), Some(22));
+    }
+
+    #[test]
+    fn garbage_output_is_none_not_a_false_block() {
+        // An unparseable probe must never block captures (issue #440).
+        assert_eq!(node_major_version(""), None);
+        assert_eq!(node_major_version("command not found"), None);
+    }
 }

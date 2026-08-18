@@ -12,6 +12,25 @@ import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { getThumbnailsEnabled, setThumbnailsEnabled } from '../lib/settings';
 import { decideAutoCapture, isPermissionDenialError } from '../lib/thumbnailGate';
+import { asCommandError, formatCommandError } from '../lib/errors';
+import { captureThumbnailFromPreview } from '../lib/previewSnapshot';
+
+/** Backend rejection meaning the project's root directory no longer exists
+ *  (deleted, renamed, or moved while its session stayed hot). Permanent for
+ *  this path — retrying can never succeed. */
+function isProjectGoneError(error: unknown): boolean {
+  return formatCommandError(asCommandError(error)).includes(
+    'Invalid path in validate_project_path'
+  );
+}
+
+/** Backend rejection meaning a capture for this project is already running
+ *  (the backend's per-project in-flight guard, issue #387). Not a failure —
+ *  the periodic timer will try again; retrying immediately would just keep
+ *  bouncing off the guard and end in a logged "failed after retries". */
+function isCaptureInFlightError(error: unknown): boolean {
+  return formatCommandError(asCommandError(error)).includes('already in progress');
+}
 
 /** Delay after page load before capturing screenshot (8 seconds to allow Next.js/Vite to fully compile) */
 const SCREENSHOT_DELAY_MS = 8000;
@@ -169,6 +188,17 @@ export function useScreenshotManagement({
         }
         return;
       }
+      // Preferred path: snapshot the preview straight out of the app's own
+      // webview — no headless browser, none of its failure modes. Falls
+      // through to the headless path when unavailable (non-macOS, preview
+      // hidden/covered, backend error). Never throws.
+      if (await captureThumbnailFromPreview(projectPath)) {
+        logger.info('[Thumbnail] Captured via native webview snapshot', {
+          projectPath,
+          attempt,
+        });
+        return;
+      }
       try {
         logger.info('[Thumbnail] Capturing now', {
           projectPath,
@@ -182,6 +212,10 @@ export function useScreenshotManagement({
         });
         logger.info('Thumbnail captured successfully', { projectPath, attempt });
       } catch (error) {
+        if (isCaptureInFlightError(error)) {
+          logger.info('[Thumbnail] Skipping - a capture for this project is already in progress');
+          return;
+        }
         if (isPermissionDenialError(error)) {
           // Denied at the OS level. Persist the opt-out so background capture
           // never re-triggers the macOS prompt; re-enable via Settings →
@@ -189,6 +223,23 @@ export function useScreenshotManagement({
           // → Privacy & Security → Screen Recording).
           logger.error('[Thumbnail] Permission denied - disabling auto-capture', { error });
           void setThumbnailsEnabled(false);
+          return;
+        }
+        if (isProjectGoneError(error)) {
+          // The project's folder vanished while its session stayed hot —
+          // retrying can't succeed, and the 5-minute interval would re-burn
+          // 5 attempts forever with no user-facing signal (issue #300).
+          // Cancel the session and stop the schedule for this project;
+          // reopening it goes through the dashboard's missing-folder
+          // recovery (#266).
+          logger.warn('[Thumbnail] Project folder no longer exists — stopping auto-capture', {
+            projectPath,
+          });
+          captureSessionIdRef.current++;
+          if (screenshotIntervalRef.current) {
+            clearInterval(screenshotIntervalRef.current);
+            screenshotIntervalRef.current = null;
+          }
           return;
         }
         if (captureSessionIdRef.current !== sessionId) {

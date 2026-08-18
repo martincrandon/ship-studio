@@ -3,7 +3,7 @@
 use crate::cache::GIT_CACHE;
 use crate::errors::CommandError;
 use crate::types::RestoreResult;
-use crate::utils::{create_command, validate_project_path};
+use crate::utils::validate_project_path;
 use tracing::{info, instrument, warn};
 
 use super::{
@@ -34,7 +34,7 @@ pub async fn get_stash_info(
 pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(&validated_path)?
         .args([
             "stash",
             "push",
@@ -42,7 +42,6 @@ pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
             "-m",
             "Ship Studio: set aside before creating a branch",
         ])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -63,9 +62,8 @@ pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
 pub async fn apply_stash(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let pop_output = create_command("git")
+    let pop_output = crate::utils::git_command_in(&validated_path)?
         .args(["stash", "pop"])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -91,9 +89,8 @@ pub async fn apply_stash(project_path: String) -> Result<bool, CommandError> {
 pub async fn drop_stash(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let drop_output = create_command("git")
+    let drop_output = crate::utils::git_command_in(&validated_path)?
         .args(["stash", "drop"])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -127,14 +124,13 @@ pub async fn get_backups(
     info!(limit, "Getting backups");
 
     // Format: hash|full_hash|message|timestamp|relative_time
-    let output = create_command("git")
+    let output = crate::utils::git_command_in(&validated_path)?
         .args([
             "--no-pager",
             "log",
             &format!("-{limit}"),
             "--format=%h|%H|%s|%ct|%cr",
         ])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -187,9 +183,8 @@ pub async fn restore_backup(
     };
 
     // Get the commit message of the target backup
-    let msg_output = create_command("git")
+    let msg_output = crate::utils::git_command_in(&validated_path)?
         .args(["--no-pager", "log", "-1", "--format=%s", &commit_hash])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
@@ -205,9 +200,8 @@ pub async fn restore_backup(
     let has_changes = git_has_any_changes(&validated_path)?;
     if has_changes {
         info!("Stashing current changes");
-        let stash_output = create_command("git")
+        let stash_output = crate::utils::git_command_in(&validated_path)?
             .args(["stash", "push", "-m", "Auto-stash before restore"])
-            .current_dir(&validated_path)
             .output()
             .map_err(|e| e.to_string())?;
 
@@ -221,33 +215,29 @@ pub async fn restore_backup(
     let branch_name = format!("restore-{short_hash}");
 
     // Check if branch already exists and delete it if so
-    let branch_exists = create_command("git")
+    let branch_exists = crate::utils::git_command_in(&validated_path)?
         .args(["rev-parse", "--verify", &branch_name])
-        .current_dir(&validated_path)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
 
     if branch_exists {
         // Delete the existing branch
-        let _ = create_command("git")
+        let _ = crate::utils::git_command_in(&validated_path)?
             .args(["branch", "-D", &branch_name])
-            .current_dir(&validated_path)
             .output();
     }
 
-    let create_output = create_command("git")
+    let create_output = crate::utils::git_command_in(&validated_path)?
         .args(["checkout", "-b", &branch_name])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
     if !create_output.status.success() {
         // Restore stash if we created one
         if has_changes {
-            if let Err(e) = create_command("git")
+            if let Err(e) = crate::utils::git_command_in(&validated_path)?
                 .args(["stash", "pop"])
-                .current_dir(&validated_path)
                 .output()
             {
                 warn!(
@@ -261,17 +251,15 @@ pub async fn restore_backup(
     }
 
     // 3. Checkout all files from the target commit
-    let checkout_output = create_command("git")
+    let checkout_output = crate::utils::git_command_in(&validated_path)?
         .args(["checkout", &commit_hash, "--", "."])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 
     if !checkout_output.status.success() {
         // Switch back to original branch and restore stash
-        if let Err(e) = create_command("git")
+        if let Err(e) = crate::utils::git_command_in(&validated_path)?
             .args(["checkout", &current_branch])
-            .current_dir(&validated_path)
             .output()
         {
             warn!(
@@ -279,17 +267,15 @@ pub async fn restore_backup(
                 e
             );
         }
-        if let Err(e) = create_command("git")
+        if let Err(e) = crate::utils::git_command_in(&validated_path)?
             .args(["branch", "-D", &branch_name])
-            .current_dir(&validated_path)
             .output()
         {
             warn!("Failed to delete restore branch during recovery: {}", e);
         }
         if has_changes {
-            if let Err(e) = create_command("git")
+            if let Err(e) = crate::utils::git_command_in(&validated_path)?
                 .args(["stash", "pop"])
-                .current_dir(&validated_path)
                 .output()
             {
                 warn!("Failed to restore stash during recovery: {}", e);
@@ -299,16 +285,19 @@ pub async fn restore_backup(
         return Err((format!("Failed to restore files: {stderr}")).into());
     }
 
-    // 4. Stage and commit the restored files
+    // 4. Stage and commit the restored files. Self-heal a missing
+    // user.name/user.email from the gh CLI identity first, mirroring
+    // commit_changes/publishing/conflicts — without it the restore commit dies
+    // on git's "Please tell me who you are" (issue #679, same class as #276).
+    let _ = crate::commands::github::ensure_git_identity(&validated_path);
     let commit_message = format!("Restore to: {target_message}");
     let committed = git_stage_and_commit(&validated_path, &commit_message)?;
 
     if !committed {
         // No changes means we're already at this state
         // Switch back to original branch and clean up
-        if let Err(e) = create_command("git")
+        if let Err(e) = crate::utils::git_command_in(&validated_path)?
             .args(["checkout", &current_branch])
-            .current_dir(&validated_path)
             .output()
         {
             warn!(
@@ -316,17 +305,15 @@ pub async fn restore_backup(
                 e
             );
         }
-        if let Err(e) = create_command("git")
+        if let Err(e) = crate::utils::git_command_in(&validated_path)?
             .args(["branch", "-D", &branch_name])
-            .current_dir(&validated_path)
             .output()
         {
             warn!("Failed to delete restore branch after no-op restore: {}", e);
         }
         if has_changes {
-            if let Err(e) = create_command("git")
+            if let Err(e) = crate::utils::git_command_in(&validated_path)?
                 .args(["stash", "pop"])
-                .current_dir(&validated_path)
                 .output()
             {
                 warn!("Failed to restore stash after no-op restore: {}", e);
@@ -337,9 +324,8 @@ pub async fn restore_backup(
 
     // 5. Push the new branch to remote
     info!("Pushing restore branch");
-    let push_output = create_command("git")
+    let push_output = crate::utils::git_command_in(&validated_path)?
         .args(["push", "-u", "origin", &branch_name])
-        .current_dir(&validated_path)
         .output()
         .map_err(|e| e.to_string())?;
 

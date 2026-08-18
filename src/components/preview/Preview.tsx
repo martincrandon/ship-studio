@@ -287,7 +287,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // inline function here would change every render, re-firing their load effects (and
   // wiping optimistic edits like a just-added keyframe step before it saves).
   const onToast = useCallback(
-    (message: string, type?: 'success' | 'error') => showToast(message, type),
+    (message: string, type?: 'success' | 'error' | 'info') => showToast(message, type),
     [showToast]
   );
   // Server connection, health checks, page navigation (extracted to hook)
@@ -578,7 +578,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   const cssVariables = useCssVariables({
     iframeRef,
     projectPath,
-    enabled: cssEditor.editMode,
+    enabled: editor.editMode || cssEditor.editMode,
     onToast,
   });
   const cssAnimations = useCssAnimations({
@@ -1083,7 +1083,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         devServerOutput={devServerOutput}
         onStop={conn.stopConnecting}
         onRetry={conn.handleRetry}
-        processExited={serverProcessGone}
+        processExited={serverProcessGone || conn.serverStale}
         exitCode={devServerUnexpectedExit?.exitCode ?? null}
         onRestartServer={onRestartDevServer}
         onFixWithAgent={handleFixWithAgent && (() => handleFixWithAgent('server-down'))}
@@ -1629,6 +1629,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               selection={editor.selection}
               projectPath={projectPath}
               currentClass={editor.currentClass}
+              variables={cssVariables.variables}
               textResolution={textEditing.textResolution}
               imageResolution={editor.imageResolution}
               onReplaceImage={editor.replaceImage}
@@ -1675,6 +1676,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           return editorPinned ? (
             <div ref={editorPanelDockRef} className="ss-edit-panel-dock">
               {panel}
+              <PanelResizeHandle
+                value={editorPanelWidth}
+                min={EDITOR_PANEL_MIN_WIDTH_PX}
+                max={EDITOR_PANEL_MAX_WIDTH_PX}
+                label="Resize Visual Editor panel"
+                className="ss-edit-panel-dock__resize"
+                onResize={resizeEditorPanel}
+                onResizeBy={resizeEditorPanelBy}
+              />
             </div>
           ) : (
             createPortal(panel, document.body)

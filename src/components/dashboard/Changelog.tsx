@@ -26,6 +26,100 @@ interface ChangelogEntry {
 // Keep ~15 most recent versions for the sidebar
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.18.6', // v0.18.6
+    items: [
+      'Two crash fixes: the app no longer panics when generating a commit message containing accents, emoji, or non-Latin characters, and closing a project no longer risks a crash from the dev-server logs terminal',
+      'Broken plugin installs now heal themselves: a plugin whose files went missing is automatically re-installed from its source on next load, and the plugin manager checks for plugin updates when you open it — so plugin fixes actually reach you',
+      'All bundled plugins now work on Windows: Google Analytics, Cloudflare Pages, Sanity, Figma, Brand Guidelines, and Webflow to Code no longer depend on macOS-only commands (file pickers, clipboard, file reads)',
+      'Creating a pull request is more reliable: pushes go through your GitHub sign-in (no more "could not read Username" failures), and transient GitHub server errors are no longer mistaken for "someone else pushed"',
+      "Importing a repo that uses pnpm now explains pnpm's build-approval prompt instead of dumping a raw error log",
+      'Pushes rejected because a file exceeds GitHub\'s 100MB limit now name the file and point you at Git LFS, instead of claiming "someone else pushed first"',
+      'Zip templates made with Finder no longer fail validation (macOS packaging files are tolerated), and templates with nested folders are recognized',
+      'Screenshots and thumbnails ride out slow first compiles, flaky Chromium captures, and broken Node installs with clear messages instead of raw errors',
+      'Dev servers in monorepos: starting from a workspace subfolder without its own package.json no longer attempts a doomed npm run dev',
+      'Dozens of confusing errors replaced with plain explanations: corporate-proxy TLS failures, Homebrew update errors, locked config files, enterprise-policy-blocked MCP servers, out-of-memory git, localized error text, and more',
+      '78 auto-reported issues fixed since 0.18.5',
+    ],
+  },
+  {
+    version: '0.18.5', // v0.18.5
+    items: [
+      'Project thumbnails on macOS are now captured instantly from the app itself — no more background Chrome. This eliminates the whole family of thumbnail failures (profile locks, browser crashes, leftover processes) that produced most error reports',
+      "Your text edits in the visual editor can no longer be silently lost: if the source file changed while you were typing (a formatter or hot reload touching it), Ship Studio now re-finds your element and saves your text there — and tells you plainly in the rare case it can't",
+      'Commands that time out (git, GitHub CLI, deploys, screenshots) are now actually stopped instead of running on invisibly in the background, where they could hold locks and slow everything down',
+      'Generating a PR description no longer fails on big changes: the AI prompt is fed via stdin (no more "argument list too long") and large diffs get triple the time budget',
+      "The Vercel plugin's status checks now respond in seconds instead of hanging for minutes when the CLI stalls (several timeout values were off by 1000×)",
+      'Windows: npm and npx now launch correctly from health checks and dev tooling ("not a valid Win32 application" fixed), and custom thumbnails accept JPEG images',
+      'When your system is briefly too busy to start a new process (the macOS "Resource temporarily unavailable" error), Ship Studio now quietly retries instead of surfacing a scary one-off failure',
+      'Friendlier messages all around: pull/merge conflicts, push races, unaccepted Xcode license, macOS folder-permission blocks, branches checked out in another worktree, and out-of-date agent CLIs now explain themselves and how to fix it',
+      '80+ auto-reported issues fixed in total across three bug-bash rounds — the largest cleanup in Ship Studio history',
+    ],
+  },
+  {
+    version: '0.18.4', // v0.18.4
+    items: [
+      'Major fix: the app no longer freezes when running multiple projects. Background thumbnail captures could silently pile up and starve the app until nothing responded and a force-quit was the only way out — captures are now strictly time-limited and never overlap',
+      'Project thumbnails are far more reliable: an interrupted capture no longer leaves a lock file that broke every future capture (the single most-reported bug of the last release), and captures no longer fail just because your browser is open',
+      "Committing and publishing no longer fail when a background process is holding a file in .shipstudio (a frequent Windows failure) — Ship Studio's own metadata folder is now always excluded from your commits",
+      'When a command fails to start (like a package manager that isn\'t installed), you now see the actual reason — and the missing tool by name with install guidance — instead of a bare "exited with code -1"',
+      'Draft pull requests now show a Draft badge with merging disabled, instead of failing with a raw GraphQL error when you tried',
+      'Undo/rewind on Windows now rides out files still being written (like dev-server logs) instead of failing, and log files are excluded from snapshots',
+      'Hot reload is steadier: the preview retries a dropped WebSocket connection to your dev server instead of giving up on the first hiccup',
+      'Opening in VS Code/Cursor, health checks, and plugin commands now find their tools reliably on Windows',
+      'Another 60+ auto-reported issues fixed across four bug-bash rounds: clearer errors for expired GitHub sign-ins, network blips, Homebrew permission problems, abandoned merges, branch conflicts, and much quieter error reporting for routine states',
+    ],
+  },
+  {
+    version: '0.18.3', // v0.18.3
+    items: [
+      'Important safety fix: your home folder can no longer be mistaken for a project. A stray .git or .gitignore in your home directory could previously let "Discard Changes" run git cleanup across your personal files — that door is now closed at every layer, including for anyone who already had their home folder registered',
+      "New Eve Agent template: build an AI agent on Vercel's Eve framework with a web chat UI — find it under Other when creating a project",
+      'Windows opened via "Window → New Window" work fully again: update checks, terminal fonts, and live events were silently broken in them',
+      'Clearer GitHub errors: an expired sign-in or missing write access now says exactly that (with a reconnect hint) instead of dumping raw git output, across publish, pull requests, and repo lists',
+      'Windows fixes: project thumbnails no longer fail when your browser is already open, and plugin installs ride out antivirus file locks instead of dying with "Access is denied"',
+      'Onboarding no longer blames your shell when a setup download is quiet — slow connections get an accurate "check your internet" message instead of "/bin/bash did not respond"',
+      'The preview for plain HTML sites whose pages live in public/ now works, files with double dots in the name (notes..bak) are no longer blocked as "path traversal", and embedded plugin windows (like Sanity Studio) can no longer be clipped off the bottom edge of the app',
+      'Another 20+ auto-reported bugs fixed within hours: failed dependency installs now show the actual npm error, agent screenshots wait for the dev server to be ready, and a batch of confusing "[object Object]" errors now say what actually happened',
+    ],
+  },
+  {
+    version: '0.18.2', // v0.18.2
+    items: [
+      'Another 11 auto-reported bugs fixed within hours of being detected — the automatic error reporting keeps paying for itself',
+      'Installing agents on a slow connection works now: the setup terminal was mistaking a quiet download for a frozen one and restarting it forever. Downloads now show live progress instead of a blank screen',
+      'Git commands find git reliably on Windows (even when installed mid-setup), and a missing tool now tells you which one is missing instead of just "program not found"',
+      'Editing the markup of a repeated element (like a card in a grid) now offers "edit all copies or just this one" instead of refusing — same choice the class editor already had',
+      'Broken agent installs are detected and skipped: registering the preview MCP server picks a working binary instead of crashing with a raw error, and registration no longer races itself into "already exists" failures',
+      'Plugins can no longer hang the app for hours with a runaway command — shell timeouts are capped and timed-out commands are actually stopped, and a plugin removed mid-operation no longer throws confusing "not found" errors',
+      'Error reporting got much quieter behind the scenes: routine states (a tool not installed yet, a security guardrail doing its job, input validation) are no longer treated as bugs — real malfunctions still report',
+    ],
+  },
+  {
+    version: '0.18.1', // v0.18.1
+    items: [
+      'The new automatic error reporting paid off immediately: 40+ bugs found, diagnosed, and fixed within two days of v0.18.0. Highlights below — plus dozens of errors across the app that now explain what actually went wrong instead of showing raw error codes',
+      'Quitting Ship Studio now really stops everything — dev servers and agent sessions no longer linger in the background after the app closes, and restarting a dev server reliably frees its port',
+      'The preview notices when a dev server comes back wedged (every page a 404) and lights up the Restart button; hot reload now rides out dev-server restarts instead of dying',
+      'Agent terminals find your agent wherever it\'s installed — fixes "Unable to spawn claude" appearing even though the app said it was installed (nvm, pnpm, volta, fnm, and friends)',
+      'Agent follow-up questions in the terminal are readable again — dark-on-dark text is automatically lifted to readable contrast',
+      'Windows round-up: GitHub operations work with the GitHub CLI in its default install location, project deletion waits out antivirus file locks, and path handling is consistent end to end',
+      'Publishing hardened: sparse-checkout repos can commit again, a failed save can no longer slip past a publish silently, and merging a conflicted PR opens the conflict resolver instead of dumping raw git output',
+      "Also fixed: creating a repo with a name you already used, importing Rust/Go/Python projects, visual-editor dropdowns closing instantly on some Macs, thumbnails with only Brave or Arc installed — and there's a new guide for building your own plugins (docs/plugins.md)",
+    ],
+  },
+  {
+    version: '0.18.0', // v0.18.0
+    items: [
+      'Bugs now fix themselves faster: when something goes wrong, Ship Studio automatically reports the error (anonymized — never your code or files) so it can be investigated and patched. Opt out anytime in Settings → Usage analytics & error reports',
+    ],
+  },
+  {
+    version: '0.17.2', // v0.17.2
+    items: [
+      'Slack links now go through ship.studio/slack, so the community invite always stays fresh — no more expired invite links in older app versions',
+    ],
+  },
+  {
     version: '0.17.1', // v0.17.1
     items: [
       'Worktree fix — the sidebar no longer shows duplicate rows for a project when its worktrees are open. Grouping now asks git which repository a worktree belongs to, so it works for imported projects living outside ~/ShipStudio too',

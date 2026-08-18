@@ -23,6 +23,7 @@ import { Preview, type InspectTab, type PreviewHandle } from '../preview/Preview
 import { DeviceMirror } from '../preview/DeviceMirror';
 import { ShopifySetup } from '../shopify/ShopifySetup';
 
+/** Props for the web preview, mobile mirror, and code-side workspace pane. */
 export interface WorkspacePreviewPaneProps {
   currentProject: Project;
   previewRef: RefObject<PreviewHandle | null>;
@@ -90,6 +91,7 @@ export interface WorkspacePreviewPaneProps {
   >;
 }
 
+/** Renders the active preview-side surface for the current project and workspace mode. */
 export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
   const {
     currentProject,

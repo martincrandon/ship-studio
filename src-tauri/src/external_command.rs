@@ -34,7 +34,37 @@ pub async fn run_with_timeout(
     let label = cmd_label.into();
     debug!(cmd = %label, timeout_secs, "spawning external command");
 
-    let result = tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output()).await;
+    // When the timeout fires, the output() future is dropped — without
+    // kill_on_drop the child would keep running (a timed-out headless-browser
+    // capture lingered forever, issue #510; a timed-out `git diff` keeps
+    // grinding a big repo in the background, issue #608; same class as
+    // run_git_net's #556).
+    cmd.kill_on_drop(true);
+
+    // Retry transient EAGAIN spawn failures in place (issue #616): the
+    // process-table pressure that produces them usually clears within
+    // milliseconds, and background polling callers (e.g. `gh pr list`) would
+    // otherwise surface a scary one-off error for a self-healing condition.
+    // The retries run inside the caller's timeout budget.
+    let run = async {
+        const ATTEMPTS: u64 = 3;
+        for attempt in 1..=ATTEMPTS {
+            match cmd.output().await {
+                Err(e) if attempt < ATTEMPTS && is_spawn_resource_pressure(&e.to_string()) => {
+                    warn!(
+                        cmd = %label,
+                        attempt,
+                        error = %e,
+                        "spawn hit transient resource pressure (EAGAIN); retrying"
+                    );
+                    tokio::time::sleep(Duration::from_millis(100 * attempt)).await;
+                }
+                other => return other,
+            }
+        }
+        unreachable!("loop returns on the final attempt")
+    };
+    let result = tokio::time::timeout(Duration::from_secs(timeout_secs), run).await;
 
     match result {
         Ok(Ok(output)) => {
@@ -47,9 +77,128 @@ pub async fn run_with_timeout(
         }
         Ok(Err(io_err)) => {
             warn!(cmd = %label, error = %io_err, "external command spawn failed");
-            Err(CommandError::Io {
-                message: io_err.to_string(),
+            Err(map_spawn_io_error(&label, &io_err))
+        }
+        Err(_) => {
+            warn!(cmd = %label, timeout_secs, "external command timed out");
+            Err(CommandError::Timeout {
+                cmd: label,
+                secs: timeout_secs,
             })
+        }
+    }
+}
+
+/// Shared mapping of a spawn-time `io::Error` into a `CommandError`, used by
+/// both timeout runners:
+/// - The error names the command: Windows renders a PATH miss as the bare
+///   "program not found", which is useless without knowing WHICH program
+///   (issue #296) — Timeout/Process already carry the label.
+/// - A missing binary is an environment gap ("install X first"), not an app
+///   malfunction — Expected keeps it out of telemetry.
+/// - Windows pagefile exhaustion is likewise the environment (issue #356).
+/// - Persistent EAGAIN after the in-place retries is process-table pressure —
+///   an environment state with a user-side fix (issue #616).
+fn map_spawn_io_error(label: &str, io_err: &std::io::Error) -> CommandError {
+    let message = format!("`{label}`: {io_err}");
+    if io_err.kind() == std::io::ErrorKind::NotFound {
+        CommandError::expected(message)
+    } else if let Some(oom) = crate::errors::windows_out_of_memory(io_err, Some(label)) {
+        oom
+    } else if is_spawn_resource_pressure(&io_err.to_string()) {
+        spawn_resource_pressure_error(label)
+    } else if io_err.kind() == std::io::ErrorKind::PermissionDenied {
+        // Windows ERROR_ACCESS_DENIED (os error 5, localized text — e.g.
+        // "Acceso denegado.") and Unix EACCES/EPERM: an AV scanner or file
+        // lock blocking the spawn is the user's environment, not an app
+        // malfunction (issue #596).
+        spawn_access_denied_error(label)
+    } else if is_windows_path_too_long(&io_err.to_string()) {
+        windows_path_too_long_error(label)
+    } else if io_err.kind() == std::io::ErrorKind::InvalidInput
+        && io_err
+            .to_string()
+            .contains("batch file arguments are invalid")
+    {
+        // Windows-only: Rust's std routes `.bat`/`.cmd` scripts through
+        // `cmd.exe` (the BatBadBut mitigation) and refuses to spawn when an
+        // argument can't be safely cmd-escaped (embedded double quotes,
+        // newlines). npm-installed CLIs resolve to `.cmd` shims on Windows, so
+        // an argument carrying free-form text (an AI prompt embedding a git
+        // diff) hit this as an unactionable raw Io error (issue #663). It's an
+        // input-shape limitation of the environment, not an app malfunction.
+        CommandError::expected(format!(
+            "`{label}` couldn't be launched: one of its arguments contains characters \
+             (quotes or line breaks) that Windows can't pass to a .cmd script."
+        ))
+    } else {
+        CommandError::Io { message }
+    }
+}
+
+/// Like [`run_with_timeout`], but feeds `stdin_data` to the child's stdin.
+///
+/// Exists because passing a large payload (an AI prompt carrying a ~40KB diff)
+/// as a single argv element can exceed the OS's combined argv+env exec limit —
+/// `Argument list too long` / E2BIG (issue #595). Stdin has no such ceiling.
+///
+/// The write and the wait run concurrently (`tokio::join!`) so a child that
+/// interleaves reading stdin with writing output can't deadlock on a full
+/// pipe; once everything is written the stdin handle is shut down and dropped
+/// so the child sees EOF. A child that exits without draining stdin (e.g. an
+/// early CLI error) surfaces its own output — the resulting broken-pipe write
+/// error is deliberately ignored.
+pub async fn run_with_timeout_stdin(
+    mut cmd: Command,
+    stdin_data: &str,
+    cmd_label: impl Into<String>,
+    timeout_secs: u64,
+) -> Result<std::process::Output, CommandError> {
+    let label = cmd_label.into();
+    debug!(cmd = %label, timeout_secs, stdin_bytes = stdin_data.len(), "spawning external command (stdin-fed)");
+
+    cmd.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        // Reap the child if the timeout drops the future mid-run (#608).
+        .kill_on_drop(true);
+
+    let data = stdin_data.as_bytes().to_vec();
+    let run = async move {
+        let mut child = cmd.spawn()?;
+        let mut stdin = child.stdin.take();
+        let feed = async {
+            if let Some(mut handle) = stdin.take() {
+                use tokio::io::AsyncWriteExt;
+                match handle.write_all(&data).await {
+                    Ok(()) => {
+                        let _ = handle.shutdown().await;
+                    }
+                    // The child closed stdin early (exited or stopped
+                    // reading) — its exit status/stderr is the real story.
+                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+                    Err(e) => warn!(error = %e, "failed writing to child stdin"),
+                }
+                // Dropping the handle closes the pipe: the child must see EOF.
+            }
+        };
+        let (output, ()) = tokio::join!(child.wait_with_output(), feed);
+        output
+    };
+
+    match tokio::time::timeout(Duration::from_secs(timeout_secs), run).await {
+        Ok(Ok(output)) => {
+            debug!(
+                cmd = %label,
+                status = ?output.status.code(),
+                "external command finished"
+            );
+            Ok(output)
+        }
+        // Same io-error mapping as run_with_timeout (issues #296, #356, #616).
+        Ok(Err(io_err)) => {
+            warn!(cmd = %label, error = %io_err, "external command spawn failed");
+            Err(map_spawn_io_error(&label, &io_err))
         }
         Err(_) => {
             warn!(cmd = %label, timeout_secs, "external command timed out");
@@ -75,10 +224,189 @@ pub async fn run_to_stdout(
         return Err(CommandError::Process {
             cmd: label_for_err,
             exit_code: output.status.code().unwrap_or(-1),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            stderr: truncate_output(&String::from_utf8_lossy(&output.stderr)),
         });
     }
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+// ===== Transient spawn resource pressure (EAGAIN / EMFILE / ENFILE) =====
+//
+// Under macOS process/thread-table pressure, `fork()`/`posix_spawn()` can
+// transiently fail with EAGAIN ("Resource temporarily unavailable", os error
+// 35 on macOS/BSD, 11 on Linux). This surfaced as bare, unlabeled OS error
+// strings from many independent spawn sites (issues #555, #573, #585, #586,
+// #587). File-descriptor exhaustion is the same condition wearing a different
+// errno: EMFILE ("Too many open files", os error 24) when this process hits
+// its fd budget, ENFILE ("Too many open files in system", os error 23) when
+// the whole machine does — both transient, both self-healing, both previously
+// reaching telemetry raw (issue #574). The helpers below give every spawn
+// site one shared treatment: a couple of short-backoff retries, and — if the
+// pressure persists — a human-readable `Expected` error instead of telemetry
+// noise.
+
+/// True when a rendered error message is a transient resource-pressure spawn
+/// failure: EAGAIN (process-table pressure) or EMFILE/ENFILE (fd exhaustion,
+/// issue #574).
+///
+/// Message-based (rather than `raw_os_error`-based) so it works uniformly for
+/// `std::io::Error` and for portable_pty's `anyhow`-shaped errors, which only
+/// expose the underlying OS error through their `Display` text. The raw-code
+/// fallbacks are Unix-gated: on Windows os errors 35/11/23/24 mean unrelated
+/// things (ERROR_CRC, ERROR_BAD_LENGTH, …).
+pub fn is_spawn_resource_pressure(message: &str) -> bool {
+    message.contains("Resource temporarily unavailable")
+        || message.contains("Too many open files")
+        || (cfg!(unix)
+            && (message.contains("(os error 35)")
+                || message.contains("(os error 11)")
+                || message.contains("(os error 23)")
+                || message.contains("(os error 24)")))
+}
+
+/// The persistent resource-pressure error: process-table/fd pressure is an
+/// environment condition with a user-side fix, not an app malfunction —
+/// `Expected` keeps it out of telemetry and swaps the raw OS string for
+/// actionable guidance.
+pub fn spawn_resource_pressure_error(label: &str) -> CommandError {
+    CommandError::expected(format!(
+        "Couldn't start `{label}` — your system is temporarily low on process resources \
+         or open files. Close some apps or terminal tabs and try again."
+    ))
+}
+
+/// The access-denied spawn error (issue #596): the OS refused to run the
+/// program. On Windows this is `ERROR_ACCESS_DENIED` (os error 5, whose text
+/// is localized — "Acceso denegado." on a Spanish install); on Unix,
+/// EACCES/EPERM. Typically antivirus/security software briefly locking the
+/// binary, or missing file permissions — the user's environment, so
+/// `Expected` keeps it out of telemetry.
+pub fn spawn_access_denied_error(label: &str) -> CommandError {
+    CommandError::expected(format!(
+        "Couldn't start `{label}` — the operating system denied access. This is usually \
+         security/antivirus software briefly locking the program, or missing file \
+         permissions. Try again in a moment."
+    ))
+}
+
+/// True when a rendered error message is Windows `ERROR_FILENAME_EXCED_RANGE`
+/// (os error 206, "The filename or extension is too long") — `CreateProcess`
+/// rejecting an over-long resolved executable path or command line (issue
+/// #549). The text is localized on non-English Windows, so match the os-error
+/// code, and only on Windows: 206 means something unrelated elsewhere.
+pub fn is_windows_path_too_long(message: &str) -> bool {
+    cfg!(windows) && message.contains("(os error 206)")
+}
+
+/// The Windows path-too-long error (issue #549): an environment limit
+/// (legacy MAX_PATH without the long-path opt-in) with user-side fixes, so
+/// `Expected` swaps the raw OS string for actionable guidance.
+pub fn windows_path_too_long_error(label: &str) -> CommandError {
+    CommandError::expected(format!(
+        "Couldn't start `{label}` — Windows rejected the command because its path or \
+         arguments exceed the path-length limit (os error 206). Enable Windows \
+         long-path support, or move the tool/project to a shorter path, then try again."
+    ))
+}
+
+/// Run a spawn closure, retrying a couple of times with a short backoff when
+/// it fails with EAGAIN (see module comment above). Any other failure — and
+/// an EAGAIN that survives every retry — is returned unchanged so the
+/// caller's existing error mapping still applies; pair with
+/// [`is_spawn_resource_pressure`] / [`spawn_resource_pressure_error`] to
+/// classify the persistent case.
+///
+/// Blocking (uses `std::thread::sleep`); total added wait is ≤ 300ms and only
+/// on the rare EAGAIN path, matching `output_retrying_index_lock`'s tradeoff.
+pub fn retry_spawn_on_pressure<T, E: std::fmt::Display>(
+    label: &str,
+    mut spawn: impl FnMut() -> Result<T, E>,
+) -> Result<T, E> {
+    const ATTEMPTS: u64 = 3;
+    for attempt in 1..=ATTEMPTS {
+        match spawn() {
+            Ok(v) => return Ok(v),
+            Err(e) if attempt < ATTEMPTS && is_spawn_resource_pressure(&e.to_string()) => {
+                warn!(
+                    cmd = %label,
+                    attempt,
+                    error = %e,
+                    "spawn hit transient resource pressure (EAGAIN); retrying"
+                );
+                std::thread::sleep(Duration::from_millis(100 * attempt));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    unreachable!("loop returns on the final attempt")
+}
+
+/// Convenience for `std::process` spawn sites: run the spawn with the EAGAIN
+/// retry, then map any failure into a labeled `CommandError` — persistent
+/// EAGAIN becomes the human `Expected` message, a missing binary stays
+/// `Expected` (mirroring [`run_with_timeout`], #296), Windows pagefile
+/// exhaustion keeps its typed guidance (#356), access-denied and path-too-long
+/// spawns classify Expected (#596, #549), and anything else is a labeled `Io`
+/// so telemetry can attribute the call site.
+pub fn spawn_with_pressure_retry<T>(
+    label: &str,
+    spawn: impl FnMut() -> std::io::Result<T>,
+) -> Result<T, CommandError> {
+    retry_spawn_on_pressure(label, spawn).map_err(|io_err| {
+        if is_spawn_resource_pressure(&io_err.to_string()) {
+            return spawn_resource_pressure_error(label);
+        }
+        map_spawn_io_error(label, &io_err)
+    })
+}
+
+/// Cap on CLI output forwarded into user-facing error messages (and thus into
+/// telemetry). A crashing subprocess can dump arbitrarily much — a Go runtime
+/// stack trace, a full agent session transcript — and nothing past the head is
+/// useful in an error dialog (issues #578, #610).
+pub const MAX_ERROR_OUTPUT_CHARS: usize = 2048;
+
+/// Trim `text` and cap it at [`MAX_ERROR_OUTPUT_CHARS`], keeping the head (the
+/// useful part — CLIs print the actual error first, then detail/backtrace) and
+/// appending a truncation marker. Use this whenever raw stderr/stdout is
+/// embedded into a `CommandError`.
+///
+/// Head-only is right for git/gh-style CLIs. For transcript-style output where
+/// the actual error arrives at the END (e.g. `codex exec` dumping its whole
+/// session before failing), use [`truncate_output_head_tail`] instead — a
+/// head-only cap there is guaranteed to cut the useful line (issue #665).
+pub fn truncate_output(text: &str) -> String {
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= MAX_ERROR_OUTPUT_CHARS {
+        return trimmed.to_string();
+    }
+    let head: String = trimmed.chars().take(MAX_ERROR_OUTPUT_CHARS).collect();
+    format!("{}… (truncated)", head.trim_end())
+}
+
+/// Like [`truncate_output`], but keeps both ends: the first and last
+/// [`MAX_ERROR_OUTPUT_CHARS`]/2 characters with an omission marker in between.
+/// For output where the useful line can live at either end — a banner up top,
+/// the actual error at the bottom of a session transcript (issue #665).
+///
+/// Operates on `char`s throughout (never byte offsets), so a cut can never
+/// land inside a multi-byte UTF-8 sequence and panic (the #673 class of bug).
+pub fn truncate_output_head_tail(text: &str) -> String {
+    let trimmed = text.trim();
+    let total = trimmed.chars().count();
+    if total <= MAX_ERROR_OUTPUT_CHARS {
+        return trimmed.to_string();
+    }
+    let head_len = MAX_ERROR_OUTPUT_CHARS / 2;
+    let tail_len = MAX_ERROR_OUTPUT_CHARS - head_len;
+    let head: String = trimmed.chars().take(head_len).collect();
+    let tail: String = trimmed.chars().skip(total - tail_len).collect();
+    let omitted = total - head_len - tail_len;
+    format!(
+        "{}\n… ({omitted} chars omitted) …\n{}",
+        head.trim_end(),
+        tail.trim_start()
+    )
 }
 
 #[cfg(test)]
@@ -95,13 +423,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_with_timeout_maps_missing_binary_to_io() {
+    async fn run_with_timeout_maps_missing_binary_to_expected_with_label() {
         let cmd = Command::new("definitely-not-a-real-binary-shipstudio");
         let err = run_with_timeout(cmd, "ghost", 5).await.unwrap_err();
+        // Missing binary = environment gap: labeled (#296) and typed
+        // Expected so it never reaches telemetry.
         match err {
-            CommandError::Io { .. } => {}
-            other => panic!("expected Io, got {other:?}"),
+            CommandError::Expected { message } => {
+                assert!(message.contains("`ghost`"), "got: {message}")
+            }
+            other => panic!("expected Expected, got {other:?}"),
         }
+    }
+
+    /// The #608/#556 leak shape: when the timeout fires, the child must be
+    /// killed, not left running. `sh` would touch the marker after 2s if it
+    /// survived; kill_on_drop must prevent that.
+    #[tokio::test]
+    async fn timed_out_child_is_killed_not_orphaned() {
+        let dir = std::env::temp_dir().join(format!("ss-kill-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let marker = dir.join("survived-marker");
+        let _ = std::fs::remove_file(&marker);
+
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c")
+            .arg(format!("sleep 2; touch {}", marker.display()));
+        let err = run_with_timeout(cmd, "sh sleep-touch", 1)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, CommandError::Timeout { .. }));
+
+        // Give a hypothetical surviving child ample time to reach the touch.
+        tokio::time::sleep(Duration::from_millis(2500)).await;
+        assert!(
+            !marker.exists(),
+            "timed-out child survived and wrote its marker — kill_on_drop regressed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
@@ -113,6 +472,415 @@ mod tests {
             CommandError::Timeout { secs, .. } => assert_eq!(secs, 1),
             other => panic!("expected Timeout, got {other:?}"),
         }
+    }
+
+    /// Builds an io::Error whose Display matches the reported telemetry shapes
+    /// deterministically on every platform (from_raw_os_error(35) renders
+    /// differently on Windows CI).
+    fn eagain() -> std::io::Error {
+        std::io::Error::other("Resource temporarily unavailable (os error 35)")
+    }
+
+    // The #555/#573/#585/#586/#587 shapes: bare EAGAIN text from macOS spawns.
+    #[test]
+    fn spawn_pressure_matches_reported_eagain_shapes() {
+        assert!(is_spawn_resource_pressure(
+            "Resource temporarily unavailable (os error 35)"
+        ));
+        assert!(is_spawn_resource_pressure(
+            "spawn_command: Resource temporarily unavailable (os error 35)"
+        ));
+        assert!(is_spawn_resource_pressure(
+            "Failed to execute command: Resource temporarily unavailable (os error 35)"
+        ));
+        // Linux renders EAGAIN as os error 11.
+        #[cfg(unix)]
+        assert!(is_spawn_resource_pressure(
+            "Resource temporarily unavailable (os error 11)"
+        ));
+    }
+
+    #[test]
+    fn spawn_pressure_rejects_other_errors() {
+        assert!(!is_spawn_resource_pressure(
+            "No such file or directory (os error 2)"
+        ));
+        assert!(!is_spawn_resource_pressure(
+            "Operation not permitted (os error 1)"
+        ));
+        assert!(!is_spawn_resource_pressure(""));
+        // Don't match a larger error code that merely contains "35"/"11".
+        assert!(!is_spawn_resource_pressure("something (os error 110)"));
+        assert!(!is_spawn_resource_pressure("something (os error 355)"));
+        assert!(!is_spawn_resource_pressure("something (os error 230)"));
+        assert!(!is_spawn_resource_pressure("something (os error 240)"));
+    }
+
+    // The #574 shape: fd exhaustion is the same transient resource pressure
+    // as EAGAIN and must get the same retry+classify treatment.
+    #[test]
+    fn spawn_pressure_matches_fd_exhaustion_shapes() {
+        // EMFILE — per-process fd budget exhausted.
+        assert!(is_spawn_resource_pressure(
+            "Too many open files (os error 24)"
+        ));
+        // ENFILE — system-wide open-file table exhausted.
+        assert!(is_spawn_resource_pressure(
+            "Too many open files in system (os error 23)"
+        ));
+        assert!(is_spawn_resource_pressure(
+            "Failed to execute command: Too many open files in system (os error 23)"
+        ));
+        // Localized strerror text still matches via the Unix-gated os codes.
+        #[cfg(unix)]
+        {
+            assert!(is_spawn_resource_pressure("¡demasiados! (os error 23)"));
+            assert!(is_spawn_resource_pressure("¡demasiados! (os error 24)"));
+        }
+    }
+
+    // On Windows, os errors 23/24 are ERROR_CRC / ERROR_BAD_LENGTH — the raw
+    // code fallbacks must not classify them as fd pressure there.
+    #[test]
+    #[cfg(windows)]
+    fn spawn_pressure_ignores_windows_crc_codes() {
+        assert!(!is_spawn_resource_pressure("Data error (os error 23)"));
+        assert!(!is_spawn_resource_pressure("Bad length (os error 24)"));
+    }
+
+    // The #596 shape: a localized Windows "Acceso denegado. (os error 5)"
+    // spawn failure must classify Expected (kind-based, so the localized
+    // Display text doesn't matter), with the label preserved.
+    #[test]
+    fn map_spawn_io_error_classifies_access_denied_as_expected() {
+        let denied = std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "Acceso denegado. (os error 5)",
+        );
+        match map_spawn_io_error("git status", &denied) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`git status`"), "got: {message}");
+                assert!(message.contains("denied access"), "got: {message}");
+                assert!(!message.contains("Acceso denegado"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_with_pressure_retry_classifies_access_denied_as_expected() {
+        let err = spawn_with_pressure_retry::<()>("npm install", || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Access is denied. (os error 5)",
+            ))
+        })
+        .unwrap_err();
+        assert!(matches!(err, CommandError::Expected { .. }), "got: {err:?}");
+        assert!(err.to_string().contains("`npm install`"));
+    }
+
+    // The #549 shape: ERROR_FILENAME_EXCED_RANGE is Windows-only; elsewhere
+    // os error 206 means something unrelated and must stay unclassified.
+    #[test]
+    #[cfg(not(windows))]
+    fn path_too_long_never_matches_off_windows() {
+        assert!(!is_windows_path_too_long(
+            "The filename or extension is too long. (os error 206)"
+        ));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn path_too_long_matches_error_206_on_windows() {
+        // Localized text still matches — the check is on the os-error code.
+        assert!(is_windows_path_too_long(
+            "El nombre de archivo o la extensión es demasiado largo. (os error 206)"
+        ));
+        assert!(!is_windows_path_too_long("some other failure (os error 2)"));
+
+        let e = std::io::Error::from_raw_os_error(206);
+        match map_spawn_io_error("npx tool", &e) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`npx tool`"), "got: {message}");
+                assert!(message.contains("long-path"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    // The #663 shape: Rust's BatBadBut mitigation refuses to spawn a .cmd
+    // with an argument it can't safely cmd-escape — an environment/input
+    // limitation, so Expected with a human message, not a reported raw Io.
+    #[test]
+    fn map_spawn_io_error_classifies_batch_argument_rejection_as_expected() {
+        let e = std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "batch file arguments are invalid",
+        );
+        match map_spawn_io_error("Codex CLI", &e) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`Codex CLI`"), "got: {message}");
+                assert!(message.contains(".cmd script"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+
+        // Other InvalidInput failures stay unclassified.
+        let unrelated = std::io::Error::new(std::io::ErrorKind::InvalidInput, "bad handle");
+        assert!(matches!(
+            map_spawn_io_error("Codex CLI", &unrelated),
+            CommandError::Io { .. }
+        ));
+    }
+
+    // The #616 shape: `I/O error: `gh pr list`: Resource temporarily
+    // unavailable (os error 35)` from run_with_timeout-backed polling must
+    // classify Expected (with the human message), not a reported Io.
+    #[test]
+    fn map_spawn_io_error_covers_all_families() {
+        let eagain = std::io::Error::other("Resource temporarily unavailable (os error 35)");
+        match map_spawn_io_error("gh pr list", &eagain) {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`gh pr list`"), "got: {message}");
+                assert!(
+                    message.contains("low on process resources"),
+                    "got: {message}"
+                );
+                assert!(!message.contains("os error 35"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+
+        let missing = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        assert!(matches!(
+            map_spawn_io_error("gh", &missing),
+            CommandError::Expected { .. }
+        ));
+
+        let plain = std::io::Error::other("boom");
+        match map_spawn_io_error("gh api user", &plain) {
+            CommandError::Io { message } => {
+                assert!(message.contains("`gh api user`"), "got: {message}");
+                assert!(message.contains("boom"), "got: {message}");
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn retry_spawn_recovers_after_transient_eagain() {
+        let mut calls = 0;
+        let result: Result<i32, std::io::Error> = retry_spawn_on_pressure("git status", || {
+            calls += 1;
+            if calls < 3 {
+                Err(eagain())
+            } else {
+                Ok(42)
+            }
+        });
+        assert_eq!(result.unwrap(), 42);
+        assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn retry_spawn_does_not_retry_non_eagain_failures() {
+        let mut calls = 0;
+        let result: Result<(), std::io::Error> = retry_spawn_on_pressure("git status", || {
+            calls += 1;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "No such file or directory (os error 2)",
+            ))
+        });
+        assert!(result.is_err());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn persistent_eagain_becomes_expected_with_human_message() {
+        let mut calls = 0;
+        let err = spawn_with_pressure_retry::<()>("open safari", || {
+            calls += 1;
+            Err(eagain())
+        })
+        .unwrap_err();
+        assert_eq!(calls, 3, "must exhaust the retries first");
+        assert!(matches!(err, CommandError::Expected { .. }), "got: {err:?}");
+        let msg = err.to_string();
+        assert!(msg.contains("`open safari`"), "got: {msg}");
+        assert!(msg.contains("low on process resources"), "got: {msg}");
+        // The raw OS string must not leak into the user-facing message.
+        assert!(!msg.contains("os error 35"), "got: {msg}");
+    }
+
+    #[test]
+    fn spawn_with_pressure_retry_keeps_not_found_expected_and_labeled() {
+        let err = spawn_with_pressure_retry::<()>("gh api user", || {
+            Err(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"))
+        })
+        .unwrap_err();
+        match err {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`gh api user`"), "got: {message}")
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    /// `cat` only exits once stdin reaches EOF, so a passing test proves the
+    /// prompt is fully written *and* the handle closed before we wait —
+    /// exactly the plumbing issue #595 depends on.
+    #[tokio::test]
+    async fn run_with_timeout_stdin_writes_and_closes_stdin() {
+        let cmd = Command::new("cat");
+        let out = run_with_timeout_stdin(cmd, "hello stdin prompt", "cat", 5)
+            .await
+            .unwrap();
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "hello stdin prompt");
+    }
+
+    /// A payload far beyond any argv limit and larger than a pipe buffer:
+    /// write/wait must interleave without deadlocking, and every byte must
+    /// arrive.
+    #[tokio::test]
+    async fn run_with_timeout_stdin_handles_large_payloads() {
+        let payload = "diff line with some content\n".repeat(10_000); // ~280KB
+        let cmd = Command::new("cat");
+        let out = run_with_timeout_stdin(cmd, &payload, "cat large", 10)
+            .await
+            .unwrap();
+        assert!(out.status.success());
+        assert_eq!(out.stdout.len(), payload.len());
+    }
+
+    /// A child that exits without reading stdin (early CLI error) must surface
+    /// its own status/stderr, not a broken-pipe write failure.
+    #[tokio::test]
+    async fn run_with_timeout_stdin_tolerates_child_ignoring_stdin() {
+        let big = "x".repeat(1_000_000);
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("echo boom 1>&2; exit 3");
+        let out = run_with_timeout_stdin(cmd, &big, "sh early-exit", 10)
+            .await
+            .unwrap();
+        assert_eq!(out.status.code(), Some(3));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("boom"));
+    }
+
+    #[tokio::test]
+    async fn run_with_timeout_stdin_maps_missing_binary_to_expected() {
+        let cmd = Command::new("definitely-not-a-real-binary-shipstudio");
+        let err = run_with_timeout_stdin(cmd, "prompt", "ghost-stdin", 5)
+            .await
+            .unwrap_err();
+        match err {
+            CommandError::Expected { message } => {
+                assert!(message.contains("`ghost-stdin`"), "got: {message}")
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_with_pressure_retry_labels_other_io_errors() {
+        let err =
+            spawn_with_pressure_retry::<()>("gh api user", || Err(std::io::Error::other("boom")))
+                .unwrap_err();
+        match err {
+            CommandError::Io { message } => {
+                assert!(message.contains("`gh api user`"), "got: {message}");
+                assert!(message.contains("boom"), "got: {message}");
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn spawn_with_pressure_retry_passes_success_through_untouched() {
+        let mut calls = 0;
+        let out = spawn_with_pressure_retry("echo", || {
+            calls += 1;
+            Ok(7)
+        })
+        .unwrap();
+        assert_eq!(out, 7);
+        assert_eq!(calls, 1, "no gratuitous retries on success");
+    }
+
+    #[test]
+    fn truncate_output_passes_short_text_through_trimmed() {
+        assert_eq!(truncate_output("  short error  \n"), "short error");
+        assert_eq!(truncate_output(""), "");
+    }
+
+    // The #610/#578 shape: a crash dump / session transcript on stderr must be
+    // capped, keeping the head where the actual error line lives.
+    #[test]
+    fn truncate_output_caps_long_text_preserving_head() {
+        let long = format!("fatal error: the real cause\n{}", "x".repeat(10_000));
+        let capped = truncate_output(&long);
+        assert!(capped.starts_with("fatal error: the real cause"));
+        assert!(
+            capped.ends_with("… (truncated)"),
+            "got tail: {}",
+            &capped[capped.len().saturating_sub(40)..]
+        );
+        assert!(capped.chars().count() <= MAX_ERROR_OUTPUT_CHARS + "… (truncated)".len());
+    }
+
+    #[test]
+    fn truncate_output_head_tail_passes_short_text_through_trimmed() {
+        assert_eq!(
+            truncate_output_head_tail("  short error  \n"),
+            "short error"
+        );
+        assert_eq!(truncate_output_head_tail(""), "");
+    }
+
+    // The #665 shape: `codex exec` fails with a full session transcript on
+    // stderr — banner first, actual error LAST. Head-only capping guaranteed
+    // the useful line was cut; head+tail must preserve both ends.
+    #[test]
+    fn truncate_output_head_tail_keeps_both_ends() {
+        let long = format!(
+            "OpenAI Codex v0.0.0 (banner)\n{}\nERROR: stream disconnected before completion",
+            "transcript filler line\n".repeat(1_000)
+        );
+        let capped = truncate_output_head_tail(&long);
+        assert!(
+            capped.starts_with("OpenAI Codex v0.0.0 (banner)"),
+            "head lost"
+        );
+        assert!(
+            capped.ends_with("ERROR: stream disconnected before completion"),
+            "tail (the actual error) lost — got tail: {}",
+            &capped[capped.len().saturating_sub(60)..]
+        );
+        assert!(capped.contains("chars omitted"), "got: no omission marker");
+        // Head + tail + marker, never materially more than the cap.
+        assert!(capped.chars().count() <= MAX_ERROR_OUTPUT_CHARS + 40);
+    }
+
+    // A cut landing mid multi-byte sequence must never panic (the #673 class
+    // of bug in this codebase) — char-based slicing throughout.
+    #[test]
+    fn truncate_output_head_tail_survives_multibyte_boundaries() {
+        // 2-byte chars: every byte offset that isn't even is a non-boundary.
+        let two_byte = "é".repeat(MAX_ERROR_OUTPUT_CHARS + 501);
+        let capped = truncate_output_head_tail(&two_byte);
+        assert!(capped.contains("(501 chars omitted)"), "got: {capped}");
+        assert!(capped.starts_with('é') && capped.ends_with('é'));
+
+        // 4-byte emoji straddling both cut points.
+        let emoji = "🎉".repeat(MAX_ERROR_OUTPUT_CHARS + 10);
+        let capped = truncate_output_head_tail(&emoji);
+        assert!(
+            capped.contains("(10 chars omitted)"),
+            "got marker: {capped}"
+        );
+        assert!(capped.starts_with('🎉') && capped.ends_with('🎉'));
     }
 
     #[tokio::test]

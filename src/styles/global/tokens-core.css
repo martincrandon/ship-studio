@@ -119,4 +119,10 @@
   --tracking-code: -0.44px;
   --tracking-04: 0.4px;
   --tracking-display: -2px;
+
+  --duration-fast: 100ms;
+  --duration-standard: 150ms;
+  --duration-slow: 300ms;
+  --ease-standard: ease;
+  --ease-icon-swap: cubic-bezier(0.2, 0, 0, 1);
 }

@@ -1,6 +1,7 @@
 import { forwardRef, type InputHTMLAttributes } from 'react';
 import { SearchIcon } from '@/components/icons';
 
+/** Props for the shared extension-manager search input. */
 export interface ExtensionSearchFieldProps extends Omit<
   InputHTMLAttributes<HTMLInputElement>,
   'className'

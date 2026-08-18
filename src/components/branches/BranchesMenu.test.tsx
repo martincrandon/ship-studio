@@ -147,6 +147,24 @@ describe('BranchesMenu', () => {
     ).toBeTruthy();
   });
 
+  it('uses the empty main-branch icon only when main has no other branches', () => {
+    const props = makeProps({
+      currentBranch: 'main',
+      branches: [branch('main', 10, true)],
+    });
+    render(<BranchesMenu {...props} />);
+    const mainRow = screen.getByText('main').closest('button');
+
+    expect(mainRow?.querySelector('[data-icon-name="GitBranchMainNoneIcon"]')).toBeTruthy();
+    expect(mainRow?.querySelector('[data-icon-name="GitBranchMainIcon"]')).toBeNull();
+    expect(mainRow?.querySelector('[data-icon-name="GitBranchMidIcon"]')).toBeNull();
+    expect(mainRow?.querySelector('[data-icon-name="GitBranchEndIcon"]')).toBeNull();
+    expect(mainRow?.querySelector('[data-icon-name="GitBranchMainNoneIcon"] path')).toHaveAttribute(
+      'stroke',
+      'currentColor'
+    );
+  });
+
   it('starts branch creation from the menu', () => {
     const props = makeProps();
     render(<BranchesMenu {...props} />);
@@ -176,6 +194,7 @@ describe('BranchesMenu', () => {
           baseRef: 'main',
           author: 'martin',
           state: 'OPEN',
+          isDraft: false,
           mergeable: true,
           url: 'https://github.com/martin/ship-studio/pull/42',
           createdAt: '2026-07-31T00:00:00Z',

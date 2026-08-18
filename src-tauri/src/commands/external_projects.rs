@@ -95,6 +95,12 @@ pub fn is_registered_external_path(canonical: &Path) -> Result<bool, String> {
     for project in &config.projects {
         let project_path = Path::new(&project.path);
         if let Ok(project_canonical) = dunce::canonicalize(project_path) {
+            // Neutralize any pre-existing bad registration of $HOME (or wider):
+            // honoring it would make every path under the home directory pass
+            // validate_project_path via starts_with (issue #345).
+            if crate::utils::is_forbidden_project_root(&project_canonical) {
+                continue;
+            }
             if canonical.starts_with(&project_canonical) {
                 return Ok(true);
             }
@@ -122,6 +128,16 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
             .map_err(|e| format!("Invalid folder path: {e}"))?,
         None => return Ok(None), // User cancelled
     };
+
+    // The home directory (or anything above it) is never a project, even when
+    // a stray ~/.git or ~/.gitignore makes it look like one — registering it
+    // would scope destructive git ops to the whole home tree (issue #345).
+    if crate::utils::is_forbidden_project_root(&folder_path) {
+        return Err(CommandError::expected(
+            "That folder is your home directory (or a folder above it), which can't be added as a \
+             project. Pick the specific project folder instead.",
+        ));
+    }
 
     // Use the same predicate as dashboard discovery so removed projects can be
     // restored even when they were blank, git-only, or Ship Studio metadata-only.
@@ -151,27 +167,27 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
             }
         }
 
+        // All of these are by-design guidance about the user's folder pick,
+        // not malfunctions — Expected keeps them out of telemetry (issue #416).
         if nested_projects.len() == 1 {
-            return Err((format!(
+            return Err(CommandError::expected(format!(
                 "The project appears to be inside the \"{}\" subfolder. Please select that folder instead.",
                 nested_projects[0]
-            )).into());
+            )));
         } else if nested_projects.len() > 1 {
-            return Err((format!(
+            return Err(CommandError::expected(format!(
                 "This folder contains multiple projects inside it: {}. Please select the specific project folder you want to import.",
                 nested_projects.join(", ")
-            )).into());
+            )));
         }
 
-        return Err(
-            "Selected folder doesn't appear to be a project — no package.json or .html files found."
-                .to_string()
-                .into(),
-        );
+        return Err(CommandError::expected(
+            "Selected folder doesn't appear to be a project — no project files found (package.json, .html, .git, or a language manifest like Cargo.toml, go.mod, pyproject.toml…)."
+        ));
     }
 
     // Canonicalize the path
-    let canonical = dunce::canonicalize(&folder_path).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical = crate::utils::canonicalize_tagged(&folder_path, "register_external_project")?;
     let canonical_str = canonical.to_string_lossy().to_string();
 
     // Reject folders that already live under a projects root (configured or
@@ -184,11 +200,9 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
             return Ok(Some(canonical_str));
         }
 
-        return Err(
-            "This project is already inside your projects folder. It will appear automatically."
-                .to_string()
-                .into(),
-        );
+        return Err(CommandError::expected(
+            "This project is already inside your projects folder. It will appear automatically.",
+        ));
     }
 
     // Check if already registered
@@ -198,7 +212,9 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
             .map(|c| c == canonical)
             .unwrap_or(false)
     }) {
-        return Err(("This project is already registered.".to_string()).into());
+        return Err(CommandError::expected(
+            "This project is already registered.",
+        ));
     }
 
     // Register
@@ -293,6 +309,10 @@ fn looks_like_project_root(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
     }
+    // Never the home directory or above it, regardless of markers (#345).
+    if crate::utils::is_forbidden_project_root(path) {
+        return false;
+    }
     const MARKERS: &[&str] = &[
         ".git",
         "package.json",
@@ -307,9 +327,11 @@ fn looks_like_project_root(path: &Path) -> bool {
         "composer.json",
         "index.html",
     ];
-    // Mirror register_external_project's picker check: any .html file counts as a
-    // project, so static sites whose entry isn't index.html still auto-register.
-    MARKERS.iter().any(|m| path.join(m).exists()) || crate::commands::projects::has_html_files(path)
+    // Mirror register_external_project's picker check: any .html file (root or
+    // Vercel-style public/) counts as a project, so static sites whose entry
+    // isn't a root index.html still auto-register.
+    MARKERS.iter().any(|m| path.join(m).exists())
+        || crate::commands::projects::static_site_dir(path).is_some()
 }
 
 /// Register an external project by path (no folder picker dialog).
@@ -326,7 +348,7 @@ pub async fn ensure_external_project_registered(
     path: String,
 ) -> Result<bool, CommandError> {
     let canonical =
-        dunce::canonicalize(Path::new(&path)).map_err(|e| format!("Invalid path: {e}"))?;
+        crate::utils::canonicalize_tagged(Path::new(&path), "ensure_external_project_registered")?;
 
     // Skip if already inside a projects root (configured or default) — those are
     // already trusted by validate_project_path and listed automatically.
@@ -349,11 +371,14 @@ pub async fn ensure_external_project_registered(
     // only auto-register paths that actually look like a project root. The
     // picker flow remains the way to add anything that doesn't.
     if !looks_like_project_root(&canonical) {
-        return Err(format!(
+        // A by-design security refusal, not a malfunction — Expected keeps it
+        // out of bug telemetry (issue #598, same classification #416 applied
+        // to the folder-picker guidance branches in this file). Serializes
+        // identically to Other, so the frontend sees the same message.
+        return Err(CommandError::expected(format!(
             "Refusing to auto-register '{}': it does not look like a project directory. Add it via the folder picker instead.",
             canonical.display()
-        )
-        .into());
+        )));
     }
 
     // Register it
@@ -380,8 +405,7 @@ pub async fn ensure_external_project_registered(
 #[tauri::command]
 #[tracing::instrument]
 pub async fn is_project_external(path: String) -> Result<bool, CommandError> {
-    let canonical =
-        dunce::canonicalize(Path::new(&path)).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical = crate::utils::canonicalize_tagged(Path::new(&path), "is_project_external")?;
 
     let config = load_config()?;
     for project in &config.projects {

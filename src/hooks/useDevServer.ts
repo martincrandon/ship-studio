@@ -584,18 +584,20 @@ export function useDevServer(currentProjectPath: string | null) {
 
       // A plain static site that carries a root `package.json` only for build
       // tooling (PostCSS, autoprefixer, a CSS minifier) is detected as `generic`
-      // and would start no server. The user can opt into static serving via
+      // and would start no server; a site whose HTML lives somewhere detection
+      // doesn't look is `unknown`. The user can opt into static serving via
       // `.shipstudio/project.json` → `force_static_serve`; when set, treat it as
       // a static-HTML project so it serves over the static server and the
-      // Preview pane renders (it gates out `generic`). Scoped to `generic` —
-      // the override is specifically for the package.json-present case.
+      // Preview pane renders (it gates out `generic`/`unknown`). Never applied
+      // to detected web frameworks — the override exists only for the two
+      // "no server would start" outcomes.
       let forceStatic = false;
       try {
         forceStatic = await getForceStaticServe(projectPath);
       } catch {
         /* default: respect detection */
       }
-      if (forceStatic && detectedType === 'generic') {
+      if (forceStatic && (detectedType === 'generic' || detectedType === 'unknown')) {
         logger.info('[OpenProject] force_static_serve set; serving as static HTML', {
           projectPath,
           detectedType,
@@ -612,14 +614,28 @@ export function useDevServer(currentProjectPath: string | null) {
       // Shopify themes are exempt: `shopify theme dev` needs no npm install,
       // and a theme's optional package.json (Tailwind tooling, or one an
       // agent added) must not block the preview behind an install gate.
+      // Whether the project has a package.json at all — a framework detected
+      // via its config file alone can't run a dev script (issue #593).
+      // null = unknown (dependency check failed or was exempt).
+      let hasPackageJson: boolean | null = null;
+      // Same, but at the resolved dev-server cwd (workspace subpath for
+      // monorepos). The root-OR-workspace flag above is right for install
+      // gating but wrong for "will the dev spawn at cwd find a package.json"
+      // (issue #656).
+      let cwdHasPackageJson: boolean | null = null;
       try {
         // Shopify themes and force-static projects don't need an npm install to
         // preview: the theme runs via `shopify theme dev`, and a force-static
         // site is served straight off disk regardless of its build tooling.
         const depStatus =
           detectedType === 'shopifytheme' || forceStatic
-            ? { installed: true, hasPackageJson: false }
+            ? { installed: true, hasPackageJson: false, workspaceHasPackageJson: false }
             : await checkDependenciesInstalled(projectPath);
+        if (detectedType !== 'shopifytheme' && !forceStatic) {
+          hasPackageJson = depStatus.hasPackageJson;
+          // Older backends predate the field; keep null (= unknown) then.
+          cwdHasPackageJson = depStatus.workspaceHasPackageJson ?? null;
+        }
         if (!depStatus.installed && depStatus.hasPackageJson) {
           const packageManager = await detectPackageManager(projectPath).catch((err) => {
             logger.warn(
@@ -765,6 +781,36 @@ export function useDevServer(currentProjectPath: string | null) {
             { projectPath }
           );
         }
+      } else if (detectedType === 'unknown') {
+        // No framework config, no package.json, no HTML — Ship Studio doesn't
+        // know how to preview this project. Spawning `npm run dev` anyway just
+        // produced a doomed spawn plus a spurious package.json read error in
+        // telemetry (issue #330).
+        logger.info('[OpenProject] Unknown project type; skipping dev server', {
+          projectPath,
+        });
+      } else if (hasPackageJson === false && cwd === projectPath) {
+        // A framework detected from its config file alone (next.config.js /
+        // vite.config.ts / …) with no package.json: there's no dev script to
+        // run, so spawning `npm run dev` is doomed and produced a spurious
+        // "File not found: package.json" error in telemetry (issue #593).
+        // Mirrors the `unknown`-type skip above.
+        logger.info(
+          '[OpenProject] Framework config found but no package.json; skipping dev server',
+          { projectPath, projectType: detectedType }
+        );
+      } else if (cwdHasPackageJson === false && cwd !== projectPath) {
+        // Monorepo workspace subpath without its own package.json: the
+        // root-OR-workspace hasPackageJson flag can be true (the repo root has
+        // one), but the dev server spawns at the subpath, where the
+        // package.json read is doomed — this produced the same spurious
+        // "File not found: package.json" error plus a doomed `npm run dev` at
+        // the subpath (issue #656, the case #593 intentionally exempted).
+        logger.info('[OpenProject] Workspace subpath has no package.json; skipping dev server', {
+          projectPath,
+          cwd,
+          projectType: detectedType,
+        });
       } else {
         try {
           s.outputBuffer = '';

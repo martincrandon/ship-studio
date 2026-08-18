@@ -9,12 +9,14 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useClickOutside } from './useClickOutside';
+import { useCopyToClipboard } from './useCopyToClipboard';
 import {
   decideIframeWatchdogArm,
   isPreviewProofOfLife,
   IFRAME_BLANK_TIMEOUT_MS,
 } from './previewIframeWatchdog';
 import { logger } from '../lib/logger';
+import { asCommandError, formatCommandError, isProjectFolderGoneError } from '../lib/errors';
 import { getWindowLabel } from '../lib/window';
 import { trackEvent } from '../lib/analytics';
 
@@ -40,6 +42,12 @@ const SERVER_READY_TIMEOUT_MS = 30000;
 export const SERVER_MAX_RETRIES = 60;
 /** Consecutive health check failures before marking server as down */
 const HEALTH_CHECK_MAX_FAILURES = 3;
+/** Consecutive 404s on the root (after it was once healthy) before treating
+ *  the dev server as wedged. A restart race can leave a dev server accepting
+ *  connections but 404ing every route — including ones it served moments
+ *  earlier (issue #243). Requiring a previously-healthy root means projects
+ *  that legitimately have no `/` route are never flagged. */
+const STALE_404_MAX_STRIKES = 3;
 
 /** Information about a page/route */
 export interface PageInfo {
@@ -104,11 +112,21 @@ export function usePreviewConnection({
   // land on the dev server directly.
   const externalUrl = `${devServerUrl}${iframePath === '/' ? '' : iframePath}`;
 
+  // The dev server answers TCP but 404s every route — wedged by a restart
+  // race, only a process restart recovers it (issue #243).
+  const [serverStale, setServerStale] = useState(false);
+
   const wasRestartingRef = useRef(false);
   const healthCheckFailuresRef = useRef(0);
+  const notFoundStreakRef = useRef(0);
+  const sawHealthyRootRef = useRef(false);
   // Last time the HMR watchdog auto-reloaded the preview — throttles recovery
   // so a flapping HMR socket can't put the iframe in a reload loop.
   const lastHmrRecoveryRef = useRef(0);
+  // Options-less so `copy` stays referentially stable — it's a dependency of
+  // the message-handler effect below, and per-render options would make that
+  // effect re-subscribe on every render.
+  const { copy: copyErrorText } = useCopyToClipboard();
   const isStoppedRef = useRef(false);
   isStoppedRef.current = isStopped;
   const retryCountRef = useRef(0);
@@ -166,7 +184,10 @@ export function usePreviewConnection({
     setPageSearch('');
     setReloadToken(0);
     setIframeBlank(false);
+    setServerStale(false);
     iframeAliveRef.current = false;
+    notFoundStreakRef.current = 0;
+    sawHealthyRootRef.current = false;
 
     const timer = setTimeout(() => setRetryCount(0), 1500);
     return () => clearTimeout(timer);
@@ -178,9 +199,12 @@ export function usePreviewConnection({
       setServerReady(false);
       setIsLoading(true);
       setHasError(false);
+      setServerStale(false);
       setRetryCount(-1);
       setIsStopped(false);
       wasRestartingRef.current = true;
+      notFoundStreakRef.current = 0;
+      sawHealthyRootRef.current = false;
     } else if (wasRestartingRef.current) {
       wasRestartingRef.current = false;
       const timer = setTimeout(() => setRetryCount(0), 1000);
@@ -194,9 +218,21 @@ export function usePreviewConnection({
       const pageList = await invoke<PageInfo[]>('list_pages', { projectPath });
       setPages(pageList);
     } catch (error) {
-      logger.error('Failed to load pages', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+      // `list_pages` rejects with a plain CommandError object (not an Error
+      // instance) — String() renders it as "[object Object]" (issue #541).
+      const message = formatCommandError(asCommandError(error));
+      if (isProjectFolderGoneError(error)) {
+        // The project's folder is gone (moved/renamed/deleted outside Ship
+        // Studio) — a by-design Expected state the backend deliberately keeps
+        // out of telemetry (canonicalize_tagged in src-tauri/src/utils.rs).
+        // This runs on a 5s poll, so logging it at error level auto-filed a
+        // bug report every tick (issue #698).
+        logger.warn('Failed to load pages — project folder no longer exists', {
+          error: message,
+        });
+      } else {
+        logger.error('Failed to load pages', { error: message });
+      }
     }
   }, [projectPath]);
 
@@ -282,7 +318,9 @@ export function usePreviewConnection({
         }
       })
       .catch((err) => {
-        logger.error('[Preview] Failed to start proxy, using direct URL', { error: err });
+        logger.error('[Preview] Failed to start proxy, using direct URL', {
+          error: formatCommandError(asCommandError(err)),
+        });
       });
 
     return () => {
@@ -384,10 +422,19 @@ export function usePreviewConnection({
         });
       }
       if (data && data.type === 'shipstudio:copy-error' && data.message) {
-        navigator.clipboard.writeText(data.message).then(
-          () => onToast?.('Error copied to clipboard', 'success'),
-          () => onToast?.('Failed to copy to clipboard', 'error')
-        );
+        void copyErrorText(data.message).then((ok) => {
+          if (ok) {
+            onToast?.('Error copied to clipboard', 'success');
+          } else {
+            // The click happened inside the preview iframe, so the app window
+            // itself may lack the user-activation the clipboard API wants
+            // (issue #357).
+            onToast?.(
+              'Failed to copy to clipboard — click the Ship Studio window, then try again',
+              'error'
+            );
+          }
+        });
       }
       if (data && data.type === 'shipstudio:send-error-to-claude' && data.message) {
         const prompt = `My dev server is returning an error:\n\n${data.message}\n\nPlease help me fix this.`;
@@ -428,6 +475,7 @@ export function usePreviewConnection({
     serverReady,
     devServerUrl,
     clearIframeWatchdogTimer,
+    copyErrorText,
   ]);
 
   // Auto-reload for static HTML projects when files change on disk
@@ -476,7 +524,7 @@ export function usePreviewConnection({
         setHasError(false);
         setServerReady(true);
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
+        const errorMsg = formatCommandError(asCommandError(err));
         logger.info('[Preview] Server check failed', {
           retry: retryCount,
           maxRetries: SERVER_MAX_RETRIES,
@@ -528,29 +576,59 @@ export function usePreviewConnection({
       return;
     }
 
+    const markDown = (reason: string) => {
+      logger.warn(`[Preview] ${reason}`);
+      setServerReady(false);
+      setHasError(true);
+      setIsLoading(false);
+    };
+
+    // Probes from Rust so the real status code is visible — a webview fetch to
+    // the (cross-origin) dev server must use `no-cors`, whose opaque response
+    // resolves for ANY completed response, so "up but 404ing every route"
+    // (issue #243) was structurally undetectable here.
     const healthCheck = async () => {
+      let status: number | null;
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
-
-        await fetch(devServerUrl, { mode: 'no-cors', signal: controller.signal });
-
-        clearTimeout(timeoutId);
-        healthCheckFailuresRef.current = 0;
+        status = await invoke<number | null>('probe_preview_status', {
+          port,
+          timeoutMs: HEALTH_CHECK_TIMEOUT_MS,
+        });
       } catch {
+        // Probe command itself failed — treat as inconclusive, not as a
+        // server failure.
+        return;
+      }
+
+      if (status === null) {
+        notFoundStreakRef.current = 0;
         healthCheckFailuresRef.current += 1;
         logger.warn(
           `[Preview] Dev server health check failed (${healthCheckFailuresRef.current}/${HEALTH_CHECK_MAX_FAILURES})`
         );
-
         if (healthCheckFailuresRef.current >= HEALTH_CHECK_MAX_FAILURES) {
-          logger.warn(
-            '[Preview] Dev server appears to have crashed after multiple failed health checks'
-          );
-          setServerReady(false);
-          setHasError(true);
-          setIsLoading(false);
+          markDown('Dev server appears to have crashed after multiple failed health checks');
         }
+        return;
+      }
+
+      healthCheckFailuresRef.current = 0;
+
+      if (status === 404 && sawHealthyRootRef.current) {
+        notFoundStreakRef.current += 1;
+        logger.warn(
+          `[Preview] Dev server root 404'd after being healthy (${notFoundStreakRef.current}/${STALE_404_MAX_STRIKES})`
+        );
+        if (notFoundStreakRef.current >= STALE_404_MAX_STRIKES) {
+          markDown('Dev server is up but 404s every route — needs a restart');
+          setServerStale(true);
+        }
+        return;
+      }
+
+      notFoundStreakRef.current = 0;
+      if (status < 400) {
+        sawHealthyRootRef.current = true;
       }
     };
 
@@ -585,7 +663,7 @@ export function usePreviewConnection({
       stopPolling();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [serverReady, devServerUrl]);
+  }, [serverReady, port]);
 
   // Handlers
   const handleRefresh = useCallback(() => {
@@ -660,6 +738,7 @@ export function usePreviewConnection({
     hasError,
     retryCount,
     serverReady,
+    serverStale,
     isStopped,
     iframeBlank,
 

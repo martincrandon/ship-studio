@@ -9,7 +9,7 @@
 //! - Claude: `claude mcp list`, `claude mcp add`, `claude mcp remove`
 //! - Codex: `codex mcp list`, `codex mcp add`, `codex mcp remove`
 use crate::errors::CommandError;
-use crate::utils::{create_command, find_executable, get_extended_path, validate_project_path};
+use crate::utils::{create_command, get_extended_path, validate_project_path};
 use serde::Serialize;
 
 /// Represents an MCP server configured for an agent.
@@ -47,9 +47,21 @@ fn strip_ansi(s: &str) -> String {
 }
 
 /// Find the agent binary path.
-fn find_agent_binary(agent: &crate::agent::AgentConfig) -> Result<std::path::PathBuf, String> {
-    find_executable(agent.binary_name)
-        .ok_or_else(|| format!("{} binary not found", agent.display_name))
+///
+/// Uses the same thorough resolver as the rest of the app
+/// (every NVM version's bin, `~/.<agent>/bin`, pnpm/volta/fnm dirs…) — the
+/// narrower `find_executable` missed installs like `~/.codex/bin/codex`, so
+/// the MCP modal said "Codex binary not found" while the Agents panel showed
+/// it installed (issue #250). Candidates are validated with the agent's
+/// version flag so a broken install (e.g. an npm package whose platform
+/// vendor binary is missing on disk) is skipped instead of being invoked and
+/// surfacing its internal ENOENT stack trace (issue #286).
+fn find_agent_binary(
+    agent: &crate::agent::AgentConfig,
+) -> Result<std::path::PathBuf, CommandError> {
+    crate::commands::claude::find_validated_binary(agent.binary_name, agent.version_flag)
+        // Expected: "agent not installed" is an environment gap, not a bug.
+        .ok_or_else(|| CommandError::expected(format!("{} binary not found", agent.display_name)))
 }
 
 /// Parse the output of `claude mcp list` which has the format:
@@ -262,6 +274,149 @@ pub async fn list_mcp_servers(
     Ok(servers)
 }
 
+/// OpenCode's global config file (`~/.config/opencode/opencode.json` — the
+/// path OpenCode documents on every platform).
+fn opencode_config_path() -> Result<std::path::PathBuf, CommandError> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| CommandError::from("Could not determine home directory".to_string()))?;
+    Ok(home.join(".config").join("opencode").join("opencode.json"))
+}
+
+/// Load OpenCode's config for editing. A config that exists but isn't valid
+/// JSON fails closed with an actionable message — never risk rewriting (and
+/// destroying) another tool's configuration.
+fn opencode_config_load() -> Result<(std::path::PathBuf, serde_json::Value), CommandError> {
+    let path = opencode_config_path()?;
+    let root = if path.exists() {
+        let raw = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read OpenCode config {}: {e}", path.display()))?;
+        serde_json::from_str(&raw).map_err(|e| {
+            CommandError::expected(format!(
+                "OpenCode's config ({}) isn't valid JSON, so Ship Studio won't edit it. Fix the file, then try again. (parse error: {e})",
+                path.display()
+            ))
+        })?
+    } else {
+        serde_json::json!({ "$schema": "https://opencode.ai/config.json" })
+    };
+    Ok((path, root))
+}
+
+fn opencode_config_save(
+    path: &std::path::Path,
+    root: &serde_json::Value,
+) -> Result<(), CommandError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create OpenCode config directory: {e}"))?;
+    }
+    let serialized = serde_json::to_string_pretty(root)
+        .map_err(|e| format!("Failed to serialize OpenCode config: {e}"))?;
+    std::fs::write(path, serialized)
+        .map_err(|e| {
+            // EACCES here is machine state (config dir owned by root after a
+            // sudo install, etc.), not an app bug — give the fix, skip
+            // telemetry (issue #471).
+            if e.raw_os_error() == Some(13) || e.kind() == std::io::ErrorKind::PermissionDenied {
+                crate::errors::CommandError::expected(format!(
+                    "Ship Studio can't write OpenCode's config at {} — permission denied. The                      folder is likely owned by another user (often from a sudo install). In a                      terminal, run: sudo chown -R $(whoami) ~/.config/opencode — then try again.",
+                    path.display()
+                ))
+            } else {
+                crate::errors::CommandError::from(format!(
+                    "Failed to write OpenCode config {}: {e}",
+                    path.display()
+                ))
+            }
+        })?;
+    Ok(())
+}
+
+/// Add (or overwrite — OpenCode adds are upserts by name) an MCP server in
+/// OpenCode's config file. OpenCode's `opencode mcp add` is an interactive
+/// wizard with no scriptable form, so shelling out just prints its usage
+/// banner and fails (issue #308) — instead we merge the entry into its config
+/// directly, the same way the preview bridge merges into Cursor's
+/// `~/.cursor/mcp.json` (`register_cursor_mcp`).
+///
+/// Accepts the same shapes the modal/bridge already produce:
+/// `<name> --url <url>` (remote server) or `<name> [--] <command...>` (local).
+fn opencode_mcp_entry(args_str: &str) -> Result<(String, serde_json::Value), CommandError> {
+    let tokens = shell_split(args_str);
+    let Some((name, rest)) = tokens.split_first() else {
+        return Err(("No arguments provided for mcp add".to_string()).into());
+    };
+    let entry = if rest.first().map(String::as_str) == Some("--url") {
+        let Some(url) = rest.get(1) else {
+            return Err(CommandError::expected(
+                "mcp add: --url needs a value, e.g. `my-server --url https://example.com/mcp`",
+            ));
+        };
+        serde_json::json!({ "type": "remote", "url": url, "enabled": true })
+    } else {
+        // Strip the optional `--` separator between the name and the command.
+        let command = if rest.first().map(String::as_str) == Some("--") {
+            &rest[1..]
+        } else {
+            rest
+        };
+        if command.is_empty() {
+            return Err(CommandError::expected(
+                "OpenCode MCP servers need a command or a --url, e.g. `my-server -- npx -y @some/mcp-server`",
+            ));
+        }
+        serde_json::json!({ "type": "local", "command": command, "enabled": true })
+    };
+    Ok((name.clone(), entry))
+}
+
+fn add_opencode_mcp_server(args_str: &str) -> Result<(), CommandError> {
+    let (name, entry) = opencode_mcp_entry(args_str)?;
+
+    let (path, mut root) = opencode_config_load()?;
+    let Some(root_obj) = root.as_object_mut() else {
+        return Err(CommandError::expected(format!(
+            "OpenCode's config ({}) doesn't have a JSON object at its root, so Ship Studio won't edit it.",
+            path.display()
+        )));
+    };
+    let servers = root_obj
+        .entry("mcp")
+        .or_insert_with(|| serde_json::json!({}));
+    let Some(servers_obj) = servers.as_object_mut() else {
+        return Err(CommandError::expected(format!(
+            "OpenCode's config ({}) has a non-object `mcp` key, so Ship Studio won't edit it.",
+            path.display()
+        )));
+    };
+    servers_obj.insert(name.clone(), entry);
+    opencode_config_save(&path, &root)?;
+    tracing::info!(server = %name, "Added MCP server to OpenCode config");
+    Ok(())
+}
+
+/// Remove an MCP server from OpenCode's config file (OpenCode has no
+/// `mcp remove` subcommand). Already-absent entries are the goal state, not an
+/// error — matching the CLI path's idempotent-remove semantics (issue #295).
+fn remove_opencode_mcp_server(name: &str) -> Result<(), CommandError> {
+    let path = opencode_config_path()?;
+    if !path.exists() {
+        return Ok(());
+    }
+    let (path, mut root) = opencode_config_load()?;
+    let removed = root
+        .as_object_mut()
+        .and_then(|o| o.get_mut("mcp"))
+        .and_then(|m| m.as_object_mut())
+        .map(|servers| servers.remove(name).is_some())
+        .unwrap_or(false);
+    if removed {
+        opencode_config_save(&path, &root)?;
+        tracing::info!(server = %name, "Removed MCP server from OpenCode config");
+    }
+    Ok(())
+}
+
 /// Add an MCP server using the agent's CLI.
 ///
 /// The `raw_args` parameter contains the arguments after `mcp add`, e.g.:
@@ -301,6 +456,13 @@ pub async fn add_mcp_server(
         return Err(("No arguments provided for mcp add".to_string()).into());
     }
 
+    // OpenCode's `mcp add` is interactive-only — edit its config file instead
+    // (issue #308). The binary lookup above still gates on OpenCode actually
+    // being installed.
+    if agent.id == "opencode" {
+        return add_opencode_mcp_server(args_str);
+    }
+
     // Build the command: <binary> mcp add <args>
     let mut cmd = create_command(&binary);
     cmd.arg("mcp")
@@ -337,10 +499,72 @@ pub async fn add_mcp_server(
         } else {
             stderr
         };
-        return Err((format!("Failed to add MCP server: {details}")).into());
+        return Err(classify_mcp_add_failure(&details));
     }
 
     Ok(())
+}
+
+/// Turn a failed `<agent> mcp add` invocation's output into a `CommandError`,
+/// classifying the shapes that reflect machine state or org policy — not a
+/// Ship Studio bug — as `Expected` so they stay out of telemetry.
+fn classify_mcp_add_failure(details: &str) -> CommandError {
+    let message = format!("Failed to add MCP server: {details}");
+    let lower = details.to_ascii_lowercase();
+
+    // "Already exists" is a benign race with a concurrent registration —
+    // the goal state is reached; callers treat it accordingly (#292).
+    if lower.contains("already exists") {
+        return CommandError::expected(message);
+    }
+
+    // Claude Code's enterprise-managed settings can refuse servers that
+    // aren't on the org's MCP allowlist ("Cannot add MCP server \"x\": not
+    // allowed by enterprise policy" / "…explicitly blocked by enterprise
+    // policy" / "…enterprise MCP configuration is active"). An org policy
+    // decision, not an app bug (issue #675).
+    if lower.contains("enterprise policy") || lower.contains("enterprise mcp configuration") {
+        return CommandError::expected(format!(
+            "{message}\n\nYour organization's managed agent settings block this MCP server. Ask your admin to allowlist it, then try again."
+        ));
+    }
+
+    // The agent CLI failed to write its own config file because the OS
+    // denied access — Windows "Access is denied. (os error 5)" (e.g. Codex
+    // persisting ~/.codex/config.toml) or POSIX EACCES/"Permission denied".
+    // Machine state: file read-only, locked by antivirus/OneDrive sync, or
+    // a config dir owned by another account — mirroring the EACCES handling
+    // in `opencode_config_save` (issues #471, #677).
+    let os_denied = lower.contains("access is denied")
+        || lower.contains("(os error 5)")
+        || lower.contains("permission denied")
+        || lower.contains("eacces");
+    let config_write = lower.contains("config")
+        || lower.contains("failed to write mcp servers")
+        || lower.contains(".codex")
+        || lower.contains(".claude");
+    if os_denied && config_write {
+        return CommandError::expected(format!(
+            "{message}\n\nThe agent couldn't write its own config file — the OS denied access. Check that the file isn't read-only or locked by another program (antivirus, OneDrive/cloud sync), and that its folder is owned by your user account, then try again."
+        ));
+    }
+
+    message.into()
+}
+
+/// Does this CLI error text mean "no server with that name exists"?
+///
+/// Wording varies by agent CLI and version: "No MCP server named x",
+/// "No project-local MCP server found with name: x", "x not found",
+/// "no such server". An allowlist of exact phrases kept missing variants
+/// (issue #295), so match on the shape instead.
+fn mcp_server_not_found(details: &str) -> bool {
+    let lower = details.to_ascii_lowercase();
+    lower.contains("not found")
+        || lower.contains("no such")
+        || (lower.contains("no ")
+            && lower.contains("server")
+            && (lower.contains("found") || lower.contains("named")))
 }
 
 /// Remove an MCP server by name using the agent's CLI.
@@ -361,6 +585,12 @@ pub async fn remove_mcp_server(
     let home = dirs::home_dir()
         .map(|h| h.to_string_lossy().to_string())
         .unwrap_or_default();
+
+    // OpenCode has no `mcp remove` subcommand — edit its config file instead
+    // (issue #308).
+    if agent.id == "opencode" {
+        return remove_opencode_mcp_server(&name);
+    }
 
     let mut cmd = create_command(&binary);
     cmd.args(["mcp", "remove"])
@@ -392,6 +622,16 @@ pub async fn remove_mcp_server(
         } else {
             stderr
         };
+        // Removing a server that's already gone is the goal state, not an
+        // error — the preview bridge's remove-then-add cycle races manual
+        // removes and re-registrations, and CLI wording for "not found"
+        // varies by agent/version ("No MCP server named …", "No
+        // project-local MCP server found with name: …"), so match broadly
+        // (issues #248, #295).
+        if mcp_server_not_found(&details) {
+            tracing::info!(server = %name, "mcp remove: server already absent — treating as success");
+            return Ok(());
+        }
         return Err((format!("Failed to remove MCP server: {details}")).into());
     }
 
@@ -449,6 +689,42 @@ fn shell_split(input: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opencode_entry_remote_url() {
+        let (name, entry) =
+            opencode_mcp_entry("shipstudio-preview --url http://127.0.0.1:4923/mcp/active")
+                .unwrap();
+        assert_eq!(name, "shipstudio-preview");
+        assert_eq!(entry["type"], "remote");
+        assert_eq!(entry["url"], "http://127.0.0.1:4923/mcp/active");
+        assert_eq!(entry["enabled"], true);
+    }
+
+    #[test]
+    fn opencode_entry_local_command_with_separator() {
+        let (name, entry) = opencode_mcp_entry("my-server -- npx -y @some/mcp-server").unwrap();
+        assert_eq!(name, "my-server");
+        assert_eq!(entry["type"], "local");
+        assert_eq!(
+            entry["command"],
+            serde_json::json!(["npx", "-y", "@some/mcp-server"])
+        );
+    }
+
+    #[test]
+    fn opencode_entry_local_command_without_separator() {
+        let (_, entry) = opencode_mcp_entry("my-server npx -y pkg").unwrap();
+        assert_eq!(entry["type"], "local");
+        assert_eq!(entry["command"], serde_json::json!(["npx", "-y", "pkg"]));
+    }
+
+    #[test]
+    fn opencode_entry_rejects_bare_name_and_dangling_url() {
+        assert!(opencode_mcp_entry("just-a-name").is_err());
+        assert!(opencode_mcp_entry("just-a-name --url").is_err());
+        assert!(opencode_mcp_entry("").is_err());
+    }
 
     #[test]
     fn test_strip_ansi() {
@@ -563,5 +839,100 @@ mod tests {
     fn test_shell_split_extra_whitespace() {
         let args = shell_split("  my-server   --   npx  ");
         assert_eq!(args, vec!["my-server", "--", "npx"]);
+    }
+
+    #[test]
+    fn not_found_matches_known_cli_wordings() {
+        // Claude Code
+        assert!(mcp_server_not_found(
+            "No MCP server named \"shipstudio-preview\" in local scope"
+        ));
+        // The #295 variant that slipped past the old exact-phrase check
+        assert!(mcp_server_not_found(
+            "No project-local MCP server found with name: shipstudio-preview"
+        ));
+        assert!(mcp_server_not_found("server 'x' not found"));
+        assert!(mcp_server_not_found("no such server: x"));
+    }
+
+    #[test]
+    fn not_found_rejects_real_failures() {
+        assert!(!mcp_server_not_found(
+            "MCP server shipstudio-preview already exists in local config"
+        ));
+        assert!(!mcp_server_not_found("permission denied writing config"));
+        assert!(!mcp_server_not_found(""));
+    }
+
+    #[test]
+    fn add_failure_already_exists_is_expected() {
+        let err = classify_mcp_add_failure(
+            "MCP server shipstudio-preview already exists in local config",
+        );
+        assert!(matches!(err, CommandError::Expected { .. }));
+    }
+
+    #[test]
+    fn add_failure_enterprise_policy_is_expected() {
+        // Exact wording from issue #675.
+        let err = classify_mcp_add_failure(
+            "Cannot add MCP server \"shipstudio-preview\": not allowed by enterprise policy",
+        );
+        match err {
+            CommandError::Expected { message } => {
+                assert!(message.contains("Failed to add MCP server"));
+                assert!(message.contains("Ask your admin"));
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+        // Wording variants of the same policy denial.
+        assert!(matches!(
+            classify_mcp_add_failure("MCP server \"x\" is explicitly blocked by enterprise policy"),
+            CommandError::Expected { .. }
+        ));
+        assert!(matches!(
+            classify_mcp_add_failure(
+                "Cannot modify MCP servers: enterprise MCP configuration is active"
+            ),
+            CommandError::Expected { .. }
+        ));
+    }
+
+    #[test]
+    fn add_failure_windows_config_access_denied_is_expected() {
+        // Exact shape from issue #677 (Codex CLI on Windows).
+        let err = classify_mcp_add_failure(
+            "Error: failed to write MCP servers to C:\\Users\\me\\.codex\n\nCaused by:\n    0: failed to persist config at C:\\Users\\me\\.codex\\config.toml\n    1: Access is denied. (os error 5)",
+        );
+        match err {
+            CommandError::Expected { message } => {
+                assert!(message.contains("denied access"));
+                assert!(message.contains("read-only"));
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
+        // POSIX flavor of the same machine state.
+        assert!(matches!(
+            classify_mcp_add_failure(
+                "failed to persist config at /Users/me/.codex/config.toml: Permission denied (os error 13)"
+            ),
+            CommandError::Expected { .. }
+        ));
+    }
+
+    #[test]
+    fn add_failure_generic_stays_reportable() {
+        // Unrecognized failures must remain `Other` so telemetry still sees
+        // genuine bugs.
+        assert!(matches!(
+            classify_mcp_add_failure("unexpected argument '--transport'"),
+            CommandError::Other { .. }
+        ));
+        // Access-denied wording without any config-write context isn't the
+        // #677 shape — don't over-classify.
+        assert!(matches!(
+            classify_mcp_add_failure("Access is denied."),
+            CommandError::Other { .. }
+        ));
     }
 }

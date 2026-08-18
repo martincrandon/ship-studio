@@ -38,7 +38,7 @@
   border-radius: var(--radius-card);
   font-size: var(--font-size-badge);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: all var(--transition-interaction);
 }
 
 .onboarding-mode-toggle:hover {
@@ -78,7 +78,7 @@
   color: var(--text-primary);
   cursor: pointer;
   text-align: center;
-  transition: all var(--transition);
+  transition: all var(--transition-interaction);
 }
 
 .agent-pick-card:hover:not(:disabled) {
@@ -117,8 +117,8 @@
 .agent-pick-card-desc {
   font-size: var(--font-size-badge);
   color: var(--text-muted);
-  line-height: var(--line-height-medium);
-  transition: color var(--transition);
+  line-height: var(--line-height-compact);
+  transition: color var(--transition-interaction);
 }
 .agent-pick-card:hover .agent-pick-card-desc {
   color: var(--text-secondary);
@@ -129,7 +129,7 @@
   font-size: var(--font-size-badge);
   color: var(--text-secondary);
   white-space: nowrap;
-  transition: color var(--transition);
+  transition: color var(--transition-interaction);
 }
 .agent-pick-card:hover .agent-pick-card-status {
   color: var(--text-primary);
@@ -295,7 +295,7 @@
   gap: var(--spacing-sm);
   font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
-  transition: color var(--transition);
+  transition: color var(--transition-interaction);
 }
 
 .agent-setup-checklist-item.ready {

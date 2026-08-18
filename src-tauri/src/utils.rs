@@ -160,6 +160,31 @@ fn most_recent_subdir(dir: &std::path::Path) -> Option<std::path::PathBuf> {
         .map(|entry| entry.path())
 }
 
+/// pnpm's self-managed global bin directories (issue #570): `$PNPM_HOME` when
+/// set (pnpm's own bin dir is configurable), plus the per-platform defaults
+/// its standalone installer / `pnpm setup` uses — macOS `~/Library/pnpm`,
+/// Linux `~/.local/share/pnpm`, Windows `%LOCALAPPDATA%\pnpm`. Mirrors
+/// `claude.rs::candidate_paths_for`. Pure on its inputs so it's testable;
+/// existence isn't checked — a nonexistent PATH entry is harmless, matching
+/// the other entries here.
+fn pnpm_home_dirs(home: &std::path::Path, pnpm_home: Option<&str>) -> Vec<String> {
+    let mut dirs: Vec<String> = Vec::new();
+    if let Some(ph) = pnpm_home {
+        let ph = ph.trim();
+        if !ph.is_empty() {
+            dirs.push(ph.to_string());
+        }
+    }
+    let home_str = home.to_string_lossy();
+    if cfg!(windows) {
+        dirs.push(format!("{home_str}\\AppData\\Local\\pnpm"));
+    } else {
+        dirs.push(format!("{home_str}/Library/pnpm")); // macOS default
+        dirs.push(format!("{home_str}/.local/share/pnpm")); // Linux default
+    }
+    dirs
+}
+
 /// Computes the extended PATH (uncached). Called by `get_extended_path()`.
 fn build_extended_path() -> String {
     let current_path = std::env::var("PATH").unwrap_or_default();
@@ -243,6 +268,11 @@ fn build_extended_path() -> String {
             windows_paths.push(format!("{}\\AppData\\Local\\Programs\\Git\\bin", home_str));
             windows_paths.push(format!("{}\\AppData\\Roaming\\npm", home_str));
             windows_paths.push(format!(r"{}\.local\bin", home_str));
+            // pnpm's self-managed install dir ($PNPM_HOME, default
+            // %LOCALAPPDATA%\pnpm) — see the Unix branch (issue #570).
+            for dir in pnpm_home_dirs(&home, std::env::var("PNPM_HOME").ok().as_deref()) {
+                windows_paths.push(dir);
+            }
         }
 
         windows_paths
@@ -265,6 +295,15 @@ fn build_extended_path() -> String {
         paths.push(format!("{home_str}/.opencode/bin")); // Opencode installer location
         paths.push(format!("{home_str}/.bun/bin")); // Bun-installed tools
         paths.push(format!("{home_str}/n/bin"));
+        // pnpm's self-managed install dirs (standalone installer / `pnpm
+        // setup`): $PNPM_HOME when set, else the platform defaults. Without
+        // these, a repo's husky/lefthook hook that shells out to pnpm fails
+        // with "command not found" under git_command()'s PATH (issue #570) —
+        // the same gap claude.rs::candidate_paths_for already closed for
+        // agent-CLI detection.
+        for dir in pnpm_home_dirs(&home, std::env::var("PNPM_HOME").ok().as_deref()) {
+            paths.push(dir);
+        }
 
         // Add NVM current/default version if it exists
         // First try the default alias, then fall back to finding the latest version
@@ -365,6 +404,249 @@ fn build_extended_path() -> String {
     paths.join(get_path_separator())
 }
 
+/// Build a `Command` for git, resolving the full binary path first.
+///
+/// Spawning bare `"git"` can fail to resolve on Windows even when git is
+/// installed — and the resulting `io::Error` renders as the context-free
+/// "program not found" (issue #297). Resolving via [`find_executable`] fixes
+/// resolution and yields a clear, actionable error when git truly is missing.
+///
+/// The resolved path is cached after the first success; a miss is re-probed
+/// on every call, so installing git mid-session (the onboarding wizard does
+/// exactly this) starts working without an app restart.
+pub fn git_command() -> Result<Command, crate::errors::CommandError> {
+    // Hand git the extended PATH, not for git itself (already resolved
+    // absolutely) but for whatever it spawns: pre-commit/pre-push hooks
+    // inherit this environment, and under a GUI-launched app's minimal PATH
+    // a lefthook/husky hook can't find pnpm/node/etc. even though they work
+    // fine in the user's terminal (issue #363). Same treatment `run_git_net`
+    // already applies to fetch/pull/push.
+    fn with_extended_path(mut cmd: Command) -> Command {
+        cmd.env("PATH", get_extended_path());
+        cmd
+    }
+    static GIT_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    if let Some(path) = GIT_PATH.get() {
+        return Ok(with_extended_path(create_command(path)));
+    }
+    match find_executable("git") {
+        Some(path) => {
+            let cmd = with_extended_path(create_command(&path));
+            let _ = GIT_PATH.set(path);
+            Ok(cmd)
+        }
+        // Expected: a missing git is an environment gap the onboarding
+        // wizard handles, not an app malfunction.
+        None => Err(crate::errors::CommandError::expected(
+            "Git isn't installed or couldn't be located. Install Git \
+             (https://git-scm.com) and restart Ship Studio, then try again",
+        )),
+    }
+}
+
+/// Like [`git_command`], but scoped to a repository directory: sets the
+/// working directory and passes `-c safe.directory=<dir>` so git's
+/// dubious-ownership safeguard (CVE-2022-24765) doesn't hard-fail when the
+/// repo is owned by a different OS user than the one running Ship Studio —
+/// e.g. a project restored or synced from another Windows profile (issue
+/// #305). Trust is scoped per-invocation to this exact directory (which
+/// callers have already passed through `validate_project_path`); nothing is
+/// ever written to the user's global git config, and never a blanket `*`.
+pub fn git_command_in(
+    dir: impl AsRef<std::path::Path>,
+) -> Result<Command, crate::errors::CommandError> {
+    let dir = dir.as_ref();
+    let mut cmd = git_command()?;
+    // git compares safe.directory entries against forward-slash paths,
+    // including on Windows.
+    let safe = dir.to_string_lossy().replace('\\', "/");
+    cmd.arg("-c").arg(format!("safe.directory={safe}"));
+    cmd.current_dir(dir);
+    Ok(cmd)
+}
+
+/// True when git failed because another process held one of its lock files.
+/// Concurrent git spawns against the same repo are unavoidable here: the
+/// snapshot watcher, commit/publish flows, and the user's own agent CLIs all
+/// run git independently. Git fails fast instead of waiting, so a collision
+/// surfaces as "Unable to create '….lock': File exists" — most visibly on
+/// Windows, where lock files also linger longer (AV scanning, handle-release
+/// timing) (issue #377).
+///
+/// The same concurrency produces the same message for *every* git lock file,
+/// not just `.git/index.lock`: `git commit` also takes `HEAD.lock` and
+/// `refs/heads/<branch>.lock` when it updates the ref, and ref updates take
+/// `packed-refs.lock` — so the match is on the shared `….lock': File exists`
+/// shape rather than the literal `index.lock` (issue #567).
+pub fn is_index_lock_contention(stderr: &str) -> bool {
+    (stderr.contains(".lock") && stderr.contains("File exists"))
+        || stderr.contains("Another git process seems to be running")
+}
+
+/// Run a git invocation built by `run`, retrying with a short backoff when it
+/// loses the `.git/index.lock` race. The closure rebuilds and executes the
+/// command each attempt. Non-contention failures and successes return
+/// immediately; contention is retried a couple of times, then returned as-is
+/// so the caller's normal error path reports it.
+pub fn output_retrying_index_lock<F>(
+    mut run: F,
+) -> Result<std::process::Output, crate::errors::CommandError>
+where
+    F: FnMut() -> Result<std::process::Output, crate::errors::CommandError>,
+{
+    const ATTEMPTS: u64 = 3;
+    for attempt in 1..=ATTEMPTS {
+        let output = run()?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.status.success() || !is_index_lock_contention(&stderr) || attempt == ATTEMPTS {
+            return Ok(output);
+        }
+        tracing::warn!(
+            attempt,
+            "git lost the index.lock race; retrying after backoff"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(200 * attempt));
+    }
+    unreachable!("loop always returns on the final attempt")
+}
+
+/// Classify git stderr that signals a *machine/environment* gap — git itself
+/// couldn't run (or couldn't read the project), through no fault of the app.
+/// Returns a `CommandError::expected` with actionable guidance so these don't
+/// page telemetry as malfunctions, or `None` for anything else.
+///
+/// Covered signatures:
+/// - macOS Xcode CLT license not accepted — git is a CLT shim on macOS, so
+///   every git call fails with the license text until the user accepts it
+///   (issue #603).
+/// - macOS Xcode CLT missing/broken (`xcrun: error: invalid active developer
+///   path`) — same shim, e.g. after a macOS upgrade removed the CLT.
+/// - macOS TCC denial (`Unable to read current working directory: Operation
+///   not permitted`) — the sandbox refused the app read access to the project
+///   folder, so spawned git can't even resolve its cwd (issue #546).
+/// - git itself running out of memory (`fatal: Out of memory, malloc failed
+///   (tried to allocate N bytes)`) — the host machine under memory pressure
+///   at the moment git spawned; cross-platform, first seen on Windows
+///   (issue #668).
+pub fn git_environment_gap(stderr: &str) -> Option<crate::errors::CommandError> {
+    if stderr.contains("You have not agreed to the Xcode license agreements") {
+        return Some(crate::errors::CommandError::expected(
+            "Xcode's license hasn't been accepted yet, so git can't run. Open Terminal, run \
+             `sudo xcodebuild -license accept`, then try again.",
+        ));
+    }
+    if stderr.contains("invalid active developer path")
+        || stderr.contains("no developer tools were found")
+    {
+        return Some(crate::errors::CommandError::expected(
+            "The Xcode Command Line Tools (which provide git on macOS) are missing or broken. \
+             Run `xcode-select --install` in Terminal, then try again.",
+        ));
+    }
+    if stderr.contains("Unable to read current working directory")
+        && stderr.contains("Operation not permitted")
+    {
+        return Some(crate::errors::CommandError::expected(
+            "Ship Studio isn't allowed to read this project's folder — macOS blocked access. \
+             Grant access in System Settings → Privacy & Security → Files & Folders (or give \
+             Ship Studio Full Disk Access), then try again.",
+        ));
+    }
+    // git's allocator giving up ("fatal: Out of memory, malloc failed (tried
+    // to allocate N bytes)" — also "realloc failed" / "mmap failed" variants).
+    // The machine is out of memory at the moment git runs, which no app-side
+    // fix can address (issue #668).
+    let lower = stderr.to_lowercase();
+    if lower.contains("out of memory")
+        || lower.contains("malloc failed")
+        || lower.contains("realloc failed")
+    {
+        return Some(crate::errors::CommandError::expected(
+            "Git ran out of memory while working on this project — this computer is low on \
+             available RAM right now. Close some other applications to free up memory, then \
+             try again.",
+        ));
+    }
+    None
+}
+
+/// Classify a filesystem `io::Error` for a user-facing command error.
+///
+/// macOS TCC's EPERM denial (`os error 1` — Privacy & Security blocking
+/// Desktop/Documents/Downloads/iCloud/external volumes) is an environment
+/// condition with a user-side fix, so it becomes an actionable `Expected`
+/// with the Files & Folders remediation instead of a bare "Operation not
+/// permitted" telemetry bug — the same treatment `read_projects_dir` got in
+/// #307, shared here so every fs call site classifies identically (issues
+/// #545, #605, #625).
+///
+/// Two more environment shapes classify Expected here:
+/// - Windows `ERROR_ACCESS_DENIED` (os error 5, localized text — "Acceso
+///   denegado." on a Spanish install): typically the file being briefly
+///   locked by antivirus, another program, or cloud sync (issue #596).
+/// - A read-only filesystem (Unix EROFS os error 30 / Windows
+///   ERROR_WRITE_PROTECT os error 19): the volume itself refuses writes —
+///   e.g. a project opened off a read-only disk image or locked SD card
+///   (issue #625).
+///
+/// Anything else stays a labeled `Io` for diagnosability.
+pub fn classify_fs_error(
+    action: &str,
+    path: &std::path::Path,
+    e: &std::io::Error,
+) -> crate::errors::CommandError {
+    if cfg!(target_os = "macos") && e.raw_os_error() == Some(1) {
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio isn't allowed to {action} ({}). Grant access in System Settings → \
+             Privacy & Security → Files & Folders (or Full Disk Access), then try again.",
+            path.display()
+        ))
+    } else if cfg!(windows) && e.raw_os_error() == Some(5) {
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio couldn't {action} ({}) — Windows denied access. The file may be \
+             briefly locked by antivirus, another program, or cloud sync (e.g. OneDrive). \
+             Try again in a moment.",
+            path.display()
+        ))
+    } else if (cfg!(unix) && e.raw_os_error() == Some(30))
+        || (cfg!(windows) && e.raw_os_error() == Some(19))
+    {
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio couldn't {action} ({}) — the disk or volume is read-only. Move \
+             the project to a writable location, then try again.",
+            path.display()
+        ))
+    } else {
+        crate::errors::CommandError::Io {
+            message: format!("Failed to {action} ({}): {e}", path.display()),
+        }
+    }
+}
+
+/// Resolve `cmd` inside a single directory.
+///
+/// On Windows, executable (`.exe`) and batch (`.cmd`) shims are checked
+/// BEFORE an extensionless sibling: Node installs `npm`/`npx` both as
+/// `.cmd` batch shims AND as extensionless POSIX-shell scripts (for Git
+/// Bash) in the same directory. Preferring the bare name resolved the shell
+/// script, which `CreateProcess` cannot execute — every spawn then failed
+/// with "%1 is not a valid Win32 application" (os error 193, issue #590).
+/// `.cmd`/`.bat` are fine: Rust ≥ 1.77 spawns them through `cmd.exe` itself.
+fn resolve_executable_in_dir(dir: &std::path::Path, cmd: &str) -> Option<std::path::PathBuf> {
+    #[cfg(windows)]
+    for ext in ["exe", "cmd", "bat"] {
+        let with_ext = dir.join(format!("{cmd}.{ext}"));
+        if with_ext.is_file() {
+            return Some(with_ext);
+        }
+    }
+    let bare = dir.join(cmd);
+    if bare.is_file() {
+        return Some(bare);
+    }
+    None
+}
+
 /// Finds an executable by checking common installation paths.
 /// This is needed because bundled macOS apps don't inherit the user's shell PATH.
 /// On Windows, checks standard Program Files and AppData locations.
@@ -382,16 +664,8 @@ pub fn find_executable(cmd: &str) -> Option<std::path::PathBuf> {
         if dir.is_empty() {
             continue;
         }
-        let candidate = std::path::Path::new(dir).join(cmd);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        #[cfg(windows)]
-        for ext in ["exe", "cmd"] {
-            let win = std::path::Path::new(dir).join(format!("{cmd}.{ext}"));
-            if win.is_file() {
-                return Some(win);
-            }
+        if let Some(found) = resolve_executable_in_dir(std::path::Path::new(dir), cmd) {
+            return Some(found);
         }
     }
 
@@ -706,15 +980,87 @@ pub fn normalize_separators(path: &str) -> String {
     path.to_string()
 }
 
+/// Canonicalize with a diagnosable error naming the call site and the path.
+///
+/// A bare "Invalid path: No such file or directory (os error 2)" is emitted
+/// from ~20 canonicalize sites and is untraceable from telemetry (issue #284).
+/// Including the path is safe: error reports scrub home directories before
+/// anything leaves the machine.
+pub fn canonicalize_tagged(
+    path: impl AsRef<std::path::Path>,
+    site: &str,
+) -> Result<std::path::PathBuf, crate::errors::CommandError> {
+    let path = path.as_ref();
+    dunce::canonicalize(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            // A folder disappearing out from under the app — deleted, renamed,
+            // or moved in Finder/Explorer — is an environment change, not a
+            // malfunction: say so plainly and keep it out of telemetry
+            // (issues #365/#372, same family as #300/#342).
+            crate::errors::CommandError::expected(format!(
+                "The folder '{}' no longer exists — it may have been moved, renamed, or deleted outside Ship Studio",
+                path.display()
+            ))
+        } else {
+            crate::errors::CommandError::from(format!(
+                "Invalid path in {site} ('{}'): {e}",
+                path.display()
+            ))
+        }
+    })
+}
+
+/// True when a user-supplied relative path contains an actual `..` path
+/// component (a traversal attempt). A naive `contains("..")` substring test
+/// also rejects legitimate names like `notes..bak` or `v1..2-draft`
+/// (issue #331); this checks whole components, and the canonicalize +
+/// `starts_with` containment checks at every call site remain the real
+/// defense against escapes.
+pub fn has_parent_dir_component(path: &str) -> bool {
+    std::path::Path::new(path)
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+}
+
+/// Directories that must never be treated as a project root, no matter what
+/// marker files they contain: the user's home directory (a stray `~/.git` or
+/// `~/.gitignore` is common), anything above it, and the filesystem root.
+/// Treating one of these as a project hands project-scoped git commands
+/// (`git add -A`, `git clean -fd`) the entire home tree to walk — observed
+/// as issues #345/#346, where a registered `$HOME` "project" made Discard
+/// Changes run `git clean -fd` across the user's home directory.
+pub(crate) fn is_forbidden_project_root(path: &std::path::Path) -> bool {
+    let candidate = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    // Filesystem root ("/", "C:\") has no parent.
+    if candidate.parent().is_none() {
+        return true;
+    }
+    if let Some(home) = dirs::home_dir() {
+        let home = dunce::canonicalize(&home).unwrap_or(home);
+        // $HOME itself, or an ancestor of it (/Users, /home, C:\Users).
+        if candidate == home || home.starts_with(&candidate) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Validates that a project path is inside an allowed projects root (the
 /// configured root or the default `~/ShipStudio`) or is a registered external
 /// project. Prevents path traversal where the frontend could pass arbitrary paths.
-pub fn validate_project_path(project_path: &str) -> Result<std::path::PathBuf, String> {
+///
+/// Refusals are `CommandError::Expected`: the sandbox rejecting a path is the
+/// app working correctly, not a malfunction to report.
+pub fn validate_project_path(
+    project_path: &str,
+) -> Result<std::path::PathBuf, crate::errors::CommandError> {
     let path = std::path::Path::new(project_path);
     if !path.is_absolute() {
-        return Err("Security error: project path must be absolute".to_string());
+        return Err(crate::errors::CommandError::expected(
+            "Security error: project path must be absolute",
+        ));
     }
-    let canonical = dunce::canonicalize(path).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical = canonicalize_tagged(path, "validate_project_path")?;
 
     // Allow paths inside any allowed projects root
     if allowed_project_roots()
@@ -729,9 +1075,9 @@ pub fn validate_project_path(project_path: &str) -> Result<std::path::PathBuf, S
         return Ok(canonical);
     }
 
-    Err(format!(
+    Err(crate::errors::CommandError::expected(format!(
         "Security error: path '{project_path}' is outside the projects directory"
-    ))
+    )))
 }
 
 /// Validates a path to a *file* that lives inside ~/ShipStudio (or a registered
@@ -746,7 +1092,10 @@ pub fn validate_project_path(project_path: &str) -> Result<std::path::PathBuf, S
 /// absolute path.
 ///
 /// Returns the safe, canonical absolute path the caller should operate on.
-pub fn validate_project_file_path(file_path: &str) -> Result<std::path::PathBuf, String> {
+/// Refusals are `CommandError::Expected` (see [`validate_project_path`]).
+pub fn validate_project_file_path(
+    file_path: &str,
+) -> Result<std::path::PathBuf, crate::errors::CommandError> {
     let path = std::path::Path::new(file_path);
 
     let file_name = path
@@ -759,7 +1108,7 @@ pub fn validate_project_file_path(file_path: &str) -> Result<std::path::PathBuf,
 
     // Canonicalize the parent (must exist) — resolves symlinks and `..` so the
     // containment check below can't be defeated lexically.
-    let canonical_parent = dunce::canonicalize(parent).map_err(|e| format!("Invalid path: {e}"))?;
+    let canonical_parent = canonicalize_tagged(parent, "validate_project_file_path")?;
 
     let allowed = allowed_project_roots()
         .iter()
@@ -767,9 +1116,9 @@ pub fn validate_project_file_path(file_path: &str) -> Result<std::path::PathBuf,
         || crate::commands::external_projects::is_registered_external_path(&canonical_parent)?;
 
     if !allowed {
-        return Err(format!(
+        return Err(crate::errors::CommandError::expected(format!(
             "Security error: path '{file_path}' is outside the projects directory"
-        ));
+        )));
     }
 
     let resolved = canonical_parent.join(file_name);
@@ -781,9 +1130,9 @@ pub fn validate_project_file_path(file_path: &str) -> Result<std::path::PathBuf,
     // in assets.rs::upload_asset.)
     if let Ok(meta) = std::fs::symlink_metadata(&resolved) {
         if meta.file_type().is_symlink() {
-            return Err(format!(
+            return Err(crate::errors::CommandError::expected(format!(
                 "Security error: '{file_path}' is a symlink; refusing to follow it"
-            ));
+            )));
         }
     }
 
@@ -909,6 +1258,155 @@ pub fn validate_workspace_path(project_path: &str) -> Result<std::path::PathBuf,
     Ok(resolve_workspace_path(&root))
 }
 
+/// Recursively clear read-only attributes so Windows will delete the tree.
+/// Never follows symlinks — see the body comment.
+fn make_writable_recursive(path: &std::path::Path) -> std::io::Result<()> {
+    let metadata = std::fs::symlink_metadata(path)?;
+
+    // Never follow symlinks. A project can link outside itself — pnpm's
+    // node_modules links into the machine-global content-addressable store,
+    // whose files are deliberately read-only and shared by every project —
+    // and chmod-ing through the link would mutate files the delete below
+    // never touches. remove_dir_all removes the link itself, not its target,
+    // so the link needs no permission help either.
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+
+    if metadata.file_type().is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            make_writable_recursive(&entry?.path())?;
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        let mut permissions = metadata.permissions();
+        if permissions.readonly() {
+            permissions.set_readonly(false);
+            std::fs::set_permissions(path, permissions)?;
+        }
+    }
+    #[cfg(unix)]
+    {
+        // Owner-write only — Permissions::set_readonly(false) would make the
+        // file world-writable on Unix (clippy::permissions_set_readonly_false).
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode();
+        if mode & 0o200 == 0 {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode | 0o200))?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether a failed filesystem delete/rename is worth retrying after a wait.
+///
+/// ERROR_SHARING_VIOLATION (32) / ERROR_LOCK_VIOLATION (33) are Windows'
+/// "file open by another process" errors — the transient locks (antivirus,
+/// Search indexer, a just-killed PTY's children winding down) this retry
+/// exists for. ERROR_ACCESS_DENIED (5) covers in-use executables.
+pub fn is_retryable_delete_error(e: &std::io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(5) | Some(32) | Some(33))
+        || e.kind() == std::io::ErrorKind::PermissionDenied
+}
+
+/// Run a filesystem operation, retrying on transient Windows lock errors.
+///
+/// Backoff schedule totalling ~8s: field reports show antivirus / Search
+/// indexer locks routinely outlasting a flat ~1s budget (10 × 100ms), still
+/// surfacing "os error 32" to the user (issue #253). Growing sleeps keep the
+/// common quick-release case fast while giving a slow scanner time to let go.
+fn retry_on_transient_locks<F>(mut op: F) -> std::io::Result<()>
+where
+    F: FnMut() -> std::io::Result<()>,
+{
+    let mut delay = std::time::Duration::from_millis(100);
+    let mut retries = 10;
+    loop {
+        match op() {
+            Ok(()) => return Ok(()),
+            Err(e) if retries > 0 && is_retryable_delete_error(&e) => {
+                retries -= 1;
+                std::thread::sleep(delay);
+                delay = (delay * 2).min(std::time::Duration::from_secs(1));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Blocking delete with read-only clearing and lock retries. Call from
+/// `spawn_blocking` — the chmod walk and retry sleeps can hold a thread for
+/// seconds on a large node_modules.
+pub fn remove_dir_all_robust(path: &std::path::Path) -> std::io::Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    // Fast path first: on a healthy tree remove_dir_all just works, and the
+    // chmod walk below stats every file — seconds of pure overhead on a large
+    // node_modules if paid unconditionally.
+    let first_err = match std::fs::remove_dir_all(path) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    tracing::info!(
+        "remove_dir_all failed ({}), retrying with read-only clearing: {}",
+        path.display(),
+        first_err
+    );
+
+    // Clear read-only attributes (Windows refuses to delete read-only files;
+    // git objects and some packages ship them). Best-effort: a partial chmod
+    // still lets most of the tree go.
+    if let Err(e) = make_writable_recursive(path) {
+        tracing::warn!(
+            "Failed to set write permissions recursively on {}: {}",
+            path.display(),
+            e
+        );
+    }
+
+    retry_on_transient_locks(|| std::fs::remove_dir_all(path))
+}
+
+/// Blocking single-file delete with the same read-only clearing and lock
+/// retries as [`remove_dir_all_robust`] — on Windows a file open in another
+/// process (antivirus, Search indexer) fails an unretried `fs::remove_file`
+/// with "Access is denied (os error 5)" / "os error 32" (issue #696). Call
+/// from `spawn_blocking`; the retry sleeps can hold a thread for seconds.
+///
+/// Unlike `remove_dir_all_robust`, a missing file is an error (surfaced from
+/// the underlying `remove_file`) so callers keep their existing semantics.
+pub fn remove_file_robust(path: &std::path::Path) -> std::io::Result<()> {
+    let first_err = match std::fs::remove_file(path) {
+        Ok(()) => return Ok(()),
+        Err(e) => e,
+    };
+    // NotFound etc. are not helped by chmod or waiting — fail immediately.
+    if !is_retryable_delete_error(&first_err) {
+        return Err(first_err);
+    }
+    tracing::info!(
+        "remove_file failed ({}), retrying with read-only clearing: {}",
+        path.display(),
+        first_err
+    );
+
+    // Windows also refuses to delete read-only files with "access denied";
+    // clear the attribute best-effort before retrying. (No-op for symlinks.)
+    if let Err(e) = make_writable_recursive(path) {
+        tracing::warn!(
+            "Failed to clear read-only attribute on {}: {}",
+            path.display(),
+            e
+        );
+    }
+
+    retry_on_transient_locks(|| std::fs::remove_file(path))
+}
+
 /// Check if Homebrew is installed
 pub fn check_homebrew() -> (bool, Option<String>) {
     let paths = [
@@ -1020,6 +1518,406 @@ fn format_relative_time_from_now(timestamp_ms: u64, now_ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod canonicalize_tagged_errors {
+        use super::*;
+
+        #[test]
+        fn missing_folder_is_expected_not_reported() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            let gone = tmp.path().join("vanished-project");
+            let err = canonicalize_tagged(&gone, "test_site").unwrap_err();
+            // A folder deleted/moved outside the app is an environment change
+            // (issues #365/#372) — must be Expected so telemetry skips it.
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(err.to_string().contains("no longer exists"));
+        }
+
+        #[test]
+        fn other_failures_keep_the_diagnosable_tagged_format() {
+            // A file used as a directory component fails with NotADirectory
+            // (not NotFound) on Unix — that's still a diagnosable anomaly.
+            let tmp = tempfile::TempDir::new().unwrap();
+            let file = tmp.path().join("plain.txt");
+            std::fs::write(&file, "x").unwrap();
+            let bad = file.join("child");
+            if let Err(err) = canonicalize_tagged(&bad, "test_site") {
+                if !matches!(err, crate::errors::CommandError::Expected { .. }) {
+                    assert!(err.to_string().contains("test_site"));
+                }
+            }
+        }
+    }
+
+    mod classify_fs_errors {
+        use super::*;
+
+        // The #545/#605 shape: TCC denying a read under ~/Desktop etc.
+        #[test]
+        #[cfg(target_os = "macos")]
+        fn macos_eperm_becomes_expected_with_privacy_remediation() {
+            let e = std::io::Error::from_raw_os_error(1);
+            let err = classify_fs_error(
+                "read this project's plugin storage",
+                std::path::Path::new("/Users/x/Desktop/proj/.shipstudio"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("Privacy & Security"), "got: {msg}");
+            assert!(msg.contains("plugin storage"), "got: {msg}");
+            assert!(msg.contains("/Users/x/Desktop/proj"), "got: {msg}");
+        }
+
+        #[test]
+        fn other_io_errors_stay_labeled_io() {
+            let e = std::io::Error::new(std::io::ErrorKind::InvalidData, "corrupt");
+            let err = classify_fs_error(
+                "read this project's plugin registry",
+                std::path::Path::new("/p/registry.json"),
+                &e,
+            );
+            match err {
+                crate::errors::CommandError::Io { message } => {
+                    assert!(message.contains("plugin registry"), "got: {message}");
+                    assert!(message.contains("corrupt"), "got: {message}");
+                }
+                other => panic!("expected Io, got {other:?}"),
+            }
+        }
+
+        // The #596 shape: localized Windows ERROR_ACCESS_DENIED on an fs op
+        // ("Acceso denegado. (os error 5)") — matched by code, not text.
+        #[test]
+        #[cfg(windows)]
+        fn windows_access_denied_becomes_expected() {
+            let e = std::io::Error::from_raw_os_error(5);
+            let err = classify_fs_error(
+                "write project metadata",
+                std::path::Path::new("C:\\p\\.shipstudio\\project.json"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("denied access"), "got: {msg}");
+            assert!(msg.contains("project.json"), "got: {msg}");
+        }
+
+        // The #625 shape: EROFS on a project.json write (read-only volume).
+        #[test]
+        #[cfg(unix)]
+        fn read_only_filesystem_becomes_expected() {
+            let e = std::io::Error::from_raw_os_error(30);
+            let err = classify_fs_error(
+                "write project metadata",
+                std::path::Path::new("/p/.shipstudio/project.json"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("read-only"), "got: {msg}");
+            assert!(msg.contains("project.json"), "got: {msg}");
+        }
+
+        // Unix EPERM outside macOS (and any other permission error not
+        // covered by a specific branch) must stay a labeled Io — the TCC
+        // guidance would be wrong on Linux.
+        #[test]
+        #[cfg(all(unix, not(target_os = "macos")))]
+        fn linux_eperm_stays_labeled_io() {
+            let e = std::io::Error::from_raw_os_error(1);
+            let err = classify_fs_error(
+                "write project metadata",
+                std::path::Path::new("/p/.shipstudio/project.json"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Io { .. }),
+                "got: {err:?}"
+            );
+        }
+    }
+
+    mod pnpm_home_dirs_tests {
+        use super::*;
+
+        #[test]
+        fn includes_pnpm_home_when_set() {
+            let home = std::path::Path::new(if cfg!(windows) {
+                "C:\\Users\\x"
+            } else {
+                "/Users/x"
+            });
+            let dirs = pnpm_home_dirs(home, Some("/custom/pnpm-home"));
+            assert_eq!(dirs.first().map(String::as_str), Some("/custom/pnpm-home"));
+            // Defaults still follow so a stale/empty PNPM_HOME doesn't hide them.
+            assert!(dirs.len() > 1);
+        }
+
+        #[test]
+        fn blank_pnpm_home_is_ignored() {
+            let home = std::path::Path::new(if cfg!(windows) {
+                "C:\\Users\\x"
+            } else {
+                "/Users/x"
+            });
+            let with_blank = pnpm_home_dirs(home, Some("  "));
+            let without = pnpm_home_dirs(home, None);
+            assert_eq!(with_blank, without);
+        }
+
+        #[test]
+        #[cfg(not(windows))]
+        fn unix_defaults_cover_macos_and_linux_locations() {
+            let dirs = pnpm_home_dirs(std::path::Path::new("/Users/x"), None);
+            assert!(
+                dirs.contains(&"/Users/x/Library/pnpm".to_string()),
+                "{dirs:?}"
+            );
+            assert!(
+                dirs.contains(&"/Users/x/.local/share/pnpm".to_string()),
+                "{dirs:?}"
+            );
+        }
+
+        #[test]
+        #[cfg(windows)]
+        fn windows_default_is_local_app_data_pnpm() {
+            let dirs = pnpm_home_dirs(std::path::Path::new("C:\\Users\\x"), None);
+            assert!(
+                dirs.contains(&"C:\\Users\\x\\AppData\\Local\\pnpm".to_string()),
+                "{dirs:?}"
+            );
+        }
+
+        // The #570 regression guard: the extended PATH handed to git (and thus
+        // to pre-commit hooks) must contain pnpm's self-managed install dirs.
+        #[test]
+        fn build_extended_path_includes_pnpm_dirs() {
+            let path = build_extended_path();
+            let expected = if cfg!(windows) {
+                "\\AppData\\Local\\pnpm"
+            } else if cfg!(target_os = "macos") {
+                "/Library/pnpm"
+            } else {
+                "/.local/share/pnpm"
+            };
+            assert!(
+                path.contains(expected),
+                "extended PATH missing pnpm dir: {path}"
+            );
+        }
+    }
+
+    mod resolve_executable {
+        use super::*;
+
+        #[test]
+        fn resolves_bare_name() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            std::fs::write(tmp.path().join("mytool"), "#!/bin/sh\n").unwrap();
+            let found = resolve_executable_in_dir(tmp.path(), "mytool").unwrap();
+            assert_eq!(found, tmp.path().join("mytool"));
+        }
+
+        #[test]
+        fn misses_cleanly_when_absent() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            assert!(resolve_executable_in_dir(tmp.path(), "ghost-tool").is_none());
+        }
+
+        // The #590 shape: nodejs ships BOTH an extensionless POSIX-shell
+        // `npm` and `npm.cmd` in the same directory. Resolving the shell
+        // script makes CreateProcess fail with os error 193 — the batch
+        // shim must win.
+        #[test]
+        #[cfg(windows)]
+        fn prefers_cmd_shim_over_extensionless_shell_script() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            std::fs::write(tmp.path().join("npm"), "#!/bin/sh\n").unwrap();
+            std::fs::write(tmp.path().join("npm.cmd"), "@echo off\r\n").unwrap();
+            let found = resolve_executable_in_dir(tmp.path(), "npm").unwrap();
+            assert_eq!(found, tmp.path().join("npm.cmd"));
+        }
+
+        #[test]
+        #[cfg(windows)]
+        fn prefers_exe_over_cmd_shim() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            std::fs::write(tmp.path().join("tool.cmd"), "@echo off\r\n").unwrap();
+            std::fs::write(tmp.path().join("tool.exe"), "MZ").unwrap();
+            let found = resolve_executable_in_dir(tmp.path(), "tool").unwrap();
+            assert_eq!(found, tmp.path().join("tool.exe"));
+        }
+    }
+
+    mod index_lock_retry {
+        use super::*;
+
+        #[test]
+        fn recognizes_gits_lock_collision_message() {
+            let stderr = "fatal: Unable to create 'C:/Users/x/ShipStudio/p/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository";
+            assert!(is_index_lock_contention(stderr));
+            assert!(!is_index_lock_contention("fatal: not a git repository"));
+            assert!(!is_index_lock_contention(""));
+        }
+
+        /// Issue #567: the same concurrency that produces index.lock collisions
+        /// also produces HEAD.lock / refs/heads/*.lock / packed-refs.lock
+        /// collisions — all must be retried, not just the index.lock wording.
+        #[test]
+        fn recognizes_head_and_ref_lock_collisions() {
+            let head = "fatal: cannot lock ref 'HEAD': Unable to create '/Users/x/acss-poc/.git/HEAD.lock': File exists.\n\nAnother git process seems to be running in this repository, e.g.\nan editor opened by 'git commit'.";
+            assert!(is_index_lock_contention(head));
+            let branch_ref = "fatal: cannot lock ref 'refs/heads/main': Unable to create '/repo/.git/refs/heads/main.lock': File exists.";
+            assert!(is_index_lock_contention(branch_ref));
+            let packed = "fatal: Unable to create '/repo/.git/packed-refs.lock': File exists.";
+            assert!(is_index_lock_contention(packed));
+            // Unrelated failures that merely mention a lock-ish word must not
+            // trigger retries.
+            assert!(!is_index_lock_contention(
+                "error: could not write config file .git/config: File exists"
+            ));
+            assert!(!is_index_lock_contention(
+                "fatal: pathspec 'package-lock.json' did not match any files"
+            ));
+        }
+
+        #[test]
+        #[cfg(unix)]
+        fn retries_contention_then_returns_final_output() {
+            // Fails with the lock message every time — the helper must retry
+            // (3 attempts total) and then hand back the failing output rather
+            // than swallowing it.
+            let mut calls = 0;
+            let result = output_retrying_index_lock(|| {
+                calls += 1;
+                std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg("echo \"fatal: Unable to create '.git/index.lock': File exists.\" 1>&2; exit 128")
+                    .output()
+                    .map_err(|e| crate::errors::CommandError::Io {
+                        message: e.to_string(),
+                    })
+            })
+            .unwrap();
+            assert_eq!(calls, 3);
+            assert!(!result.status.success());
+        }
+
+        #[test]
+        #[cfg(unix)]
+        fn success_returns_immediately_without_retry() {
+            let mut calls = 0;
+            let result = output_retrying_index_lock(|| {
+                calls += 1;
+                std::process::Command::new("true").output().map_err(|e| {
+                    crate::errors::CommandError::Io {
+                        message: e.to_string(),
+                    }
+                })
+            })
+            .unwrap();
+            assert_eq!(calls, 1);
+            assert!(result.status.success());
+        }
+    }
+
+    mod git_environment_gap {
+        use super::*;
+
+        /// Issue #603: unaccepted Xcode CLT license makes every git call fail
+        /// on macOS — an environment gap, not an app malfunction.
+        #[test]
+        fn classifies_unaccepted_xcode_license_as_expected() {
+            let stderr = "You have not agreed to the Xcode license agreements. Please run 'sudo xcodebuild -license' from within a Terminal window to review and agree to the Xcode and Apple SDKs license.";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(
+                err.to_string().contains("sudo xcodebuild -license accept"),
+                "message must carry the remediation, got: {err}"
+            );
+        }
+
+        /// Missing/broken CLT (e.g. after a macOS upgrade) fails through the
+        /// same git shim with the xcrun wording.
+        #[test]
+        fn classifies_missing_developer_tools_as_expected() {
+            let stderr = "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(err.to_string().contains("xcode-select --install"));
+        }
+
+        /// Issue #546: macOS TCC denying the app read access to the project
+        /// folder surfaces as git's own getcwd failure on stderr.
+        #[test]
+        fn classifies_macos_tcc_denial_as_expected() {
+            let stderr = "fatal: Unable to read current working directory: Operation not permitted";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(err.to_string().contains("Privacy & Security"));
+        }
+
+        /// Issue #668: git's allocator failing on a memory-starved machine
+        /// (first seen on Windows) — an environment gap with close-other-apps
+        /// guidance, not a raw fatal that pages telemetry.
+        #[test]
+        fn classifies_git_oom_as_expected() {
+            let stderr = "fatal: Out of memory, malloc failed (tried to allocate 1048576 bytes)";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            let msg = err.to_string();
+            assert!(msg.contains("memory"), "got: {msg}");
+            assert!(
+                msg.contains("Close some other applications"),
+                "message must carry the remediation, got: {msg}"
+            );
+            // The realloc variant git emits from strbuf growth is covered too.
+            assert!(git_environment_gap("fatal: Out of memory, realloc failed").is_some());
+        }
+
+        #[test]
+        fn leaves_ordinary_git_failures_unclassified() {
+            assert!(git_environment_gap("fatal: not a git repository").is_none());
+            assert!(git_environment_gap("").is_none());
+            // "Operation not permitted" on some other operation isn't the TCC
+            // getcwd signature — don't over-match.
+            assert!(git_environment_gap(
+                "error: unable to unlink old 'a.txt': Operation not permitted"
+            )
+            .is_none());
+        }
+    }
+
+    mod is_forbidden_project_root {
+        use super::*;
+
+        #[test]
+        fn refuses_home_its_ancestors_and_fs_root() {
+            let home = dirs::home_dir().expect("home dir");
+            assert!(is_forbidden_project_root(&home));
+            if let Some(parent) = home.parent() {
+                assert!(is_forbidden_project_root(parent));
+            }
+            assert!(is_forbidden_project_root(std::path::Path::new("/")));
+        }
+
+        #[test]
+        fn allows_ordinary_directories() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            assert!(!is_forbidden_project_root(tmp.path()));
+        }
+    }
 
     mod normalize_separators {
         use super::*;
@@ -1266,7 +2164,9 @@ mod tests {
             // Current working directory in test runner is src-tauri, which is
             // outside ~/ShipStudio. `.` canonicalizes to cwd, so this should
             // fail the security check.
-            let err = validate_project_path(".").expect_err("should reject");
+            let err = validate_project_path(".")
+                .expect_err("should reject")
+                .to_string();
             assert!(
                 err.contains("Security error") || err.contains("outside ShipStudio"),
                 "unexpected error: {err}"
@@ -1276,7 +2176,8 @@ mod tests {
         #[test]
         fn rejects_nonexistent_path() {
             let err = validate_project_path("/this/path/definitely/does/not/exist/shipstudio-test")
-                .expect_err("should reject nonexistent");
+                .expect_err("should reject nonexistent")
+                .to_string();
             // Either "Invalid path" (from canonicalize) or the security error —
             // both are acceptable rejection modes.
             assert!(!err.is_empty(), "empty error for nonexistent path");
@@ -1396,7 +2297,8 @@ mod tests {
             let home = dirs::home_dir().expect("home dir");
             let target = home.join(".zshenv-shipstudio-audit-test");
             let err = validate_project_file_path(&target.to_string_lossy())
-                .expect_err("file in $HOME (outside ShipStudio) must be rejected");
+                .expect_err("file in $HOME (outside ShipStudio) must be rejected")
+                .to_string();
             assert!(
                 err.contains("Security error") || err.contains("outside ShipStudio"),
                 "unexpected error: {err}"
@@ -1470,6 +2372,127 @@ mod tests {
                 result.is_err(),
                 "symlinked final component must be rejected, got {result:?}"
             );
+        }
+    }
+
+    mod robust_delete {
+        use super::*;
+
+        // The #559/#253 shape: Windows sharing/lock violations are the
+        // transient states the rename/delete retry loops exist for; anything
+        // else must fail immediately.
+        #[test]
+        fn retryable_delete_error_matches_windows_lock_codes() {
+            assert!(is_retryable_delete_error(
+                &std::io::Error::from_raw_os_error(32) // ERROR_SHARING_VIOLATION
+            ));
+            assert!(is_retryable_delete_error(
+                &std::io::Error::from_raw_os_error(33) // ERROR_LOCK_VIOLATION
+            ));
+            assert!(is_retryable_delete_error(
+                &std::io::Error::from_raw_os_error(5) // ERROR_ACCESS_DENIED
+            ));
+            assert!(is_retryable_delete_error(&std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "denied"
+            )));
+            assert!(!is_retryable_delete_error(&std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "gone"
+            )));
+        }
+
+        #[test]
+        fn remove_dir_all_robust_deletes_readonly_files() {
+            let tmp = tempfile::tempdir().unwrap();
+            let file_path = tmp.path().join("readonly_file.txt");
+            std::fs::write(&file_path, "test content").unwrap();
+
+            // Set the file to read-only
+            let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
+            perms.set_readonly(true);
+            std::fs::set_permissions(&file_path, perms).unwrap();
+
+            // Verify it is indeed read-only
+            assert!(std::fs::metadata(&file_path)
+                .unwrap()
+                .permissions()
+                .readonly());
+
+            // Use remove_dir_all_robust to delete the directory tree
+            remove_dir_all_robust(tmp.path()).unwrap();
+
+            // Verify the directory no longer exists
+            assert!(!tmp.path().exists());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn remove_dir_all_robust_never_chmods_through_symlinks() {
+            // pnpm-style layout: the project links to a shared store whose files
+            // are read-only on purpose. Deleting the project must remove the link
+            // itself without touching the store's permissions.
+            let store = tempfile::tempdir().unwrap();
+            let store_file = store.path().join("shared.txt");
+            std::fs::write(&store_file, "shared").unwrap();
+            let mut perms = std::fs::metadata(&store_file).unwrap().permissions();
+            perms.set_readonly(true);
+            std::fs::set_permissions(&store_file, perms).unwrap();
+
+            let project = tempfile::tempdir().unwrap();
+            std::os::unix::fs::symlink(store.path(), project.path().join("node_modules_link"))
+                .unwrap();
+
+            remove_dir_all_robust(project.path()).unwrap();
+
+            assert!(!project.path().exists());
+            assert!(
+                store_file.exists(),
+                "symlink target must survive the delete"
+            );
+            assert!(
+                std::fs::metadata(&store_file)
+                    .unwrap()
+                    .permissions()
+                    .readonly(),
+                "store file must stay read-only — chmod escaped through the symlink"
+            );
+        }
+
+        // The #696 shape: a read-only asset file (checked-out git object,
+        // Windows attribute) must delete after the attribute is cleared.
+        #[test]
+        fn remove_file_robust_deletes_readonly_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let file_path = tmp.path().join("readonly_asset.png");
+            std::fs::write(&file_path, "png-bytes").unwrap();
+
+            let mut perms = std::fs::metadata(&file_path).unwrap().permissions();
+            perms.set_readonly(true);
+            std::fs::set_permissions(&file_path, perms).unwrap();
+
+            remove_file_robust(&file_path).unwrap();
+
+            assert!(!file_path.exists());
+        }
+
+        #[test]
+        fn remove_file_robust_deletes_plain_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let file_path = tmp.path().join("asset.txt");
+            std::fs::write(&file_path, "hi").unwrap();
+            remove_file_robust(&file_path).unwrap();
+            assert!(!file_path.exists());
+        }
+
+        #[test]
+        fn remove_file_robust_surfaces_not_found_immediately() {
+            let tmp = tempfile::tempdir().unwrap();
+            let missing = tmp.path().join("never-existed.txt");
+            let err = remove_file_robust(&missing).unwrap_err();
+            // NotFound is not a lock — must not burn ~8s of retries, and the
+            // caller keeps remove_file's missing-file error semantics.
+            assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
         }
     }
 }

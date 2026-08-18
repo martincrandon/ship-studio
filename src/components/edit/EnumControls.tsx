@@ -18,7 +18,13 @@ import {
 import { EnumDropdown } from './EnumDropdown';
 import { ResettableLabel } from './ResettableLabel';
 import { SegmentedControl } from '../primitives/SegmentedControl';
-import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icons';
+import {
+  ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ArrowUpIcon,
+  CloseIcon,
+} from '@/components/icons';
 import { EyeIcon, EyeOffIcon } from '@/components/icons';
 import {
   AlignItemsCenterIcon,
@@ -43,7 +49,9 @@ import {
   JustifyCenterIcon,
   JustifyEndIcon,
   JustifyStartIcon,
+  OverflowAutoIcon,
   OverflowScrollIcon,
+  WrapUpIcon,
   WrapDownIcon,
 } from '@/components/icons';
 
@@ -77,13 +85,13 @@ const ICONS: Record<string, ReactNode> = {
   hidden: <EyeOffIcon />,
   'flex-row': <ArrowRightIcon />,
   'flex-row-reverse': <ArrowLeftIcon />,
-  'flex-col': <EnumGlyph>↓</EnumGlyph>,
-  'flex-col-reverse': <EnumGlyph>↑</EnumGlyph>,
-  'flex-nowrap': <EnumGlyph>↔</EnumGlyph>,
+  'flex-col': <ArrowDownIcon />,
+  'flex-col-reverse': <ArrowUpIcon />,
+  'flex-nowrap': <CloseIcon />,
   'flex-wrap': <WrapDownIcon />,
-  'flex-wrap-reverse': <EnumGlyph>↕</EnumGlyph>,
+  'flex-wrap-reverse': <WrapUpIcon />,
   'overflow-visible': <EyeIcon />,
-  'overflow-auto': <EnumGlyph>⋯</EnumGlyph>,
+  'overflow-auto': <OverflowAutoIcon />,
   'overflow-hidden': <EyeOffIcon />,
   'overflow-scroll': <OverflowScrollIcon />,
   'normal-case': <EnumGlyph>Ab</EnumGlyph>,
@@ -122,7 +130,55 @@ export function EnumControlRow({
   );
 
   let body: ReactNode;
-  if (control.variant === 'dropdown') {
+  if (control.label === 'Display') {
+    const primaryDefaults = control.options.filter((option) =>
+      ['block', 'flex', 'grid', 'hidden'].includes(option.token)
+    );
+    const activeIsPrimary = primaryDefaults.some((option) => option.token === active);
+    const selectedOverflow =
+      !activeIsPrimary && active
+        ? (control.options.find((option) => option.token === active) ?? null)
+        : null;
+    const displacedPrimary = selectedOverflow
+      ? (primaryDefaults[primaryDefaults.length - 1] ?? null)
+      : null;
+    const primary = selectedOverflow
+      ? [...primaryDefaults.slice(0, -1), selectedOverflow]
+      : primaryDefaults;
+    const more = control.options.filter(
+      (option) => !primaryDefaults.includes(option) && option.token !== selectedOverflow?.token
+    );
+    const overflowOptions = displacedPrimary ? [...more, displacedPrimary] : more;
+    const apply = (token: string) => {
+      const option = control.options.find((candidate) => candidate.token === token);
+      if (option) onApplyEnum(option.token, option.style);
+    };
+    body = (
+      <div className="ss-edit-panel__display-controls">
+        <SegmentedControl
+          className="ss-edit-panel__segmented ss-edit-panel__segmented--icons"
+          value={active ?? ''}
+          size="medium"
+          options={primary.map((option) => ({
+            value: option.token,
+            label: ICONS[option.token],
+            ariaLabel: option.label,
+            title: option.label,
+          }))}
+          aria-label={control.label}
+          onValueChange={apply}
+        />
+        <EnumDropdown
+          label="More display options"
+          value={active}
+          options={overflowOptions}
+          optionIcons={ICONS}
+          compactTrigger
+          onChange={apply}
+        />
+      </div>
+    );
+  } else if (control.variant === 'dropdown') {
     body = (
       <EnumDropdown
         label={control.label}

@@ -3,17 +3,17 @@
 .text-style-h1 {
   font-family: var(--font-ui);
   font-size: var(--font-size-h1);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-default);
-  letter-spacing: var(--tracking-display);
+  font-weight: var(--font-weight-title);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-heading);
   text-wrap: balance;
 }
 
 .text-style-h2 {
   font-family: var(--font-ui);
   font-size: var(--font-size-h2);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-title);
+  line-height: var(--line-height-heading);
   letter-spacing: normal;
   text-wrap: balance;
 }
@@ -21,8 +21,8 @@
 .text-style-h3 {
   font-family: var(--font-ui);
   font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-title);
+  line-height: var(--line-height-heading);
   letter-spacing: normal;
   text-wrap: balance;
 }
@@ -30,8 +30,8 @@
 .text-style-h4 {
   font-family: var(--font-ui);
   font-size: var(--font-size-h4);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-title);
+  line-height: var(--line-height-heading);
   letter-spacing: normal;
   text-wrap: balance;
 }
@@ -39,24 +39,24 @@
 .text-style-body-medium {
   font-family: var(--font-ui);
   font-size: var(--font-size-body-md);
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-label);
+  line-height: var(--line-height-body);
   letter-spacing: normal;
 }
 
 .text-style-control {
   font-family: var(--font-ui);
   font-size: var(--font-size-control);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-control);
   letter-spacing: normal;
 }
 
 .text-style-control-semibold {
   font-family: var(--font-ui);
   font-size: var(--font-size-control);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-control);
   letter-spacing: normal;
 }
 
@@ -71,7 +71,7 @@
 .text-style-label {
   font-family: var(--font-ui);
   font-size: var(--font-size-label);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-default);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-control);
   letter-spacing: var(--tracking-micro);
 }

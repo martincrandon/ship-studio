@@ -2,7 +2,9 @@
  * Hook for project lifecycle operations — owns the dashboard ⇄ workspace
  * navigation, orchestrating every other subsystem on project open/close.
  *
- * `handleSelectProject` phases: monorepo workspace gate (pauses for picker) →
+ * `handleSelectProject` phases: external-project registration (fatal on
+ * refusal; must precede anything that validates the path, issue #319) →
+ * monorepo workspace gate (pauses for picker) →
  * claim navigation version + duplicate-open guard → save outgoing project's
  * terminal state + read auto-accept → show workspace IMMEDIATELY (server spins
  * up in background) → restore/seed terminal tabs → duplicate-window check +
@@ -40,6 +42,7 @@ import {
   getAutoAcceptMode,
   setAutoAcceptMode as setAutoAcceptModeApi,
   detectWorkspaces,
+  getCustomDevCommand,
   getWorkspaceSubpath,
   setWorkspaceSubpath,
 } from '../lib/project';
@@ -65,7 +68,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '../lib/logger';
 import { trackEvent, trackError, setActiveProject } from '../lib/analytics';
-import { asCommandError, formatCommandError } from '../lib/errors';
+import { asCommandError, formatCommandError, isExpectedProjectImportRefusal } from '../lib/errors';
+import { describeExitStatus, extractTerminalError } from '../lib/terminalDiagnostics';
 import { getProjectId } from '../lib/projectIdentity';
 import { startProjectSession, endProjectSession } from '../lib/session';
 import { basename } from '../lib/paths';
@@ -258,7 +262,9 @@ export function useProjectLifecycle({
       // and a log so we notice. Don't toast: this is internal.
       trackError('workspace_gate_subpath_check', err, 'Dashboard');
       logger.error('[OpenProject] getWorkspaceSubpath failed; opening as-is', {
-        error: err instanceof Error ? err.message : String(err),
+        // Tauri rejections are plain objects — String(err) renders them as
+        // "[object Object]" (issue #283); asCommandError handles both shapes.
+        error: formatCommandError(asCommandError(err)),
       });
       return false;
     }
@@ -270,7 +276,7 @@ export function useProjectLifecycle({
     } catch (err) {
       trackError('workspace_gate_detect', err, 'Dashboard');
       logger.error('[OpenProject] detectWorkspaces failed; opening as-is', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       return false;
     }
@@ -292,6 +298,41 @@ export function useProjectLifecycle({
     const windowLabel = getWindowLabel();
     const totalStart = performance.now();
     let stepStart = performance.now();
+
+    // Ensure external projects are registered BEFORE anything validates the
+    // path. Projects outside ~/ShipStudio can enter the app via session
+    // restore, URL params, or direct path — without this, all
+    // validate_project_path() calls would fail. A refusal is fatal: proceeding
+    // used to land the user in a broken workspace where every backend call
+    // toasted "Security error: path ... is outside the projects directory"
+    // with no way out (issue #266). Must also run before the monorepo gate:
+    // getWorkspaceSubpath validates the path too, so an unregistered external
+    // project would otherwise always fail its first-open gate check — skipping
+    // the workspace picker and logging a spurious security error (issue #319).
+    // Idempotent local config read/write, ~ms.
+    try {
+      const wasRegistered = await invoke<boolean>('ensure_external_project_registered', {
+        path: project.path,
+      });
+      if (wasRegistered) {
+        logger.info(`[OpenProject] Auto-registered external project: ${project.path}`);
+      }
+    } catch (e) {
+      logger.warn('[OpenProject] Failed to ensure external project registration', { error: e });
+      // Distinguish "the folder is gone" (moved/renamed/deleted outside the
+      // app — issue #365) from "the path isn't in an allowed location"; the
+      // "re-add via Select Project Folder" advice only fits the latter.
+      const folderGone = formatCommandError(asCommandError(e)).includes('no longer exists');
+      const message = folderGone
+        ? `Can't open "${project.name}" — its folder no longer exists. It may have been moved, renamed, or deleted outside Ship Studio.`
+        : `Can't open "${project.name}" — its folder isn't a recognized project location. Re-add it via "Select Project Folder".`;
+      // A folder deleted/moved outside the app is a user-caused environment
+      // change the backend already classifies Expected — info toast, NOT
+      // 'error': error toasts auto-file bug reports (issue #640, same
+      // pattern as #535's import-refusal gating below).
+      showToast(message, folderGone ? 'info' : 'error');
+      return;
+    }
 
     // Pre-flight monorepo gate: runs BEFORE we claim a navigation slot so
     // pausing for the picker doesn't bump the version counter or set the
@@ -524,20 +565,6 @@ export function useProjectLifecycle({
       logger.warn('[OpenProject] Failed to register project session', { error: e });
     }
 
-    // Ensure external projects are registered before any backend commands run.
-    // Projects outside ~/ShipStudio can enter the app via session restore, URL params,
-    // or direct path — without this, all validate_project_path() calls would fail.
-    try {
-      const wasRegistered = await invoke<boolean>('ensure_external_project_registered', {
-        path: project.path,
-      });
-      if (wasRegistered) {
-        logger.info(`[OpenProject] Auto-registered external project: ${project.path}`);
-      }
-    } catch (e) {
-      logger.warn('[OpenProject] Failed to ensure external project registration', { error: e });
-    }
-
     // We never stop the outgoing project's dev server on switch — that's
     // the hot-session contract. Only an explicit close button / app quit
     // tears a session down.
@@ -690,11 +717,17 @@ export function useProjectLifecycle({
       return;
     }
 
-    // Generic projects don't have a web preview — default to branches tab.
-    // We only force this for fresh starts; when reusing a pinned session we
-    // preserve whichever tab the user was on.
+    // Generic projects without a configured dev command don't have a web
+    // preview — default to branches tab. A generic project WITH a custom dev
+    // command (e.g. an Nx monorepo root running `nx serve`, issue #691) does
+    // get the Preview tab, so leave it on the default. We only force this for
+    // fresh starts; when reusing a pinned session we preserve whichever tab
+    // the user was on.
     if (!reuseIncomingServer && detectedType === 'generic') {
-      setWorkspaceTab('branches');
+      const customCmd = await getCustomDevCommand(project.path).catch(() => null);
+      if (!customCmd) {
+        setWorkspaceTab('branches');
+      }
     }
 
     setView('workspace');
@@ -732,7 +765,7 @@ export function useProjectLifecycle({
     } catch (err) {
       trackError('monorepo_pick_save', err, 'Dashboard');
       logger.error('[OpenProject] Failed to save workspace subpath', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       showToast(
         `Couldn't save workspace pick: ${formatCommandError(asCommandError(err))}`,
@@ -766,19 +799,33 @@ export function useProjectLifecycle({
     setInstallTerminalExited(false);
   };
 
-  const handleInstallTerminalExit = async (exitCode: number | null) => {
+  const handleInstallTerminalExit = async (exitCode: number | null, outputTail = '') => {
     const cfg = installTerminalConfig;
     if (!cfg) return;
     setInstallTerminalExited(true);
     // null = killed mid-run; treat as failure (don't auto-restart).
     if (exitCode !== 0) {
+      // The overlay terminal already collects the raw output tail — surface
+      // the actual npm/pnpm error instead of a bare exit code (issue #344).
+      // Home-dir paths are masked before the detail reaches analytics.
+      const detail = extractTerminalError(outputTail);
+      const scrubbedDetail = detail
+        ?.replace(/((?:\/Users|\/home|[A-Za-z]:[\\/]Users)[\\/])[^\\/\s]+/g, '$1~')
+        .slice(0, 300);
       void trackEvent('install_dependencies_failed', {
         package_manager: cfg.packageManager,
         exit_code: exitCode ?? -1,
+        error_detail: scrubbedDetail,
         $screen_name: 'Workspace',
       });
+      // describeExitStatus: abnormal Windows statuses (negative NTSTATUS /
+      // libuv codes, or their huge u32 wraps from older backends) render as
+      // hex instead of a nonsense number like 4294963238 (issue #622).
+      const exitDesc = describeExitStatus(exitCode);
       showToast(
-        `Install exited with code ${exitCode ?? 'null'}. Check the terminal for details.`,
+        detail
+          ? `Install exited with ${exitDesc}: ${detail} — check the terminal for the full output.`
+          : `Install exited with ${exitDesc}. Check the terminal for details.`,
         'error'
       );
       return; // keep overlay open so user can read stderr + close manually
@@ -821,7 +868,7 @@ export function useProjectLifecycle({
       }
     } catch (err) {
       logger.warn('[OpenProject] Cancel rollback failed', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
     }
   };
@@ -877,11 +924,19 @@ export function useProjectLifecycle({
     } catch (error) {
       trackError('local_folder_import', error, 'Dashboard');
       const message = formatCommandError(asCommandError(error));
-      logger.error('[ImportLocalFolder] failed', { error: message });
+      // register_external_project throws CommandError::Expected for by-design
+      // refusals of the user's folder pick (issue #416), but Expected serializes
+      // across IPC identically to Other, so re-check its known guidance phrases
+      // (shared list in lib/errors). Those get logger.warn — the user already
+      // sees an accurate toast, and logger.error would file a bug report for
+      // correct behavior (#518) — and an *info* toast: error toasts re-report
+      // through the toast telemetry pipeline too (#535).
+      const expectedRefusal = isExpectedProjectImportRefusal(message);
+      logger[expectedRefusal ? 'warn' : 'error']('[ImportLocalFolder] failed', { error: message });
       const friendly = message.includes('already registered')
         ? "This folder is already in Ship Studio. To work on a different workspace from the same folder, clone the repo again via 'Import from GitHub' (each clone is independent), or duplicate the folder on disk first."
         : message;
-      showToast(friendly, 'error');
+      showToast(friendly, expectedRefusal ? 'info' : 'error');
     }
   };
 

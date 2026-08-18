@@ -131,6 +131,9 @@
   padding: 8px 10px;
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border-default);
+  /* Keep header popovers above preview error/status overlays. */
+  position: relative;
+  z-index: var(--z-workspace-header);
 }
 
 /* An open workspace panel is signalled by the standard outlined button state,

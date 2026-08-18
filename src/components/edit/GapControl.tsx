@@ -113,7 +113,7 @@ export function GapControl({ currentClass, layer, onApplyEnum, onReset, onStepGa
       <div className="ss-edit-panel__stepper">
         <Button
           size="medium"
-          variant="secondary"
+          variant="default"
           aria-label="Decrease gap"
           onClick={() => onStepGap(-1)}
         >
@@ -126,7 +126,7 @@ export function GapControl({ currentClass, layer, onApplyEnum, onReset, onStepGa
         />
         <Button
           size="medium"
-          variant="secondary"
+          variant="default"
           aria-label="Increase gap"
           onClick={() => onStepGap(1)}
         >

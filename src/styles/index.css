@@ -29,6 +29,7 @@
 @import './components/tooltip.css';
 @import './components/middle-truncate.css';
 @import './components/value-field.css';
+@import './components/error-boundary.css';
 
 /* Features */
 @import './features/setup.css';

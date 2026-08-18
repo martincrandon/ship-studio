@@ -28,5 +28,4 @@
   --transition-fast: 0.1s ease;
   --transition: 0.15s ease;
   --transition-slow: 0.3s ease;
-  --transition-icon-swap: 0.3s cubic-bezier(0.2, 0, 0, 1);
 }

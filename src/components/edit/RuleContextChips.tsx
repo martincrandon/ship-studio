@@ -102,6 +102,7 @@ function MediaChip({
   );
 }
 
+/** Renders the selector, at-rule, and inheritance context for a CSS declaration. */
 export function RuleContextChips({
   mediaText,
   layer,

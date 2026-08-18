@@ -95,6 +95,13 @@ export function extractTerminalError(tail: string): string | null {
   const lines = toVisibleLines(tail);
   if (lines.length === 0) return null;
 
+  // pnpm's build-script gate: the install "fails" because pnpm wants explicit
+  // approval to run dependency postinstall scripts. Surfacing the raw notice
+  // with no next step left users stuck (issue #469) — say what to actually do.
+  if (lines.some((line) => line.includes('approve-builds'))) {
+    return 'pnpm blocked dependency build scripts pending your approval. In the terminal, run `pnpm approve-builds`, approve the listed packages, then retry the install';
+  }
+
   const errorLines = lines.filter(
     (line) => ERROR_LINE_PATTERN.test(line) && !NOISE_LINE_PATTERN.test(line)
   );
@@ -166,4 +173,26 @@ export function detectAlreadyLoggedIn(tail: string): { identity: string | null }
     }
   }
   return ALREADY_LOGGED_IN_PATTERN.test(text) ? { identity: null } : null;
+}
+
+/**
+ * Describe a PTY exit code for a failure message.
+ *
+ * Normal exits stay the familiar "code N". Abnormal Windows terminations
+ * arrive as full 32-bit statuses — a negative NTSTATUS or node's negative
+ * libuv errno (e.g. -4058 = UV_ENOENT), historically wrapped to a huge u32
+ * like 4294963238 by the PTY plugin — and interpolating those raw made the
+ * failure toast look broken (issue #622). Both the negative (current backend)
+ * and wrapped-u32 (older backend) shapes render as the status in hex, which
+ * is how such codes are documented and searchable.
+ */
+export function describeExitStatus(exitCode: number | null): string {
+  if (exitCode === null) return 'code null';
+  // Plausible ordinary exit codes (0-255 everywhere; Windows tools also use
+  // small positive codes like 3221225477's little siblings — anything beyond
+  // 0xFFFF is not a code a CLI returns deliberately).
+  if (exitCode >= 0 && exitCode <= 0xffff) return `code ${exitCode}`;
+  // Reinterpret as an unsigned 32-bit status and render as hex.
+  const u32 = exitCode < 0 ? exitCode + 0x1_0000_0000 : exitCode;
+  return `status 0x${u32.toString(16).toUpperCase().padStart(8, '0')}`;
 }

@@ -21,13 +21,13 @@ import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
-import { WebglAddon } from '@xterm/addon-webgl';
+import { attachWebglRenderer } from '../../lib/terminalWebgl';
 import { createWebLinksAddon } from '../../lib/terminalLinks';
 import {
   openPtySession,
   attachPtySession,
   writePtySessionLogged,
-  resizePtySession,
+  resizePtySessionLogged,
   detachPtySession,
   onPtySessionData,
   onPtySessionExit,
@@ -92,6 +92,9 @@ export function BuildTerminal({
     const container = containerRef.current;
     if (!container) return;
     let cancelled = false;
+    // Set once openPtySession resolves — resize calls before that would hit
+    // the backend's "unknown session" guard (issue #261).
+    let sessionOpened = false;
     const disposers: Array<() => void> = [];
 
     const term = new XTerm({
@@ -121,17 +124,14 @@ export function BuildTerminal({
     });
 
     // GPU renderer, gated by the same user setting Terminal honors.
+    // attachWebglRenderer keeps the addon loaded only while the pane has
+    // layout — a zero-size/hidden pane made the glyph atlas throw from
+    // getImageData (issue #383).
     void (async () => {
       if (cancelled) return;
       const gpuEnabled = await getTerminalGpuEnabled();
       if (cancelled || !gpuEnabled) return;
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
-      } catch {
-        /* canvas fallback */
-      }
+      disposers.push(attachWebglRenderer(term, container));
     })();
 
     // Initial fit after layout settles; focus is owned by the isActive effect.
@@ -174,7 +174,11 @@ export function BuildTerminal({
           rows: Math.max(term.rows, 2),
           projectPath: cwd,
         });
+        sessionOpened = true;
         if (cancelled) return;
+        // Layout may have settled while the open was in flight (those resize
+        // callbacks were skipped) — sync the PTY to the current size once.
+        resizePtySessionLogged(sessionId, Math.max(term.cols, 2), Math.max(term.rows, 2));
 
         const gate = createAttachGate((bytes) => {
           term.write(bytes);
@@ -228,10 +232,16 @@ export function BuildTerminal({
       }
     })();
 
+    // ResizeObserver fires an initial callback within a frame of observe(),
+    // while openPtySession is a real IPC round-trip — an unguarded resize can
+    // reach the backend before the session exists in its registry, producing
+    // "unknown session" (issue #261). Mirror Terminal.tsx's opened-guard.
     const resizeObserver = new ResizeObserver(() => {
       if (cancelled) return;
       safeFit();
-      void resizePtySession(sessionId, term.cols, term.rows);
+      if (sessionOpened) {
+        resizePtySessionLogged(sessionId, term.cols, term.rows);
+      }
     });
     resizeObserver.observe(container);
 

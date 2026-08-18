@@ -259,7 +259,7 @@
   padding: var(--spacing-md);
   color: var(--text-muted);
   font-size: var(--font-size-body-md);
-  line-height: var(--line-height-medium);
+  line-height: var(--line-height-compact);
 }
 
 .branch-changes-discard-btn.button.confirming {
@@ -499,7 +499,7 @@
 .branches-menu-pr-main,
 .branches-menu-pr-meta {
   min-width: 0;
-  line-height: var(--line-height-default);
+  line-height: var(--line-height-body);
 }
 
 .branches-menu-pr-main {
@@ -510,7 +510,7 @@
   display: -webkit-box;
   overflow: hidden;
   color: var(--text-secondary);
-  line-height: var(--line-height-medium);
+  line-height: var(--line-height-compact);
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -642,7 +642,7 @@
   margin: var(--spacing-sm) 0 var(--spacing-md);
   color: var(--text-secondary);
   font-size: var(--font-size-body-md);
-  line-height: var(--line-height-medium);
+  line-height: var(--line-height-compact);
 }
 
 .branches-menu-setup .button {

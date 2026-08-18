@@ -19,11 +19,27 @@ import {
   type PluginThemeData,
 } from '../../contexts/PluginContext';
 import { execPluginShell, readPluginStorage, writePluginStorage } from '../../lib/plugins';
-import { markPluginCrashed, isPluginCrashed } from '../../lib/plugin-loader';
-import { asCommandError, formatCommandError } from '../../lib/errors';
+import {
+  markPluginCrashed,
+  isPluginCrashed,
+  wasPluginUnloaded,
+  unloadPluginModule,
+} from '../../lib/plugin-loader';
+import { asCommandError, formatCommandError, isProjectFolderGoneError } from '../../lib/errors';
+import { logger } from '../../lib/logger';
 import { invoke } from '@tauri-apps/api/core';
 import { WarningIcon } from '@/components/icons';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
+
+/**
+ * Project paths whose root folder was detected missing mid-session (deleted,
+ * renamed, or moved outside Ship Studio). Session-scoped one-shot guard: the
+ * first plugin rejection for that project shows one info toast; a plugin that
+ * keeps polling in the background is then only warn-logged instead of
+ * toasting on every tick (issue #629 — same repeated-toast shape #315 fixed
+ * for a plugin's own folder disappearing).
+ */
+const projectGoneNotified = new Set<string>();
 
 interface PluginSlotProps {
   /** Slot name (e.g., "toolbar", "sidebar") */
@@ -169,7 +185,61 @@ export function buildContext(
 
   /** Toast the rejection (naming the plugin), then re-throw for the caller. */
   const report = (e: unknown): never => {
-    actions.showToast(`Plugin "${pluginName}": ${formatCommandError(asCommandError(e))}`, 'error');
+    // A call that was already in flight when its plugin was unloaded
+    // (project switch, uninstall) rejects after the plugin is gone —
+    // an expected transient state, not an actionable error (issue #288).
+    if (wasPluginUnloaded(projectPath, pluginId)) {
+      logger.warn(`Plugin "${pluginId}" call rejected after unload — suppressing toast`, {
+        error: formatCommandError(asCommandError(e)),
+      });
+      throw e;
+    }
+    const message = formatCommandError(asCommandError(e));
+    // The plugin's backing files vanished without an in-app unlink/uninstall
+    // (dev-linked folder deleted or moved, branch switch). Deactivate it like
+    // an explicit unload — one clear toast now, and any background calls it
+    // keeps making are suppressed instead of toasting every tick (issue #315).
+    if (message.includes(`Plugin '${pluginId}' not found`)) {
+      unloadPluginModule(projectPath, pluginId);
+      actions.showToast(
+        `Plugin "${pluginName}" was deactivated because its files are no longer on disk. Unlink or reinstall it from the Plugins menu.`,
+        'error'
+      );
+      throw e;
+    }
+    // The *project's* folder is gone (deleted/renamed/moved outside the app
+    // while its session stayed open) — an Expected environment change the
+    // backend deliberately keeps out of telemetry, and permanent for this
+    // path. One info toast per project, then only a local warn log, so a
+    // plugin polling on its own interval can't toast every tick (issue #629).
+    if (isProjectFolderGoneError(e)) {
+      if (projectGoneNotified.has(projectPath)) {
+        logger.warn(
+          `Plugin "${pluginId}" call rejected — project folder is gone; toast suppressed`,
+          { projectPath, error: message }
+        );
+      } else {
+        projectGoneNotified.add(projectPath);
+        actions.showToast(`Plugin "${pluginName}": ${message}`, 'info');
+      }
+      throw e;
+    }
+    // The host's own shell-command timeout (exec_plugin_shell). This catch is
+    // attached at the context level, so it fires BEFORE the plugin's own
+    // `.catch(() => null)` — a background poll the plugin deliberately lets
+    // fail (e.g. the Vercel plugin's 3-second git ticks) used to error-toast
+    // and telemetry-report anyway (issues #661/#662). The plugin decides
+    // what's fatal: warn locally, re-throw, no toast.
+    if (
+      message.includes(`Plugin '${pluginId}' shell command '`) &&
+      message.includes('timed out after')
+    ) {
+      logger.warn(`Plugin "${pluginId}" shell command timed out — plugin handles this itself`, {
+        error: message,
+      });
+      throw e;
+    }
+    actions.showToast(`Plugin "${pluginName}": ${message}`, 'error');
     throw e;
   };
 
@@ -188,8 +258,14 @@ export function buildContext(
     },
     invoke: {
       call: <T = unknown,>(command: string, args?: Record<string, unknown>): Promise<T> => {
+        // Auto-inject the current project's path, matching how shell/storage
+        // already close over it — most allow-listed commands require it, and
+        // omitting it surfaced Tauri's raw "missing required key projectPath"
+        // under the plugin's name (issue #322). Commands that don't take it
+        // ignore extra args; an explicit args.projectPath still wins.
+        const mergedArgs = projectPath ? { projectPath, ...args } : args;
         const result: Promise<T> = allowedCommands.has(command)
-          ? invoke<T>(command, args)
+          ? invoke<T>(command, mergedArgs)
           : Promise.reject(new Error(`Plugin "${pluginId}" is not allowed to call "${command}"`));
         return result.catch(report);
       },
@@ -209,12 +285,14 @@ export function buildContext(
  */
 function SafePluginWrapper({
   Component: PluginComponent,
+  ctx,
   pluginId,
   pluginName,
   compact,
   onCrash,
 }: {
   Component: ComponentType;
+  ctx: PluginContextValue;
   pluginId: string;
   pluginName: string;
   compact: boolean;
@@ -242,6 +320,17 @@ function SafePluginWrapper({
       <PluginErrorChip pluginName={pluginName} compact={compact} detail={crashError.message} />
     );
   }
+
+  // Legacy plugin bundles (built before the React-context SDK) read a single
+  // window global inside their hooks at render time. A parent's render body
+  // runs synchronously immediately before its children's in the same pass, so
+  // setting the global here means it holds THIS plugin's context while this
+  // plugin's components render — with several plugins mounted, setting it any
+  // earlier (e.g. while PluginSlot maps over plugins) leaves every legacy
+  // bundle reading the last plugin's context (issues #389/#465/#695). A
+  // legacy bundle that re-reads the global from an async callback after
+  // render can still race; only render-time reads are guaranteed.
+  exposePluginContext(ctx);
 
   return (
     <div ref={containerRef} style={{ display: 'contents' }}>
@@ -279,12 +368,17 @@ export function PluginSlot({ name, plugins, project, actions, theme }: PluginSlo
           plugin.info.manifest.required_commands || []
         );
 
-        // Expose context on window globals for raw-JS and legacy plugins.
+        // Expose context on the id-keyed window global for raw-JS plugins.
+        // The single-value legacy global is NOT set here: this map callback
+        // runs for every plugin before React renders any of them, so setting
+        // it here left it pointing at whichever plugin happened to be last —
+        // legacy bundles then executed with another plugin's identity
+        // ("Plugin 'vercel' tried to run 'webflow'", issues #389/#465/#695).
+        // SafePluginWrapper sets it during each plugin's own render instead.
         const pluginsMap = ((
           window as unknown as Record<string, unknown>
         ).__SHIPSTUDIO_PLUGINS__ ??= {}) as Record<string, PluginContextValue>;
         pluginsMap[pluginId] = ctx;
-        exposePluginContext(ctx);
 
         const handleCrash = () => {
           // Both boundaries (and the safety wrapper) can fire for the same
@@ -317,6 +411,7 @@ export function PluginSlot({ name, plugins, project, actions, theme }: PluginSlo
                 >
                   <SafePluginWrapper
                     Component={SlotComponent}
+                    ctx={ctx}
                     pluginId={pluginId}
                     pluginName={pluginName}
                     compact={compact}
