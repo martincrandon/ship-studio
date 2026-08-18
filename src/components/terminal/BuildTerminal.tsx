@@ -37,6 +37,7 @@ import { getTerminalGpuEnabled } from '../../lib/settings';
 import { loadNerdFonts } from '../../lib/fonts';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import { createTerminalOptions } from './terminalTheme';
 import '@xterm/xterm/css/xterm.css';
 
 interface BuildTerminalProps {
@@ -94,19 +95,8 @@ export function BuildTerminal({
     const disposers: Array<() => void> = [];
 
     const term = new XTerm({
-      fontFamily: '"JetBrainsMono NF", Menlo, Monaco, "Courier New", monospace',
-      fontSize: 12,
-      lineHeight: 1.2,
-      cursorBlink: true,
-      cursorStyle: 'bar',
-      scrollback: 5000,
+      ...createTerminalOptions('build'),
       allowProposedApi: true,
-      theme: {
-        background: '#141414',
-        foreground: '#bcbcbc',
-        cursor: '#ffffff',
-        selectionBackground: '#393939',
-      },
     });
     const fit = new FitAddon();
     const unicode11 = new Unicode11Addon();

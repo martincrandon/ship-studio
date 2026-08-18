@@ -23,11 +23,11 @@ import {
   type Hsva,
 } from '../../lib/color';
 import { logger } from '../../lib/logger';
-import { CheckIcon, ChevronIcon, CloseIcon, ColorPickerIcon, CopyIcon } from '../icons';
+import { CheckIcon, ChevronIcon, CloseIcon, ColorPickerIcon, CopyIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { IconButton } from '../primitives/IconButton';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 
 const toHsl = converter('hsl');
 const toOklch = converter('oklch');
@@ -396,23 +396,16 @@ export function ColorPicker({ value, onChange, onClose }: Props) {
             }`}
           >
             {!usesOverflowFormat && (
-              <Tabs
+              <SegmentedControl<ColorFormat>
                 value={format}
-                onValueChange={(next) => selectFormat(next as ColorFormat)}
-                className="ss-color-picker__tabs"
-              >
-                <TabsList
-                  variant="stretch"
-                  aria-label="Color format"
-                  className="ss-color-picker__tabs-list"
-                >
-                  {COLOR_FORMATS.filter((option) => option.id !== 'oklch').map((option) => (
-                    <TabsTab key={option.id} value={option.id}>
-                      {option.label}
-                    </TabsTab>
-                  ))}
-                </TabsList>
-              </Tabs>
+                onValueChange={selectFormat}
+                aria-label="Color format"
+                className="ss-color-picker__tabs ss-color-picker__tabs-list"
+                options={COLOR_FORMATS.filter((option) => option.id !== 'oklch').map((option) => ({
+                  value: option.id,
+                  label: option.label,
+                }))}
+              />
             )}
             <Dropdown
               align="right"

@@ -14,7 +14,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
-import { PlusIcon } from '../icons/utility';
+import { AddIcon } from '@/components/icons';
 import { suggestProperties } from '../../lib/cssProperties';
 import {
   NEST_ITEMS,
@@ -266,7 +266,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
         }
       }}
     >
-      <PlusIcon size={11} /> {label}
+      <AddIcon size={12} /> {label}
     </button>
   );
 

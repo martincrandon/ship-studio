@@ -16,10 +16,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { trackEvent } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
-import { CheckIcon, CloseIcon, FileIcon, UploadIcon } from '../icons';
+import { CheckIcon, CloseIcon, FileIcon, PendingCircleIcon, UploadIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import {
   useProjectCreation,
   TEMPLATES,
@@ -190,16 +190,7 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
                   ) : status === 'active' ? (
                     <Spinner />
                   ) : (
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                    </svg>
+                    <PendingCircleIcon size={18} />
                   )}
                   <span>{step.label}</span>
                 </div>
@@ -251,99 +242,109 @@ export function CreateProject({ onComplete, onCancel }: CreateProjectProps) {
                 Start from Template
               </TabsTab>
             </TabsList>
-          </Tabs>
 
-          {activeTab === 'scratch' && (
-            <>
-              {TEMPLATE_GROUPS.map((group) => {
-                const groupTemplates = TEMPLATES.filter((t) => t.category === group.id);
-                if (groupTemplates.length === 0) return null;
-                return (
-                  <div key={group.id} className="stack-group">
-                    <h3 className="stack-group-title">{group.label}</h3>
-                    <div className="stack-grid">
-                      {groupTemplates.map((template) => (
-                        <TemplateCard
-                          key={template.id}
-                          name={template.name}
-                          description={template.description}
-                          selected={selectedTemplate?.id === template.id && !hasZipTemplate}
-                          onSelect={() => {
-                            handleTemplateSelect(template);
-                            void trackEvent('template_selected', {
-                              template_id: template.id,
-                              $screen_name: 'Create Project',
-                            });
-                            setSetAsDefaultChecked(false);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+            <TabsPanel value="scratch" className="create-tab-panel">
+              {activeTab === 'scratch' && (
+                <>
+                  {TEMPLATE_GROUPS.map((group) => {
+                    const groupTemplates = TEMPLATES.filter((t) => t.category === group.id);
+                    if (groupTemplates.length === 0) return null;
+                    return (
+                      <div key={group.id} className="stack-group">
+                        <h3 className="stack-group-title">{group.label}</h3>
+                        <div className="stack-grid">
+                          {groupTemplates.map((template) => (
+                            <TemplateCard
+                              key={template.id}
+                              name={template.name}
+                              description={template.description}
+                              selected={selectedTemplate?.id === template.id && !hasZipTemplate}
+                              onSelect={() => {
+                                handleTemplateSelect(template);
+                                void trackEvent('template_selected', {
+                                  template_id: template.id,
+                                  $screen_name: 'Create Project',
+                                });
+                                setSetAsDefaultChecked(false);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
 
-              {selectedTemplate && selectedTemplate.id !== defaultTemplateId && !hasZipTemplate && (
-                <button
-                  type="button"
-                  className={`template-default-toggle ${setAsDefaultChecked ? 'active' : ''}`}
-                  onClick={() => setSetAsDefaultChecked(!setAsDefaultChecked)}
-                >
-                  {setAsDefaultChecked ? 'Will be your default' : 'Set as default?'}
-                </button>
+                  {selectedTemplate &&
+                    selectedTemplate.id !== defaultTemplateId &&
+                    !hasZipTemplate && (
+                      <button
+                        type="button"
+                        className={`template-default-toggle ${setAsDefaultChecked ? 'active' : ''}`}
+                        onClick={() => setSetAsDefaultChecked(!setAsDefaultChecked)}
+                      >
+                        {setAsDefaultChecked ? 'Will be your default' : 'Set as default?'}
+                      </button>
+                    )}
+                </>
               )}
-            </>
-          )}
+            </TabsPanel>
 
-          {activeTab === 'template' && (
-            <>
-              <TemplateGallery
-                templates={communityTemplates}
-                loading={communityLoading}
-                onSelect={handleCommunitySelect}
-                selectedId={selectedCommunityId}
-                searchQuery={communitySearch}
-                onSearchChange={setCommunitySearch}
-              />
-
-              <div className="template-divider">
-                <span>or upload a template</span>
-              </div>
-
-              {!hasZipTemplate ? (
-                <div
-                  ref={dropZoneRef}
-                  className={`template-dropzone ${isDragging ? 'dragging' : ''}`}
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".zip"
-                    onChange={handleFileSelect}
-                    style={{ display: 'none' }}
+            <TabsPanel value="template" className="create-tab-panel">
+              {activeTab === 'template' && (
+                <>
+                  <TemplateGallery
+                    templates={communityTemplates}
+                    loading={communityLoading}
+                    onSelect={handleCommunitySelect}
+                    selectedId={selectedCommunityId}
+                    searchQuery={communitySearch}
+                    onSearchChange={setCommunitySearch}
                   />
-                  <UploadIcon size={24} />
-                  <p>Drop a template .zip file here</p>
-                  <span>or click to browse</span>
-                </div>
-              ) : (
-                <div className="template-zip-selected">
-                  <div className="template-zip-info">
-                    <FileIcon size={20} />
-                    <span>{displayZipName}</span>
+
+                  <div className="template-divider">
+                    <span>or upload a template</span>
                   </div>
-                  <button type="button" className="template-zip-remove" onClick={handleRemoveZip}>
-                    <CloseIcon size={16} />
-                  </button>
-                </div>
+
+                  {!hasZipTemplate ? (
+                    <div
+                      ref={dropZoneRef}
+                      className={`template-dropzone ${isDragging ? 'dragging' : ''}`}
+                      onDragEnter={handleDragEnter}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".zip"
+                        onChange={handleFileSelect}
+                        style={{ display: 'none' }}
+                      />
+                      <UploadIcon size={24} />
+                      <p>Drop a template .zip file here</p>
+                      <span>or click to browse</span>
+                    </div>
+                  ) : (
+                    <div className="template-zip-selected">
+                      <div className="template-zip-info">
+                        <FileIcon size={20} />
+                        <span>{displayZipName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="template-zip-remove"
+                        onClick={handleRemoveZip}
+                      >
+                        <CloseIcon size={16} />
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
-            </>
-          )}
+            </TabsPanel>
+          </Tabs>
 
           {error && <p className="error">{error}</p>}
 

@@ -1,13 +1,7 @@
 /* Modal-local colors — intentional one-offs, not part of the global scale. */
 :root {
-  /* --action (#54e36e) as an rgb triplet for alpha tints (no global --action-rgb). */
+  /* Local action green as an rgb triplet for alpha tints. */
   --modal-action-green-rgb: 84, 227, 110;
-}
-
-/* Hints */
-.hint {
-  color: var(--text-muted);
-  font-size: var(--font-size-md);
 }
 
 /* Modal */
@@ -34,7 +28,7 @@
 }
 
 .modal h3 {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-h3);
   margin-bottom: 12px;
 }
 
@@ -46,7 +40,7 @@
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--button-gap);
   margin-top: 24px;
 }
 
@@ -63,7 +57,7 @@
 
 .quit-confirm-modal p {
   color: var(--text-primary);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   margin: 0 0 20px;
 }
 
@@ -76,7 +70,7 @@
 .quit-confirm-actions button {
   min-width: 80px;
   padding: 8px 16px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 /* Plugin Suggestion Modal */
@@ -119,7 +113,7 @@
 }
 
 .plugin-suggestion-desc {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   line-height: 1.55;
   color: var(--text-secondary);
   margin-bottom: 0;

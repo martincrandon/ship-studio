@@ -57,12 +57,12 @@
 }
 
 .import-picker-title {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .import-picker-subtitle {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
 }

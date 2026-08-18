@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { WarningIcon } from '../icons';
+import { WarningIcon } from '@/components/icons';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { abortMerge } from '../../lib/conflicts';

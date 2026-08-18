@@ -21,7 +21,7 @@ import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { AgentsIcon, ElementsIcon, FolderOpenIcon, ImageIcon } from '../icons';
+import { AgentsIcon, ElementsIcon, FolderOpenIcon, ImageIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ToggleButton } from '../primitives/ToggleButton';

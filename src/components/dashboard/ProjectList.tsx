@@ -59,10 +59,14 @@ import { Spinner } from '../primitives/Spinner';
 import { GitHubCalendar } from './GitHubCalendar';
 import { useModal } from '../../contexts/ModalContext';
 import {
+  DASHBOARD_VISIBILITY_CHANGED_EVENT,
+  type DashboardVisibilityChangedDetail,
   getCalendarHidden,
   setCalendarHidden as persistCalendarHidden,
   getSlackCtaHidden,
   setSlackCtaHidden as persistSlackCtaHidden,
+  getDashboardHeaderHidden,
+  setDashboardHeaderHidden as persistDashboardHeaderHidden,
 } from '../../lib/settings';
 import { moveProjectToAccount, getProjectAccountId } from '../../lib/accounts';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
@@ -70,7 +74,7 @@ import { useProjectBulkActions } from '../../hooks/useProjectBulkActions';
 import { useProjectViewModeCommands } from '../../hooks/useProjectViewModeCommands';
 import { useProjectRemovalActions } from '../../hooks/useProjectRemovalActions';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { SwitchWorkspaceIcon } from '../icons';
+import { SwitchWorkspaceIcon } from '@/components/icons';
 import type { ProjectViewMode } from './ProjectGridView';
 
 /** Basic project info for selection callback */
@@ -175,13 +179,37 @@ export function ProjectList({
   // Settings / Changelog modal state
   const [showSettings, setShowSettings] = useState(false);
   const changelogModal = useModal('changelog');
+  const [dashboardHeaderHidden, setDashboardHeaderHidden] = useState(false);
   const [calendarHidden, setCalendarHidden] = useState(false);
   const [slackCtaHidden, setSlackCtaHidden] = useState(false);
 
   // Load visibility preferences
   useEffect(() => {
+    void getDashboardHeaderHidden().then(setDashboardHeaderHidden);
     void getCalendarHidden().then(setCalendarHidden);
     void getSlackCtaHidden().then(setSlackCtaHidden);
+  }, []);
+
+  // The app-level Settings modal is mounted outside this dashboard view, so
+  // mirror successful visibility changes here when settings are opened from
+  // the workspace sidebar instead of the dashboard Preferences card.
+  useEffect(() => {
+    const handleVisibilityChanged = (event: Event) => {
+      const detail = (event as CustomEvent<DashboardVisibilityChangedDetail>).detail;
+      if (!detail) return;
+      if (detail.key === 'dashboardHeader') setDashboardHeaderHidden(detail.hidden);
+      if (detail.key === 'calendar') setCalendarHidden(detail.hidden);
+      if (detail.key === 'slackCta') setSlackCtaHidden(detail.hidden);
+    };
+
+    window.addEventListener(DASHBOARD_VISIBILITY_CHANGED_EVENT, handleVisibilityChanged);
+    return () =>
+      window.removeEventListener(DASHBOARD_VISIBILITY_CHANGED_EVENT, handleVisibilityChanged);
+  }, []);
+
+  const hideDashboardHeader = useCallback(() => {
+    setDashboardHeaderHidden(true);
+    void persistDashboardHeaderHidden(true);
   }, []);
 
   const hideSlackCta = useCallback(() => {
@@ -591,7 +619,9 @@ export function ProjectList({
         onDoubleClick={handleDashboardDoubleClick}
       />
       <div className="project-list dashboard">
-        <DashboardHeader />
+        {!dashboardHeaderHidden && <DashboardHeader onHide={hideDashboardHeader} />}
+
+        {!slackCtaHidden && <DashboardCommunityBanner onHide={hideSlackCta} />}
 
         {!calendarHidden && (
           <GitHubCalendar
@@ -601,8 +631,6 @@ export function ProjectList({
             onHide={hideCalendar}
           />
         )}
-
-        {!slackCtaHidden && <DashboardCommunityBanner onHide={hideSlackCta} />}
 
         <DashboardSearch />
 
@@ -845,6 +873,7 @@ export function ProjectList({
         <SettingsModal
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
+          onDashboardHeaderHiddenChange={setDashboardHeaderHidden}
           onCalendarHiddenChange={setCalendarHidden}
           onSlackCtaHiddenChange={setSlackCtaHidden}
           onProjectsRootChanged={() => void loadProjects()}

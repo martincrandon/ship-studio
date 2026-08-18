@@ -6,7 +6,7 @@
 
 import { useModal } from '../../contexts/ModalContext';
 import { kbd } from '../../lib/shortcuts';
-import { SearchIcon } from '../icons';
+import { SearchIcon } from '@/components/icons';
 
 export function DashboardSearch() {
   const palette = useModal('commandPalette');
@@ -25,7 +25,9 @@ export function DashboardSearch() {
         <span className="dashboard-search-placeholder text-style-body-medium">
           Search projects, actions, settings...
         </span>
-        <span className="dashboard-search-shortcut text-style-control">{kbd('mod', 'K')}</span>
+        <span className="workspace-sidebar-filter-shortcut dashboard-search-shortcut">
+          {kbd('mod', 'K')}
+        </span>
       </span>
     </button>
   );

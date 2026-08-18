@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../primitives/Button';
-import { SaveIcon } from '../icons/editor';
+import { SaveIcon } from '@/components/icons';
 import { CodeOverlayEditor } from './CodeOverlayEditor';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { resolveElementHtml, applyElementHtml } from '../../lib/edit-html';

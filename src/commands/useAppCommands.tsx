@@ -19,7 +19,7 @@ import {
   ResetIcon,
   SharedLibraryIcon,
   SettingsIcon,
-} from '../components/icons';
+} from '@/components/icons';
 
 /**
  * End-to-end smoke-test commands — wired to the real AppContents handlers.

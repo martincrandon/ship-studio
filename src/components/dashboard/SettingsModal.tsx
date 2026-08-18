@@ -3,7 +3,7 @@
  *
  * Contains:
  * - Projects folder (where projects are listed/created), with an optional move
- * - Activity calendar / community banner / terminal GPU visibility toggles
+ * - Home screen visibility, terminal GPU, and project thumbnail toggles
  * - Analytics opt-out toggle
  *
  * @module components/SettingsModal
@@ -15,10 +15,14 @@ import { Button } from '../primitives/Button';
 import { getAnalyticsEnabled, setAnalyticsEnabled, trackEvent } from '../../lib/analytics';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import {
+  DASHBOARD_VISIBILITY_CHANGED_EVENT,
+  type DashboardVisibilityChangedDetail,
   getCalendarHidden,
   setCalendarHidden,
   getSlackCtaHidden,
   setSlackCtaHidden,
+  getDashboardHeaderHidden,
+  setDashboardHeaderHidden,
   getTerminalGpuEnabled,
   setTerminalGpuEnabled,
   getThumbnailsEnabled,
@@ -32,7 +36,7 @@ import {
   type MovableProjects,
 } from '../../lib/settings';
 import { asCommandError, formatCommandError } from '../../lib/errors';
-import { EditIcon } from '../icons';
+import { MoveToFolderIcon } from '@/components/icons';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
 import { useOpenModal } from '../../contexts/ModalContext';
 
@@ -41,6 +45,7 @@ const errMsg = (err: unknown) => formatCommandError(asCommandError(err));
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onDashboardHeaderHiddenChange?: (hidden: boolean) => void;
   onCalendarHiddenChange?: (hidden: boolean) => void;
   onSlackCtaHiddenChange?: (hidden: boolean) => void;
   /** Called after the projects folder changes (and after a move) so the
@@ -58,6 +63,7 @@ interface MovePrompt {
 export function SettingsModal({
   isOpen,
   onClose,
+  onDashboardHeaderHiddenChange,
   onCalendarHiddenChange,
   onSlackCtaHiddenChange,
   onProjectsRootChanged,
@@ -69,6 +75,7 @@ export function SettingsModal({
   const multipleWorkspaces = accounts.length > 1;
 
   const [analyticsEnabled, setLocalAnalyticsEnabled] = useState(true);
+  const [dashboardHeaderVisible, setLocalDashboardHeaderVisible] = useState(true);
   const [calendarVisible, setLocalCalendarVisible] = useState(true);
   const [slackCtaVisible, setLocalSlackCtaVisible] = useState(true);
   const [terminalGpuEnabled, setLocalTerminalGpuEnabled] = useState(true);
@@ -85,9 +92,10 @@ export function SettingsModal({
     if (!isOpen) return;
     let cancelled = false;
     void (async () => {
-      const [enabled, calHidden, slackHidden, gpuEnabled, thumbnails, root, custom] =
+      const [enabled, headerHidden, calHidden, slackHidden, gpuEnabled, thumbnails, root, custom] =
         await Promise.all([
           getAnalyticsEnabled(),
+          getDashboardHeaderHidden(),
           getCalendarHidden(),
           getSlackCtaHidden(),
           getTerminalGpuEnabled(),
@@ -97,6 +105,7 @@ export function SettingsModal({
         ]);
       if (!cancelled) {
         setLocalAnalyticsEnabled(enabled);
+        setLocalDashboardHeaderVisible(!headerHidden);
         setLocalCalendarVisible(!calHidden);
         setLocalSlackCtaVisible(!slackHidden);
         setLocalTerminalGpuEnabled(gpuEnabled);
@@ -113,6 +122,22 @@ export function SettingsModal({
     };
   }, [isOpen]);
 
+  // Keep either Settings modal instance in sync with inline home-screen hide
+  // actions or changes made through the other Settings entry point.
+  useEffect(() => {
+    const handleVisibilityChanged = (event: Event) => {
+      const detail = (event as CustomEvent<DashboardVisibilityChangedDetail>).detail;
+      if (!detail) return;
+      if (detail.key === 'dashboardHeader') setLocalDashboardHeaderVisible(!detail.hidden);
+      if (detail.key === 'calendar') setLocalCalendarVisible(!detail.hidden);
+      if (detail.key === 'slackCta') setLocalSlackCtaVisible(!detail.hidden);
+    };
+
+    window.addEventListener(DASHBOARD_VISIBILITY_CHANGED_EVENT, handleVisibilityChanged);
+    return () =>
+      window.removeEventListener(DASHBOARD_VISIBILITY_CHANGED_EVENT, handleVisibilityChanged);
+  }, []);
+
   const handleToggle = useCallback(() => {
     const newValue = !analyticsEnabled;
     setLocalAnalyticsEnabled(newValue);
@@ -122,6 +147,13 @@ export function SettingsModal({
       void trackEvent('analytics_enabled', { $screen_name: 'Settings' });
     }
   }, [analyticsEnabled]);
+
+  const handleDashboardHeaderToggle = useCallback(() => {
+    const newVisible = !dashboardHeaderVisible;
+    setLocalDashboardHeaderVisible(newVisible);
+    void setDashboardHeaderHidden(!newVisible);
+    onDashboardHeaderHiddenChange?.(!newVisible);
+  }, [dashboardHeaderVisible, onDashboardHeaderHiddenChange]);
 
   const handleCalendarToggle = useCallback(() => {
     const newVisible = !calendarVisible;
@@ -275,7 +307,7 @@ export function SettingsModal({
                     {projectsRoot || '—'}
                     {!customRoot && projectsRoot ? ' (default)' : ''}
                   </span>
-                  <EditIcon size={14} />
+                  <MoveToFolderIcon size={14} />
                 </button>
                 {customRoot && (
                   <button
@@ -307,43 +339,67 @@ export function SettingsModal({
                 Manage
               </Button>
             </div>
-            <div className="settings-row">
-              <div className="settings-row-info">
-                <span className="settings-row-label">Activity calendar</span>
-                <span className="settings-row-description">
-                  Show your GitHub contribution graph on the dashboard.
-                </span>
+            <div className="settings-group">
+              <div className="settings-row">
+                <div className="settings-row-info">
+                  <span className="settings-row-label">Show home screen header</span>
+                  <span className="settings-row-description">
+                    Show the Ship Studio logo and greeting at the top of the dashboard.
+                  </span>
+                </div>
+                <button
+                  className={`settings-toggle ${dashboardHeaderVisible ? 'on' : 'off'}`}
+                  onClick={handleDashboardHeaderToggle}
+                  disabled={loading}
+                  role="switch"
+                  aria-label="Show home screen header"
+                  aria-checked={dashboardHeaderVisible}
+                >
+                  <span className="settings-toggle-track">
+                    <span className="settings-toggle-thumb" />
+                  </span>
+                </button>
               </div>
-              <button
-                className={`settings-toggle ${calendarVisible ? 'on' : 'off'}`}
-                onClick={handleCalendarToggle}
-                disabled={loading}
-                role="switch"
-                aria-checked={calendarVisible}
-              >
-                <span className="settings-toggle-track">
-                  <span className="settings-toggle-thumb" />
-                </span>
-              </button>
-            </div>
-            <div className="settings-row">
-              <div className="settings-row-info">
-                <span className="settings-row-label">Community banner</span>
-                <span className="settings-row-description">
-                  Show the Slack community invite on the dashboard.
-                </span>
+              <div className="settings-row">
+                <div className="settings-row-info">
+                  <span className="settings-row-label">Show activity calendar</span>
+                  <span className="settings-row-description">
+                    Show your GitHub contribution graph on the dashboard.
+                  </span>
+                </div>
+                <button
+                  className={`settings-toggle ${calendarVisible ? 'on' : 'off'}`}
+                  onClick={handleCalendarToggle}
+                  disabled={loading}
+                  role="switch"
+                  aria-label="Show activity calendar"
+                  aria-checked={calendarVisible}
+                >
+                  <span className="settings-toggle-track">
+                    <span className="settings-toggle-thumb" />
+                  </span>
+                </button>
               </div>
-              <button
-                className={`settings-toggle ${slackCtaVisible ? 'on' : 'off'}`}
-                onClick={handleSlackCtaToggle}
-                disabled={loading}
-                role="switch"
-                aria-checked={slackCtaVisible}
-              >
-                <span className="settings-toggle-track">
-                  <span className="settings-toggle-thumb" />
-                </span>
-              </button>
+              <div className="settings-row">
+                <div className="settings-row-info">
+                  <span className="settings-row-label">Show community banner</span>
+                  <span className="settings-row-description">
+                    Show the Slack community invite on the dashboard.
+                  </span>
+                </div>
+                <button
+                  className={`settings-toggle ${slackCtaVisible ? 'on' : 'off'}`}
+                  onClick={handleSlackCtaToggle}
+                  disabled={loading}
+                  role="switch"
+                  aria-label="Show community banner"
+                  aria-checked={slackCtaVisible}
+                >
+                  <span className="settings-toggle-track">
+                    <span className="settings-toggle-thumb" />
+                  </span>
+                </button>
+              </div>
             </div>
             <div className="settings-row">
               <div className="settings-row-info">

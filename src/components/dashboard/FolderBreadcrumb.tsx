@@ -4,7 +4,7 @@
  * of the DX refactor.
  */
 
-import { ArrowLeftIcon } from '../icons';
+import { ArrowLeftIcon } from '@/components/icons';
 
 interface FolderBreadcrumbProps {
   folderName: string;
@@ -19,7 +19,7 @@ export function FolderBreadcrumb({ folderName, onBack }: FolderBreadcrumbProps) 
         All Projects
       </button>
       <span className="folder-breadcrumb-separator text-style-control">/</span>
-      <span className="folder-breadcrumb-current text-style-heading">{folderName}</span>
+      <span className="folder-breadcrumb-current text-style-h4">{folderName}</span>
     </div>
   );
 }

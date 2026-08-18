@@ -15,21 +15,21 @@
 
 .publish-success-message {
   padding: 0 16px 16px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   line-height: 1.5;
 }
 
 .publish-branch-hint {
   padding: 0 16px 12px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   line-height: 1.5;
 }
 
 .publish-elapsed {
   margin-left: auto;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-weight: 400;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -52,7 +52,7 @@
 
 .publish-deploying-message {
   padding: 0 16px 16px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -60,7 +60,7 @@
 /* Deployed URL */
 .publish-deployed-message {
   padding: 0 16px 12px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -75,7 +75,7 @@
 
 .publish-url-text {
   flex: 1;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,7 +94,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -117,9 +117,9 @@
   padding: 10px 16px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   cursor: pointer;
   transition:
     background-color var(--transition),
@@ -167,12 +167,12 @@
 
 .publish-error-message {
   padding: 0 16px 16px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   background: rgba(var(--accent-error-deep-rgb), 0.05);
   margin: 0 16px 16px;
   padding: 12px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   font-family: var(--font-code);
   word-break: break-word;
 }

@@ -157,12 +157,12 @@
   padding: 9px 10px;
   min-height: 48px;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 
 .terminal-title {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   font-weight: 500;
 }

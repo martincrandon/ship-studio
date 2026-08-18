@@ -90,7 +90,7 @@
 
 .folder-card-open-label {
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-weight: 500;
 }
 
@@ -120,7 +120,7 @@
 }
 
 .folder-card-count {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
 }
 
@@ -132,7 +132,7 @@
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   letter-spacing: 1px;
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -163,7 +163,7 @@
   padding: 6px 12px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
   cursor: pointer;
   transition:

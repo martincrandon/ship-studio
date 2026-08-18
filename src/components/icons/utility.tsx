@@ -1,155 +1,189 @@
-/**
- * Miscellaneous action icons.
- *
- * Plus, branch, pull request, settings, globe, zap, help, and layer icons.
- */
+import LoginSvg from '../../assets/icons/login.svg?react';
+import AddSvg from '../../assets/icons/add.svg?react';
+import PlusSvg from '../../assets/icons/plus.svg?react';
+import PullSvg from '../../assets/icons/pull.svg?react';
+import PushSvg from '../../assets/icons/push.svg?react';
+import BranchSvg from '../../assets/icons/git-branch.svg?react';
+import BranchEndSvg from '../../assets/icons/git-branch-end.svg?react';
+import BranchHorizontalSvg from '../../assets/icons/git-branch-horizontal.svg?react';
+import BranchMainSvg from '../../assets/icons/git-branch-main.svg?react';
+import BranchMidSvg from '../../assets/icons/git-branch-mid.svg?react';
+import PullRequestSvg from '../../assets/icons/git-pull-request.svg?react';
+import SettingsSvg from '../../assets/icons/settings.svg?react';
+import GlobeSvg from '../../assets/icons/globe.svg?react';
+import AiSvg from '../../assets/icons/ai.svg?react';
+import HelpAlertSvg from '../../assets/icons/help-alert.svg?react';
+import UndoSvg from '../../assets/icons/undo.svg?react';
+import RedoSvg from '../../assets/icons/redo.svg?react';
+import LayersSvg from '../../assets/icons/layers.svg?react';
+import GenericAgentSvg from '../../assets/icons/old-icons/generic-agent.svg?react';
+import CollaboratorsSvg from '../../assets/icons/old-icons/collaborators.svg?react';
+import PackageSvg from '../../assets/icons/old-icons/package.svg?react';
+import PlaySvg from '../../assets/icons/old-icons/play.svg?react';
+import { createIcon } from './icon-base';
 
-import { NewDesignIcon } from './new-design';
-import { getIconData, ICON_STROKE_WIDTH, resolveIconSize } from './provenance';
-
-interface IconProps {
-  size?: number;
-  className?: string;
-}
-
-export function LoginIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="LoginIcon" source="Login" size={size} className={className} />;
-}
-
-export function AddIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="AddIcon" source="Add" size={size} className={className} />;
-}
-
-export function PlusIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="PlusIcon" source="Plus" size={size} className={className} />;
-}
-
-/** Arrow down to a line (lucide arrow-down-to-line) — the git-pull metaphor:
- *  bring the remote's commits down into your working copy. */
-export function PullIcon({ size = 14, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="PullIcon" source="Pull" compact size={size} className={className} />
-  );
-}
-
-/** Git push action: send local commits to the remote repository. */
-export function PushIcon({ size = 14, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="PushIcon" source="Push" compact size={size} className={className} />
-  );
-}
-
-export function BranchIcon({ size = 14 }: IconProps) {
-  return <NewDesignIcon iconName="BranchIcon" source="GitBranch" compact size={size} />;
-}
-
-export function PullRequestIcon({ size = 14 }: IconProps) {
-  const renderedSize = resolveIconSize(size, true);
-
-  return (
-    <svg
-      {...getIconData('PullRequestIcon')}
-      width={renderedSize}
-      height={renderedSize}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE_WIDTH}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="18" cy="18" r="3" />
-      <circle cx="6" cy="6" r="3" />
-      <path d="M13 6h3a2 2 0 0 1 2 2v7" />
-      <line x1="6" y1="9" x2="6" y2="21" />
-    </svg>
-  );
-}
-
-export function SettingsIcon({ size = 18, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="SettingsIcon" source="Settings" size={size} className={className} />
-  );
-}
-
-export function GlobeIcon({ size = 16 }: IconProps) {
-  const renderedSize = resolveIconSize(size);
-
-  return (
-    <svg
-      {...getIconData('GlobeIcon')}
-      width={renderedSize}
-      height={renderedSize}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE_WIDTH}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
-}
-
-export function ZapIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="ZapIcon" source="AI" size={size} />;
-}
-
-export function AgentsIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="AgentsIcon" source="AI" size={size} />;
-}
-
-export function HelpIcon({ size = 16 }: IconProps) {
-  const renderedSize = resolveIconSize(size);
-
-  return (
-    <svg
-      {...getIconData('HelpIcon')}
-      width={renderedSize}
-      height={renderedSize}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE_WIDTH}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
-export function UndoIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="UndoIcon" source="Undo" size={size} className={className} />;
-}
-
-export function RedoIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="RedoIcon" source="Redo" size={size} className={className} />;
-}
-
-export function LayersIcon({ size = 16 }: IconProps) {
-  const renderedSize = resolveIconSize(size);
-
-  return (
-    <svg
-      {...getIconData('LayersIcon')}
-      width={renderedSize}
-      height={renderedSize}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE_WIDTH}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
-  );
-}
+export const LoginIcon = createIcon(LoginSvg, {
+  name: 'LoginIcon',
+  source: 'icons/login.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const AddIcon = createIcon(AddSvg, {
+  name: 'AddIcon',
+  source: 'icons/add.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const PlusIcon = createIcon(PlusSvg, {
+  name: 'PlusIcon',
+  source: 'icons/plus.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const PullIcon = createIcon(PullSvg, {
+  name: 'PullIcon',
+  source: 'icons/pull.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const PushIcon = createIcon(PushSvg, {
+  name: 'PushIcon',
+  source: 'icons/push.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const BranchIcon = createIcon(BranchSvg, {
+  name: 'BranchIcon',
+  source: 'icons/git-branch.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const GitBranchEndIcon = createIcon(BranchEndSvg, {
+  name: 'GitBranchEndIcon',
+  source: 'icons/git-branch-end.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const GitBranchHorizontalIcon = createIcon(BranchHorizontalSvg, {
+  name: 'GitBranchHorizontalIcon',
+  source: 'icons/git-branch-horizontal.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const GitBranchMainIcon = createIcon(BranchMainSvg, {
+  name: 'GitBranchMainIcon',
+  source: 'icons/git-branch-main.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const GitBranchMidIcon = createIcon(BranchMidSvg, {
+  name: 'GitBranchMidIcon',
+  source: 'icons/git-branch-mid.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const PullRequestIcon = createIcon(PullRequestSvg, {
+  name: 'PullRequestIcon',
+  source: 'icons/git-pull-request.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const SettingsIcon = createIcon(SettingsSvg, {
+  name: 'SettingsIcon',
+  source: 'icons/settings.svg',
+  kind: 'ui',
+  defaultSize: 18,
+  strokeWidth: '1px',
+});
+export const GlobeIcon = createIcon(GlobeSvg, {
+  name: 'GlobeIcon',
+  source: 'icons/globe.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ZapIcon = createIcon(AiSvg, {
+  name: 'ZapIcon',
+  source: 'icons/ai.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const AgentsIcon = createIcon(AiSvg, {
+  name: 'AgentsIcon',
+  source: 'icons/ai.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const HelpIcon = createIcon(HelpAlertSvg, {
+  name: 'HelpIcon',
+  source: 'icons/help-alert.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const UndoIcon = createIcon(UndoSvg, {
+  name: 'UndoIcon',
+  source: 'icons/undo.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const RedoIcon = createIcon(RedoSvg, {
+  name: 'RedoIcon',
+  source: 'icons/redo.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const LayersIcon = createIcon(LayersSvg, {
+  name: 'LayersIcon',
+  source: 'icons/layers.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const GenericAgentIcon = createIcon(GenericAgentSvg, {
+  name: 'GenericAgentIcon',
+  source: 'icons/old-icons/generic-agent.svg',
+  kind: 'ui',
+  defaultSize: 16,
+});
+export const CollaboratorsIcon = createIcon(CollaboratorsSvg, {
+  name: 'CollaboratorsIcon',
+  source: 'icons/old-icons/collaborators.svg',
+  kind: 'ui',
+  defaultSize: 16,
+});
+export const PackageIcon = createIcon(PackageSvg, {
+  name: 'PackageIcon',
+  source: 'icons/old-icons/package.svg',
+  kind: 'ui',
+  defaultSize: 32,
+});
+export const PlayIcon = createIcon(PlaySvg, {
+  name: 'PlayIcon',
+  source: 'icons/old-icons/play.svg',
+  kind: 'ui',
+  defaultSize: 12,
+});

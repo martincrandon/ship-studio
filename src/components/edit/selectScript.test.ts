@@ -167,6 +167,13 @@ it('reports the count of, and live-mutates, ALL elements sharing the class', asy
   expect(msg.count).toBe(3);
   expect(msg.affectedNodeIds).toHaveLength(2);
 
+  // The hover box is created first on activation; selection overlays follow it.
+  const overlays = [...document.querySelectorAll<HTMLElement>('[data-ss-overlay]')].slice(1);
+  expect(overlays[0]?.style.borderStyle).toBe('dashed');
+  expect(overlays[0]?.style.borderColor).toBe('rgba(235, 171, 107, 0.95)');
+  expect(overlays[1]?.style.borderStyle).toBe('solid');
+  expect(overlays[2]?.style.borderStyle).toBe('dashed');
+
   // A mutation applies to every matching element, not just the clicked one.
   send({ type: 'ss:mutate', className: 'name font-bold' });
   const updated = [...document.querySelectorAll('[class]')].filter(

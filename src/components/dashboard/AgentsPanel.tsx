@@ -53,17 +53,9 @@ import {
   OpencodeIcon,
   PlugIcon,
   VercelIcon,
-} from '../icons';
-
-export function KebabGlyph() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <circle cx="2.5" cy="7" r="1.3" fill="currentColor" />
-      <circle cx="7" cy="7" r="1.3" fill="currentColor" />
-      <circle cx="11.5" cy="7" r="1.3" fill="currentColor" />
-    </svg>
-  );
-}
+  GenericAgentIcon,
+  MoreHorizontalIcon,
+} from '@/components/icons';
 
 interface TerminalTask {
   agentId: string;
@@ -94,20 +86,6 @@ function formatVersion(v: string | null): string | null {
   // Strip common prefixes (e.g. "Claude Code v1.2.3" → "1.2.3")
   const cleaned = v.replace(/^[^\d]*/, '').split(/\s+/)[0];
   return cleaned || v;
-}
-
-function GenericAgentIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M8 10h2M14 10h2M8 14h8"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 function iconFor(agentId: string) {
@@ -516,7 +494,7 @@ export function AgentsPanel() {
     <section className="agents-panel" ref={panelRef}>
       <header className="agents-panel-header">
         <div>
-          <h3 className="agents-panel-title text-style-heading">Workspace accounts</h3>
+          <h3 className="agents-panel-title text-style-h4">Workspace accounts</h3>
           <p className="agents-panel-subtitle text-style-body-medium">
             Logins for{' '}
             {activeAccount && (
@@ -621,7 +599,7 @@ export function AgentsPanel() {
                       variant="ghost"
                       size="default"
                       width="hug"
-                      leftIcon={<KebabGlyph />}
+                      leftIcon={<MoreHorizontalIcon />}
                       className="agents-panel-kebab"
                       expanded={menuOpen}
                       onClick={() => setOpenMenuId(menuOpen ? null : agent.id)}
@@ -751,7 +729,7 @@ export function AgentsPanel() {
                           variant="ghost"
                           size="default"
                           width="hug"
-                          leftIcon={<KebabGlyph />}
+                          leftIcon={<MoreHorizontalIcon />}
                           className="agents-panel-kebab"
                           expanded={menuOpen}
                           onClick={() => setOpenMenuId(menuOpen ? null : menuKey)}

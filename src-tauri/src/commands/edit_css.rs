@@ -2284,11 +2284,11 @@ mod tests {
     #[test]
     fn collect_custom_props_finds_definitions_not_usages() {
         let css = ":root {\n  --accent: #fff;\n  --gap: 8px;\n}\n\
-                   .btn { color: var(--accent); padding: var(--gap); --local: 1; }";
+                   .btn { color: var(--accent-active); padding: var(--gap); --local: 1; }";
         let mut set = std::collections::BTreeSet::new();
         collect_custom_props(css, &mut set);
         let got: Vec<_> = set.into_iter().collect();
-        // --accent, --gap, --local are definitions; the var(--accent)/var(--gap)
+        // --accent, --gap, --local are definitions; the var(--accent-active)/var(--gap)
         // usages must NOT add duplicates or stray names.
         assert_eq!(got, vec!["--accent", "--gap", "--local"]);
     }

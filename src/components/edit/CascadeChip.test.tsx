@@ -57,6 +57,7 @@ describe('CascadeChip', () => {
       ).toHaveLength(2);
       expect(selector?.querySelectorAll('.ss-cascade-selector-display__connector')).toHaveLength(1);
       expect(selector?.querySelectorAll('.ss-cascade-chip[data-tone="selector"]')).toHaveLength(2);
+      expect(selector?.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'none');
     }
   );
 

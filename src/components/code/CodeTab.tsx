@@ -14,7 +14,7 @@ import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { IconButton } from '../primitives/IconButton';
-import { ResetIcon, SearchIcon, EditIcon } from '../icons';
+import { ResetIcon, SearchIcon, EditIcon } from '@/components/icons';
 import { type FileTreeNode, fileExtensionForAnalytics } from '../../lib/code';
 import { trackEvent, trackSearch } from '../../lib/analytics';
 import { useCommands } from '../../commands/useCommands';

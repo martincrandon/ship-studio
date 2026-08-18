@@ -513,6 +513,8 @@ pub fn run() {
             commands::settings::set_calendar_hidden,
             commands::settings::get_slack_cta_hidden,
             commands::settings::set_slack_cta_hidden,
+            commands::settings::get_dashboard_header_hidden,
+            commands::settings::set_dashboard_header_hidden,
             commands::settings::get_terminal_gpu_enabled,
             commands::settings::set_terminal_gpu_enabled,
             commands::settings::get_thumbnails_enabled,

@@ -115,6 +115,11 @@ Single-file domains:
 - `primitives/`, `icons/`, `setup/`, `edit/`, `support/`, `CommandPalette/`, `import-project/` - pre-existing groups
 - Root holds only cross-cutting files: ErrorBoundary, UpdateBanner, EducationOverlay, ConnectOverlay, AppGlobalModals, HelpModal
 
+Shared icons are imported from `@/components/icons`, never from an internal icon module or a raw
+SVG asset. Static inline SVG is prohibited in feature components; use the shared icon modules or
+`src/assets/graphics/` for feature artwork. The marked dynamic `BranchGraph.tsx` exception is the
+only inline SVG. See [Icons and SVG graphics](docs/design-system.md#icons-and-svg-graphics).
+
 #### Frontend Libraries
 Key modules in `src/lib/` (not exhaustive — `ls src/lib` for the full list):
 - `agents-management.ts` / `agent.ts` - Agent CLI detection, install state, default-agent selection
@@ -363,7 +368,7 @@ import { Spinner } from './primitives/Spinner';
 
 <Spinner size="sm" />                                  {/* 14px — inline, inside buttons */}
 <Spinner />                                            {/* 20px — default */}
-<Spinner size="lg" style={{ color: 'var(--accent)' }} /> {/* 32px — section loading */}
+<Spinner size="lg" style={{ color: 'var(--accent-active)' }} /> {/* 32px — section loading */}
 ```
 
 The arc uses `currentColor` — set `color` on the spinner or let it inherit (inside a green action button it's automatically dark).

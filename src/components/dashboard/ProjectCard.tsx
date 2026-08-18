@@ -10,7 +10,7 @@
 
 import { memo } from 'react';
 import { DashboardProject } from '../../lib/project';
-import { BranchIcon } from '../icons';
+import { BranchIcon } from '@/components/icons';
 import { ProjectCardMenu } from './ProjectCardMenu';
 
 /** Props for the ProjectCard component */

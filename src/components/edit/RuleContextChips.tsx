@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { suggestMediaConditions } from '../../lib/cssProperties';
-import { LayersIcon } from '../icons/utility';
+import { LayersIcon } from '@/components/icons';
 import { CascadeChip } from './CascadeChip';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
 

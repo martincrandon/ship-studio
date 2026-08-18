@@ -11,15 +11,18 @@
 
 import {
   TrashIcon,
-  FolderIcon,
+  MoveToFolderIcon,
+  PinIcon,
   WarningIcon,
   DownloadIcon,
   CloseIcon,
   ImageIcon,
-  EditIcon,
+  EditFieldIcon,
   MoveToWorkspaceIcon,
-} from '../icons';
+  MoreHorizontalIcon,
+} from '@/components/icons';
 import { Dropdown, DropdownItem, DropdownDivider } from '../primitives/Dropdown';
+import { IconButton } from '../primitives/IconButton';
 
 interface ProjectCardMenuProps {
   /** Whether main branch warning is hidden */
@@ -70,14 +73,13 @@ export function ProjectCardMenu({
       <Dropdown
         align="right"
         trigger={(p) => (
-          <button
-            className="project-card-menu"
+          <IconButton
+            variant="ghost"
+            icon={<MoreHorizontalIcon />}
             title="Project options"
             aria-label="Project options"
             {...p}
-          >
-            &bull;&bull;&bull;
-          </button>
+          />
         )}
       >
         <DropdownItem
@@ -90,12 +92,12 @@ export function ProjectCardMenu({
           </span>
         </DropdownItem>
         {onRename && !isExternal && (
-          <DropdownItem icon={<EditIcon size={14} />} onSelect={onRename}>
+          <DropdownItem icon={<EditFieldIcon size={14} />} onSelect={onRename}>
             <span>Rename project</span>
           </DropdownItem>
         )}
         {onMoveToFolder && (
-          <DropdownItem icon={<FolderIcon size={14} />} onSelect={onMoveToFolder}>
+          <DropdownItem icon={<MoveToFolderIcon size={14} />} onSelect={onMoveToFolder}>
             <span>Move to folder</span>
           </DropdownItem>
         )}
@@ -116,14 +118,7 @@ export function ProjectCardMenu({
         )}
         {onTogglePin && (
           <DropdownItem
-            icon={
-              <span
-                aria-hidden="true"
-                style={{ width: 14, display: 'inline-block', textAlign: 'center' }}
-              >
-                {isPinned ? '○' : '●'}
-              </span>
-            }
+            icon={<PinIcon size={14} />}
             onSelect={() => {
               void onTogglePin(!isPinned);
             }}

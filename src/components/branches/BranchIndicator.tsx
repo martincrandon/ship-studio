@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BranchIcon, FileIcon, TrashIcon } from '../icons';
+import { BranchIcon, FileIcon, TrashIcon } from '@/components/icons';
 import type { ChangedFile, ChangeStatus } from '../../lib/git';
 import { discardChanges } from '../../lib/branches';
 import { DiffModal } from './DiffModal';

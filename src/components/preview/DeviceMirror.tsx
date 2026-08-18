@@ -44,7 +44,7 @@ import { usePolling } from '../../hooks/usePolling';
 import { checkDependenciesInstalled } from '../../lib/project';
 import { attachPtySession, writePtySessionLogged } from '../../lib/ptySession';
 import { getWindowLabel } from '../../lib/window';
-import { ResetIcon, ChevronIcon } from '../icons';
+import { ResetIcon, ChevronIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { Spinner } from '../primitives/Spinner';
@@ -539,8 +539,8 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
   ) => (
     <div className="preview-install-prompt">
       <h3>{heading}</h3>
-      <p className="hint">{detail}</p>
-      {extra && <p className="hint">{extra}</p>}
+      <p className="text-style-hint">{detail}</p>
+      {extra && <p className="text-style-hint">{extra}</p>}
       {setup && onSendToAgent && (
         <Button variant="primary" onClick={() => handleAgentSetup(setup)}>
           Set up with AI
@@ -737,7 +737,7 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
   return (
     <div className="preview-loading">
       <Spinner />
-      <span className="hint">{PLATFORM_COPY[platform ?? 'ios'].startHint}</span>
+      <span className="text-style-hint">{PLATFORM_COPY[platform ?? 'ios'].startHint}</span>
     </div>
   );
 }

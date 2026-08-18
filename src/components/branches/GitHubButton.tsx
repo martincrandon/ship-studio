@@ -26,7 +26,7 @@ import { IconButton } from '../primitives/IconButton';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
-import { GitHubIcon } from '../icons';
+import { GitHubIcon } from '@/components/icons';
 
 /** Props for the GitHubButton component */
 interface GitHubButtonProps {

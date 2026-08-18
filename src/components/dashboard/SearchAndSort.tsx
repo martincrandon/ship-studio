@@ -14,10 +14,10 @@ import {
   CheckIcon,
   FolderPlusIcon,
   GridIcon,
-  HomeIcon,
   ListIcon,
   PlusIcon,
-} from '../icons';
+  PullIcon,
+} from '@/components/icons';
 import { trackEvent } from '../../lib/analytics';
 import type { ProjectViewMode } from './ProjectGridView';
 
@@ -70,9 +70,11 @@ export function SearchAndSort({
     <div className="dashboard-section-header">
       <div className="dashboard-section-heading">
         <div className="dashboard-section-heading-title">
-          <span className="dashboard-section-title text-style-heading">{title}</span>
+          <span className="dashboard-section-title text-style-h4">{title}</span>
           {totalCount > 0 && (
-            <span className="dashboard-section-count text-style-heading-bold">{totalCount}</span>
+            <span className="dashboard-section-count text-style-h4 font-weight-heading">
+              {totalCount}
+            </span>
           )}
         </div>
         {titleAccessory}
@@ -100,7 +102,7 @@ export function SearchAndSort({
               size="default"
               width="hug"
               className="dashboard-action-button text-style-control-semibold"
-              leftIcon={<HomeIcon size={14} />}
+              leftIcon={<PullIcon size={14} />}
               data-education-id="import-button"
               onClick={() => {
                 void trackEvent('import_button_clicked', { $screen_name: 'Dashboard' });
@@ -135,11 +137,14 @@ export function SearchAndSort({
         <div className="dashboard-section-actions-right">
           <Tabs
             value={viewMode}
+            size="default"
+            mode="navigation"
             onValueChange={(next) => onViewModeChange(next as ProjectViewMode)}
           >
             <TabsList variant="stretch" className="dashboard-view-toggle" aria-label="Project view">
               <TabsTab
                 value="grid"
+                variant={viewMode === 'grid' ? 'default' : 'ghost'}
                 className="dashboard-view-toggle-btn text-style-control-semibold"
                 leftIcon={<GridIcon size={14} />}
                 aria-label="Grid view"
@@ -149,6 +154,7 @@ export function SearchAndSort({
               </TabsTab>
               <TabsTab
                 value="list"
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
                 className="dashboard-view-toggle-btn text-style-control-semibold"
                 leftIcon={<ListIcon size={14} />}
                 aria-label="List view"

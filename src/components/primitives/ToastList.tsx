@@ -8,7 +8,7 @@
  */
 
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
-import { SuccessIcon, InfoIcon, CloseIcon, CopyIcon } from '../icons';
+import { SuccessIcon, InfoIcon, CloseIcon, CopyIcon } from '@/components/icons';
 import type { Toast } from '../../hooks/useToasts';
 import { Button } from './Button';
 import { IconButton } from './IconButton';

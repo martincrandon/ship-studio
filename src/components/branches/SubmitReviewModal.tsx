@@ -30,7 +30,7 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
-import { GitHubIcon, WarningIcon } from '../icons';
+import { GitHubIcon, WarningIcon } from '@/components/icons';
 import { useOptionalToast } from '../../contexts/ToastContext';
 
 interface SubmitReviewModalProps {

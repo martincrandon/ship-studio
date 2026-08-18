@@ -11,7 +11,7 @@
   padding: var(--spacing-sm) 0;
 }
 .ss-css-empty__lead {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -19,7 +19,7 @@
 .ss-css-empty__hint,
 .ss-css-instances,
 .ss-css-status {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
   margin: 0;
   line-height: 1.5;
@@ -58,21 +58,21 @@
 }
 .ss-css-selector {
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   color: var(--accent-active);
 }
 /* The breakpoint the edit targets (Base / SM / MD / LG / XL), muted next to the
    selector so you always know which layer you're editing. */
 .ss-css-bp {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 .ss-css-file {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -97,7 +97,7 @@
 }
 .ss-css-row__prop {
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -107,7 +107,7 @@
 .ss-css-add__prop,
 .ss-css-add__value {
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-primary);
   background: var(--surface-control);
   border: 1px solid var(--border-default);
@@ -136,7 +136,7 @@
   color: var(--text-muted);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   line-height: 1;
   transition:
     color var(--transition),
@@ -166,7 +166,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-secondary);
 }
 .ss-css-create__label .property-field {
@@ -175,7 +175,7 @@
 }
 
 .ss-css-readonly {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -189,7 +189,7 @@
   margin: var(--spacing-xs) 0 0;
   padding-left: var(--spacing-md);
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
 }
 
@@ -222,7 +222,7 @@
   background: none;
   color: var(--text-secondary);
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 4px 4px 4px 8px;
   cursor: pointer;
 }
@@ -236,7 +236,7 @@
   border: none;
   background: none;
   color: var(--text-muted);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   line-height: 1;
   padding: 0 6px;
   align-self: stretch;
@@ -256,7 +256,7 @@
   background: var(--surface-control);
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   line-height: 1;
   cursor: pointer;
   transition:
@@ -271,7 +271,7 @@
   width: auto;
   gap: 4px;
   padding: 0 10px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
 }
 .ss-css-states {
@@ -284,7 +284,7 @@
   border: none;
   background: none;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -296,7 +296,7 @@
 .ss-css-state-input {
   width: 100%;
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-primary);
   background: var(--surface-control);
   border: 1px solid var(--accent-active);
@@ -315,7 +315,7 @@
   width: 232px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
   overflow: hidden;
 }
@@ -325,7 +325,7 @@
   border-bottom: 1px solid var(--border-default);
   background: var(--surface-control);
   color: var(--text-primary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 8px 10px;
 }
 .ss-css-combo__input:focus {
@@ -345,7 +345,7 @@
   background: none;
   color: var(--text-secondary);
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -363,7 +363,7 @@
 }
 .ss-css-combo__empty {
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 8px;
 }
 
@@ -382,7 +382,7 @@
 .ss-css-section-count {
   margin-right: auto;
   margin-left: 8px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 700;
   line-height: 1;
   color: var(--accent-active);
@@ -423,7 +423,7 @@
   gap: 6px;
 }
 .ss-cc-label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -436,7 +436,7 @@
   border: none;
   background: none;
   padding: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
@@ -455,7 +455,7 @@
   gap: 2px;
   padding: 2px;
   background: var(--surface-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
 }
 .ss-cc-seg__btn {
   flex: 1;
@@ -464,7 +464,7 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 500;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -489,7 +489,7 @@
 .ss-cc-select,
 .ss-cc-input {
   width: 100%;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-primary);
   background: var(--surface-control);
   border: 1px solid var(--border-default);
@@ -578,7 +578,7 @@
   border: none;
   background: none;
   color: var(--accent-active);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   cursor: pointer;
 }
@@ -592,7 +592,7 @@
   gap: var(--spacing-sm);
 }
 .ss-css-prep__lead {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
@@ -602,7 +602,7 @@
   overflow-y: auto;
   white-space: pre-wrap;
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--surface-control);

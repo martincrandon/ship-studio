@@ -844,6 +844,9 @@ pub struct AppState {
     /// Whether the Slack community CTA banner is hidden on the dashboard
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slack_cta_hidden: Option<bool>,
+    /// Whether the dashboard home header is hidden
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dashboard_header_hidden: Option<bool>,
     /// Whether the terminal uses WebGL (GPU-accelerated) rendering. Defaults to true.
     /// Disable if the terminal renders corrupted/fragmented characters (known issue on some
     /// macOS beta / GPU-driver combinations).

@@ -14,6 +14,10 @@ import {
 } from '../../lib/setup';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
+import SetupItemErrorGraphic from '@/assets/graphics/setup-item-error.svg?react';
+import SetupItemEmptyGraphic from '@/assets/graphics/setup-item-empty.svg?react';
+import SetupItemBlockedGraphic from '@/assets/graphics/setup-item-blocked.svg?react';
+import { SuccessIcon } from '@/components/icons';
 
 interface SetupItemProps {
   item: SetupItemType;
@@ -31,94 +35,45 @@ interface SetupItemProps {
   isOptional?: boolean;
 }
 
-/** Checkmark icon for ready items */
-function CheckIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      className="setup-item-icon setup-item-icon-check"
-    >
-      <circle cx="10" cy="10" r="10" fill="#7FE89A" />
-      <path
-        d="M6 10l3 3 5-6"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** X icon for error items */
-function ErrorIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      className="setup-item-icon setup-item-icon-error"
-    >
-      <circle cx="10" cy="10" r="10" fill="var(--accent-error)" />
-      <path d="M7 7l6 6M13 7l-6 6" stroke="white" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Empty circle for not installed/not authenticated */
-function EmptyCircleIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      className="setup-item-icon setup-item-icon-empty"
-    >
-      <circle cx="10" cy="10" r="9" stroke="var(--border-default)" strokeWidth="2" fill="none" />
-    </svg>
-  );
-}
-
-/** Lock icon for blocked items */
-function BlockedIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      className="setup-item-icon setup-item-icon-blocked"
-    >
-      <circle
-        cx="10"
-        cy="10"
-        r="9"
-        stroke="var(--text-muted)"
-        strokeWidth="2"
-        fill="none"
-        strokeDasharray="4 2"
-      />
-    </svg>
-  );
-}
-
 function getStatusIcon(status: SetupItemStatus) {
   switch (status) {
     case 'ready':
-      return <CheckIcon />;
+      return (
+        <SuccessIcon
+          size={20}
+          className="setup-item-icon setup-item-icon-check"
+          aria-hidden="true"
+        />
+      );
     case 'error':
-      return <ErrorIcon />;
+      return (
+        <SetupItemErrorGraphic
+          width={20}
+          height={20}
+          className="setup-item-icon setup-item-icon-error"
+          aria-hidden="true"
+        />
+      );
     case 'in_progress':
-      return <Spinner style={{ color: 'var(--accent-active)' }} />;
+      return <Spinner className="setup-item-spinner" />;
     case 'blocked':
-      return <BlockedIcon />;
+      return (
+        <SetupItemBlockedGraphic
+          width={20}
+          height={20}
+          className="setup-item-icon setup-item-icon-blocked"
+          aria-hidden="true"
+        />
+      );
     default:
-      return <EmptyCircleIcon />;
+      return (
+        <SetupItemEmptyGraphic
+          width={20}
+          height={20}
+          className="setup-item-icon setup-item-icon-empty"
+          aria-hidden="true"
+        />
+      );
   }
 }
 

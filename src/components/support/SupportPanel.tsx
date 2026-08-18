@@ -16,7 +16,7 @@ import { NewTicketForm } from './NewTicketForm';
 import { TicketList } from './TicketList';
 import { ConversationView } from './ConversationView';
 import { disconnectChat } from '../../lib/support';
-import { CloseIcon } from '../icons';
+import { CloseIcon } from '@/components/icons';
 import { IconButton } from '../primitives/IconButton';
 
 export type SupportView =

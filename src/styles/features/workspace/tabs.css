@@ -46,7 +46,7 @@
   box-shadow: none;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition: color 0.15s;
@@ -96,9 +96,9 @@
   padding: 6px 12px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -129,7 +129,7 @@
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -171,9 +171,9 @@
   padding: 6px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -203,7 +203,7 @@
   padding: 0;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -235,9 +235,9 @@
   padding: 6px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition:

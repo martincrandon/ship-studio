@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
-import { CheckIcon } from '../icons/common';
+import { CheckIcon } from '@/components/icons';
 
 export type ValueFieldVariant = 'number' | 'length' | 'angle' | 'time';
 
@@ -99,6 +99,7 @@ export function ValueField({
   const [unit, setUnit] = useState(initial.unit);
   const [invalid, setInvalid] = useState(false);
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [menuRect, setMenuRect] = useState<{ top: number; right: number } | null>(null);
   const rootRef = useRef<HTMLSpanElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -211,9 +212,59 @@ export function ValueField({
     (option) => option.value.toLowerCase() === text.trim().toLowerCase() && unit === ''
   );
   const selectedValue = currentKeyword?.value ?? unit;
+  const selectedIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === selectedValue)
+  );
   const selectedLabel = options.find(
     (option) => option.kind !== 'keyword' && option.value === unit
   )?.label;
+
+  useLayoutEffect(() => {
+    if (!open || !menuRect || !menuRef.current) return;
+    const optionElements = Array.from(
+      menuRef.current.querySelectorAll<HTMLElement>('[role="option"]')
+    );
+    const option = optionElements[Math.min(activeIndex, optionElements.length - 1)];
+    option?.focus({ preventScroll: true });
+  }, [activeIndex, menuRect, open]);
+
+  const handleFormatKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus({ preventScroll: true });
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((current) => (current + 1) % options.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((current) => (current - 1 + options.length) % options.length);
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      setActiveIndex(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      setActiveIndex(options.length - 1);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      const option = options[activeIndex];
+      if (!option) return;
+      event.preventDefault();
+      selectOption(option);
+    }
+  };
 
   return (
     <span
@@ -247,7 +298,11 @@ export function ValueField({
         }}
         onFocus={(event) => event.currentTarget.select()}
         onBlur={(event) => {
-          if (rootRef.current?.contains(event.relatedTarget)) return;
+          if (
+            rootRef.current?.contains(event.relatedTarget) ||
+            menuRef.current?.contains(event.relatedTarget)
+          )
+            return;
           commit();
         }}
         onKeyDown={(event) => {
@@ -284,7 +339,17 @@ export function ValueField({
         }}
         onClick={(event) => {
           event.stopPropagation();
-          setOpen((current) => !current);
+          if (open) setOpen(false);
+          else {
+            setActiveIndex(selectedIndex);
+            setOpen(true);
+          }
+        }}
+        onKeyDown={(event) => {
+          if (open || !['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+          setActiveIndex(selectedIndex);
+          setOpen(true);
         }}
       >
         {selectedLabel ?? '-'}
@@ -299,8 +364,10 @@ export function ValueField({
             role="listbox"
             aria-label={`${ariaLabel ?? 'Value'} formats`}
             style={{ top: menuRect.top, right: menuRect.right }}
+            tabIndex={-1}
+            onKeyDown={handleFormatKeyDown}
           >
-            {options.map((option) => {
+            {options.map((option, index) => {
               const selected = option.value === selectedValue;
               return (
                 <button
@@ -308,7 +375,9 @@ export function ValueField({
                   type="button"
                   role="option"
                   aria-selected={selected}
+                  tabIndex={index === activeIndex ? 0 : -1}
                   className={`value-field__option${selected ? ' value-field__option--selected' : ''}`}
+                  onFocus={() => setActiveIndex(index)}
                   onClick={() => selectOption(option)}
                 >
                   <span className="value-field__check" aria-hidden>

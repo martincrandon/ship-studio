@@ -7,7 +7,7 @@
  */
 
 import { Button } from '../../primitives/Button';
-import { CloseIcon } from '../../icons';
+import { CloseIcon, CollaboratorsIcon } from '@/components/icons';
 
 export interface Step1AccountSelectionProps {
   username: string | null;
@@ -76,19 +76,7 @@ export function Step1AccountSelection({
           onClick={() => onOwnerSelect('__collaborator__')}
         >
           <div className="import-owner-avatar collab">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+            <CollaboratorsIcon size={16} />
           </div>
           <div className="import-owner-info">
             <span className="import-owner-name">Collaborator Access</span>

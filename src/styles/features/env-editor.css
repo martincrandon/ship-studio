@@ -37,6 +37,18 @@
   padding: var(--spacing-xl);
 }
 
+.env-editor-content > .tabs {
+  display: contents;
+}
+
+.env-file-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--spacing-md);
+}
+
 .env-file-tabs {
   display: flex;
   align-items: center;
@@ -55,7 +67,7 @@
 }
 
 .env-add-file .button__icon {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
 }
 
 .env-new-file-input {
@@ -68,9 +80,9 @@
   padding: 6px 10px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-family: var(--font-code);
   width: 140px;
 }
@@ -125,9 +137,9 @@
   padding: 8px 10px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-family: var(--font-code);
 }
 
@@ -146,9 +158,9 @@
   padding: 8px 10px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-family: var(--font-code);
 }
 
@@ -215,7 +227,7 @@
   padding: 40px 20px;
   text-align: center;
   color: var(--text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
 }
 
 .env-empty-state {
@@ -244,14 +256,14 @@
 }
 
 .env-empty-state h4 {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-h4);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px 0;
 }
 
 .env-empty-state p {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-muted);
   margin: 0 0 20px 0;
   max-width: 260px;
@@ -265,10 +277,10 @@
 
 .env-error {
   color: var(--accent-error);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   padding: 8px 12px;
   background: rgba(var(--accent-error-rgb), 0.1);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
 }
 
 /* Env Button in Header */
@@ -281,7 +293,7 @@
   padding: 12px;
   background: rgba(var(--accent-warning-rgb), 0.1);
   border: 1px solid rgba(var(--accent-warning-rgb), 0.3);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
 }
 
 .env-sync-item {
@@ -296,7 +308,7 @@
   align-items: center;
   gap: 8px;
   color: var(--accent-warning);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .env-sync-info svg {
@@ -334,14 +346,14 @@
 }
 
 .env-paste-header h4 {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-h4);
   font-weight: 600;
   margin: 0;
   color: var(--text-primary);
 }
 
 .env-paste-hint {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-muted);
   margin: 0;
 }
@@ -352,9 +364,9 @@
   padding: 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-family: var(--font-code);
   line-height: 1.5;
   resize: vertical;

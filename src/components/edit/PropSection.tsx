@@ -6,7 +6,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { ChevronIcon } from '../icons';
+import { ChevronIcon } from '@/components/icons';
 
 export function PropSection({
   title,

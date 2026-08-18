@@ -1,14 +1,14 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 
 export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
-  /** Adds the invalid treatment without requiring feature code to compose classes. */
+  /** Adds the invalid class and aria-invalid state without feature-level duplication. */
   invalid?: boolean;
   /** Optional trailing unit/value slot for compact property fields. */
   suffix?: ReactNode;
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { className, invalid = false, suffix, ...props },
+  { className, invalid = false, suffix, 'aria-invalid': ariaInvalid, ...props },
   ref
 ) {
   const input = (
@@ -17,6 +17,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
       className={['ss-text-field', invalid ? 'ss-text-field--invalid' : null, className]
         .filter(Boolean)
         .join(' ')}
+      aria-invalid={invalid || ariaInvalid}
       {...props}
     />
   );

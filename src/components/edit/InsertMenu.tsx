@@ -10,7 +10,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ELEMENT_KINDS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
 import { Button } from '../primitives/Button';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 
 interface Props {
   /** Where to anchor the popover (viewport coords); null = closed. */
@@ -110,28 +110,20 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
         }
       }}
     >
-      <Tabs
+      <SegmentedControl<InsertPosition>
         value={effectivePosition}
-        onValueChange={(value) => setPosition(value as InsertPosition)}
+        onValueChange={setPosition}
+        aria-label="Placement"
+        className="ss-insert-menu__positions"
         size="compact"
-      >
-        <TabsList className="ss-insert-menu__positions" variant="stretch" aria-label="Placement">
-          {POSITIONS.map((p) => (
-            <TabsTab
-              key={p.id}
-              value={p.id}
-              disabled={p.id === 'inside' && insideDisabled}
-              title={
-                p.id === 'inside' && insideDisabled
-                  ? 'This element can’t contain children'
-                  : undefined
-              }
-            >
-              {p.label}
-            </TabsTab>
-          ))}
-        </TabsList>
-      </Tabs>
+        options={POSITIONS.map((p) => ({
+          value: p.id,
+          label: p.label,
+          disabled: p.id === 'inside' && insideDisabled,
+          title:
+            p.id === 'inside' && insideDisabled ? 'This element can’t contain children' : undefined,
+        }))}
+      />
       <div
         ref={listRef}
         className="ss-insert-menu__list"

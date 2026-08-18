@@ -12,7 +12,7 @@
 import { useEffect, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getFileDiff, FileDiff, ChangeStatus } from '../../lib/git';
-import { FileIcon } from '../icons';
+import { FileIcon } from '@/components/icons';
 import { trackError } from '../../lib/analytics';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';

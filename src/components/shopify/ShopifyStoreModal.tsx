@@ -69,7 +69,7 @@ export function ShopifyStoreModal({ projectPath, onStoreSaved }: ShopifyStoreMod
   return (
     <ModalFrame isOpen={isOpen} onClose={close} title="Shopify store">
       <div className="shopify-store-modal-body">
-        <p className="hint">
+        <p className="text-style-hint">
           The preview renders this theme against a real store via <code>shopify theme dev</code>.
         </p>
         <input

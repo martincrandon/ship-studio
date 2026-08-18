@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { PlusIcon } from '../icons/utility';
+import { PlusIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { PropertyField } from '../primitives/PropertyField';
 import { Spinner } from '../primitives/Spinner';

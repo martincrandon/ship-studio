@@ -7,8 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
-import { CloseIcon } from '../icons/common';
-import { PlusIcon } from '../icons/utility';
+import { CloseIcon, NestRuleIcon, PlusIcon } from '@/components/icons';
 import { EditPopover } from './EditPopover';
 import { CssValueText } from './CssValueText';
 import { CSS_PROPERTIES, colorSwatch, suggestValues } from '../../lib/cssProperties';
@@ -195,7 +194,7 @@ function NestControl({
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
-        <NestGlyph />
+        <NestRuleIcon />
       </button>
       {open && (
         <span className="ss-decl__nest-menu" role="menu" aria-label="Move into a nested rule">
@@ -227,25 +226,5 @@ function NestControl({
         </span>
       )}
     </span>
-  );
-}
-
-/** "Move into a nested rule" affordance — a corner-down-right turn arrow. */
-function NestGlyph() {
-  return (
-    <svg
-      width={11}
-      height={11}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="9 10 4 15 9 20" />
-      <path d="M20 4v7a4 4 0 0 1-4 4H4" />
-    </svg>
   );
 }

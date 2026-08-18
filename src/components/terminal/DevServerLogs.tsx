@@ -22,10 +22,11 @@ import { createWebLinksAddon } from '../../lib/terminalLinks';
 import { loadNerdFonts } from '../../lib/fonts';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { CopyIcon } from '../icons';
+import { CopyIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { trackEvent } from '../../lib/analytics';
 import { stripAnsi } from '../../lib/ansi';
+import { createTerminalOptions } from './terminalTheme';
 import '@xterm/xterm/css/xterm.css';
 
 /* Tail-limit the full-buffer send so we don't fire 3k+ lines of HMR
@@ -127,39 +128,12 @@ export function DevServerLogs({
 
     const container = containerRef.current;
 
-    // Create terminal with same styling as Claude terminal
+    // Create terminal with the dedicated non-blinking log-surface variant.
     const term = new XTerm({
-      fontFamily: '"JetBrainsMono NF", Menlo, Monaco, "Courier New", monospace',
-      fontSize: 13,
-      lineHeight: 1.2,
-      cursorBlink: false,
-      cursorStyle: 'block',
-      scrollback: 10000,
+      ...createTerminalOptions('logs'),
       // Stdin stays enabled so interactive CLI prompts (Shopify password,
       // y/n confirms) can be answered here; keys flow to the PTY via onInput.
       disableStdin: false,
-      theme: {
-        background: '#1a1a1a',
-        foreground: '#bcbcbc',
-        cursor: '#ffffff',
-        selectionBackground: '#393939',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
-      },
     });
 
     const fitAddon = new FitAddon();

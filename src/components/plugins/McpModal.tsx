@@ -9,17 +9,22 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { SearchIcon } from '../icons';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
-import { Spinner } from '../primitives/Spinner';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { SegmentedControl } from '../primitives/SegmentedControl';
 import { type McpServer, listMcpServers, addMcpServer, removeMcpServer } from '../../lib/mcp';
 import { trackEvent, trackSearch } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { useModal } from '../../contexts/ModalContext';
+import {
+  ExtensionListRow,
+  ExtensionManagerLayout,
+  ExtensionSearchField,
+  ExtensionState,
+  ScopeBadge,
+} from './extension';
 
 type Tab = 'connected' | 'add';
 type ScopeFilter = 'all' | 'user' | 'project';
@@ -185,162 +190,162 @@ export function McpModal({
             }
           }}
         >
-          <TabsList className="mcp-tabs" aria-label="MCP servers view">
-            <TabsTab value="connected" className="mcp-tab">
-              Connected
-            </TabsTab>
-            <TabsTab value="add" className="mcp-tab">
-              Add
-            </TabsTab>
-          </TabsList>
-        </Tabs>
-
-        <div className="mcp-modal-body">
-          {activeTab === 'connected' && (
-            <>
-              <div className="mcp-connected-controls">
-                <div className="mcp-search">
-                  <SearchIcon size={12} />
-                  <input
-                    ref={searchRef}
-                    type="text"
-                    className="mcp-search-input"
-                    placeholder="Filter servers..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      trackSearch('mcp_filter', e.target.value, 'MCP Modal');
-                    }}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                  />
-                </div>
-                <SegmentedControl
-                  value={scopeFilter}
-                  options={[
-                    { value: 'all', label: 'All' },
-                    { value: 'user', label: 'User' },
-                    { value: 'project', label: 'Project' },
-                  ]}
-                  onValueChange={setScopeFilter}
-                  aria-label="Filter MCP servers by scope"
-                />
-              </div>
-
-              {isLoadingServers && servers.length === 0 && (
-                <div className="mcp-loading">
-                  <Spinner className="mcp-loading-spinner" />
-                  Loading MCP servers...
-                </div>
-              )}
-
-              {!isLoadingServers && filteredServers.length === 0 && (
-                <div className="mcp-empty">
-                  {debouncedQuery
-                    ? 'No matching servers found'
-                    : scopeFilter === 'all'
-                      ? 'No MCP servers configured yet'
-                      : `No ${scopeFilter}-scoped servers configured`}
-                </div>
-              )}
-
-              <div className="mcp-list">
-                {filteredServers.map((server) => (
-                  <div key={`${server.scope}-${server.name}`} className="mcp-row">
-                    <div className="mcp-server-info">
-                      <div className="mcp-server-name-row">
-                        <span
-                          className={`mcp-status-dot ${server.status}`}
-                          title={statusLabel(server.status)}
-                        />
-                        <span className="mcp-server-name">{server.name}</span>
-                      </div>
-                      <div className="mcp-server-meta">
-                        <span
-                          className={`mcp-scope-badge ${server.scope === 'project' ? 'project' : ''}`}
-                        >
-                          {server.scope}
-                        </span>
-                        <span className="mcp-status-label">{statusLabel(server.status)}</span>
-                      </div>
-                      {server.command_or_url && (
-                        <div className="mcp-server-command">{server.command_or_url}</div>
-                      )}
-                    </div>
-                    <Button
-                      variant="danger"
-                      size="compact"
-                      onClick={() => void handleRemove(server)}
-                      disabled={removingServer === serverKey(server)}
-                    >
-                      {removingServer === serverKey(server) ? 'Removing...' : 'Remove'}
-                    </Button>
+          <ExtensionManagerLayout
+            tabs={
+              <TabsList className="mcp-tabs" aria-label="MCP servers view">
+                <TabsTab value="connected" className="mcp-tab">
+                  Connected
+                </TabsTab>
+                <TabsTab value="add" className="mcp-tab">
+                  Add
+                </TabsTab>
+              </TabsList>
+            }
+            footer={
+              <span className="extension-manager-layout__footer-hint">
+                Press <span className="help-shortcut">Esc</span> to close
+              </span>
+            }
+          >
+            <TabsPanel value="connected" className="mcp-modal-body">
+              {activeTab === 'connected' && (
+                <>
+                  <div className="mcp-connected-controls">
+                    <ExtensionSearchField
+                      ref={searchRef}
+                      placeholder="Filter servers..."
+                      aria-label="Filter MCP servers"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        trackSearch('mcp_filter', e.target.value, 'MCP Modal');
+                      }}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                    />
+                    <SegmentedControl
+                      value={scopeFilter}
+                      options={[
+                        { value: 'all', label: 'All' },
+                        { value: 'user', label: 'User' },
+                        { value: 'project', label: 'Project' },
+                      ]}
+                      onValueChange={setScopeFilter}
+                      aria-label="Filter MCP servers by scope"
+                    />
                   </div>
-                ))}
-              </div>
-            </>
-          )}
 
-          {activeTab === 'add' && (
-            <>
-              <div className="mcp-add-section">
-                <p className="mcp-add-description">
-                  Paste the full command to add an MCP server. The{' '}
-                  <code>{agentBinaryName} mcp add</code> prefix is optional.
-                </p>
-                <div className="mcp-add-input-wrapper">
-                  <input
-                    type="text"
-                    className="mcp-add-input"
-                    placeholder={`e.g. my-server -- npx -y @some/mcp-server`}
-                    value={addCommand}
-                    onChange={(e) => {
-                      setAddCommand(e.target.value);
-                      setAddError(null);
-                      setAddSuccess(false);
-                    }}
-                    onKeyDown={handleAddKeyDown}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                  />
-                  <Button
-                    variant="primary"
-                    onClick={() => void handleAdd()}
-                    disabled={isAdding || !addCommand.trim()}
-                  >
-                    {isAdding ? 'Adding...' : 'Add'}
-                  </Button>
-                </div>
-                <div className="mcp-scope-toggle">
-                  <span className="mcp-scope-toggle-label">Scope:</span>
-                  <SegmentedControl
-                    value={addScope}
-                    options={[
-                      { value: 'user', label: 'User' },
-                      { value: 'project', label: 'Project', disabled: !projectPath },
-                    ]}
-                    onValueChange={setAddScope}
-                    aria-label="MCP server scope"
-                  />
-                </div>
-              </div>
+                  {isLoadingServers && servers.length === 0 && (
+                    <ExtensionState kind="loading" loadingLabel="Loading MCP servers">
+                      Loading MCP servers...
+                    </ExtensionState>
+                  )}
 
-              {addError && <div className="mcp-error">{addError}</div>}
+                  {!isLoadingServers && filteredServers.length === 0 && (
+                    <ExtensionState kind="empty">
+                      {debouncedQuery
+                        ? 'No matching servers found'
+                        : scopeFilter === 'all'
+                          ? 'No MCP servers configured yet'
+                          : `No ${scopeFilter}-scoped servers configured`}
+                    </ExtensionState>
+                  )}
 
-              {addSuccess && <div className="mcp-success">MCP server added successfully.</div>}
-            </>
-          )}
-        </div>
+                  <div className="mcp-list">
+                    {filteredServers.map((server) => (
+                      <ExtensionListRow
+                        key={`${server.scope}-${server.name}`}
+                        action={
+                          <Button
+                            variant="danger"
+                            size="compact"
+                            onClick={() => void handleRemove(server)}
+                            disabled={removingServer === serverKey(server)}
+                          >
+                            {removingServer === serverKey(server) ? 'Removing...' : 'Remove'}
+                          </Button>
+                        }
+                      >
+                        <div className="mcp-server-info">
+                          <div className="mcp-server-name-row">
+                            <span
+                              className={`mcp-status-dot ${server.status}`}
+                              title={statusLabel(server.status)}
+                            />
+                            <span className="mcp-server-name">{server.name}</span>
+                          </div>
+                          <div className="mcp-server-meta">
+                            <ScopeBadge scope={server.scope} />
+                            <span className="mcp-status-label">{statusLabel(server.status)}</span>
+                          </div>
+                          {server.command_or_url && (
+                            <div className="mcp-server-command">{server.command_or_url}</div>
+                          )}
+                        </div>
+                      </ExtensionListRow>
+                    ))}
+                  </div>
+                </>
+              )}
+            </TabsPanel>
 
-        <div className="mcp-footer">
-          <span className="mcp-footer-hint">
-            Press <span className="help-shortcut">Esc</span> to close
-          </span>
-        </div>
+            <TabsPanel value="add" className="mcp-modal-body">
+              {activeTab === 'add' && (
+                <>
+                  <div className="mcp-add-section">
+                    <p className="mcp-add-description">
+                      Paste the full command to add an MCP server. The{' '}
+                      <code>{agentBinaryName} mcp add</code> prefix is optional.
+                    </p>
+                    <div className="mcp-add-input-wrapper">
+                      <input
+                        type="text"
+                        className="mcp-add-input"
+                        placeholder={`e.g. my-server -- npx -y @some/mcp-server`}
+                        value={addCommand}
+                        onChange={(e) => {
+                          setAddCommand(e.target.value);
+                          setAddError(null);
+                          setAddSuccess(false);
+                        }}
+                        onKeyDown={handleAddKeyDown}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                      />
+                      <Button
+                        variant="primary"
+                        onClick={() => void handleAdd()}
+                        disabled={isAdding || !addCommand.trim()}
+                      >
+                        {isAdding ? 'Adding...' : 'Add'}
+                      </Button>
+                    </div>
+                    <div className="mcp-scope-toggle">
+                      <span className="mcp-scope-toggle-label">Scope:</span>
+                      <SegmentedControl
+                        value={addScope}
+                        options={[
+                          { value: 'user', label: 'User' },
+                          { value: 'project', label: 'Project', disabled: !projectPath },
+                        ]}
+                        onValueChange={setAddScope}
+                        aria-label="MCP server scope"
+                      />
+                    </div>
+                  </div>
+
+                  {addError && <ExtensionState kind="error">{addError}</ExtensionState>}
+
+                  {addSuccess && <div className="mcp-success">MCP server added successfully.</div>}
+                </>
+              )}
+            </TabsPanel>
+          </ExtensionManagerLayout>
+        </Tabs>
       </>
     </ModalFrame>
   );

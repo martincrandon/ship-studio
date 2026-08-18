@@ -30,7 +30,7 @@ import {
   FileTextIcon,
   SaveIcon,
   VSCodeIcon,
-} from '../icons';
+} from '@/components/icons';
 import { trackEvent } from '../../lib/analytics';
 import { fileExtensionForAnalytics } from '../../lib/code';
 import { CodeFileEditor } from './CodeFileEditor';

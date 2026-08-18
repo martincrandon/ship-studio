@@ -23,7 +23,7 @@
 }
 
 .device-mirror-label {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   margin-right: auto;
 }
@@ -95,7 +95,7 @@
   border: none;
   border-radius: 0;
   background: transparent;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
@@ -128,7 +128,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -170,7 +170,7 @@
 .device-mirror-build-hint {
   margin: 0;
   padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--accent-warning);
 }
 

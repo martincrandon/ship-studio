@@ -9,11 +9,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { ChevronRightIcon, CloseIcon, PinIcon } from '../icons';
+import { ChevronRightIcon, CloseIcon, PinIcon } from '@/components/icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
@@ -225,7 +225,11 @@ export function ElementTreePanel({
     : '';
 
   return (
-    <div ref={panelRef} className="ss-tree-panel" data-testid="element-tree-panel">
+    <div
+      ref={panelRef}
+      className={`ss-tree-panel${structure ? '' : ' ss-tree-panel--view-only'}`}
+      data-testid="element-tree-panel"
+    >
       {structure ? (
         <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
@@ -257,62 +261,82 @@ export function ElementTreePanel({
               />
             )}
           </div>
+          <TabsPanel value={visibleView} className="ss-tree-panel__active-view">
+            {visibleView === 'visual' ? (
+              <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
+                {tree ? (
+                  renderNode(tree, 0)
+                ) : (
+                  <div className="ss-tree-panel__empty">Loading elements…</div>
+                )}
+                {truncated && (
+                  <div className="ss-tree-panel__note">
+                    Large page — showing the first part of the tree.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="ss-tree-panel__body ss-tree-panel__body--code">
+                {selectedSignature ? (
+                  <ElementHtmlEditor
+                    key={sigKey}
+                    projectPath={projectPath}
+                    signature={selectedSignature}
+                  />
+                ) : (
+                  <div className="ss-tree-panel__empty">Select an element to edit its HTML.</div>
+                )}
+              </div>
+            )}
+          </TabsPanel>
+          <TabsPanel
+            value={visibleView === 'visual' ? 'code' : 'visual'}
+            className="ss-tree-panel__active-view"
+          />
         </Tabs>
       ) : (
-        <div className="ss-tree-panel__header" data-dockable-drag-handle>
-          <span className="ss-tree-panel__title">Elements</span>
-          <Tooltip content="Turn on edit mode to select and edit elements.">
-            <span className="ss-tree-panel__view-only">View only</span>
-          </Tooltip>
-          {onTogglePin && (
-            <ToggleButton
-              variant="ghost"
-              size="compact"
-              className="button--icon-only"
-              onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
-              aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}
-              pressed={pinned}
-              leftIcon={<PinIcon size={13} />}
-            />
-          )}
-          {onClose && (
-            <IconButton
-              variant="ghost"
-              size="compact"
-              onClick={onClose}
-              title="Close Elements panel"
-              aria-label="Close Elements panel"
-              icon={<CloseIcon size={14} />}
-            />
-          )}
-        </div>
-      )}
-      {visibleView === 'visual' ? (
-        <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
-          {tree ? (
-            renderNode(tree, 0)
-          ) : (
-            <div className="ss-tree-panel__empty">Loading elements…</div>
-          )}
-          {truncated && (
-            <div className="ss-tree-panel__note">
-              Large page — showing the first part of the tree.
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="ss-tree-panel__body ss-tree-panel__body--code">
-          {selectedSignature ? (
-            <ElementHtmlEditor
-              key={sigKey}
-              projectPath={projectPath}
-              signature={selectedSignature}
-            />
-          ) : (
-            <div className="ss-tree-panel__empty">Select an element to edit its HTML.</div>
-          )}
-        </div>
+        <>
+          <div className="ss-tree-panel__header" data-dockable-drag-handle>
+            <span className="ss-tree-panel__title">Elements</span>
+            <Tooltip content="Turn on edit mode to select and edit elements.">
+              <span className="ss-tree-panel__view-only">View only</span>
+            </Tooltip>
+            {onTogglePin && (
+              <ToggleButton
+                variant="ghost"
+                size="compact"
+                className="button--icon-only"
+                onClick={onTogglePin}
+                title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
+                aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}
+                pressed={pinned}
+                leftIcon={<PinIcon size={13} />}
+              />
+            )}
+            {onClose && (
+              <IconButton
+                variant="ghost"
+                size="compact"
+                onClick={onClose}
+                title="Close Elements panel"
+                aria-label="Close Elements panel"
+                icon={<CloseIcon size={14} />}
+              />
+            )}
+          </div>
+          <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
+            {tree ? (
+              renderNode(tree, 0)
+            ) : (
+              <div className="ss-tree-panel__empty">Loading elements…</div>
+            )}
+            {truncated && (
+              <div className="ss-tree-panel__note">
+                Large page — showing the first part of the tree.
+              </div>
+            )}
+          </div>
+        </>
       )}
       {structure && (
         <>

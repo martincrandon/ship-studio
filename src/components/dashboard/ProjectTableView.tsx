@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { DashboardProject } from '../../lib/project';
-import { BranchIcon } from '../icons';
+import { BranchIcon } from '@/components/icons';
 import { ProjectCardMenu } from './ProjectCardMenu';
 
 interface ProjectTableViewProps<TProject extends DashboardProject> {

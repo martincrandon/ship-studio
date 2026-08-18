@@ -4,9 +4,9 @@
   gap: 6px;
   padding: 6px 10px;
   background: var(--surface-control);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
 }
 
@@ -17,7 +17,7 @@
 
 .capture-shortcut {
   font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
   white-space: nowrap;
 }

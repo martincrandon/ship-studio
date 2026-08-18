@@ -18,7 +18,7 @@ import {
   switchBranch,
 } from '../../lib/branches';
 import { useAsyncState } from '../../hooks/useAsyncState';
-import { GitHubIcon, WarningIcon, BranchIcon } from '../icons';
+import { GitHubIcon, WarningIcon, BranchIcon } from '@/components/icons';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';

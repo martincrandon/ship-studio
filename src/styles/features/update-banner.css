@@ -121,7 +121,7 @@
   min-width: 0;
   overflow: hidden;
   color: currentColor;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -217,7 +217,7 @@
 
 .update-indicator-version {
   color: var(--color-green-300);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-variant-numeric: tabular-nums;
 }
 
@@ -227,7 +227,7 @@
   gap: var(--space-04);
   margin: var(--space-06) 0 0;
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.35;
 }
 
@@ -272,7 +272,7 @@
   justify-content: center;
   flex: 0 0 var(--control-height-standard);
   color: var(--color-green-300);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-variant-numeric: tabular-nums;
 }
 
@@ -329,7 +329,7 @@
 .update-details-list h3 {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-weight: var(--font-weight-semibold);
   line-height: 1.4;
   text-wrap: balance;
@@ -340,7 +340,7 @@
 .update-details-error {
   margin: var(--space-04) 0 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   line-height: 1.5;
   text-wrap: pretty;
 }
@@ -351,7 +351,7 @@
   gap: var(--space-08);
   margin-top: var(--space-16);
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-variant-numeric: tabular-nums;
 }
 

@@ -8,7 +8,9 @@
 
 import type { PluginInfo } from '../../lib/plugins';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
+import { PuzzleIcon } from '@/components/icons';
 import { TextButton } from '../primitives/TextButton';
+import { ExtensionListRow } from './extension';
 
 export interface PluginStatusGridProps {
   plugins: PluginInfo[];
@@ -28,7 +30,6 @@ export interface PluginStatusGridProps {
 
 export function PluginStatusGrid({
   plugins,
-  loadedPlugins,
   togglingId,
   removingId,
   reloadingId,
@@ -44,12 +45,11 @@ export function PluginStatusGrid({
   return (
     <div className="plugins-list">
       {plugins.map((plugin) => {
-        const loaded = loadedPlugins.find((lp) => lp.info.manifest.id === plugin.manifest.id);
-        const ToolbarIcon = loaded?.module.slots['toolbar'];
-
         return (
-          <div key={plugin.manifest.id} className="plugin-row">
-            <div className="plugin-icon-container">{ToolbarIcon ? <ToolbarIcon /> : null}</div>
+          <ExtensionListRow key={plugin.manifest.id} className="plugin-row">
+            <div className="plugin-icon-container">
+              <PuzzleIcon size={14} />
+            </div>
             <div className="plugin-info">
               <div className="plugin-header">
                 <div>
@@ -146,7 +146,7 @@ export function PluginStatusGrid({
                 )}
               </div>
             </div>
-          </div>
+          </ExtensionListRow>
         );
       })}
     </div>

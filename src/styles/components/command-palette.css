@@ -24,6 +24,7 @@
   gap: var(--spacing-md);
   padding: var(--spacing-lg) var(--spacing-lg);
   border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
 }
 
 .command-palette-search-icon {
@@ -60,7 +61,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-lg);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   background: var(--surface-app);
   border-bottom: 1px solid var(--border-default);
 }
@@ -69,7 +70,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
 }
 
 .command-palette-scope-value {
@@ -78,16 +79,12 @@
 }
 
 /* ===== Tab row ===== */
-.command-palette-tabs {
+.command-palette-tabs.tabs__list--stretch {
   display: flex;
   align-items: stretch;
   width: 100%;
-}
-
-/* The workspace header supplies this separator around its tabs. The palette
-   needs the same full-width baseline because it has no surrounding toolbar. */
-.command-palette-tabs.tabs__list--appearance-underline {
-  border-bottom: var(--stroke-1) solid var(--border-default);
+  height: calc(var(--spacing-lg) * 2 + var(--font-size-body-lg));
+  flex-shrink: 0;
 }
 
 .command-palette-tab {
@@ -101,7 +98,7 @@
   appearance: none;
   -webkit-appearance: none;
   padding: var(--spacing-lg) 0;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-muted);
   cursor: pointer;
   font-family: inherit;
@@ -115,6 +112,19 @@
 .command-palette-tabs .tabs__tab.button.command-palette-tab {
   height: auto;
   min-height: 0;
+}
+
+.command-palette > .tabs {
+  display: contents;
+}
+
+.command-palette-list-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: var(--stroke-1) solid var(--border-default);
 }
 
 .command-palette-tab:hover,
@@ -142,7 +152,7 @@
   padding: var(--spacing-2xl) var(--spacing-lg);
   color: var(--text-muted);
   text-align: center;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .command-palette-group + .command-palette-group {
@@ -154,7 +164,7 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
 }
 
@@ -172,7 +182,7 @@
   color: var(--text-primary);
   cursor: pointer;
   font-family: inherit;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   transition: background-color var(--transition-fast);
   min-height: 40px;
 }
@@ -205,7 +215,7 @@
 }
 
 .command-palette-row-title {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -214,7 +224,7 @@
 }
 
 .command-palette-row-subtitle {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -241,7 +251,7 @@
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1;
   height: 20px;
 }
@@ -254,7 +264,7 @@
   padding: var(--spacing-sm) var(--spacing-lg);
   border-top: 1px solid var(--border-default);
   background: var(--surface-app);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }
 

@@ -7,7 +7,7 @@
 
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { DuplicateIcon, PlusIcon, TrashIcon } from '../icons';
+import { DuplicateIcon, PlusIcon, TrashIcon } from '@/components/icons';
 
 interface Props {
   /** Cursor position (viewport coords); null = closed. */

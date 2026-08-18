@@ -1,9 +1,23 @@
 /* Main styles entry point - imports all component styles */
 
-/* Global tokens + base rules */
+/* Global tokens: order is governed by global/token-manifest.json. */
+@import './global/fonts.css';
+@import './global/tokens-core.css';
+@import './global/tokens-semantic.css';
+@import './global/tokens-components.css';
+@import './global/tokens-compatibility.css';
+
+/* Global base rules */
 @import './global/base.css';
+@import './global/typography.css';
 
 /* Components (primitives) */
+@import './components/modal-frame.css';
+@import './components/property-field.css';
+@import './components/empty-state.css';
+@import './components/dropdown.css';
+@import './components/spinner.css';
+@import './components/text-field.css';
 @import './components/modal.css';
 @import './components/command-palette.css';
 @import './components/code-overlay.css';
@@ -12,11 +26,8 @@
 @import './components/tabs.css';
 @import './components/text-button.css';
 @import './components/segmented-control.css';
-@import './components/icon-audit.css';
-@import './components/icon-gallery.css';
 @import './components/tooltip.css';
 @import './components/middle-truncate.css';
-@import './components/typography.css';
 @import './components/value-field.css';
 
 /* Features */
@@ -39,7 +50,10 @@
 @import './features/preview-size.css';
 @import './features/agent-activity.css';
 @import './features/thumbnail-consent.css';
-@import './features/visual-editor.css';
+@import './features/visual-editor/panel.css';
+@import './features/visual-editor/controls.css';
+@import './features/visual-editor/usage.css';
+@import './features/visual-editor/properties.css';
 @import './features/visual-editor-image.css';
 @import './features/visual-editor-classes.css';
 @import './features/visual-editor-css-mode.css';
@@ -59,7 +73,6 @@
 @import './features/publish/dropdown.css';
 @import './features/publish/rows.css';
 @import './features/publish/states.css';
-@import './features/publish/sites.css';
 @import './features/publish/toasts.css';
 @import './features/env-editor.css';
 @import './features/assets-panel.css';
@@ -69,24 +82,24 @@
 @import './features/dashboard/projects.css';
 @import './features/dashboard/folders.css';
 @import './features/dashboard/move-folder.css';
-@import './features/update-banner.css';
 @import './features/branches/main.css';
 @import './features/branches/pr-list.css';
 @import './features/branches/branch-actions.css';
 @import './features/branches/branch-graph.css';
 @import './features/branches/worktrees.css';
 @import './features/conflicts.css';
-@import './features/health.css';
 @import './features/health-tab.css';
 @import './features/diff-modal.css';
 @import './features/help-modal.css';
 @import './features/backups-modal.css';
 @import './features/languages-modal.css';
+@import './features/extensions.css';
 @import './features/skills-modal.css';
 @import './features/mcp-modal.css';
 @import './features/plugins.css';
 @import './features/changelog.css';
 @import './features/settings.css';
+@import './features/settings-forms.css';
 @import './features/attached-libraries.css';
 @import './features/support-panel.css';
 @import './features/project-rail.css';

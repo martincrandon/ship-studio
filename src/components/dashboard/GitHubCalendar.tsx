@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback, memo } from 'react';
 import { GitHubCalendar as GitHubCalendarLib } from 'react-github-calendar';
-import { EyeOffIcon } from '../icons';
+import { EyeOffIcon } from '@/components/icons';
 import { Tooltip } from '../primitives/Tooltip';
 
 interface Activity {

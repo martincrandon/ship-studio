@@ -7,7 +7,7 @@
 
 import { Button } from '../../primitives/Button';
 import { Spinner } from '../../primitives/Spinner';
-import { CloseIcon } from '../../icons';
+import { CloseIcon } from '@/components/icons';
 import type { GitHubRepo } from '../../../lib/github';
 
 export interface Step2RepoSelectionProps {

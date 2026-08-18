@@ -32,7 +32,14 @@ import {
 import { gitPull } from '../../lib/git';
 import { removeWorktree, pruneWorktrees, type WorktreeInfo } from '../../lib/worktrees';
 import { openProjectInNewWindow } from '../../lib/project';
-import { BranchIcon, PlusIcon, TrashIcon, ExternalLinkIcon, PullIcon, PushIcon } from '../icons';
+import {
+  BranchIcon,
+  PlusIcon,
+  TrashIcon,
+  ExternalLinkIcon,
+  PullIcon,
+  PushIcon,
+} from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { BranchGraph } from './BranchGraph';
 import { UnsavedChangesModal } from './UnsavedChangesModal';

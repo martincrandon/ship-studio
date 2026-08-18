@@ -10,17 +10,28 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from 'react';
-import { Button, type ButtonProps, type ButtonSize } from './Button';
+import { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
 
 type TabValue = string;
 
+export type TabsMode = 'panel' | 'navigation';
+
+interface RegisteredTab {
+  element: HTMLButtonElement;
+  disabled: boolean;
+}
+
 interface TabsContextValue {
   id: string;
+  mode: TabsMode;
   value: TabValue;
   select: (value: TabValue) => void;
   size: ButtonSize;
-  registerTab: (value: TabValue, element: HTMLButtonElement | null) => void;
+  tabId: (value: TabValue) => string;
+  panelId: (value: TabValue) => string;
+  registerTab: (value: TabValue, element: HTMLButtonElement | null, disabled: boolean) => void;
   moveFocus: (value: TabValue, direction: 1 | -1) => void;
+  moveFocusToEdge: (edge: 'first' | 'last') => void;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -30,6 +41,8 @@ export interface TabsProps {
   defaultValue?: TabValue;
   onValueChange?: (value: TabValue) => void;
   size?: ButtonSize;
+  /** Panel tabs link to a TabsPanel; navigation tabs intentionally omit aria-controls. */
+  mode?: TabsMode;
   children: ReactNode;
   className?: string;
 }
@@ -39,13 +52,14 @@ export function Tabs({
   defaultValue,
   onValueChange,
   size = 'compact',
+  mode = 'panel',
   children,
   className,
 }: TabsProps) {
   const id = useId();
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue ?? '');
   const value = controlledValue ?? uncontrolledValue;
-  const tabsRef = useRef(new Map<TabValue, HTMLButtonElement>());
+  const tabsRef = useRef(new Map<TabValue, RegisteredTab>());
 
   const select = useCallback(
     (next: TabValue) => {
@@ -55,26 +69,71 @@ export function Tabs({
     [controlledValue, onValueChange]
   );
 
-  const registerTab = useCallback((tabValue: TabValue, element: HTMLButtonElement | null) => {
-    if (element) tabsRef.current.set(tabValue, element);
-    else tabsRef.current.delete(tabValue);
-  }, []);
+  const tabId = useCallback((tabValue: TabValue) => `${id}-tab-${encodeTabValue(tabValue)}`, [id]);
+  const panelId = useCallback(
+    (tabValue: TabValue) => `${id}-panel-${encodeTabValue(tabValue)}`,
+    [id]
+  );
 
-  const moveFocus = useCallback(
-    (current: TabValue, direction: 1 | -1) => {
-      const values = [...tabsRef.current.keys()];
-      const index = values.indexOf(current);
-      if (index < 0 || values.length < 2) return;
-      const next = values[(index + direction + values.length) % values.length];
+  const registerTab = useCallback(
+    (tabValue: TabValue, element: HTMLButtonElement | null, disabled: boolean) => {
+      if (element) tabsRef.current.set(tabValue, { element, disabled });
+      else tabsRef.current.delete(tabValue);
+    },
+    []
+  );
+
+  const focusValue = useCallback(
+    (next: TabValue) => {
       select(next);
-      tabsRef.current.get(next)?.focus();
+      tabsRef.current.get(next)?.element.focus();
     },
     [select]
   );
 
+  const moveFocus = useCallback(
+    (current: TabValue, direction: 1 | -1) => {
+      const values = [...tabsRef.current.entries()]
+        .filter(([, tab]) => !tab.disabled)
+        .map(([tabValue]) => tabValue);
+      const index = values.indexOf(current);
+      if (values.length === 0) return;
+      const nextIndex =
+        index < 0
+          ? direction === 1
+            ? 0
+            : values.length - 1
+          : (index + direction + values.length) % values.length;
+      focusValue(values[nextIndex]);
+    },
+    [focusValue]
+  );
+
+  const moveFocusToEdge = useCallback(
+    (edge: 'first' | 'last') => {
+      const values = [...tabsRef.current.entries()]
+        .filter(([, tab]) => !tab.disabled)
+        .map(([tabValue]) => tabValue);
+      const next = edge === 'first' ? values[0] : values[values.length - 1];
+      if (next) focusValue(next);
+    },
+    [focusValue]
+  );
+
   const contextValue = useMemo(
-    () => ({ id, value, select, size, registerTab, moveFocus }),
-    [id, value, select, size, registerTab, moveFocus]
+    () => ({
+      id,
+      mode,
+      value,
+      select,
+      size,
+      tabId,
+      panelId,
+      registerTab,
+      moveFocus,
+      moveFocusToEdge,
+    }),
+    [id, mode, value, select, size, tabId, panelId, registerTab, moveFocus, moveFocusToEdge]
   );
 
   return (
@@ -84,10 +143,19 @@ export function Tabs({
   );
 }
 
-export interface TabsListProps extends HTMLAttributes<HTMLDivElement> {
+function encodeTabValue(value: TabValue): string {
+  return (
+    Array.from(value)
+      .map((character) => character.codePointAt(0)?.toString(16) ?? '0')
+      .join('-') || 'empty'
+  );
+}
+
+export interface TabsListProps extends Omit<HTMLAttributes<HTMLDivElement>, 'aria-label'> {
   children: ReactNode;
   variant?: 'default' | 'stretch';
   appearance?: 'segmented' | 'underline';
+  'aria-label': string;
 }
 
 export function TabsList({
@@ -150,13 +218,16 @@ export interface TabsTabProps extends Omit<ButtonProps, 'children' | 'value' | '
   value: TabValue;
   children?: ReactNode;
   size?: ButtonSize;
+  variant?: ButtonVariant;
 }
 
 export function TabsTab({
   value,
   children,
+  variant = 'default',
   className,
   size,
+  disabled = false,
   onClick,
   onKeyDown,
   ...props
@@ -168,15 +239,17 @@ export function TabsTab({
   return (
     <Button
       {...props}
-      variant="default"
+      variant={variant}
       size={size ?? tabs.size}
       className={`tabs__tab ${active ? 'is-active' : ''} ${className ?? ''}`}
       data-tab-value={value}
+      id={tabs.tabId(value)}
       role="tab"
       aria-selected={active}
-      aria-controls={`${tabs.id}-panel-${value}`}
+      aria-controls={tabs.mode === 'panel' ? tabs.panelId(value) : undefined}
       tabIndex={active ? 0 : -1}
-      ref={(element) => tabs.registerTab(value, element)}
+      disabled={disabled}
+      ref={(element) => tabs.registerTab(value, element, disabled)}
       onClick={(event) => {
         tabs.select(value);
         onClick?.(event);
@@ -190,6 +263,12 @@ export function TabsTab({
         } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
           event.preventDefault();
           tabs.moveFocus(value, -1);
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          tabs.moveFocusToEdge('first');
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          tabs.moveFocusToEdge('last');
         }
       }}
     >
@@ -200,10 +279,18 @@ export function TabsTab({
 
 export interface TabsPanelProps extends HTMLAttributes<HTMLDivElement> {
   value: TabValue;
-  children: ReactNode;
+  children?: ReactNode;
+  /** Keep stateful content mounted while making inactive content inert. */
+  keepMounted?: boolean;
 }
 
-export function TabsPanel({ value, children, className, ...props }: TabsPanelProps) {
+export function TabsPanel({
+  value,
+  children,
+  className,
+  keepMounted = false,
+  ...props
+}: TabsPanelProps) {
   const tabs = useContext(TabsContext);
   if (!tabs) throw new Error('TabsPanel must be used inside Tabs');
   const active = tabs.value === value;
@@ -211,11 +298,14 @@ export function TabsPanel({ value, children, className, ...props }: TabsPanelPro
   return (
     <div
       {...props}
-      id={`${tabs.id}-panel-${value}`}
+      id={tabs.panelId(value)}
       className={`tabs__panel ${className ?? ''}`}
       role="tabpanel"
       aria-hidden={!active}
-      hidden={!active}
+      aria-labelledby={tabs.tabId(value)}
+      hidden={keepMounted ? undefined : !active}
+      inert={keepMounted && !active ? true : undefined}
+      data-tabs-keep-mounted={keepMounted ? 'true' : undefined}
     >
       {children}
     </div>

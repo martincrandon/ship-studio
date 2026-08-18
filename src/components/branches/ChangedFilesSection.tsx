@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { FileIcon, TrashIcon } from '../icons';
+import { FileIcon, TrashIcon } from '@/components/icons';
 import type { ChangedFile, ChangeStatus } from '../../lib/git';
 import { discardChanges } from '../../lib/branches';
 import { DiffModal } from './DiffModal';

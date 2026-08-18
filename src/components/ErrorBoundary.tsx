@@ -4,7 +4,7 @@ import { logger } from '../lib/logger';
 import { lookupBlobOwner, markPluginCrashed } from '../lib/plugin-loader';
 import { uninstallPlugin } from '../lib/plugins';
 import { Button } from './primitives/Button';
-import { InfoIcon } from './icons';
+import { InfoIcon } from '@/components/icons';
 
 interface Props {
   children: ReactNode;

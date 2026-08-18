@@ -56,11 +56,20 @@ When in doubt, check what `<ModalFrame>` / `<Button>` / `useInvoke` /
 `useCopyToClipboard` / `usePolling` / `CommandError` / `run_with_timeout`
 do, and follow that pattern.
 
+### Icons and SVG artwork
+
+Use named exports from `@/components/icons` for shared icons. Do not import shared SVG assets
+directly from feature code or from an internal icon module. Do not add static inline `<svg>` markup
+to feature components; place reusable icons in `src/assets/icons/`, app-specific artwork in
+`src/assets/icons/old-icons/`, and feature graphics in `src/assets/graphics/`. The only inline SVG
+exception is the marked dynamic graph in `BranchGraph.tsx`. See [Icons and SVG graphics](design-system.md#icons-and-svg-graphics)
+for the metadata, accessibility, and extraction contracts.
+
 ## Where to look
 
 | Layer | File | Purpose |
 |---|---|---|
-| UI primitives | [src/components/primitives/](../src/components/primitives/) | `ModalFrame`, `Button`, `EmptyState`, `Skeleton` |
+| UI primitives | [src/components/primitives/](../src/components/primitives/) | `ModalFrame`, `Button`, `Dropdown`, `Tabs`, `EmptyState` |
 | Hooks | [src/hooks/](../src/hooks/) | `useModalState`, `useAsyncState`, `useInvoke`, `useCopyToClipboard`, `usePolling` |
 | Contexts | [src/contexts/](../src/contexts/) | `ToastContext` (`useToast` / `useOptionalToast`), `ModalContext` (`useModal`) |
 | Design tokens | [src/styles/global/base.css](../src/styles/global/base.css) | All `--*` variables, plugin-stable |

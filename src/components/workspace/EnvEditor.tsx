@@ -19,8 +19,17 @@ import { useModal } from '../../contexts/ModalContext';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
-import { CheckIcon, CloseIcon, EyeIcon, EyeOffIcon, InfoIcon, SaveIcon, TrashIcon } from '../icons';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
+import {
+  CheckIcon,
+  CloseIcon,
+  EyeIcon,
+  EyeOffIcon,
+  InfoIcon,
+  PasteIcon,
+  SaveIcon,
+  TrashIcon,
+} from '@/components/icons';
 
 /** Props for the EnvEditor component */
 interface EnvEditorProps {
@@ -78,15 +87,15 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
       dismissable={!showPasteModal}
     >
       <div className="env-editor-content">
-        {/* File Tabs */}
-        <div className="env-file-tabs">
-          <Tabs
-            value={selectedFile?.path ?? ''}
-            onValueChange={(path) => {
-              const file = envFiles.find((candidate) => candidate.path === path);
-              if (file) setSelectedFile(file);
-            }}
-          >
+        <Tabs
+          value={selectedFile?.path ?? ''}
+          onValueChange={(path) => {
+            const file = envFiles.find((candidate) => candidate.path === path);
+            if (file) setSelectedFile(file);
+          }}
+        >
+          {/* File Tabs */}
+          <div className="env-file-tabs">
             <TabsList className="env-file-tabs-list" aria-label="Environment files">
               {envFiles.map((file) => (
                 <TabsTab key={file.path} value={file.path} className="env-file-tab">
@@ -94,215 +103,227 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
                 </TabsTab>
               ))}
             </TabsList>
-          </Tabs>
-          {showNewFileInput ? (
-            <div className="env-new-file-input">
-              <input
-                type="text"
-                value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleCreateFile();
-                  if (e.key === 'Escape') setShowNewFileInput(false);
-                }}
-                placeholder=".env.local"
-                autoFocus
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-              />
+            {showNewFileInput ? (
+              <div className="env-new-file-input">
+                <input
+                  type="text"
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleCreateFile();
+                    if (e.key === 'Escape') setShowNewFileInput(false);
+                  }}
+                  placeholder=".env.local"
+                  autoFocus
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+                <IconButton
+                  variant="default"
+                  size="compact"
+                  onClick={() => void handleCreateFile()}
+                  title="Create"
+                  aria-label="Create"
+                  icon={<CheckIcon size={14} />}
+                />
+                <IconButton
+                  variant="default"
+                  size="compact"
+                  onClick={() => setShowNewFileInput(false)}
+                  title="Cancel"
+                  aria-label="Cancel"
+                  icon={<CloseIcon size={14} />}
+                />
+              </div>
+            ) : (
               <IconButton
                 variant="default"
                 size="compact"
-                onClick={() => void handleCreateFile()}
-                title="Create"
-                aria-label="Create"
-                icon={<CheckIcon size={14} />}
+                className="env-add-file"
+                onClick={() => setShowNewFileInput(true)}
+                title="Create new env file"
+                aria-label="Create new env file"
+                icon="+"
               />
-              <IconButton
-                variant="default"
-                size="compact"
-                onClick={() => setShowNewFileInput(false)}
-                title="Cancel"
-                aria-label="Cancel"
-                icon={<CloseIcon size={14} />}
-              />
-            </div>
-          ) : (
-            <IconButton
-              variant="default"
-              size="compact"
-              className="env-add-file"
-              onClick={() => setShowNewFileInput(true)}
-              title="Create new env file"
-              aria-label="Create new env file"
-              icon="+"
-            />
-          )}
-        </div>
-
-        {/* Sync Warning */}
-        {syncStatus &&
-          (syncStatus.missingInExample.length > 0 || syncStatus.missingInLocal.length > 0) && (
-            <div className="env-sync-warning">
-              {syncStatus.missingInExample.length > 0 && (
-                <div className="env-sync-item">
-                  <div className="env-sync-info">
-                    <InfoIcon size={14} />
-                    <span>
-                      {syncStatus.missingInExample.length} key
-                      {syncStatus.missingInExample.length > 1 ? 's' : ''} in .env.local missing from
-                      .env.example
-                    </span>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    onClick={() => void handleSyncToExample()}
-                  >
-                    Sync to .env.example
-                  </Button>
-                </div>
-              )}
-              {syncStatus.missingInLocal.length > 0 && (
-                <div className="env-sync-item">
-                  <div className="env-sync-info">
-                    <InfoIcon size={14} />
-                    <span>
-                      {syncStatus.missingInLocal.length} key
-                      {syncStatus.missingInLocal.length > 1 ? 's' : ''} in .env.example missing from
-                      .env.local
-                    </span>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="compact"
-                    onClick={() => void handleSyncToLocal()}
-                  >
-                    Add to .env.local
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-        {/* Variables List */}
-        {isLoading ? (
-          <div className="env-loading">Loading...</div>
-        ) : selectedFile ? (
-          <div className="env-vars-container">
-            <div className="env-vars-list">
-              {vars.length === 0 ? (
-                <div className="env-empty">
-                  No variables defined. Click "Add Variable" to get started.
-                </div>
-              ) : (
-                vars.map((v, index) => (
-                  <div key={index} className="env-var-row">
-                    <input
-                      type="text"
-                      className="env-var-key"
-                      value={v.key}
-                      onChange={(e) => handleUpdateVar(index, 'key', e.target.value)}
-                      placeholder="KEY"
-                      autoFocus={editingKey === v.key}
-                      onFocus={() => setEditingKey(v.key)}
-                      onBlur={() => setEditingKey(null)}
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                    />
-                    <span className="env-var-equals">=</span>
-                    <input
-                      type={visibleValues.has(index) ? 'text' : 'password'}
-                      className="env-var-value"
-                      value={v.value}
-                      onChange={(e) => handleUpdateVar(index, 'value', e.target.value)}
-                      placeholder="value"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                    />
-                    <button
-                      className="env-var-visibility"
-                      onClick={() => toggleValueVisibility(index)}
-                      title={visibleValues.has(index) ? 'Hide value' : 'Show value'}
-                    >
-                      {visibleValues.has(index) ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
-                    </button>
-                    <button
-                      className="env-var-delete"
-                      onClick={() => handleDeleteVar(index)}
-                      title="Delete variable"
-                    >
-                      <TrashIcon size={14} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="env-actions">
-              <div className="env-actions-left">
-                <Button variant="secondary" onClick={handleAddVar}>
-                  + Add Variable
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowPasteModal(true)}
-                  leftIcon={
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                    </svg>
-                  }
-                >
-                  Paste .env
-                </Button>
-              </div>
-              <div className="env-actions-right">
-                {selectedFile && (
-                  <Button
-                    variant="danger"
-                    onClick={() => void handleDeleteFile()}
-                    title="Delete this file"
-                  >
-                    Delete File
-                  </Button>
-                )}
-                <Button
-                  variant="primary"
-                  onClick={() => void handleSave()}
-                  disabled={!hasChanges || isSaving || isLoading}
-                  leftIcon={!isSaving ? <SaveIcon size={14} /> : undefined}
-                >
-                  {isSaving ? 'Saving...' : 'Save'}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
-        ) : (
-          <div className="env-empty-state">
-            <div className="env-empty-icon">$</div>
-            <h4>No environment files</h4>
-            <p>Create an .env file to store your API keys and secrets.</p>
-            <Button variant="primary" onClick={() => setShowNewFileInput(true)}>
-              Create .env.local
-            </Button>
-          </div>
-        )}
 
-        {error && <div className="env-error">{error}</div>}
+          {envFiles.map((file) => (
+            <TabsPanel key={file.path} value={file.path} className="env-file-panel">
+              {selectedFile?.path === file.path && (
+                <>
+                  {/* Sync Warning */}
+                  {syncStatus &&
+                    (syncStatus.missingInExample.length > 0 ||
+                      syncStatus.missingInLocal.length > 0) && (
+                      <div className="env-sync-warning">
+                        {syncStatus.missingInExample.length > 0 && (
+                          <div className="env-sync-item">
+                            <div className="env-sync-info">
+                              <InfoIcon size={14} />
+                              <span>
+                                {syncStatus.missingInExample.length} key
+                                {syncStatus.missingInExample.length > 1 ? 's' : ''} in .env.local
+                                missing from .env.example
+                              </span>
+                            </div>
+                            <Button
+                              variant="secondary"
+                              size="compact"
+                              onClick={() => void handleSyncToExample()}
+                            >
+                              Sync to .env.example
+                            </Button>
+                          </div>
+                        )}
+                        {syncStatus.missingInLocal.length > 0 && (
+                          <div className="env-sync-item">
+                            <div className="env-sync-info">
+                              <InfoIcon size={14} />
+                              <span>
+                                {syncStatus.missingInLocal.length} key
+                                {syncStatus.missingInLocal.length > 1 ? 's' : ''} in .env.example
+                                missing from .env.local
+                              </span>
+                            </div>
+                            <Button
+                              variant="secondary"
+                              size="compact"
+                              onClick={() => void handleSyncToLocal()}
+                            >
+                              Add to .env.local
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  {/* Variables List */}
+                  {isLoading ? (
+                    <div className="env-loading">Loading...</div>
+                  ) : selectedFile ? (
+                    <div className="env-vars-container">
+                      <div className="env-vars-list">
+                        {vars.length === 0 ? (
+                          <div className="env-empty">
+                            No variables defined. Click "Add Variable" to get started.
+                          </div>
+                        ) : (
+                          vars.map((v, index) => (
+                            <div key={index} className="env-var-row">
+                              <input
+                                type="text"
+                                className="env-var-key"
+                                value={v.key}
+                                onChange={(e) => handleUpdateVar(index, 'key', e.target.value)}
+                                placeholder="KEY"
+                                autoFocus={editingKey === v.key}
+                                onFocus={() => setEditingKey(v.key)}
+                                onBlur={() => setEditingKey(null)}
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                              />
+                              <span className="env-var-equals">=</span>
+                              <input
+                                type={visibleValues.has(index) ? 'text' : 'password'}
+                                className="env-var-value"
+                                value={v.value}
+                                onChange={(e) => handleUpdateVar(index, 'value', e.target.value)}
+                                placeholder="value"
+                                autoComplete="off"
+                                autoCorrect="off"
+                                autoCapitalize="off"
+                                spellCheck={false}
+                              />
+                              <button
+                                className="env-var-visibility"
+                                onClick={() => toggleValueVisibility(index)}
+                                title={visibleValues.has(index) ? 'Hide value' : 'Show value'}
+                              >
+                                {visibleValues.has(index) ? (
+                                  <EyeOffIcon size={14} />
+                                ) : (
+                                  <EyeIcon size={14} />
+                                )}
+                              </button>
+                              <button
+                                className="env-var-delete"
+                                onClick={() => handleDeleteVar(index)}
+                                title="Delete variable"
+                              >
+                                <TrashIcon size={14} />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="env-actions">
+                        <div className="env-actions-left">
+                          <Button variant="secondary" onClick={handleAddVar}>
+                            + Add Variable
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setShowPasteModal(true)}
+                            leftIcon={<PasteIcon />}
+                          >
+                            Paste .env
+                          </Button>
+                        </div>
+                        <div className="env-actions-right">
+                          {selectedFile && (
+                            <Button
+                              variant="danger"
+                              onClick={() => void handleDeleteFile()}
+                              title="Delete this file"
+                            >
+                              Delete File
+                            </Button>
+                          )}
+                          <Button
+                            variant="primary"
+                            onClick={() => void handleSave()}
+                            disabled={!hasChanges || isSaving || isLoading}
+                            leftIcon={!isSaving ? <SaveIcon size={14} /> : undefined}
+                          >
+                            {isSaving ? 'Saving...' : 'Save'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="env-empty-state">
+                      <div className="env-empty-icon">$</div>
+                      <h4>No environment files</h4>
+                      <p>Create an .env file to store your API keys and secrets.</p>
+                      <Button variant="primary" onClick={() => setShowNewFileInput(true)}>
+                        Create .env.local
+                      </Button>
+                    </div>
+                  )}
+
+                  {error && <div className="env-error">{error}</div>}
+                </>
+              )}
+            </TabsPanel>
+          ))}
+
+          {envFiles.length === 0 && (
+            <div className="env-empty-state">
+              <div className="env-empty-icon">$</div>
+              <h4>No environment files</h4>
+              <p>Create an .env file to store your API keys and secrets.</p>
+              <Button variant="primary" onClick={() => setShowNewFileInput(true)}>
+                Create .env.local
+              </Button>
+            </div>
+          )}
+        </Tabs>
       </div>
 
       {/* Paste Modal */}

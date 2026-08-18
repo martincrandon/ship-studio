@@ -5,8 +5,8 @@
  */
 
 import { useState, type KeyboardEvent } from 'react';
-import { CloseIcon } from '../icons/common';
-import { PlusIcon } from '../icons/utility';
+import { CloseIcon } from '@/components/icons';
+import { PlusIcon } from '@/components/icons';
 import type { ElementSettings } from '../../hooks/useElementSettings';
 import { CascadeChip } from './CascadeChip';
 

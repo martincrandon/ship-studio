@@ -12,6 +12,7 @@ import {
 } from '../../lib/sounds';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
+import { PlayIcon } from '@/components/icons';
 
 interface NotificationSettingsModalProps {
   settings: NotificationSettings;
@@ -147,11 +148,7 @@ export function NotificationSettingsModal({
 
                 <Button
                   variant="secondary"
-                  leftIcon={
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="currentColor">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                  }
+                  leftIcon={<PlayIcon />}
                   onClick={() => void handlePreviewSound()}
                 >
                   Preview

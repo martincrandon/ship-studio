@@ -4,7 +4,7 @@
  * @module components/accounts/AccountCard
  */
 
-import { SettingsIcon } from '../icons';
+import { SettingsIcon } from '@/components/icons';
 import { IconButton } from '../primitives/IconButton';
 import type { Account } from '../../lib/accounts';
 

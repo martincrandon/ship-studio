@@ -5,7 +5,7 @@
  */
 
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { EyeOffIcon, SlackIcon } from '../icons';
+import { EyeOffIcon, SlackIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 

@@ -22,7 +22,7 @@ import {
 } from '../../lib/branches';
 import { Spinner } from '../primitives/Spinner';
 import { IconButton } from '../primitives/IconButton';
-import { ResetIcon } from '../icons';
+import { ResetIcon } from '@/components/icons';
 import { logger } from '../../lib/logger';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { humanizeGitError } from '../../lib/errors';
@@ -308,7 +308,12 @@ export function BranchGraph({
       ) : (
         <div className="branch-graph-body" style={{ height }}>
           {/* SVG graphics layer: rails, nodes, elbows, PR markers */}
-          <svg className="branch-graph-svg" width={width} height={height}>
+          <svg
+            data-dynamic-svg="branch-graph"
+            className="branch-graph-svg"
+            width={width}
+            height={height}
+          >
             {/* Fork elbows (under rails) */}
             {laid.map((l) => {
               const base = l.node.base ? laidByName.get(l.node.base) : null;

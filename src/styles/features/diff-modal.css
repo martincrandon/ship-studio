@@ -55,7 +55,7 @@
 }
 
 .diff-status {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   font-weight: 500;
@@ -86,7 +86,7 @@
   padding: 6px;
   background: transparent;
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -104,7 +104,7 @@
 /* File path */
 .diff-path {
   padding: 8px 20px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-family: var(--font-code);
   color: var(--text-muted);
   background: var(--surface-control);
@@ -122,7 +122,7 @@
   padding: 10px 20px;
   background: var(--surface-control);
   border-bottom: 1px solid var(--border-default);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   font-family: var(--font-code);
   flex-shrink: 0;
@@ -148,7 +148,7 @@
   margin: 0;
   padding: 0;
   font-family: var(--font-code);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   line-height: 1.5;
 }
 
@@ -222,7 +222,7 @@
   padding: 48px 24px;
   text-align: center;
   color: var(--text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
 }
 
 /* Loading state */
@@ -250,10 +250,10 @@
   padding: 8px 16px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
   cursor: pointer;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   transition:
     background-color var(--transition),
     color var(--transition),

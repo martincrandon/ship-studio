@@ -24,7 +24,7 @@ import { useModal } from '../../contexts/ModalContext';
 import { useAsyncState } from '../../hooks/useAsyncState';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { GlobeIcon, CloseIcon } from '../icons';
+import { GlobeIcon, CloseIcon } from '@/components/icons';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { trackEvent } from '../../lib/analytics';
 import {

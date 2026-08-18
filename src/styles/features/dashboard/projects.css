@@ -39,7 +39,7 @@
   padding: 0 var(--spacing-sm);
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -133,7 +133,7 @@
   margin-bottom: var(--spacing-sm);
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
 }
 
 .project-bulk-actions-summary {
@@ -142,7 +142,7 @@
   gap: var(--spacing-md);
   min-width: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .project-bulk-actions-summary strong {
@@ -185,7 +185,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   margin-top: 2px;
   min-width: 0;
@@ -226,7 +226,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   margin-top: 4px;
   min-width: 0;
@@ -383,7 +383,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   cursor: pointer;
   transition:
     background-color var(--transition),

@@ -26,7 +26,7 @@ import {
   SlackIcon,
   NewWorkspaceIcon,
   SwitchWorkspaceIcon,
-} from '../icons';
+} from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
@@ -1170,7 +1170,7 @@ function ProjectGroup({
           aria-hidden={!compact}
           title={
             compact
-              ? `${row.fallbackName}${shortcutNumber !== null ? ` (${kbd('mod', String(shortcutNumber))})` : ''}`
+              ? row.fallbackName
               : shortcutNumber !== null
                 ? kbd('mod', String(shortcutNumber))
                 : undefined

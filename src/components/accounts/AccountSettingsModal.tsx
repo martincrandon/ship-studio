@@ -10,7 +10,7 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
-import { GitHubIcon, VercelIcon } from '../icons';
+import { GitHubIcon, VercelIcon } from '@/components/icons';
 import { useWorkspaceConnect, type ConnectServiceId } from '../../hooks/useWorkspaceConnect';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import {
@@ -410,7 +410,7 @@ export function AccountSettingsModal({
 
           <div className="account-detail-footer">
             {account.isDefault ? (
-              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+              <span className="account-detail-footer-note">
                 The Default workspace cannot be renamed or deleted.
               </span>
             ) : confirmingDelete ? (

@@ -23,7 +23,7 @@ import {
   HelpIcon,
   ChevronIcon,
   SettingsIcon,
-} from '../icons';
+} from '@/components/icons';
 import { Dropdown, DropdownItem, DropdownDivider } from '../primitives/Dropdown';
 import { MenuButton } from '../primitives/MenuButton';
 import { PluginSlot } from '../plugins/PluginSlot';

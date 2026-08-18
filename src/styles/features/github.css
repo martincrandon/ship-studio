@@ -20,8 +20,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  font-size: var(--font-size-md);
-  border-radius: var(--radius);
+  font-size: var(--font-size-body-lg);
+  border-radius: var(--radius-control);
 }
 
 .github-status-btn.not-installed {
@@ -43,7 +43,7 @@
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .github-status-connected svg {
@@ -155,7 +155,7 @@
 
 .github-error {
   color: var(--accent-error);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   margin-left: 8px;
 }
 
@@ -170,7 +170,7 @@
 
 .github-modal > p {
   padding: 6px 20px 0;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-muted);
   margin: 0;
 }
@@ -185,7 +185,7 @@
 .github-form > label:first-child,
 .github-form > label:nth-child(2) {
   padding: 0 20px 16px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-weight: 500;
   color: var(--text-secondary);
   display: flex;
@@ -198,9 +198,9 @@
   padding-right: 36px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-primary);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-family: var(--font-code);
   outline: none;
   cursor: pointer;
@@ -226,7 +226,7 @@
   align-items: center;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
   transition: border-color var(--transition);
 }
@@ -239,7 +239,7 @@
   padding: 12px 0 12px 14px;
   color: var(--text-muted);
   font-family: var(--font-code);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   white-space: nowrap;
 }
 
@@ -250,7 +250,7 @@
   border: none;
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 600;
   outline: none;
 }
@@ -321,20 +321,20 @@
 
 .visibility-option strong {
   color: var(--text-primary);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 500;
 }
 
 .visibility-option span {
   color: var(--text-muted);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
 }
 
 .github-form .github-error {
   margin: 0;
   padding: 12px 20px;
   background: rgba(var(--accent-error-rgb), 0.1);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 /* GitHub Modal Actions */

@@ -5,7 +5,7 @@
  */
 
 import { Button } from '../primitives/Button';
-import { CloseIcon, TrashIcon } from '../icons';
+import { CloseIcon, TrashIcon } from '@/components/icons';
 import { projectCountLabel } from '../../hooks/useProjectBulkActions';
 
 interface ProjectBulkActionsBarProps {

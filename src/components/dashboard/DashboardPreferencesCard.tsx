@@ -5,7 +5,7 @@
  */
 
 import { trackEvent } from '../../lib/analytics';
-import { HistoryIcon, SettingsIcon } from '../icons';
+import { HistoryIcon, SettingsIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 
 interface DashboardPreferencesCardProps {
@@ -25,7 +25,7 @@ export function DashboardPreferencesCard({
     <section className="dashboard-card">
       <header className="dashboard-card-header">
         <div>
-          <h3 className="dashboard-card-title text-style-heading">Preferences</h3>
+          <h3 className="dashboard-card-title text-style-h4">Preferences</h3>
           <p className="dashboard-card-subtitle text-style-body-medium">
             Adjust app settings or review recent updates.
           </p>

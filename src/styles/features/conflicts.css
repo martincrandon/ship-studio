@@ -2,7 +2,7 @@
 
 /* Conflict-local colors — intentional one-offs, not part of the global scale. */
 :root {
-  /* Hover state for the "theirs" (green) button — darker step of --success-light. */
+  /* Hover state for the "theirs" (green) button — darker step of --accent-success. */
   --conflict-theirs-hover: #16a34a;
 }
 
@@ -71,7 +71,7 @@
 
 .conflict-header h2 {
   margin: 0 0 4px 0;
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-h4);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -80,7 +80,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .conflict-file-name {
@@ -93,13 +93,13 @@
 
 .conflict-progress {
   color: var(--text-muted);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
 }
 
 /* Explanation */
 .conflict-explanation {
   padding: 12px 24px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   background: var(--surface-control);
   border-bottom: 1px solid var(--border-default);
@@ -138,7 +138,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -159,7 +159,7 @@
 
 .conflict-branch-name {
   font-weight: 400;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-muted);
@@ -173,14 +173,14 @@
   flex: 1;
   padding: 12px;
   overflow: auto;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   line-height: 1.5;
 }
 
 .conflict-panel-content pre {
   margin: 0;
   font-family: var(--font-code);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-primary);
@@ -196,7 +196,7 @@
   padding-top: 8px;
   border-top: 1px dashed var(--border-default);
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-style: italic;
 }
 
@@ -223,8 +223,8 @@
 
 .conflict-btn {
   padding: 10px 20px;
-  border-radius: var(--radius);
-  font-size: var(--font-size-md);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body-lg);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -302,8 +302,8 @@
   padding: 12px 14px;
   background: rgba(var(--info-rgb), 0.08);
   border: 1px solid rgba(var(--info-rgb), 0.2);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
+  border-radius: var(--radius-card);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -331,9 +331,9 @@
   padding: 8px 14px;
   background: var(--accent-active);
   border: 1px solid var(--accent-active);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--surface-app);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -360,7 +360,7 @@
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   cursor: pointer;
   transition: color var(--transition);
   text-align: left;
@@ -391,9 +391,9 @@
   margin-bottom: 16px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   cursor: pointer;
   transition:
     background-color var(--transition),
@@ -411,7 +411,7 @@
 }
 
 .conflict-context-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
   color: var(--text-muted);
   margin-bottom: 6px;
@@ -424,9 +424,9 @@
   padding: 10px 12px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -447,7 +447,7 @@
 }
 
 .conflict-diff-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
   margin-bottom: 6px;
   text-transform: uppercase;
@@ -467,9 +467,9 @@
   padding: 10px 12px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;

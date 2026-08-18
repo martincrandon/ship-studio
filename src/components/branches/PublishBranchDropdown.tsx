@@ -12,7 +12,7 @@
 import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { ProjectGitHubStatus } from '../../lib/github';
 import { publishBranch } from '../../lib/branches';
-import { ChevronIcon, BranchIcon, SuccessIcon, ErrorIcon, PushIcon } from '../icons';
+import { ChevronIcon, BranchIcon, SuccessIcon, ErrorIcon, PushIcon } from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { useClickOutside } from '../../hooks/useClickOutside';
 import { logger } from '../../lib/logger';
@@ -276,7 +276,10 @@ export function PublishBranchDropdown({
           disabled
           title="Checking GitHub status..."
         >
-          Push
+          <span className="source-control-push-content">
+            <PushIcon size={16} />
+            <span>Push</span>
+          </span>
           <ChevronIcon />
         </MenuButton>
       </div>
@@ -297,7 +300,10 @@ export function PublishBranchDropdown({
           disabled
           title="Create a GitHub repository first"
         >
-          Push
+          <span className="source-control-push-content">
+            <PushIcon size={16} />
+            <span>Push</span>
+          </span>
           <ChevronIcon />
         </MenuButton>
       </div>

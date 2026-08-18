@@ -10,7 +10,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
-import { NewWorkspaceIcon } from '../icons';
+import { NewWorkspaceIcon } from '@/components/icons';
 import { AccountCard } from './AccountCard';
 import { NewAccountModal } from './NewAccountModal';
 import { AccountSettingsModal } from './AccountSettingsModal';

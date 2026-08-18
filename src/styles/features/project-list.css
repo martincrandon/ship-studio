@@ -41,7 +41,7 @@
   padding: 12px 16px;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   min-width: 200px;
   flex: 1;
   max-width: 280px;
@@ -63,7 +63,7 @@
   width: 36px;
   height: 36px;
   background: var(--surface-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-secondary);
 }
 
@@ -82,12 +82,12 @@
 
 .connection-name {
   font-weight: 600;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   color: var(--text-primary);
 }
 
 .connection-status {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--accent-success);
   white-space: nowrap;
   overflow: hidden;
@@ -100,12 +100,12 @@
 
 .connection-action {
   padding: 6px 12px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
   color: var(--text-primary);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition:
     background-color var(--transition),
@@ -140,9 +140,9 @@
   color: var(--text-secondary);
 }
 
-.project-list-empty .hint {
+.project-list-empty .text-style-hint {
   color: var(--text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   margin-top: 8px;
 }
 

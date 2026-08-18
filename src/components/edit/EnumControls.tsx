@@ -18,8 +18,8 @@ import {
 import { EnumDropdown } from './EnumDropdown';
 import { ResettableLabel } from './ResettableLabel';
 import { SegmentedControl } from '../primitives/SegmentedControl';
-import { ArrowLeftIcon, ArrowRightIcon } from '../icons/common';
-import { EyeIcon, EyeOffIcon } from '../icons/layout';
+import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icons';
+import { EyeIcon, EyeOffIcon } from '@/components/icons';
 import {
   AlignItemsCenterIcon,
   AlignItemsEndIcon,
@@ -45,7 +45,7 @@ import {
   JustifyStartIcon,
   OverflowScrollIcon,
   WrapDownIcon,
-} from '../icons/editor-controls';
+} from '@/components/icons';
 
 function EnumGlyph({ children }: { children: ReactNode }) {
   return (

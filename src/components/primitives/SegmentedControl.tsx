@@ -7,6 +7,7 @@ export interface SegmentedControlOption<T extends string> {
   label: ReactNode;
   ariaLabel?: string;
   title?: string;
+  className?: string;
   disabled?: boolean;
 }
 
@@ -44,6 +45,7 @@ export function SegmentedControl<T extends string>({
           disabled={option.disabled}
           aria-label={option.ariaLabel}
           title={option.title ?? option.ariaLabel}
+          className={option.className}
           onClick={() => onValueChange(option.value)}
         >
           {option.label}

@@ -12,8 +12,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
-import { ChevronRightIcon } from '../icons';
+import { ChevronRightIcon } from '@/components/icons';
 import { stripAnsi } from '../../lib/ansi';
+import DevServerStoppedGraphic from '@/assets/graphics/dev-server-stopped.svg?react';
+import DevServerErrorGraphic from '@/assets/graphics/dev-server-error.svg?react';
 
 /** Last N log lines to show inline — enough to catch a compile error or an
  *  EADDRINUSE, small enough to stay readable in the cramped preview pane. */
@@ -143,35 +145,17 @@ export function DevServerStatus({
         <Spinner size="lg" style={{ color: 'var(--text-muted)' }} />
       ) : (
         <div className="preview-status__icon" aria-hidden>
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            {phase === 'stopped' ? (
-              <>
-                <line x1="10" y1="9" x2="10" y2="15" />
-                <line x1="14" y1="9" x2="14" y2="15" />
-              </>
-            ) : (
-              <>
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12" y2="16" />
-              </>
-            )}
-          </svg>
+          {phase === 'stopped' ? (
+            <DevServerStoppedGraphic width={28} height={28} aria-hidden="true" />
+          ) : (
+            <DevServerErrorGraphic width={28} height={28} aria-hidden="true" />
+          )}
         </div>
       )}
 
       <p className="preview-status__title">{title(phase, isStaticProject, processGone)}</p>
 
-      <p className="hint">
+      <p className="text-style-hint">
         {processGone
           ? `The dev-server process is no longer running${
               typeof exitCode === 'number' ? ` (exit code ${exitCode})` : ''

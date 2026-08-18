@@ -6,7 +6,7 @@
  */
 
 import { WIZARD_STEPS, type WizardStepId } from '../../lib/setup';
-import { CheckIcon } from '../icons';
+import { CheckIcon } from '@/components/icons';
 
 interface WizardStepIndicatorProps {
   currentStep: WizardStepId;

@@ -14,7 +14,7 @@
   /* Left padding clears the macOS traffic lights (overlay mode) */
   padding: 0 16px 0 78px;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
@@ -36,7 +36,7 @@
 }
 
 .workspace-titlebar h1 {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -62,7 +62,7 @@
   align-items: center;
   gap: var(--space-04);
   width: max-content;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-family: var(--font-code);
   white-space: nowrap;
   visibility: hidden;
@@ -75,7 +75,7 @@
 
 .workspace-titlebar .project-path {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-family: var(--font-code);
   display: flex;
   align-items: center;
@@ -107,7 +107,7 @@
 }
 
 .workspace-titlebar .back-link {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   white-space: nowrap;
   flex-shrink: 0;
   background: none;
@@ -130,7 +130,7 @@
   gap: 16px;
   padding: 8px 10px;
   background: var(--surface-panel);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 /* An open workspace panel is signalled by the standard outlined button state,

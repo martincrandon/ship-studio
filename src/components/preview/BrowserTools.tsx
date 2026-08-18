@@ -23,7 +23,7 @@ import {
   formatElementsForAgent,
 } from '../../lib/inspectFormat';
 import { trackEvent } from '../../lib/analytics';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { Button } from '../primitives/Button';
 
 type InnerTab = 'console' | 'network' | 'elements';
@@ -113,7 +113,7 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
   return (
     <div className="browser-tools">
       <Tabs value={tab} onValueChange={(next) => setTab(next as InnerTab)}>
-        <TabsList className="browser-tools-tabs">
+        <TabsList className="browser-tools-tabs" aria-label="Browser tools">
           <TabButton label="Console" count={consoleEntries.length} value="console" />
           <TabButton label="Network" count={networkEntries.length} value="network" />
           <TabButton label="Elements" value="elements" />
@@ -140,21 +140,33 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
             </Button>
           </div>
         </TabsList>
+        {/* All three views stay mounted and stack in the same grid cell.
+            Swapping `is-active` via opacity preserves scroll position and
+            state; TabsPanel also makes inactive slots inert. */}
+        <div className="browser-tools-body">
+          <TabsPanel
+            value="console"
+            keepMounted
+            className={`browser-tools-slot ${tab === 'console' ? 'is-active' : ''}`}
+          >
+            <ConsoleView entries={consoleEntries} />
+          </TabsPanel>
+          <TabsPanel
+            value="network"
+            keepMounted
+            className={`browser-tools-slot ${tab === 'network' ? 'is-active' : ''}`}
+          >
+            <NetworkView entries={networkEntries} />
+          </TabsPanel>
+          <TabsPanel
+            value="elements"
+            keepMounted
+            className={`browser-tools-slot ${tab === 'elements' ? 'is-active' : ''}`}
+          >
+            <ElementsView snapshot={domSnapshot} />
+          </TabsPanel>
+        </div>
       </Tabs>
-      {/* All three views stay mounted and stack in the same grid cell.
-          Swapping `is-active` via opacity preserves scroll position and
-          state; `inert` on inactive slots blocks focus + pointer events. */}
-      <div className="browser-tools-body">
-        <div className={`browser-tools-slot ${tab === 'console' ? 'is-active' : ''}`}>
-          <ConsoleView entries={consoleEntries} />
-        </div>
-        <div className={`browser-tools-slot ${tab === 'network' ? 'is-active' : ''}`}>
-          <NetworkView entries={networkEntries} />
-        </div>
-        <div className={`browser-tools-slot ${tab === 'elements' ? 'is-active' : ''}`}>
-          <ElementsView snapshot={domSnapshot} />
-        </div>
-      </div>
     </div>
   );
 }

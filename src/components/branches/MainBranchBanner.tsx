@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { WarningIcon, CloseIcon, BranchIcon } from '../icons';
+import { WarningIcon, CloseIcon, BranchIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { getHideMainBranchWarning, setHideMainBranchWarning } from '../../lib/project';

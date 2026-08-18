@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { DuplicateIcon, PlusIcon, TrashIcon } from '../icons';
+import { DuplicateIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { InsertMenu } from './InsertMenu';
 import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';

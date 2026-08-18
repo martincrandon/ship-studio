@@ -11,7 +11,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { PropertyField } from '../primitives/PropertyField';
-import { ChevronIcon } from '../icons';
+import { ChevronIcon } from '@/components/icons';
 
 interface Option {
   label: string;

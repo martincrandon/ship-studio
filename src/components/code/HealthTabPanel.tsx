@@ -31,7 +31,7 @@ import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Spinner } from '../primitives/Spinner';
 import { Tooltip } from '../primitives/Tooltip';
-import { CopyIcon, FileTextIcon, HelpIcon, ResetIcon } from '../icons';
+import { CopyIcon, FileTextIcon, HelpIcon, ResetIcon } from '@/components/icons';
 
 const CATEGORY_HINTS: Record<ScriptCategory, string> = {
   test: "Runs your project's test suite (vitest, jest, etc.) and reports pass/fail.",

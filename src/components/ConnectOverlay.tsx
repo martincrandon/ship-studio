@@ -6,7 +6,7 @@
  * @module components/ConnectOverlay
  */
 
-import { GitHubIcon } from './icons';
+import { GitHubIcon } from '@/components/icons';
 import { Button } from './primitives/Button';
 
 interface ConnectOverlayProps {

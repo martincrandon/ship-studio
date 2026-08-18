@@ -34,7 +34,7 @@
 }
 
 .account-select-title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-h3);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -43,7 +43,7 @@
 .account-select-subtitle {
   max-width: 720px;
   margin: -8px 0 28px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.6;
   color: var(--text-secondary);
 }
@@ -118,7 +118,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-h3);
   font-weight: 600;
   color: var(--text-inverse);
   flex-shrink: 0;
@@ -143,7 +143,7 @@
 
 .account-card-name {
   font-weight: 600;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -152,7 +152,7 @@
 }
 
 .account-card-badge {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
   padding: 2px 7px;
   border-radius: var(--radius-sm);
@@ -176,7 +176,7 @@
 
 .account-settings-hint {
   margin-top: var(--spacing-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
 }
 
@@ -223,6 +223,11 @@
   align-items: center;
 }
 
+.account-detail-footer-note {
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
+}
+
 /* Inline delete confirmation (replaces a non-blocking window.confirm). */
 .account-delete-confirm {
   display: flex;
@@ -233,7 +238,7 @@
 }
 
 .account-delete-confirm-text {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-secondary);
   min-width: 0;
 }
@@ -245,7 +250,7 @@
 }
 
 .account-section-title {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -265,7 +270,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
   padding: var(--spacing-xs) var(--spacing-sm);
 }
@@ -317,7 +322,7 @@
      of individually-bordered boxes (which read as visual noise). */
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 
@@ -336,7 +341,7 @@
 
 .account-cred-label {
   flex: 0 0 200px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -359,7 +364,7 @@
 }
 
 .account-cred-description {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -375,7 +380,7 @@
 }
 
 .account-cred-badge {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   padding: 2px 7px;
   border-radius: var(--radius-sm);
   font-weight: 500;
@@ -413,7 +418,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   padding: 5px var(--spacing-sm);
   font-family: var(--font-code);
 }
@@ -443,7 +448,7 @@
   border: 1px solid var(--border-default);
   background: var(--surface-panel);
   cursor: pointer;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-secondary);
   transition:
     background var(--transition),

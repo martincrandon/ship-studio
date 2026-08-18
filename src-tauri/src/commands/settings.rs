@@ -43,6 +43,23 @@ pub fn set_slack_cta_hidden(hidden: bool) -> Result<(), CommandError> {
     write_app_state(&state).map_err(CommandError::from)
 }
 
+/// Get whether the dashboard home header is hidden.
+#[tauri::command]
+#[tracing::instrument]
+pub fn get_dashboard_header_hidden() -> Result<bool, CommandError> {
+    let state = read_app_state();
+    Ok(state.dashboard_header_hidden.unwrap_or(false))
+}
+
+/// Set whether the dashboard home header is hidden (persisted to app state).
+#[tauri::command]
+#[tracing::instrument]
+pub fn set_dashboard_header_hidden(hidden: bool) -> Result<(), CommandError> {
+    let mut state = read_app_state();
+    state.dashboard_header_hidden = Some(hidden);
+    write_app_state(&state).map_err(CommandError::from)
+}
+
 /// Get whether the terminal uses WebGL (GPU-accelerated) rendering. Defaults to true.
 #[tauri::command]
 #[tracing::instrument]

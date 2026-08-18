@@ -28,7 +28,7 @@
   gap: var(--spacing-xs);
 }
 .ss-edit-image__path {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
   background: var(--surface-control);
   border-radius: var(--radius-sm);
@@ -39,7 +39,7 @@
 }
 .ss-edit-image__note {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.45;
   color: var(--text-muted);
 }

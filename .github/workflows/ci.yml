@@ -76,11 +76,14 @@ jobs:
       - name: Run tests
         run: pnpm test:run
 
-      - name: Pattern regression check
-        run: pnpm check:patterns
+      - name: Icon inventory check
+        run: pnpm icons:check
 
-      - name: LOC regression guard
-        run: pnpm check:loc
+      - name: Design-system docs check
+        run: pnpm docs:check
+
+      - name: UI verification baseline
+        run: pnpm check:ui-baseline
 
       - name: Coverage floor
         # Floor set at current baseline (~5% lines, 16% branches, 4% functions).

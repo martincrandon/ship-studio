@@ -8,7 +8,7 @@ import { searchArticles, getPopularArticles, listTickets } from '../../lib/suppo
 import type { LibraryArticle } from '@cstar.help/js/library';
 import type { SupportView } from './SupportPanel';
 import { trackEvent } from '../../lib/analytics';
-import { FileTextIcon, SearchIcon, SlackIcon } from '../icons';
+import { FileTextIcon, SearchIcon, SlackIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 
 const SLACK_INVITE_URL =

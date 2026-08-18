@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import svgr from "vite-plugin-svgr";
 import path from "path";
 import { readFileSync } from "fs";
 
@@ -12,7 +13,32 @@ const pkg = JSON.parse(
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [
+    svgr({
+      include: "**/*.svg?react",
+      esbuildOptions: {
+        jsx: "automatic",
+      },
+      svgrOptions: {
+        plugins: ["@svgr/plugin-svgo", "@svgr/plugin-jsx"],
+        jsxRuntime: "automatic",
+        dimensions: false,
+        expandProps: "end",
+        ref: true,
+        titleProp: true,
+        replaceAttrValues: {
+          "#979797": "currentColor",
+        },
+        svgProps: {
+          focusable: "false",
+        },
+        svgoConfig: {
+          plugins: ["prefixIds"],
+        },
+      },
+    }),
+    react(),
+  ],
 
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),

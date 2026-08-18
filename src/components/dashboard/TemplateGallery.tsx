@@ -1,5 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, SearchIcon, CloseIcon } from '../icons';
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckIcon,
+  SearchIcon,
+  CloseIcon,
+} from '@/components/icons';
+import TemplatePlaceholderGraphic from '@/assets/graphics/template-placeholder.svg?react';
 
 /** Shape of a community template from the API */
 export interface CommunityTemplate {
@@ -56,18 +63,7 @@ function TemplateCard({
           <img src={template.thumbnail_url} alt={template.name} draggable={false} />
         ) : (
           <div className="tg-card-thumb-placeholder">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M3 9h18" />
-              <path d="M9 21V9" />
-            </svg>
+            <TemplatePlaceholderGraphic width={24} height={24} aria-hidden="true" />
           </div>
         )}
       </div>

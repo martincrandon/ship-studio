@@ -5,13 +5,30 @@
  */
 
 import { useState } from 'react';
+import { EyeOffIcon } from '@/components/icons';
+import { IconButton } from '../primitives/IconButton';
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  /** Called when the user hides the home screen header. */
+  onHide?: () => void;
+}
+
+export function DashboardHeader({ onHide }: DashboardHeaderProps) {
   const [clickPulseCount, setClickPulseCount] = useState(0);
   const [isHoverSuppressed, setIsHoverSuppressed] = useState(false);
 
   return (
     <header className="dashboard-hero">
+      {onHide && (
+        <IconButton
+          variant="ghost"
+          className="dashboard-hero-hide"
+          icon={<EyeOffIcon size={14} />}
+          onClick={onHide}
+          title="Hide home screen header"
+          aria-label="Hide home screen header"
+        />
+      )}
       <button
         type="button"
         className={`dashboard-hero-icon-button${isHoverSuppressed ? ' dashboard-hero-icon-button--hover-suppressed' : ''}`}
@@ -32,7 +49,7 @@ export function DashboardHeader() {
           }}
         />
       </button>
-      <h1 className="dashboard-hero-title text-style-display">What will you Ship today?</h1>
+      <h1 className="dashboard-hero-title text-style-h1">What will you Ship today?</h1>
     </header>
   );
 }

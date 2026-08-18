@@ -23,7 +23,9 @@ vi.mock('../icons', () => ({
   HomeIcon: () => null,
   ListIcon: () => null,
   PlusIcon: () => null,
+  PullIcon: () => null,
   SearchIcon: () => null,
+  EyeOffIcon: () => null,
 }));
 
 import { DashboardHeader } from './DashboardHeader';
@@ -77,6 +79,15 @@ describe('dashboard home layout pieces', () => {
     expect(screen.getByRole('heading', { name: 'What will you Ship today?' })).toBeInTheDocument();
   });
 
+  it('routes the home screen header hide action', () => {
+    const onHide = vi.fn();
+    render(<DashboardHeader onHide={onHide} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide home screen header' }));
+
+    expect(onHide).toHaveBeenCalledOnce();
+  });
+
   it('opens the command palette from the standalone search', () => {
     render(<DashboardSearch />);
 
@@ -114,5 +125,12 @@ describe('dashboard home layout pieces', () => {
 
     expect(onImportProject).not.toHaveBeenCalled();
     expect(onGitHubConnectForImport).toHaveBeenCalledOnce();
+  });
+
+  it('uses the shared tabs primitive for the project view switcher', () => {
+    renderSearchAndSort({ viewMode: 'grid' });
+
+    expect(screen.getByRole('tab', { name: 'Grid view' })).toHaveClass('button--default');
+    expect(screen.getByRole('tab', { name: 'List view' })).toHaveClass('button--ghost');
   });
 });

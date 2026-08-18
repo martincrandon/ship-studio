@@ -1,6 +1,6 @@
 import { getAgentById } from '../../lib/agent';
-import { ChevronIcon, CloseIcon } from '../icons/common';
-import { PlusIcon } from '../icons/utility';
+import { ChevronIcon, CloseIcon } from '@/components/icons';
+import { PlusIcon } from '@/components/icons';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { IconButton } from '../primitives/IconButton';
 import { MenuButton } from '../primitives/MenuButton';

@@ -101,7 +101,7 @@
 
 /* Sync state: is this branch on GitHub or only local? */
 .branch-sync-badge {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 1px 6px;
   border-radius: 3px;
   font-weight: 500;
@@ -147,7 +147,7 @@
   width: var(--popover-source-control-width);
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
   overflow: hidden;
   z-index: var(--z-modal-overlay);
@@ -156,7 +156,7 @@
 .branch-changes-header {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border-default);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -172,7 +172,7 @@
   gap: 8px;
   padding: 8px 12px;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   transition: background var(--transition-fast);
   width: 100%;
   background: transparent;
@@ -199,7 +199,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   line-height: 1;
   border-radius: 3px;
@@ -258,8 +258,8 @@
 .branch-changes-empty {
   padding: var(--spacing-md);
   color: var(--text-muted);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-code);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-medium);
 }
 
 .branch-changes-discard-btn.button.confirming {
@@ -313,6 +313,7 @@
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
   z-index: var(--z-modal-overlay);
+  --branches-menu-subline-gap: var(--spacing-2xs);
 }
 
 .branches-menu-section,
@@ -337,7 +338,7 @@
   min-width: 0;
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -348,7 +349,7 @@
 
 .branches-menu-section-title {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-code);
   text-transform: uppercase;
@@ -363,6 +364,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.branches-menu-section-heading-main {
+  display: flex;
+  align-items: center;
+  gap: var(--branches-menu-subline-gap);
+  min-width: 0;
+}
+
+.branches-menu-section-view-all {
+  flex: 0 0 auto;
+  font-size: var(--font-size-body-sm);
+  white-space: nowrap;
+}
+
+.branches-menu-section-heading .branches-menu-section-title {
+  margin-bottom: 0;
 }
 
 .branches-menu-count {
@@ -371,7 +390,8 @@
   border-radius: var(--radius-pill);
   background: var(--surface-control);
   color: var(--text-secondary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
@@ -387,7 +407,7 @@
   border-radius: var(--button-radius);
   color: var(--text-secondary);
   font: inherit;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   text-align: left;
   cursor: pointer;
   transition:
@@ -395,9 +415,39 @@
     color var(--transition);
 }
 
+.branches-menu-branch-row {
+  align-items: stretch;
+  gap: var(--spacing-2xs);
+  min-height: var(--button-height);
+}
+
+.branches-menu-row-icon {
+  display: inline-flex;
+  flex: 0 0 var(--button-height);
+  align-items: center;
+  justify-content: center;
+  width: var(--button-height);
+  height: var(--button-height);
+  aspect-ratio: 1 / 1;
+}
+
+.branches-menu-row-icon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.branches-menu-row-content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-sm);
+  padding-block: var(--spacing-sm);
+}
+
 .branches-menu-row:hover:not(:disabled) {
   background: var(--surface-control);
-  color: var(--text-primary);
 }
 
 .branches-menu-row:focus-visible {
@@ -410,8 +460,101 @@
 }
 
 .branches-menu-row.is-current {
+  background: rgba(var(--accent-active-rgb), 0.15);
+  color: var(--accent-active);
+}
+
+.branches-menu-pr-row {
+  display: grid;
+  grid-template-columns: var(--size-icon-button) minmax(0, 1fr);
+  align-items: stretch;
+  column-gap: var(--button-gap);
+}
+
+.branches-menu-pr-leading-icon {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--spacing-2xs);
+}
+
+.branches-menu-pr-leading-icon {
+  grid-column: 1;
+  grid-row: 1;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+}
+
+.branches-menu-pr-content {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--branches-menu-subline-gap);
+  padding-block: var(--spacing-xs);
+}
+
+.branches-menu-pr-main,
+.branches-menu-pr-meta {
+  min-width: 0;
+  line-height: var(--line-height-default);
+}
+
+.branches-menu-pr-main {
+  display: block;
+}
+
+.branches-menu-pr-inline {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  line-height: var(--line-height-medium);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.branches-menu-pr-number {
+  margin-inline-end: var(--spacing-xs);
+  color: var(--text-muted);
+}
+
+.branches-menu-pr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+}
+
+.branches-menu-pr-branches {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-2xs);
+}
+
+.branches-menu-pr-branch {
+  min-width: 0;
+  padding: var(--spacing-3xs) var(--spacing-xs);
   background: var(--surface-control);
-  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
+.branches-menu-pr-row:hover:not(:disabled) .branches-menu-pr-branch {
+  background: var(--surface-control-hover);
+}
+
+.branches-menu-pr-author {
+  overflow-wrap: anywhere;
 }
 
 .branches-menu-row-label {
@@ -425,7 +568,7 @@
 .branches-menu-row-meta,
 .branches-menu-empty {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 .branches-menu-empty {
@@ -433,21 +576,73 @@
 }
 
 .branches-menu-action {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.branches-menu-section > .button--ghost {
+  height: auto;
+  min-height: var(--button-height);
+  align-items: center;
   justify-content: flex-start;
   margin-top: var(--spacing-xs);
-  color: var(--info);
+  text-align: left;
+  color: var(--accent-active);
+  white-space: normal;
+}
+
+.branches-menu-action:hover:not(:disabled) {
+  color: var(--accent-active-hover);
+}
+
+.branches-menu-action-content {
+  display: grid;
+  grid-template-columns: var(--size-icon-button) minmax(0, 1fr);
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  column-gap: var(--button-gap);
+  row-gap: var(--branches-menu-subline-gap);
+  padding-block: var(--spacing-xs);
+}
+
+.branches-menu-action-main {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  min-width: 0;
+  gap: var(--button-gap);
+}
+
+.branches-menu-action-icon {
+  display: inline-flex;
+  flex: 0 0 var(--size-icon-button);
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+}
+
+.branches-menu-action-icon > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.branches-menu-action .branches-menu-row-label {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.branches-menu-action .branches-menu-row-meta {
+  grid-column: 2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .branches-menu-setup p {
   margin: var(--spacing-sm) 0 var(--spacing-md);
   color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-code);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-medium);
 }
 
 .branches-menu-setup .button {
@@ -470,7 +665,7 @@
 
 .branch-dropdown-header {
   padding: 12px 14px 8px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -483,7 +678,7 @@
 
 .branch-dropdown-section-label {
   padding: 8px 14px 4px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }
 
@@ -497,7 +692,7 @@
   border: none;
   border-radius: 0;
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   text-align: left;
   cursor: pointer;
   transition: background var(--transition);
@@ -535,7 +730,7 @@
 }
 
 .branch-item-badge {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   padding: 1px 5px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
@@ -550,7 +745,7 @@
 }
 
 .branch-item-meta {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }
 
@@ -571,7 +766,7 @@
   background: none;
   border: none;
   color: var(--info);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   text-align: left;
   cursor: pointer;
   transition:

@@ -54,6 +54,7 @@ import { isPointInRect, dropPointToLogical } from '../../lib/dropTarget';
 import { getTerminalGpuEnabled } from '../../lib/settings';
 import { attachedLibraryDirs } from '../../lib/attached-libraries';
 import { decideStartupTimeoutAction } from './startupWatchdog';
+import { createTerminalOptions } from './terminalTheme';
 import type { AgentConfig } from '../../lib/agent';
 import '@xterm/xterm/css/xterm.css';
 
@@ -399,35 +400,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
 
     // Create terminal with JetBrains Mono Nerd Font (fallback to system monospace)
     const term = new XTerm({
-      fontFamily: '"JetBrainsMono NF", Menlo, Monaco, "Courier New", monospace',
-      fontSize: 13,
-      lineHeight: 1.2,
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 5000,
+      ...createTerminalOptions('normal'),
       allowProposedApi: true,
-      theme: {
-        background: '#141414',
-        foreground: '#bcbcbc',
-        cursor: '#ffffff',
-        selectionBackground: '#393939',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
-      },
     });
 
     const fitAddon = new FitAddon();

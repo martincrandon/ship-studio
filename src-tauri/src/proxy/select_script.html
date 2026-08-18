@@ -4,8 +4,8 @@ var active=false,hoverBox=null,selBoxes=[],selectedSet=[],selPrimary=null;
 
 /* Box colors: the element the user actually clicked (selPrimary) gets the blue
    "you're editing this" outline; its same-source siblings — which a source edit will
-   ALSO change — get the orange "also affected" outline, so the two are distinguishable. */
-var SEL_PRIMARY_COLOR='rgba(0,125,240,.95)',SEL_SIBLING_COLOR='rgba(0,125,240,.4)';
+   ALSO change — get an orange dashed outline, so the two are distinguishable. */
+var SEL_PRIMARY_COLOR='rgba(0,125,240,.95)',SEL_SIBLING_COLOR='rgba(235,171,107,.95)';
 
 /* The class each currently-selected element had BEFORE any live mutation, so we can
    revert an unsaved preview when the user deselects. Without this, re-selecting reads
@@ -62,7 +62,7 @@ function editable(el){while(el&&el!==document.body){if(el.nodeType===1){var c=el
 
 function place(box,el){if(!box)return;if(!el){box.style.display='none';return;}var r=el.getBoundingClientRect();box.style.display='block';box.style.top=r.top+'px';box.style.left=r.left+'px';box.style.width=r.width+'px';box.style.height=r.height+'px';}
 
-function placeSet(){ensureSel(selectedSet.length);for(var i=0;i<selBoxes.length;i++){var el=selectedSet[i]||null;place(selBoxes[i],el);if(el)selBoxes[i].style.borderColor=(el===selPrimary?SEL_PRIMARY_COLOR:SEL_SIBLING_COLOR);}}
+function placeSet(){ensureSel(selectedSet.length);for(var i=0;i<selBoxes.length;i++){var el=selectedSet[i]||null;place(selBoxes[i],el);if(el){var primary=el===selPrimary;selBoxes[i].style.borderColor=(primary?SEL_PRIMARY_COLOR:SEL_SIBLING_COLOR);selBoxes[i].style.borderStyle=(primary?'solid':'dashed');}}}
 
 /* All elements whose class attribute is identical to the clicked element's — these
    render from the same source literal (e.g. a .map), so a source edit changes all. */

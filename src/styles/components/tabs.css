@@ -111,6 +111,11 @@
     width var(--transition);
 }
 
-.tabs__panel[aria-hidden='true'] {
+.tabs__panel[aria-hidden='true']:not([data-tabs-keep-mounted='true']) {
   display: none;
+}
+
+.tabs__panel[data-tabs-keep-mounted='true'][aria-hidden='true'] {
+  visibility: hidden;
+  pointer-events: none;
 }

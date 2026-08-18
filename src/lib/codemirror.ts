@@ -49,7 +49,7 @@ export const ssEditorTheme = EditorView.theme(
       height: '100%',
       color: 'var(--text-primary)',
       backgroundColor: 'var(--surface-control)',
-      fontSize: 'var(--font-size-xs)',
+      fontSize: 'var(--font-size-badge)',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
@@ -113,7 +113,7 @@ export const neutralizeInvalidHighlight: Extension = Prec.high(
 /**
  * Metrics for the Code tab's full-file editor (used in both read and edit mode):
  * a comfortable 16px, a transparent surface, and the JetBrains Mono stack.
- * Without this the editor would render in the denser `--font-size-xs` / 1.6
+ * Without this the editor would render in the denser `--font-size-badge` / 1.6
  * line-height of `ssEditorTheme`. Layered AFTER `ssEditorTheme`; deliberately
  * NOT applied to the visual editor's overlay editor, which keeps the compact
  * metrics.
@@ -122,7 +122,7 @@ export const codeTabEditorTheme = EditorView.theme({
   // Larger, readable code text on a transparent surface so the code area shows
   // the panel background.
   '&': {
-    fontSize: 'var(--font-size-xl)',
+    fontSize: 'var(--font-size-h4)',
     backgroundColor: 'transparent',
   },
   '.cm-scroller': {

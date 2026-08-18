@@ -38,7 +38,7 @@
   border: 0;
   outline: 0;
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -56,7 +56,7 @@
   border-radius: 0 calc(var(--radius-control) - var(--stroke-1))
     calc(var(--radius-control) - var(--stroke-1)) 0;
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition:
@@ -87,7 +87,7 @@
   padding: var(--space-02);
   background: var(--surface-panel);
   border: var(--stroke-1) solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow);
 }
 
@@ -104,7 +104,7 @@
   border: 0;
   border-radius: var(--radius-sm);
   font: inherit;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   text-align: left;
   cursor: pointer;
   transition: background-color var(--transition);

@@ -28,7 +28,7 @@ import { SubmitReviewModal } from '../branches/SubmitReviewModal';
 import { WorktreeCreateModal } from '../branches/WorktreeCreateModal';
 import { ConflictResolutionModal } from '../branches/ConflictResolutionModal';
 import { OnboardingTerminal } from '../setup';
-import { DownloadIcon, VercelIcon, ZapIcon } from '../icons';
+import { DownloadIcon, VercelIcon, ZapIcon } from '@/components/icons';
 import { ToastList } from '../primitives/ToastList';
 import type { Toast } from '../../hooks/useToasts';
 import type { NotificationSettings } from '../../lib/sounds';
@@ -39,6 +39,7 @@ import type { AuthTerminalConfig, IntegrationState } from '../../hooks/useIntegr
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
+import { ModalFrame } from '../primitives/ModalFrame';
 
 export interface WorkspaceModalsProps {
   // Project context
@@ -309,67 +310,75 @@ export function WorkspaceModals({
 
       {/* Plugin Suggestion Popup */}
       {pluginSuggestion && (
-        <div className="modal-overlay" onClick={onDismissPluginSuggestion}>
-          <div className="modal plugin-suggestion-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="plugin-suggestion-icon">
-              <VercelIcon size={26} />
-            </div>
-            <h3>Plugin Available</h3>
-            <p className="plugin-suggestion-desc">
-              This project uses <strong>{pluginSuggestion.pluginName}</strong>. Install the plugin
-              to see deployment information.
-            </p>
-            <div className="plugin-suggestion-actions">
-              <Button variant="secondary" width="fill" onClick={onDismissPluginSuggestion}>
-                Not Now
-              </Button>
-              <Button
-                variant="primary"
-                width="fill"
-                disabled={pluginSuggestionInstalling}
-                onClick={onInstallSuggestedPlugin}
-                leftIcon={
-                  pluginSuggestionInstalling ? <Spinner size="sm" /> : <DownloadIcon size={14} />
-                }
-              >
-                {pluginSuggestionInstalling ? 'Installing…' : 'Install Plugin'}
-              </Button>
-            </div>
+        <ModalFrame
+          isOpen
+          onClose={onDismissPluginSuggestion}
+          ariaLabel="Plugin Available"
+          className="plugin-suggestion-modal"
+          showCloseButton={false}
+        >
+          <div className="plugin-suggestion-icon">
+            <VercelIcon size={26} />
           </div>
-        </div>
+          <h3>Plugin Available</h3>
+          <p className="plugin-suggestion-desc">
+            This project uses <strong>{pluginSuggestion.pluginName}</strong>. Install the plugin to
+            see deployment information.
+          </p>
+          <div className="plugin-suggestion-actions">
+            <Button variant="secondary" width="fill" onClick={onDismissPluginSuggestion}>
+              Not Now
+            </Button>
+            <Button
+              variant="primary"
+              width="fill"
+              disabled={pluginSuggestionInstalling}
+              onClick={onInstallSuggestedPlugin}
+              leftIcon={
+                pluginSuggestionInstalling ? <Spinner size="sm" /> : <DownloadIcon size={14} />
+              }
+            >
+              {pluginSuggestionInstalling ? 'Installing…' : 'Install Plugin'}
+            </Button>
+          </div>
+        </ModalFrame>
       )}
 
       {/* Auto-Accept Warning Modal */}
       {showAutoAcceptWarning && (
-        <div className="modal-overlay" onClick={onCloseAutoAcceptWarning}>
-          <div className="modal auto-accept-warning-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="auto-accept-warning-icon">
-              <ZapIcon size={32} />
-            </div>
-            <h3>Enable Auto-Accept Mode?</h3>
-            <p>
-              This mode allows {agentDisplayName} to execute commands{' '}
-              <strong>without asking for permission</strong>. {agentDisplayName} will be able to:
-            </p>
-            <ul className="auto-accept-warning-list">
-              <li>Read and modify any files in your project</li>
-              <li>Run shell commands automatically</li>
-              <li>Make changes without confirmation</li>
-            </ul>
-            <p className="auto-accept-warning-disclaimer">
-              By enabling this mode, you acknowledge that Ship Studio and Anthropic are{' '}
-              <strong>not liable</strong> for any unintended changes or actions taken by the AI.
-            </p>
-            <div className="modal-actions">
-              <Button variant="secondary" onClick={onCloseAutoAcceptWarning}>
-                Cancel
-              </Button>
-              <Button variant="warning" onClick={onAcceptAutoAcceptWarning}>
-                I understand, enable it
-              </Button>
-            </div>
+        <ModalFrame
+          isOpen
+          onClose={onCloseAutoAcceptWarning}
+          ariaLabel="Enable Auto-Accept Mode?"
+          className="auto-accept-warning-modal"
+          showCloseButton={false}
+        >
+          <div className="auto-accept-warning-icon">
+            <ZapIcon size={32} />
           </div>
-        </div>
+          <h3>Enable Auto-Accept Mode?</h3>
+          <p>
+            This mode allows {agentDisplayName} to execute commands{' '}
+            <strong>without asking for permission</strong>. {agentDisplayName} will be able to:
+          </p>
+          <ul className="auto-accept-warning-list">
+            <li>Read and modify any files in your project</li>
+            <li>Run shell commands automatically</li>
+            <li>Make changes without confirmation</li>
+          </ul>
+          <p className="auto-accept-warning-disclaimer">
+            By enabling this mode, you acknowledge that Ship Studio and Anthropic are{' '}
+            <strong>not liable</strong> for any unintended changes or actions taken by the AI.
+          </p>
+          <div className="modal-actions">
+            <Button variant="secondary" onClick={onCloseAutoAcceptWarning}>
+              Cancel
+            </Button>
+            <Button variant="warning" onClick={onAcceptAutoAcceptWarning}>
+              I understand, enable it
+            </Button>
+          </div>
+        </ModalFrame>
       )}
 
       {/* Submit for Review Modal */}

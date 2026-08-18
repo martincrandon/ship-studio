@@ -12,7 +12,7 @@
   margin: 0;
   border-radius: var(--radius-sm);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.5;
 }
 .ss-decl.is-overridden {
@@ -186,7 +186,7 @@
   background: var(--surface-control);
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 .ss-value-pop--inline .ss-value-pop__input {
   padding: 0 var(--space-06);
@@ -233,7 +233,7 @@
   padding: var(--spacing-xs) var(--spacing-sm);
   border: 1px solid transparent;
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   white-space: pre;
   overflow: hidden;
 }
@@ -261,7 +261,7 @@
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   opacity: 0;
   transition:
     opacity var(--transition-fast),
@@ -312,7 +312,7 @@
   border-radius: calc(var(--radius-sm) - 1px);
   color: var(--text-secondary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   white-space: nowrap;
 }
 .ss-decl__nest-item:hover {

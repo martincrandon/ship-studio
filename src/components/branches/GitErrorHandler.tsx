@@ -7,7 +7,7 @@
  * @module components/GitErrorHandler
  */
 
-import { WarningIcon, CopyIcon } from '../icons';
+import { WarningIcon, CopyIcon } from '@/components/icons';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';

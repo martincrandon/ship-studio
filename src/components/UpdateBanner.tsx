@@ -18,7 +18,7 @@ import { trackEvent, trackError } from '../lib/analytics';
 import { logger } from '../lib/logger';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { usePolling } from '../hooks/usePolling';
-import { AlertIcon, CloseIcon, DownloadIcon, ResetIcon } from './icons';
+import { AlertIcon, CloseIcon, DownloadIcon, ResetIcon } from '@/components/icons';
 import { Button } from './primitives/Button';
 import { IconButton } from './primitives/IconButton';
 import { ModalFrame } from './primitives/ModalFrame';

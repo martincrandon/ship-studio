@@ -76,17 +76,18 @@ import {
   FullBreakpointIcon,
   LaptopIcon,
   MobileIcon,
+  PackageIcon,
   RedoIcon,
   ResetIcon,
   TabletIcon,
   TerminalIcon,
   UndoIcon,
-} from '../icons';
+} from '@/components/icons';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { DockablePanel } from '../primitives/DockablePanel';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
 import { useCommands } from '../../commands/useCommands';
@@ -800,7 +801,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       ? saved
       : EDITOR_PANEL_DEFAULT_WIDTH_PX;
   });
-  const elementTree = useElementTree({ iframeRef, enabled: showTree });
+  // The loading/error branches render before the iframe exists. Start the tree
+  // subscription when the preview is ready so its initial request reaches the
+  // injected script even when the Elements panel is already open.
+  const elementTree = useElementTree({
+    iframeRef,
+    enabled: showTree && conn.serverReady,
+  });
 
   useEffect(() => {
     if (treePanelWidth !== null) {
@@ -1047,23 +1054,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     return (
       <div className="preview-install-prompt">
         <div className="preview-install-icon" aria-hidden>
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-            <line x1="12" y1="22.08" x2="12" y2="12" />
-          </svg>
+          <PackageIcon size={32} />
         </div>
         <h3>Dependencies not installed</h3>
-        <p className="hint">
+        <p className="text-style-hint">
           This project hasn't run <code>{needsInstall.packageManager} install</code> yet.
         </p>
         <Button variant="primary" onClick={onRunInstall} disabled={!onRunInstall}>
@@ -1123,7 +1117,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           : undefined),
         ...(activeEditMode && editorPinned
           ? ({
-              '--editor-panel-w': `${editorPanelWidth}px`,
+              '--editor-panel-visual-w': `${editorPanelWidth}px`,
             } as React.CSSProperties)
           : undefined),
         ...(isFullscreen ? { top: chromeTop } : undefined),
@@ -1311,6 +1305,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         <div className="preview-breakpoints" data-education-id="breakpoints">
           <Tabs
             value={resize.getActiveBreakpoint()}
+            mode="navigation"
             onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
             className="preview-breakpoint-tabs"
           >
@@ -1794,9 +1789,9 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
 
   return (
     <div ref={ref} className="preview-logs-panel" aria-hidden={hidden}>
-      <div className="preview-logs-header">
-        <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as InspectTab)}>
-          <TabsList className="preview-logs-tabs">
+      <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as InspectTab)}>
+        <div className="preview-logs-header">
+          <TabsList className="preview-logs-tabs" aria-label="Preview diagnostics">
             <TabsTab value="logs" className="preview-logs-tab">
               Server Logs
             </TabsTab>
@@ -1807,48 +1802,60 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
               Health
             </TabsTab>
           </TabsList>
-        </Tabs>
-        {onClose && (
-          <button
-            type="button"
-            className="preview-logs-close"
-            onClick={onClose}
-            title="Hide panel"
-            aria-label="Hide panel"
+          {onClose && (
+            <button
+              type="button"
+              className="preview-logs-close"
+              onClick={onClose}
+              title="Hide panel"
+              aria-label="Hide panel"
+            >
+              <CloseIcon size={14} />
+            </button>
+          )}
+        </div>
+        {/* Both tab contents stay mounted and stack in the same grid cell.
+            Toggling `is-active` swaps visibility via CSS (opacity) so
+            DevServerLogs doesn't re-init xterm and BrowserTools keeps its
+            scroll/state; TabsPanel makes inactive slots inert. */}
+        <div className="preview-logs-body">
+          <TabsPanel
+            value="logs"
+            keepMounted
+            className={`preview-logs-slot ${activeTab === 'logs' ? 'is-active' : ''}`}
           >
-            <CloseIcon size={14} />
-          </button>
-        )}
-      </div>
-      {/* Both tab contents stay mounted and stack in the same grid cell.
-          Toggling `is-active` swaps visibility via CSS (opacity) so
-          DevServerLogs doesn't re-init xterm (and BrowserTools doesn't
-          re-subscribe to the store) every time the user switches tabs.
-          `inert` on inactive slots blocks keyboard focus and pointer
-          events without needing pointer-events: none (which doesn't
-          compose cleanly with nested slot hierarchies). */}
-      <div className="preview-logs-body">
-        <div className={`preview-logs-slot ${activeTab === 'logs' ? 'is-active' : ''}`}>
-          <DevServerLogs
-            output={devServerOutput}
-            outputVersion={devServerOutputVersion}
-            onSendToAgent={onSendToAgent}
-            onInput={onDevServerInput}
-            onResize={onDevServerResize}
-          />
+            <DevServerLogs
+              output={devServerOutput}
+              outputVersion={devServerOutputVersion}
+              onSendToAgent={onSendToAgent}
+              onInput={onDevServerInput}
+              onResize={onDevServerResize}
+            />
+          </TabsPanel>
+          <TabsPanel
+            value="browser"
+            keepMounted
+            className={`preview-logs-slot ${activeTab === 'browser' ? 'is-active' : ''}`}
+          >
+            <BrowserTools
+              onSendToAgent={onSendToAgent}
+              active={!hidden && activeTab === 'browser'}
+            />
+          </TabsPanel>
+          <TabsPanel
+            value="health"
+            keepMounted
+            className={`preview-logs-slot ${activeTab === 'health' ? 'is-active' : ''}`}
+          >
+            <HealthTabPanel
+              ref={healthPanelRef}
+              projectPath={projectPath}
+              onAskClaude={onSendToAgent}
+              onHealthOutput={onHealthOutput}
+            />
+          </TabsPanel>
         </div>
-        <div className={`preview-logs-slot ${activeTab === 'browser' ? 'is-active' : ''}`}>
-          <BrowserTools onSendToAgent={onSendToAgent} active={!hidden && activeTab === 'browser'} />
-        </div>
-        <div className={`preview-logs-slot ${activeTab === 'health' ? 'is-active' : ''}`}>
-          <HealthTabPanel
-            ref={healthPanelRef}
-            projectPath={projectPath}
-            onAskClaude={onSendToAgent}
-            onHealthOutput={onHealthOutput}
-          />
-        </div>
-      </div>
+      </Tabs>
     </div>
   );
 });

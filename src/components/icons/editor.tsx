@@ -1,126 +1,178 @@
-/**
- * File and code operation icons.
- *
- * Code, terminal, edit, file, folder, trash, upload, download, copy, reset, and image icons.
- */
+import CodeBlockSvg from '../../assets/icons/code-block.svg?react';
+import TerminalSvg from '../../assets/icons/terminal.svg?react';
+import EditModeSvg from '../../assets/icons/edit-mode.svg?react';
+import EditFieldSvg from '../../assets/icons/edit-field.svg?react';
+import FileSvg from '../../assets/icons/file.svg?react';
+import FileTextSvg from '../../assets/icons/file-text.svg?react';
+import FolderSvg from '../../assets/icons/folder.svg?react';
+import FolderOpenSvg from '../../assets/icons/folder-open.svg?react';
+import NewFolderSvg from '../../assets/icons/new-folder.svg?react';
+import MoveToFolderSvg from '../../assets/icons/move-to-folder.svg?react';
+import TrashSvg from '../../assets/icons/trash.svg?react';
+import UpSvg from '../../assets/icons/up.svg?react';
+import DownSvg from '../../assets/icons/down.svg?react';
+import CopySvg from '../../assets/icons/copy.svg?react';
+import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
+import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
+import ReloadSvg from '../../assets/icons/reload.svg?react';
+import ImageSvg from '../../assets/icons/image.svg?react';
+import SaveSvg from '../../assets/icons/save.svg?react';
+import NestRuleSvg from '../../assets/icons/old-icons/nest-rule.svg?react';
+import ScrubHorizontalSvg from '../../assets/icons/old-icons/scrub-horizontal.svg?react';
+import PasteSvg from '../../assets/icons/old-icons/paste.svg?react';
+import { createIcon } from './icon-base';
 
-import { NewDesignIcon } from './new-design';
-import { getIconData, ICON_STROKE_WIDTH, resolveIconSize } from './provenance';
-
-interface IconProps {
-  size?: number;
-  className?: string;
-}
-
-export function CodeIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="CodeIcon" source="CodeBlock" size={size} className={className} />;
-}
-
-export function TerminalIcon({ size = 16 }: IconProps) {
-  const renderedSize = resolveIconSize(size);
-
-  return (
-    <svg
-      {...getIconData('TerminalIcon')}
-      width={renderedSize}
-      height={renderedSize}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE_WIDTH}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="4 17 10 11 4 5" />
-      <line x1="12" y1="19" x2="20" y2="19" />
-    </svg>
-  );
-}
-
-export function EditIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="EditIcon" source="EditMode" size={size} />;
-}
-
-export function FileIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="FileIcon" source="File" size={size} />;
-}
-
-export function FileTextIcon({ size = 16, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="FileTextIcon" source="FileText" size={size} className={className} />
-  );
-}
-
-export function FolderIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="FolderIcon" source="Folder" size={size} />;
-}
-
-export function FolderOpenIcon({ size = 16, className }: IconProps) {
-  return (
-    <NewDesignIcon
-      iconName="FolderOpenIcon"
-      source="FolderOpen"
-      size={size}
-      className={className}
-    />
-  );
-}
-
-export function FolderPlusIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="FolderPlusIcon" source="NewFolder" size={size} />;
-}
-
-export function TrashIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="TrashIcon" source="Trash" size={size} className={className} />;
-}
-
-export function UploadIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="UploadIcon" source="Up" size={size} />;
-}
-
-export function DownloadIcon({ size = 16 }: IconProps) {
-  return <NewDesignIcon iconName="DownloadIcon" source="Down" size={size} />;
-}
-
-export function CopyIcon({ size = 14, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="CopyIcon" source="Copy" compact size={size} className={className} />
-  );
-}
-
-export function ColorPickerIcon({ size = 16, className }: IconProps) {
-  return (
-    <NewDesignIcon
-      iconName="ColorPickerIcon"
-      source="ColorPicker"
-      size={size}
-      className={className}
-    />
-  );
-}
-
-export function DuplicateIcon({ size = 14, className }: IconProps) {
-  return (
-    <NewDesignIcon
-      iconName="DuplicateIcon"
-      source="Duplicate"
-      compact
-      size={size}
-      className={className}
-    />
-  );
-}
-
-export function ResetIcon({ size = 14, className }: IconProps) {
-  return (
-    <NewDesignIcon iconName="ResetIcon" source="Reload" compact size={size} className={className} />
-  );
-}
-
-export function ImageIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="ImageIcon" source="Image" size={size} className={className} />;
-}
-
-export function SaveIcon({ size = 16, className }: IconProps) {
-  return <NewDesignIcon iconName="SaveIcon" source="Save" size={size} className={className} />;
-}
+export const CodeIcon = createIcon(CodeBlockSvg, {
+  name: 'CodeIcon',
+  source: 'icons/code-block.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const TerminalIcon = createIcon(TerminalSvg, {
+  name: 'TerminalIcon',
+  source: 'icons/terminal.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const EditIcon = createIcon(EditModeSvg, {
+  name: 'EditIcon',
+  source: 'icons/edit-mode.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const EditFieldIcon = createIcon(EditFieldSvg, {
+  name: 'EditFieldIcon',
+  source: 'icons/edit-field.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FileIcon = createIcon(FileSvg, {
+  name: 'FileIcon',
+  source: 'icons/file.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FileTextIcon = createIcon(FileTextSvg, {
+  name: 'FileTextIcon',
+  source: 'icons/file-text.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FolderIcon = createIcon(FolderSvg, {
+  name: 'FolderIcon',
+  source: 'icons/folder.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FolderOpenIcon = createIcon(FolderOpenSvg, {
+  name: 'FolderOpenIcon',
+  source: 'icons/folder-open.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FolderPlusIcon = createIcon(NewFolderSvg, {
+  name: 'FolderPlusIcon',
+  source: 'icons/new-folder.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const MoveToFolderIcon = createIcon(MoveToFolderSvg, {
+  name: 'MoveToFolderIcon',
+  source: 'icons/move-to-folder.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const TrashIcon = createIcon(TrashSvg, {
+  name: 'TrashIcon',
+  source: 'icons/trash.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const UploadIcon = createIcon(UpSvg, {
+  name: 'UploadIcon',
+  source: 'icons/up.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const DownloadIcon = createIcon(DownSvg, {
+  name: 'DownloadIcon',
+  source: 'icons/down.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CopyIcon = createIcon(CopySvg, {
+  name: 'CopyIcon',
+  source: 'icons/copy.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const ColorPickerIcon = createIcon(ColorPickerSvg, {
+  name: 'ColorPickerIcon',
+  source: 'icons/color-picker.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const DuplicateIcon = createIcon(DuplicateSvg, {
+  name: 'DuplicateIcon',
+  source: 'icons/duplicate.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const ResetIcon = createIcon(ReloadSvg, {
+  name: 'ResetIcon',
+  source: 'icons/reload.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const ImageIcon = createIcon(ImageSvg, {
+  name: 'ImageIcon',
+  source: 'icons/image.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const SaveIcon = createIcon(SaveSvg, {
+  name: 'SaveIcon',
+  source: 'icons/save.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const NestRuleIcon = createIcon(NestRuleSvg, {
+  name: 'NestRuleIcon',
+  source: 'icons/old-icons/nest-rule.svg',
+  kind: 'ui',
+  defaultSize: 11,
+});
+export const ScrubHorizontalIcon = createIcon(ScrubHorizontalSvg, {
+  name: 'ScrubHorizontalIcon',
+  source: 'icons/old-icons/scrub-horizontal.svg',
+  kind: 'ui',
+  defaultSize: 12,
+});
+export const PasteIcon = createIcon(PasteSvg, {
+  name: 'PasteIcon',
+  source: 'icons/old-icons/paste.svg',
+  kind: 'ui',
+  defaultSize: 14,
+});

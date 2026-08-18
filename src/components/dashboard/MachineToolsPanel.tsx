@@ -16,7 +16,7 @@
  */
 
 import { useState, useEffect, type KeyboardEvent } from 'react';
-import { CheckIcon, WarningIcon, ChevronIcon, ClaudeIcon, GitHubIcon } from '../icons';
+import { CheckIcon, WarningIcon, ChevronIcon, ClaudeIcon, GitHubIcon } from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { getFullSetupStatus, SetupItem, SETUP_ITEM_ORDER, MACHINE_ITEM_IDS } from '../../lib/setup';
 import { logger } from '../../lib/logger';
@@ -106,7 +106,7 @@ export function MachineToolsPanel() {
     >
       <div className="dashboard-card-header integration-bar-header">
         <div>
-          <h3 className="dashboard-card-title text-style-heading">Tools on this Mac</h3>
+          <h3 className="dashboard-card-title text-style-h4">Tools on this Mac</h3>
           <div className="dashboard-card-subtitle integration-bar-subtitle text-style-control">
             {statusIcon}
             <span>{subtitle}</span>

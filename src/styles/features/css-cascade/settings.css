@@ -16,7 +16,7 @@
 .ss-settings__label {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -30,7 +30,7 @@
   border: 1px solid var(--border-default);
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 .ss-settings__classes {
@@ -65,7 +65,7 @@
   border: 1px dashed var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
 }
 
 .ss-settings__class-add:hover {
@@ -82,7 +82,7 @@
   background: var(--surface-control);
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
 }
 
 .ss-settings__attrs {
@@ -93,7 +93,7 @@
   flex-direction: column;
   gap: 2px; /* css-ok: dense rows */
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 .ss-settings__attr {
@@ -162,7 +162,7 @@
   background: var(--surface-control);
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 /* The key input stays narrow (it's an ident, not a long value). */
@@ -184,7 +184,7 @@
   padding: 3px var(--spacing-sm); /* css-ok: compact control height */
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   cursor: pointer;
   transition:
     color var(--transition),
@@ -224,5 +224,5 @@
 .ss-settings__empty {
   margin: 0;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
 }

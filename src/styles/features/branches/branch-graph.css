@@ -3,7 +3,7 @@
 .branch-graph {
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   overflow: hidden;
 }
 
@@ -22,7 +22,7 @@
 }
 
 .branch-graph-title {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -42,7 +42,7 @@
   padding: 0;
   background: none;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-muted);
   cursor: pointer;
   transition:
@@ -67,7 +67,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }
 
@@ -85,9 +85,9 @@
   padding: 4px 22px 4px 8px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   cursor: pointer;
   outline: none;
 }
@@ -105,7 +105,7 @@
   right: 8px;
   pointer-events: none;
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   line-height: 1;
 }
 
@@ -116,7 +116,7 @@
   justify-content: center;
   padding: 28px 14px;
   color: var(--text-muted);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
 }
 
 /* Body: SVG graphics layer with the HTML label gutter overlaid on top */
@@ -144,7 +144,7 @@
 }
 
 .branch-graph-row-name {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -166,7 +166,7 @@
 }
 
 .branch-graph-row-meta {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -234,7 +234,7 @@
 
 .branch-graph-pr-text {
   fill: var(--text-on-accent);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 700;
   text-anchor: middle;
 }
@@ -268,7 +268,7 @@
 
 .branch-graph-chevron {
   display: inline-block;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   line-height: 1;
   color: var(--text-muted);
   transition: transform var(--transition);
@@ -281,14 +281,14 @@
 .branch-graph-count {
   padding: 1px 7px;
   background: var(--surface-control);
-  border-radius: var(--radius);
-  font-size: var(--font-size-xs);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-badge);
   color: var(--text-muted);
 }
 
 .branch-graph-trimmed {
   padding: var(--spacing-sm) 14px;
   border-top: 1px solid var(--border-default);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }

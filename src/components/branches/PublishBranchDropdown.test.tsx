@@ -85,11 +85,18 @@ function expectNoBannedLabels() {
   }
 }
 
+function expectPushIcon() {
+  expect(
+    screen.getByRole('button', { name: /push/i }).querySelector('[data-icon-name="PushIcon"]')
+  ).toBeTruthy();
+}
+
 describe('PublishBranchDropdown trigger label', () => {
   it('says "Push" on the main branch', () => {
     render(<PublishBranchDropdown {...makeProps({ currentBranch: 'main' })} />);
 
     expect(screen.getByText('Push')).toBeInTheDocument();
+    expectPushIcon();
     expectNoBannedLabels();
   });
 
@@ -125,7 +132,15 @@ describe('PublishBranchDropdown trigger label', () => {
 
     const button = screen.getByText('Push').closest('button');
     expect(button).toBeDisabled();
+    expectPushIcon();
     expectNoBannedLabels();
+  });
+
+  it('keeps the icon visible while GitHub status is loading', () => {
+    render(<PublishBranchDropdown {...makeProps({ projectGithubStatus: null })} />);
+
+    expect(screen.getByText('Push')).toBeInTheDocument();
+    expectPushIcon();
   });
 });
 

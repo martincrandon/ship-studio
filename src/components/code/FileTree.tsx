@@ -6,7 +6,7 @@
  */
 
 import type { FileTreeNode } from '../../lib/code';
-import { ChevronRightIcon, FileIcon, FolderIcon } from '../icons';
+import { ChevronRightIcon, FileIcon, FolderIcon } from '@/components/icons';
 
 interface FileTreeProps {
   nodes: FileTreeNode[];

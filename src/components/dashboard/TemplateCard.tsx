@@ -11,7 +11,7 @@
  */
 
 import { Button } from '../primitives/Button';
-import { CheckIcon } from '../icons';
+import { CheckIcon } from '@/components/icons';
 
 interface TemplateCardProps {
   name: string;

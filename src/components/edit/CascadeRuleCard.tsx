@@ -14,8 +14,8 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { predictNextDeclaration } from '../../lib/cssPredict';
-import { ChevronIcon, CloseIcon } from '../icons/common';
-import { FileTextIcon, TrashIcon } from '../icons/editor';
+import { ChevronIcon, CloseIcon } from '@/components/icons';
+import { FileTextIcon, TrashIcon } from '@/components/icons';
 import { DeclarationRow } from './DeclarationRow';
 import { CssValueText } from './CssValueText';
 import { AddMenu } from './AddMenu';
@@ -260,14 +260,6 @@ export function CascadeRuleCard(props: Props) {
           <SelectorDisplay selector={props.selector} />
         )}
         <span className="ss-cascade-card__head-spacer" />
-        {props.editable && props.draft && (
-          <span
-            className="ss-cascade-card__chip ss-cascade-card__chip--new"
-            title="No rules applied — add a property to create this selector in your stylesheet"
-          >
-            No rules applied
-          </span>
-        )}
         {!editable && (
           <span className="ss-cascade-card__src ss-cascade-card__src--ro">read-only</span>
         )}
@@ -362,6 +354,16 @@ export function CascadeRuleCard(props: Props) {
 
       {!collapsed && (
         <div className="ss-cascade-card__body">
+          {props.draft && (
+            <div className="ss-cascade-card__draft-row">
+              <span
+                className="ss-cascade-card__chip ss-cascade-card__chip--new"
+                title="No rules applied — add a property to create this selector in your stylesheet"
+              >
+                No rules applied
+              </span>
+            </div>
+          )}
           {props.unmatched && (
             <p className="ss-cascade-card__note ss-cascade-card__note--unmatched">
               This selector doesn&apos;t match the selected element, so it isn&apos;t applying here

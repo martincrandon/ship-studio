@@ -21,20 +21,166 @@
 
 /* ---------- Top bar ---------- */
 
-/* Topbar layout is now inline-styled in CompactTopbar.tsx to avoid any
- * cascade / cache / specificity conflicts. Only leftover rules: the
- * dropdown menu item styling (plain button styling, low-risk). */
+.compact-topbar {
+  display: flex;
+  align-items: center;
+  width: 100vw;
+  height: var(--compact-topbar-height);
+  box-sizing: border-box;
+  padding-inline-end: var(--compact-topbar-padding-inline);
+  background: var(--surface-panel);
+  border-bottom: var(--compact-topbar-border-width) solid var(--border-default);
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.compact-topbar--native {
+  padding-inline-start: var(--compact-topbar-padding-inline);
+}
+
+/* macOS overlay title bars reserve room for the traffic lights. */
+.compact-topbar--mac {
+  padding-inline-start: var(--compact-topbar-macos-padding-start);
+}
+
+.compact-topbar__spacer {
+  flex: 1 1 auto;
+  align-self: stretch;
+}
+
+.compact-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--compact-topbar-cluster-gap);
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.compact-topbar__dev-server {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--compact-topbar-status-slot-size);
+  height: var(--compact-topbar-status-slot-size);
+}
+
+.compact-topbar__dev-server-dot {
+  width: var(--compact-topbar-status-dot-size);
+  height: var(--compact-topbar-status-dot-size);
+  border-radius: var(--compact-topbar-status-dot-radius);
+  background: var(--accent-success);
+}
+
+.compact-topbar__icon-button,
+.compact-topbar__palette-button,
+.compact-topbar__project-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--compact-topbar-control-size);
+  padding: 0 var(--compact-topbar-control-padding-inline);
+  border: var(--compact-topbar-border-width) solid var(--border-default);
+  border-radius: var(--compact-topbar-control-radius);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.compact-topbar__icon-button {
+  width: var(--compact-topbar-control-size);
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.compact-topbar__icon-button:hover,
+.compact-topbar__icon-button:focus-visible {
+  background: var(--surface-control);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.compact-topbar__icon-button.is-pinned {
+  background: var(--compact-topbar-pin-active-surface);
+  border-color: var(--compact-topbar-pin-active-border);
+  color: var(--accent-active);
+}
+
+.compact-topbar__palette-button {
+  background: var(--surface-control);
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-control);
+  letter-spacing: var(--tracking-control);
+}
+
+.compact-topbar__palette-button:hover,
+.compact-topbar__palette-button:focus-visible,
+.compact-topbar__project-button:hover,
+.compact-topbar__project-button:focus-visible {
+  background: var(--surface-control-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.compact-topbar__project-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.compact-topbar__project-button {
+  gap: var(--spacing-xs);
+  max-width: var(--compact-topbar-project-max-width);
+  background: var(--surface-control);
+  color: var(--text-primary);
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-label);
+  white-space: nowrap;
+}
+
+.compact-topbar__project-label {
+  max-width: var(--compact-topbar-project-label-max-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-topbar-project-menu {
+  position: absolute;
+  top: calc(100% + var(--compact-topbar-menu-offset));
+  right: 0;
+  min-width: var(--compact-topbar-menu-min-width);
+  max-height: var(--compact-topbar-menu-max-height);
+  overflow-y: auto;
+  padding: var(--compact-topbar-menu-padding);
+  background: var(--surface-panel);
+  border: var(--compact-topbar-border-width) solid var(--border-default);
+  border-radius: var(--compact-topbar-menu-radius);
+  box-shadow: var(--shadow-md);
+  z-index: var(--compact-topbar-menu-z-index);
+}
+
+.compact-topbar-project-menu-divider {
+  height: var(--compact-topbar-menu-divider-height);
+  margin: var(--compact-topbar-menu-divider-margin);
+  background: var(--border-default);
+}
 
 .compact-topbar-project-menu-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 6px 10px;
+  padding: var(--compact-topbar-menu-item-padding-block)
+    var(--compact-topbar-menu-item-padding-inline);
   background: transparent;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--compact-topbar-control-radius);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-menu-item);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -48,7 +194,7 @@
 
 .compact-topbar-project-menu-item.is-subtle {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 /* ---------- Tab strip ---------- */
@@ -98,7 +244,7 @@
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   cursor: pointer;
   max-width: 160px;
 }
@@ -152,7 +298,7 @@
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   line-height: 1;
   cursor: pointer;
   transition:
@@ -206,4 +352,8 @@
   flex: 1;
   min-height: 0;
   background: var(--surface-app);
+}
+
+.compact-workspace > .tabs {
+  display: contents;
 }

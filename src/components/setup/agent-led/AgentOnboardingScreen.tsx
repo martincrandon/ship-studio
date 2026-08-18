@@ -44,7 +44,7 @@ import {
   OnboardingTestMode,
 } from '../../../lib/agentOnboarding';
 import { initDefaultAgent, getAgentById } from '../../../lib/agent';
-import { ClaudeIcon, CodexIcon, CursorIcon, OpencodeIcon } from '../../icons';
+import { ClaudeIcon, CodexIcon, CursorIcon, OpencodeIcon } from '@/components/icons';
 import { usePolling } from '../../../hooks/usePolling';
 import { withTimeout, TimeoutError } from '../../../lib/withTimeout';
 import { trackEvent, trackPageview } from '../../../lib/analytics';

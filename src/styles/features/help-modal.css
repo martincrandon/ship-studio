@@ -10,40 +10,6 @@
   padding: 0;
 }
 
-.help-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px 16px;
-}
-
-.help-modal-header h3 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.help-close-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  transition:
-    background-color 0.15s,
-    color 0.15s;
-}
-
-.help-close-btn:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
-}
-
 .help-modal-body {
   padding: 16px 24px 24px;
   overflow-y: auto;
@@ -61,7 +27,7 @@
 }
 
 .help-section-title {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -83,7 +49,7 @@
   padding: 10px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   transition: border-color var(--transition);
 }
 
@@ -99,13 +65,13 @@
 
 .help-command-name {
   font-family: var(--font-code);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   color: var(--text-primary);
 }
 
 .help-command-desc {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -120,13 +86,13 @@
 }
 
 .help-tip {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   padding: 10px 12px;
   line-height: 1.4;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   transition: border-color var(--transition);
 }
 
@@ -142,7 +108,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
   margin: 0 2px;
 }
@@ -154,7 +120,7 @@
 }
 
 .help-example-category {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
   color: var(--text-muted);
   padding: 0 4px;
@@ -166,11 +132,11 @@
 }
 
 .help-example {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   background: var(--surface-control);
   padding: 10px 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   font-family: var(--font-code);
   border: 1px solid var(--border-default);
   transition: border-color var(--transition);
@@ -198,7 +164,7 @@
 }
 
 .help-footer-hint {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
 }
 
@@ -207,7 +173,7 @@
   padding: 10px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   cursor: pointer;
   transition: border-color var(--transition);
   user-select: none;
@@ -230,7 +196,7 @@
 
 .help-skill-name {
   font-family: var(--font-code);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   color: var(--text-primary);
   display: flex;
@@ -239,7 +205,7 @@
 }
 
 .help-skill-toggle {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 400;
   color: var(--text-muted);
   width: 16px;
@@ -248,7 +214,7 @@
 }
 
 .help-skill-desc {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
   line-height: 1.5;
   margin-top: 8px;
@@ -263,7 +229,7 @@
   background: transparent;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 400;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -271,7 +237,7 @@
 }
 
 .help-loading {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-muted);
   font-style: italic;
   padding: 0 10px;

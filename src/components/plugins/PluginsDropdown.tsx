@@ -34,7 +34,7 @@
 
 import { useState, useRef, useCallback, type MouseEvent } from 'react';
 import { useClickOutside } from '../../hooks/useClickOutside';
-import { ChevronIcon, PuzzleIcon } from '../icons';
+import { ChevronIcon, PuzzleIcon } from '@/components/icons';
 import { PluginSlot, PluginErrorChip } from './PluginSlot';
 import { MenuButton } from '../primitives/MenuButton';
 import type { LoadedPlugin, PluginFailure } from '../../hooks/usePlugins';

@@ -5,36 +5,19 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
+  padding: var(--spacing-xl);
+  overflow: hidden;
 }
 
-.assets-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+.assets-panel-modal .modal-frame-header {
+  margin-bottom: var(--spacing-md);
+  padding: 0;
+  border-bottom: none;
 }
 
-.assets-panel-header h3 {
-  font-size: var(--font-size-2xl);
+.assets-panel-modal .modal-frame-title {
+  font-size: var(--font-size-h3);
   font-weight: 600;
-  margin: 0;
-}
-
-.assets-close-btn {
-  padding: 4px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.assets-close-btn:hover {
-  background: var(--surface-control);
-  color: var(--text-primary);
 }
 
 .assets-panel-content {
@@ -53,7 +36,7 @@
   padding: 8px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
 }
 
 .assets-search:focus-within {
@@ -70,7 +53,7 @@
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   outline: none;
 }
 
@@ -103,7 +86,7 @@
   gap: 2px;
   padding: 8px 12px;
   background: var(--surface-control);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   /* Must stay visible so the assets-root dropdown isn't clipped. */
   overflow: visible;
 }
@@ -120,7 +103,7 @@
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   cursor: pointer;
   border-radius: var(--radius-sm);
   transition:
@@ -187,7 +170,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .assets-root-custom input:focus {
@@ -219,7 +202,7 @@
   padding: 8px 12px;
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
 }
 
 .assets-new-folder svg {
@@ -234,7 +217,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .assets-new-folder input:focus {
@@ -277,7 +260,7 @@
   overflow-y: auto;
   background: var(--surface-control);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   position: relative;
 }
 
@@ -315,12 +298,12 @@
 .assets-empty p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
 }
 
 .assets-empty p.assets-empty-hint {
   color: var(--text-muted);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   margin-top: 4px;
 }
 
@@ -400,7 +383,7 @@
 
 .assets-item-name {
   flex: 1;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -408,7 +391,7 @@
 }
 
 .assets-item-size {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   margin-left: 8px;
   flex-shrink: 0;
@@ -422,7 +405,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .assets-rename-input:focus {
@@ -469,7 +452,7 @@
   inset: 0;
   background: rgba(var(--accent-success-rgb), 0.1);
   border: 2px dashed var(--accent-active);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -481,17 +464,17 @@
 
 .assets-drag-overlay p {
   margin: 0;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 500;
 }
 
 /* Error */
 .assets-error {
   color: var(--accent-error);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   padding: 8px 12px;
   background: rgba(var(--accent-error-rgb), 0.1);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
 }
 
 /* Assets Button in Header */
@@ -510,7 +493,7 @@
   align-items: center;
   padding: 12px 8px 8px;
   background: var(--surface-panel);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   cursor: default;
   transition:
     background-color var(--transition),
@@ -538,7 +521,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 8px;
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   overflow: hidden;
   background: var(--surface-control);
 }
@@ -565,7 +548,7 @@
 
 .assets-grid-name {
   display: block;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -576,7 +559,7 @@
 .assets-grid-item .assets-rename-input {
   width: 100%;
   text-align: center;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   padding: 2px 4px;
 }
 

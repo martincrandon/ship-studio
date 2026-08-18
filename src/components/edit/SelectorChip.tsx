@@ -2,6 +2,7 @@ import { useId, useState, type KeyboardEvent } from 'react';
 import { WRAP_ITEMS, searchStructures } from '../../lib/cssStructures';
 import { CascadeChip, type CascadeChipTone } from './CascadeChip';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
+import SelectorConnectorGraphic from '@/assets/graphics/selector-connector.svg?react';
 
 const TAG_SELECTOR_PATTERN = /^[a-z][a-z\d-]*(?:(?::|::)[a-z-]+(?:\([^)]*\))?)*$/i;
 const CLASS_SELECTOR_SEQUENCE_PATTERN = /^(?:\.[-_a-zA-Z][-_a-zA-Z\d]*\s*){2,}$/;
@@ -33,9 +34,7 @@ function SelectorParts({ selector }: { selector: string }) {
         <span className="ss-cascade-selector-display__part" key={part}>
           {index > 0 && (
             <span className="ss-cascade-selector-display__connector" aria-hidden="true">
-              <svg viewBox="0 0 32 24" preserveAspectRatio="none">
-                <path d="M0 0C7 0 8 8 16 8C24 8 25 0 32 0V24C25 24 24 16 16 16C8 16 7 24 0 24Z" />
-              </svg>
+              <SelectorConnectorGraphic aria-hidden="true" />
             </span>
           )}
           <CascadeChip tone="selector">

@@ -9,10 +9,10 @@
  */
 
 import { useCallback, useEffect, useId, useState } from 'react';
-import { PinIcon } from '../icons/layout';
-import { CloseIcon, CheckIcon } from '../icons/common';
-import { PlusIcon } from '../icons/utility';
-import { CopyIcon } from '../icons/editor';
+import { PinIcon } from '@/components/icons';
+import { CloseIcon, CheckIcon } from '@/components/icons';
+import { PlusIcon } from '@/components/icons';
+import { CopyIcon } from '@/components/icons';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { Spinner } from '../primitives/Spinner';
@@ -171,7 +171,7 @@ export function CssCascadePanel({
       </div>
 
       <div className="ss-edit-panel__body">
-        <Tabs value={scope} onValueChange={(next) => setScope(next as Scope)}>
+        <Tabs value={scope} mode="navigation" onValueChange={(next) => setScope(next as Scope)}>
           <TabsList className="ss-cascade-scope" aria-label="CSS panel view">
             <TabsTab value="style">Style</TabsTab>
             <TabsTab value="settings">Settings</TabsTab>
@@ -180,100 +180,137 @@ export function CssCascadePanel({
           </TabsList>
         </Tabs>
 
-        {scope === 'variables' ? (
-          <CssVariablesPanel
-            variables={variablesState.variables}
-            loading={variablesState.loading}
-            variableNames={variables}
-            onSetValue={variablesState.setValue}
-            onAddVariable={(n, v) => void variablesState.addVariable(n, v)}
-          />
-        ) : scope === 'animations' ? (
-          <CssAnimationsPanel
-            animations={animationsState.animations}
-            loading={animationsState.loading}
-            selectorSuggestions={selectorSuggestions}
-            variables={variables}
-            onChangeBody={animationsState.setBody}
-            onDelete={(s) => void animationsState.remove(s)}
-            onCreate={(n) => void animationsState.create(n)}
-            onRename={(s, n) => void animationsState.rename(s, n)}
-          />
-        ) : !selection ? (
-          <p className="ss-cascade-empty">Click an element to see the CSS that styles it.</p>
-        ) : (
-          <>
-            <div className="ss-cascade-target">
-              <code className="ss-cascade-chip" data-tone="tag">
-                {selection.signature.tagName}
-              </code>
-              <span className="ss-cascade-target__selector">
-                {classes.length > 0 && (
-                  <span className="ss-cascade-target__classes">
-                    {classes.map((c) => (
-                      <code key={c} className="ss-cascade-target__class">
-                        .{c}
-                      </code>
-                    ))}
-                  </span>
-                )}
-                {selection.instanceCount > 1 && (
-                  <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
-                )}
-              </span>
-              <Button
-                className="ss-cascade-target__copy"
-                variant="ghost"
-                size="compact"
-                leftIcon={idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-                title={
-                  settings.location
-                    ? `Copy this element's source location (${settings.location.file}:${settings.location.line}) to paste into your agent`
-                    : "Copy this element's selector to paste into your agent"
-                }
-                aria-label="Copy element location"
-                onClick={() => {
-                  const sel = `${selection.signature.tagName}${classes.map((c) => `.${c}`).join('')}`;
-                  // Prefer the element's REAL source location (file:line) so the agent can
-                  // jump straight to it; fall back to the selector when it can't be resolved.
-                  const id = settings.location
-                    ? `${settings.location.file}:${settings.location.line} (${sel})`
-                    : sel;
-                  void copyElementId(id);
-                }}
-              >
-                {idCopied ? 'Copied' : 'Copy id'}
-              </Button>
-            </div>
+        <div className="ss-cascade-content">
+          {scope === 'variables' ? (
+            <CssVariablesPanel
+              variables={variablesState.variables}
+              loading={variablesState.loading}
+              variableNames={variables}
+              onSetValue={variablesState.setValue}
+              onAddVariable={(n, v) => void variablesState.addVariable(n, v)}
+            />
+          ) : scope === 'animations' ? (
+            <CssAnimationsPanel
+              animations={animationsState.animations}
+              loading={animationsState.loading}
+              selectorSuggestions={selectorSuggestions}
+              variables={variables}
+              onChangeBody={animationsState.setBody}
+              onDelete={(s) => void animationsState.remove(s)}
+              onCreate={(n) => void animationsState.create(n)}
+              onRename={(s, n) => void animationsState.rename(s, n)}
+            />
+          ) : !selection ? (
+            <p className="ss-cascade-empty">Click an element to see the CSS that styles it.</p>
+          ) : (
+            <>
+              <div className="ss-cascade-target">
+                <code className="ss-cascade-chip" data-tone="tag">
+                  {selection.signature.tagName}
+                </code>
+                <span className="ss-cascade-target__selector">
+                  {classes.length > 0 && (
+                    <span className="ss-cascade-target__classes">
+                      {classes.map((c) => (
+                        <code key={c} className="ss-cascade-target__class">
+                          .{c}
+                        </code>
+                      ))}
+                    </span>
+                  )}
+                  {selection.instanceCount > 1 && (
+                    <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
+                  )}
+                </span>
+                <Button
+                  className="ss-cascade-target__copy"
+                  variant="ghost"
+                  size="compact"
+                  leftIcon={idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                  title={
+                    settings.location
+                      ? `Copy this element's source location (${settings.location.file}:${settings.location.line}) to paste into your agent`
+                      : "Copy this element's selector to paste into your agent"
+                  }
+                  aria-label="Copy element location"
+                  onClick={() => {
+                    const sel = `${selection.signature.tagName}${classes.map((c) => `.${c}`).join('')}`;
+                    // Prefer the element's REAL source location (file:line) so the agent can
+                    // jump straight to it; fall back to the selector when it can't be resolved.
+                    const id = settings.location
+                      ? `${settings.location.file}:${settings.location.line} (${sel})`
+                      : sel;
+                    void copyElementId(id);
+                  }}
+                >
+                  {idCopied ? 'Copied' : 'Copy id'}
+                </Button>
+              </div>
 
-            {scope === 'settings' ? (
-              <ElementSettingsPanel settings={settings} />
-            ) : (
-              <>
-                <AddSelectorBar
-                  onAddSelector={onAddSelector}
-                  suggestions={addSelectorOptions}
-                  existing={existingSelectors}
-                />
+              {scope === 'settings' ? (
+                <ElementSettingsPanel settings={settings} />
+              ) : (
+                <>
+                  <AddSelectorBar
+                    onAddSelector={onAddSelector}
+                    suggestions={addSelectorOptions}
+                    existing={existingSelectors}
+                  />
 
-                {loading ? (
-                  <div className="ss-cascade-loading">
-                    <Spinner size="sm" />
-                  </div>
-                ) : (
-                  <div className="ss-cascade-cards">
-                    {rows.map((row) => {
-                      const key = rowKey(row);
-                      // Stable across element switches (unlike `key`, which embeds the row index).
-                      const collapseKey = `${row.selector ?? ''}|${row.mediaText ?? ''}`;
-                      const collapsed = collapsedRules.has(collapseKey);
-                      const onToggleCollapse = () => toggleCollapsed(collapseKey);
-                      if (row.editable && bodies[key]) {
+                  {loading ? (
+                    <div className="ss-cascade-loading">
+                      <Spinner size="sm" />
+                    </div>
+                  ) : (
+                    <div className="ss-cascade-cards">
+                      {rows.map((row) => {
+                        const key = rowKey(row);
+                        // Stable across element switches (unlike `key`, which embeds the row index).
+                        const collapseKey = `${row.selector ?? ''}|${row.mediaText ?? ''}`;
+                        const collapsed = collapsedRules.has(collapseKey);
+                        const onToggleCollapse = () => toggleCollapsed(collapseKey);
+                        if (row.editable && bodies[key]) {
+                          return (
+                            <CascadeRuleCard
+                              key={key}
+                              editable
+                              selector={row.selector ?? ''}
+                              file={row.file}
+                              line={row.line}
+                              mediaText={row.mediaText}
+                              layer={row.layer}
+                              container={row.container}
+                              supports={row.supports}
+                              inactive={row.inactiveMedia}
+                              overridden={
+                                row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())
+                              }
+                              body={bodies[key]}
+                              draft={row.draft}
+                              unmatched={row.unmatched}
+                              autoOpenAdd={key === justCreatedKey}
+                              onChange={(b) => onChangeBody(key, b)}
+                              onDelete={() => onDeleteRule(key)}
+                              // A draft rule doesn't exist in source yet — no rename/wrap
+                              // until it's created (by adding the first property).
+                              onWrap={row.draft ? undefined : (at) => onWrapRule(key, at)}
+                              onRename={row.draft ? undefined : (s) => onRenameRule(key, s)}
+                              onRenameAtRule={row.draft ? undefined : (m) => onRenameAtRule(key, m)}
+                              selectorSuggestions={selectorSuggestions}
+                              variables={variables}
+                              animations={animations}
+                              collapsed={collapsed}
+                              onToggleCollapse={onToggleCollapse}
+                            />
+                          );
+                        }
                         return (
                           <CascadeRuleCard
                             key={key}
-                            editable
-                            selector={row.selector ?? ''}
+                            editable={false}
+                            collapsed={collapsed}
+                            onToggleCollapse={onToggleCollapse}
+                            selector={row.selector ?? 'element.style'}
                             file={row.file}
                             line={row.line}
                             mediaText={row.mediaText}
@@ -284,61 +321,26 @@ export function CssCascadePanel({
                             overridden={
                               row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())
                             }
-                            body={bodies[key]}
-                            draft={row.draft}
-                            unmatched={row.unmatched}
-                            autoOpenAdd={key === justCreatedKey}
-                            onChange={(b) => onChangeBody(key, b)}
-                            onDelete={() => onDeleteRule(key)}
-                            // A draft rule doesn't exist in source yet — no rename/wrap
-                            // until it's created (by adding the first property).
-                            onWrap={row.draft ? undefined : (at) => onWrapRule(key, at)}
-                            onRename={row.draft ? undefined : (s) => onRenameRule(key, s)}
-                            onRenameAtRule={row.draft ? undefined : (m) => onRenameAtRule(key, m)}
-                            selectorSuggestions={selectorSuggestions}
-                            variables={variables}
-                            animations={animations}
-                            collapsed={collapsed}
-                            onToggleCollapse={onToggleCollapse}
+                            readonlyReason={row.readonlyReason}
+                            decls={row.declarations.map((d) => ({
+                              prop: d.prop,
+                              value: d.value,
+                              important: d.important,
+                            }))}
                           />
                         );
-                      }
-                      return (
-                        <CascadeRuleCard
-                          key={key}
-                          editable={false}
-                          collapsed={collapsed}
-                          onToggleCollapse={onToggleCollapse}
-                          selector={row.selector ?? 'element.style'}
-                          file={row.file}
-                          line={row.line}
-                          mediaText={row.mediaText}
-                          layer={row.layer}
-                          container={row.container}
-                          supports={row.supports}
-                          inactive={row.inactiveMedia}
-                          overridden={
-                            row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())
-                          }
-                          readonlyReason={row.readonlyReason}
-                          decls={row.declarations.map((d) => ({
-                            prop: d.prop,
-                            value: d.value,
-                            important: d.important,
-                          }))}
-                        />
-                      );
-                    })}
+                      })}
 
-                    {rows.length === 0 && (
-                      <p className="ss-cascade-empty">No CSS rules match this element.</p>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
+                      {rows.length === 0 && (
+                        <p className="ss-cascade-empty">No CSS rules match this element.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -26,7 +26,7 @@
   margin-bottom: var(--spacing-sm);
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
 }
 
 .worktree-row.is-current {
@@ -43,7 +43,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   font-weight: 500;
 }
 
@@ -60,7 +60,7 @@
   background: var(--tint-subtle);
   border: 1px solid var(--border-default);
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 500;
 }
 
@@ -78,7 +78,7 @@
 .worktree-row-path {
   margin-top: var(--spacing-xs);
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -123,11 +123,11 @@
 .worktree-remove-error {
   margin-top: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   background: rgba(var(--accent-error-rgb), 0.1);
   border: 1px solid rgba(var(--accent-error-rgb), 0.3);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   word-break: break-word;
 }
 
@@ -148,7 +148,7 @@
 .worktree-create-intro {
   margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   line-height: 1.5;
 }
 
@@ -157,7 +157,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-xs);
   background: var(--surface-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
 }
 
 .worktree-mode-btn {
@@ -167,7 +167,7 @@
   border: none;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -188,7 +188,7 @@
 
 .worktree-field-label {
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   font-weight: 500;
 }
 
@@ -197,9 +197,9 @@
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--surface-control);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
 }
 
 .worktree-field select {
@@ -226,7 +226,7 @@
 
 .worktree-field-hint {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 .worktree-checkbox {
@@ -234,7 +234,7 @@
   align-items: flex-start;
   gap: var(--spacing-sm);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   cursor: pointer;
 }
 
@@ -280,15 +280,15 @@
 .worktree-checkbox-hint {
   display: block;
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 .worktree-destination {
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--surface-control);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   word-break: break-all;
 }
 
@@ -298,11 +298,11 @@
 
 .worktree-create-error {
   padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   background: rgba(var(--accent-error-rgb), 0.1);
   border: 1px solid rgba(var(--accent-error-rgb), 0.3);
   color: var(--text-primary);
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   word-break: break-word;
 }
 

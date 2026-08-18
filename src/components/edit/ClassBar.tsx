@@ -21,8 +21,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import { PropertyField } from '../primitives/PropertyField';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
-import { PlusIcon } from '../icons/utility';
-import { CheckIcon, ChevronIcon, SearchIcon } from '../icons/common';
+import { PlusIcon } from '@/components/icons';
+import { CheckIcon, ChevronIcon, SearchIcon } from '@/components/icons';
 import type { CustomClass } from '../../lib/customClasses';
 import type { EditTarget } from '../../hooks/useVisualEditor';
 import { logger } from '../../lib/logger';

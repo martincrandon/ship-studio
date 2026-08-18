@@ -22,7 +22,7 @@ import { execPluginShell, readPluginStorage, writePluginStorage } from '../../li
 import { markPluginCrashed, isPluginCrashed } from '../../lib/plugin-loader';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { invoke } from '@tauri-apps/api/core';
-import { WarningIcon } from '../icons';
+import { WarningIcon } from '@/components/icons';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 
 interface PluginSlotProps {

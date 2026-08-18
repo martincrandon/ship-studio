@@ -37,7 +37,7 @@
 /* The "ghost" hint is a single-line suggestion under the value. */
 .ss-decl__ghost-hint {
   color: var(--text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-style: normal;
 }
 
@@ -54,7 +54,7 @@
   background: var(--surface-control);
   color: var(--text-muted);
   font-family: var(--font-code);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-style: normal;
 }
 

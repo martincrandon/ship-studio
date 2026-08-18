@@ -9,8 +9,8 @@
   background: var(--surface-app);
   box-shadow: var(--shadow);
   color: var(--text-primary);
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-ui);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-default);
   text-align: left;
   white-space: pre-wrap;
   pointer-events: none;

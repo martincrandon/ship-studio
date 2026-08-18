@@ -19,7 +19,7 @@ import {
   BraveIcon,
   EdgeIcon,
   GlobeIcon,
-} from '../icons';
+} from '@/components/icons';
 import { BrowserInfo, checkBrowserAvailability, openUrlInBrowser } from '../../lib/browser';
 import { logger } from '../../lib/logger';
 import { Button, type ButtonVariant } from '../primitives/Button';

@@ -8,7 +8,6 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { CloseIcon, SearchIcon } from '../icons';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
@@ -30,12 +29,17 @@ import type { LoadedPlugin } from '../../hooks/usePlugins';
 import { useModal } from '../../contexts/ModalContext';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { PluginInstallForm } from './PluginInstallForm';
-import { Spinner } from '../primitives/Spinner';
 import { PluginStatusGrid } from './PluginStatusGrid';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
+import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
-import { IconButton } from '../primitives/IconButton';
 import { TextButton } from '../primitives/TextButton';
+import {
+  ExtensionListRow,
+  ExtensionManagerLayout,
+  ExtensionSearchField,
+  ExtensionState,
+} from './extension';
 
 type Tab = 'installed' | 'library';
 
@@ -398,145 +402,139 @@ export function PluginManager({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal plugins-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="plugins-modal-header">
-          <h3>Plugins</h3>
-          <IconButton
-            variant="ghost"
-            size="compact"
-            onClick={onClose}
-            title="Close"
-            aria-label="Close"
-            icon={<CloseIcon size={16} />}
-          />
-        </div>
-
-        <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as Tab)}>
-          <TabsList className="plugins-tabs" aria-label="Plugins view">
-            <TabsTab value="installed" className="plugins-tab">
-              Installed
-            </TabsTab>
-            <TabsTab value="library" className="plugins-tab">
-              Library
-            </TabsTab>
-          </TabsList>
-        </Tabs>
-
-        {projectPath && (
-          <div className="plugins-search">
-            <SearchIcon size={12} />
-            <input
-              type="text"
-              className="plugins-search-input"
-              placeholder="Filter plugins..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-            />
-          </div>
-        )}
-
-        <div className="plugins-modal-body">
-          {!projectPath && (
-            <div className="plugins-empty">Open a project to manage its plugins.</div>
-          )}
-
-          {projectPath && activeTab === 'installed' && (
-            <>
-              {isLoading && plugins.length === 0 && (
-                <div className="plugins-loading">
-                  <Spinner style={{ color: 'var(--text-primary)' }} />
-                  Loading plugins...
-                </div>
-              )}
-
-              {!isLoading && plugins.length === 0 && (
-                <div className="plugins-empty">
-                  No plugins installed yet. Browse the{' '}
-                  <TextButton variant="primary" onClick={() => setActiveTab('library')}>
-                    Library
-                  </TextButton>{' '}
-                  to add one.
-                </div>
-              )}
-
-              {!isLoading && plugins.length > 0 && filteredPlugins.length === 0 && (
-                <div className="plugins-empty">No matching plugins</div>
-              )}
-
-              <PluginStatusGrid
-                plugins={filteredPlugins}
-                loadedPlugins={loadedPlugins}
-                togglingId={togglingId}
-                removingId={removingId}
-                reloadingId={reloadingId}
-                unlinkingId={unlinkingId}
-                updateStates={updateStates}
-                onToggle={(id, enabled) => void handleToggle(id, enabled)}
-                onCheckUpdate={(id) => void handleCheckUpdate(id)}
-                onUpdate={(id) => void handleUpdate(id)}
-                onUninstall={(id) => void handleUninstall(id)}
-                onReloadDev={(id) => handleReloadDevPlugin(id)}
-                onUnlinkDev={(id) => void handleUnlinkDevPlugin(id)}
+    <ModalFrame isOpen onClose={onClose} title="Plugins" className="plugins-modal">
+      <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as Tab)}>
+        <ExtensionManagerLayout
+          tabs={
+            <TabsList className="plugins-tabs" aria-label="Plugins view">
+              <TabsTab value="installed" className="plugins-tab">
+                Installed
+              </TabsTab>
+              <TabsTab value="library" className="plugins-tab">
+                Library
+              </TabsTab>
+            </TabsList>
+          }
+          controls={
+            projectPath ? (
+              <ExtensionSearchField
+                className="plugins-search"
+                placeholder="Filter plugins..."
+                aria-label="Filter plugins"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
+            ) : undefined
+          }
+          footer={
+            <span className="extension-manager-layout__footer-hint">
+              Press <span className="help-shortcut">Esc</span> to close
+            </span>
+          }
+        >
+          <TabsPanel value="installed" className="plugins-modal-body">
+            {!projectPath && (
+              <ExtensionState kind="empty">Open a project to manage its plugins.</ExtensionState>
+            )}
 
-              {error && activeTab === 'installed' && <div className="plugins-error">{error}</div>}
+            {projectPath && activeTab === 'installed' && (
+              <>
+                {isLoading && plugins.length === 0 && (
+                  <ExtensionState kind="loading" loadingLabel="Loading plugins">
+                    Loading plugins...
+                  </ExtensionState>
+                )}
 
-              <Button
-                variant="default"
-                width="fill"
-                onClick={() => {
-                  void handleLinkDevPlugin();
-                }}
-                disabled={isLinkingDev}
-              >
-                {isLinkingDev ? 'Linking...' : 'Link Dev Plugin'}
-              </Button>
-            </>
-          )}
+                {!isLoading && plugins.length === 0 && (
+                  <ExtensionState kind="empty">
+                    No plugins installed yet. Browse the{' '}
+                    <TextButton variant="primary" onClick={() => setActiveTab('library')}>
+                      Library
+                    </TextButton>{' '}
+                    to add one.
+                  </ExtensionState>
+                )}
 
-          {projectPath && activeTab === 'library' && (
-            <>
-              <div className="plugins-beta-notice">
-                Plugins are new and in beta. If you experience any issues, please report them in the
-                Slack group.
-              </div>
+                {!isLoading && plugins.length > 0 && filteredPlugins.length === 0 && (
+                  <ExtensionState kind="empty">No matching plugins</ExtensionState>
+                )}
 
-              {isLoadingRegistry && registry.length === 0 && (
-                <div className="plugins-loading">
-                  <Spinner style={{ color: 'var(--text-primary)' }} />
-                  Loading plugin library...
+                <PluginStatusGrid
+                  plugins={filteredPlugins}
+                  loadedPlugins={loadedPlugins}
+                  togglingId={togglingId}
+                  removingId={removingId}
+                  reloadingId={reloadingId}
+                  unlinkingId={unlinkingId}
+                  updateStates={updateStates}
+                  onToggle={(id, enabled) => void handleToggle(id, enabled)}
+                  onCheckUpdate={(id) => void handleCheckUpdate(id)}
+                  onUpdate={(id) => void handleUpdate(id)}
+                  onUninstall={(id) => void handleUninstall(id)}
+                  onReloadDev={(id) => handleReloadDevPlugin(id)}
+                  onUnlinkDev={(id) => void handleUnlinkDevPlugin(id)}
+                />
+
+                {error && activeTab === 'installed' && (
+                  <ExtensionState kind="error">{error}</ExtensionState>
+                )}
+
+                <Button
+                  variant="default"
+                  width="fill"
+                  onClick={() => {
+                    void handleLinkDevPlugin();
+                  }}
+                  disabled={isLinkingDev}
+                >
+                  {isLinkingDev ? 'Linking...' : 'Link Dev Plugin'}
+                </Button>
+              </>
+            )}
+          </TabsPanel>
+
+          <TabsPanel value="library" className="plugins-modal-body">
+            {!projectPath && (
+              <ExtensionState kind="empty">Open a project to manage its plugins.</ExtensionState>
+            )}
+            {projectPath && activeTab === 'library' && (
+              <>
+                <div className="plugins-beta-notice">
+                  Plugins are new and in beta. If you experience any issues, please report them in
+                  the Slack group.
                 </div>
-              )}
 
-              {!isLoadingRegistry && registry.length === 0 && (
-                <div className="plugins-empty">
-                  Could not load plugin library. Try installing from a URL below.
-                </div>
-              )}
+                {isLoadingRegistry && registry.length === 0 && (
+                  <ExtensionState kind="loading" loadingLabel="Loading plugin library">
+                    Loading plugin library...
+                  </ExtensionState>
+                )}
 
-              {!isLoadingRegistry && registry.length > 0 && filteredRegistry.length === 0 && (
-                <div className="plugins-empty">No matching plugins</div>
-              )}
+                {!isLoadingRegistry && registry.length === 0 && (
+                  <ExtensionState kind="empty">
+                    Could not load plugin library. Try installing from a URL below.
+                  </ExtensionState>
+                )}
 
-              <div className="plugins-list">
-                {filteredRegistry.map((entry) => {
-                  const isInstalled = isEntryInstalled(entry);
-                  const isThisInstalling = installingId === entry.id;
+                {!isLoadingRegistry && registry.length > 0 && filteredRegistry.length === 0 && (
+                  <ExtensionState kind="empty">No matching plugins</ExtensionState>
+                )}
 
-                  return (
-                    <div key={entry.id} className="plugin-row">
-                      <div className="plugin-info">
-                        <div className="plugin-header">
-                          <div>
-                            <span className="plugin-name">{entry.name}</span>
-                            <span className="plugin-meta">{entry.author}</span>
-                          </div>
-                          {isInstalled ? (
+                <div className="plugins-list">
+                  {filteredRegistry.map((entry) => {
+                    const isInstalled = isEntryInstalled(entry);
+                    const isThisInstalling = installingId === entry.id;
+
+                    return (
+                      <ExtensionListRow
+                        key={entry.id}
+                        className="plugin-row"
+                        action={
+                          isInstalled ? (
                             <span className="plugin-installed-badge">Installed</span>
                           ) : (
                             <Button
@@ -548,38 +546,41 @@ export function PluginManager({
                             >
                               {isThisInstalling ? 'Installing...' : 'Install'}
                             </Button>
+                          )
+                        }
+                      >
+                        <div className="plugin-info">
+                          <div className="plugin-header">
+                            <div>
+                              <span className="plugin-name">{entry.name}</span>
+                              <span className="plugin-meta">{entry.author}</span>
+                            </div>
+                          </div>
+                          <div className="plugin-desc">{entry.description}</div>
+                          {entry.category && (
+                            <div className="plugin-category-badge">{entry.category}</div>
                           )}
                         </div>
-                        <div className="plugin-desc">{entry.description}</div>
-                        {entry.category && (
-                          <div className="plugin-category-badge">{entry.category}</div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      </ExtensionListRow>
+                    );
+                  })}
+                </div>
 
-              {error && <div className="plugins-error">{error}</div>}
+                {error && <ExtensionState kind="error">{error}</ExtensionState>}
 
-              <PluginInstallForm
-                showUrlInput={showUrlInput}
-                onShowUrlInput={() => setShowUrlInput(true)}
-                repoUrl={repoUrl}
-                onRepoUrlChange={setRepoUrl}
-                isInstallingUrl={isInstallingUrl}
-                onInstall={() => void handleUrlInstall()}
-              />
-            </>
-          )}
-        </div>
-
-        <div className="plugins-footer">
-          <span className="plugins-footer-hint">
-            Press <span className="help-shortcut">Esc</span> to close
-          </span>
-        </div>
-      </div>
-    </div>
+                <PluginInstallForm
+                  showUrlInput={showUrlInput}
+                  onShowUrlInput={() => setShowUrlInput(true)}
+                  repoUrl={repoUrl}
+                  onRepoUrlChange={setRepoUrl}
+                  isInstallingUrl={isInstallingUrl}
+                  onInstall={() => void handleUrlInstall()}
+                />
+              </>
+            )}
+          </TabsPanel>
+        </ExtensionManagerLayout>
+      </Tabs>
+    </ModalFrame>
   );
 }

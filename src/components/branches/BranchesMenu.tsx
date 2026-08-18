@@ -12,15 +12,17 @@ import type { BranchInfo, PullRequestInfo } from '../../lib/branches';
 import type { ProjectGitHubStatus } from '../../lib/github';
 import type { GitHubState } from '../../hooks/useIntegrationStatus';
 import {
-  BranchIcon,
-  CheckIcon,
+  AddIcon,
   ChevronIcon,
   ExternalLinkIcon,
+  GitBranchEndIcon,
+  GitBranchHorizontalIcon,
+  GitBranchMainIcon,
+  GitBranchMidIcon,
   GitHubIcon,
-  PlusIcon,
   PullIcon,
   PullRequestIcon,
-} from '../icons';
+} from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { Dropdown } from '../primitives/Dropdown';
 import { MenuButton } from '../primitives/MenuButton';
@@ -117,6 +119,13 @@ export function BranchesMenu({
     action();
   };
 
+  const branchIcon = (branchName: string, isLast: boolean) => {
+    if (branchName === 'main' || branchName === 'master') {
+      return <GitBranchMainIcon size={24} />;
+    }
+    return isLast ? <GitBranchEndIcon size={24} /> : <GitBranchMidIcon size={24} />;
+  };
+
   return (
     <div className="branches-menu">
       <Dropdown
@@ -131,7 +140,7 @@ export function BranchesMenu({
             className={`branches-menu-trigger${isRepositoryViewActive ? ' is-active' : ''}`}
             data-education-id="branches-button"
             title="Branches"
-            leftIcon={<BranchIcon size={14} />}
+            leftIcon={<GitBranchHorizontalIcon size={14} />}
             rightIcon={<ChevronIcon />}
             {...triggerProps}
           >
@@ -167,7 +176,7 @@ export function BranchesMenu({
                   leftIcon={<GitHubIcon size={14} />}
                   rightIcon={<ExternalLinkIcon size={12} />}
                 >
-                  Open repository on GitHub
+                  Open in GitHub
                 </TextButton>
               )}
             </div>
@@ -187,25 +196,53 @@ export function BranchesMenu({
               </Button>
             </section>
 
-            <section className="branches-menu-section" aria-label="Branches">
+            <section className="branches-menu-section" aria-labelledby="branches-menu-branches">
+              <div className="branches-menu-section-heading">
+                <div className="branches-menu-section-heading-main">
+                  <div className="branches-menu-section-title" id="branches-menu-branches">
+                    Branches
+                  </div>
+                  <span className="branches-menu-count" aria-label={`${branches.length} branches`}>
+                    {branches.length}
+                  </span>
+                </div>
+                <TextButton
+                  className="branches-menu-section-view-all"
+                  onClick={() => runAndClose(onViewBranches)}
+                >
+                  View all branches
+                </TextButton>
+              </div>
               {currentBranch && (
-                <button type="button" className="branches-menu-row is-current" disabled>
-                  <CheckIcon size={14} />
-                  <span className="branches-menu-row-label">{currentBranch}</span>
-                  <span className="branches-menu-row-meta">Current</span>
-                </button>
-              )}
-              {recentBranches.map((branch) => (
                 <button
                   type="button"
-                  className="branches-menu-row"
+                  className="branches-menu-row branches-menu-branch-row is-current"
+                  disabled
+                >
+                  <span className="branches-menu-row-icon">
+                    {branchIcon(currentBranch, recentBranches.length === 0)}
+                  </span>
+                  <span className="branches-menu-row-content">
+                    <span className="branches-menu-row-label">{currentBranch}</span>
+                    <span className="branches-menu-row-meta">Current</span>
+                  </span>
+                </button>
+              )}
+              {recentBranches.map((branch, index) => (
+                <button
+                  type="button"
+                  className="branches-menu-row branches-menu-branch-row"
                   key={`${branch.isRemote ? 'remote' : 'local'}:${branch.name}`}
                   disabled={isBranchSwitching}
                   onClick={() => runAndClose(() => onBranchSwitch(branch.name))}
                 >
-                  <BranchIcon size={14} />
-                  <span className="branches-menu-row-label">{branch.name}</span>
-                  {branch.isRemote && <span className="branches-menu-row-meta">Remote</span>}
+                  <span className="branches-menu-row-icon">
+                    {branchIcon(branch.name, index === recentBranches.length - 1)}
+                  </span>
+                  <span className="branches-menu-row-content">
+                    <span className="branches-menu-row-label">{branch.name}</span>
+                    {branch.isRemote && <span className="branches-menu-row-meta">Remote</span>}
+                  </span>
                 </button>
               ))}
               {recentBranches.length === 0 && (
@@ -216,36 +253,64 @@ export function BranchesMenu({
                 variant="ghost"
                 className="branches-menu-action"
                 onClick={() => runAndClose(onCreateBranch)}
-                leftIcon={<PlusIcon size={14} />}
               >
-                <span className="branches-menu-row-label">New branch</span>
-              </Button>
-              <Button width="fill" variant="ghost" onClick={() => runAndClose(onViewBranches)}>
-                View all branches
+                <span className="branches-menu-action-content">
+                  <span className="branches-menu-action-main">
+                    <span className="branches-menu-action-icon">
+                      <AddIcon size={14} />
+                    </span>
+                    <span className="branches-menu-row-label">New branch</span>
+                  </span>
+                </span>
               </Button>
             </section>
 
             <section className="branches-menu-section" aria-labelledby="branches-menu-prs">
               <div className="branches-menu-section-heading">
-                <div className="branches-menu-section-title" id="branches-menu-prs">
-                  Pull requests
+                <div className="branches-menu-section-heading-main">
+                  <div className="branches-menu-section-title" id="branches-menu-prs">
+                    Pull requests
+                  </div>
+                  <span className="branches-menu-count" aria-label={`${openPRs.length} open`}>
+                    {openPRs.length}
+                  </span>
                 </div>
-                <span className="branches-menu-count" aria-label={`${openPRs.length} open`}>
-                  {openPRs.length}
-                </span>
+                <TextButton
+                  className="branches-menu-section-view-all"
+                  onClick={() => runAndClose(onViewPRs)}
+                >
+                  View all pull requests
+                </TextButton>
               </div>
               {currentOpenPR && (
                 <button
                   type="button"
-                  className="branches-menu-row"
+                  className="branches-menu-row branches-menu-pr-row"
                   onClick={() => {
                     close();
                     void openUrl(currentOpenPR.url);
                   }}
                 >
-                  <PullRequestIcon size={14} />
-                  <span className="branches-menu-row-label">View PR #{currentOpenPR.number}</span>
-                  <ExternalLinkIcon size={12} />
+                  <span className="branches-menu-pr-leading-icon">
+                    <PullRequestIcon size={14} />
+                  </span>
+                  <span className="branches-menu-pr-content">
+                    <span className="branches-menu-pr-main">
+                      <span className="branches-menu-pr-inline">
+                        <span className="branches-menu-pr-number">#{currentOpenPR.number}</span>
+                        {currentOpenPR.title}
+                      </span>
+                    </span>
+                    <span className="branches-menu-pr-meta">
+                      <span className="branches-menu-pr-branches">
+                        <span className="branches-menu-pr-branch">{currentOpenPR.headRef}</span>
+                        <span aria-hidden="true">→</span>
+                        <span className="branches-menu-pr-branch">{currentOpenPR.baseRef}</span>
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="branches-menu-pr-author">{currentOpenPR.author}</span>
+                    </span>
+                  </span>
                 </button>
               )}
               <Button
@@ -259,15 +324,18 @@ export function BranchesMenu({
                     : 'Create a feature branch first'
                 }
                 onClick={() => pullRequestBranch && runAndClose(() => onStartPR(pullRequestBranch))}
-                leftIcon={<PullRequestIcon size={14} />}
               >
-                <span className="branches-menu-row-label">New pull request</span>
-                {pullRequestBranch && (
-                  <span className="branches-menu-row-meta">{pullRequestBranch}</span>
-                )}
-              </Button>
-              <Button width="fill" variant="ghost" onClick={() => runAndClose(onViewPRs)}>
-                View all pull requests
+                <span className="branches-menu-action-content">
+                  <span className="branches-menu-action-main">
+                    <span className="branches-menu-action-icon">
+                      <AddIcon size={14} />
+                    </span>
+                    <span className="branches-menu-row-label">New pull request</span>
+                  </span>
+                  {pullRequestBranch && (
+                    <span className="branches-menu-row-meta">{pullRequestBranch}</span>
+                  )}
+                </span>
               </Button>
             </section>
           </>

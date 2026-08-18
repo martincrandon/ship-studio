@@ -1,11 +1,9 @@
 /* Setup/Onboarding Screen Styles */
 
-/* Setup-local colors — intentional one-offs, not part of the global scale.
-   The wizard greens are the onboarding install/CTA brand hue (lighter than
-   --action). */
+/* Keep the wizard stages and ready indicators aligned with primary actions. */
 :root {
-  --setup-wizard-green: #7fe89a;
-  --setup-wizard-green-hover: #6dd889;
+  --setup-wizard-green: var(--button-primary-mid);
+  --setup-wizard-green-hover: var(--button-primary-end);
 }
 
 /* ============ Onboarding Screen ============ */
@@ -38,36 +36,38 @@
 
 .onboarding-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: var(--spacing-2xl);
+  gap: var(--spacing-xl);
 }
 
 .onboarding-logo {
   height: 40px;
   width: auto;
-  margin-bottom: 20px;
+  margin-bottom: var(--spacing-2xl);
 }
 
 .onboarding-header h1 {
-  font-size: 22px;
+  font-size: var(--font-size-h2);
   font-weight: 600;
   margin-bottom: 6px;
 }
 
 .onboarding-header p {
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: var(--font-size-subhead-lg);
 }
 
-.onboarding-header .onboarding-reassurance {
-  font-size: 15px;
+.onboarding-reassurance {
+  font-size: var(--font-size-subhead-lg);
   color: var(--text-secondary);
   margin-top: 8px;
+  line-height: 1.5;
 }
 
 .onboarding-error {
   background: rgba(var(--accent-error-light-rgb), 0.1);
   border: 1px solid rgba(var(--accent-error-light-rgb), 0.3);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   padding: 16px;
   margin-bottom: 24px;
   text-align: center;
@@ -134,9 +134,34 @@
   height: 20px;
 }
 
+.setup-item-icon-check {
+  color: var(--setup-wizard-green);
+}
+
+.setup-item-icon-check path,
+.agent-setup-checklist-success-icon path {
+  stroke: currentColor;
+}
+
+.setup-item-icon-error {
+  color: var(--accent-error);
+}
+
+.setup-item-icon-empty {
+  color: var(--border-default);
+}
+
+.setup-item-icon-blocked {
+  color: var(--text-muted);
+}
+
+.setup-item-spinner {
+  color: var(--accent-active);
+}
+
 .setup-item-name {
   font-weight: 500;
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   flex: 1;
 }
 
@@ -148,13 +173,13 @@
 }
 
 .setup-item-info {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   font-family: var(--font-code);
 }
 
 .setup-item-blocked-text {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
   font-style: italic;
 }
@@ -167,12 +192,12 @@
 }
 
 .setup-item-progress-text {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
 }
 
 .setup-item-progress-hint {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
 }
 
@@ -183,7 +208,7 @@
 }
 
 .setup-item-error-text {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--accent-error);
   max-width: 180px;
 }
@@ -195,7 +220,7 @@
 }
 
 .setup-item-time-estimate {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-muted);
 }
 
@@ -227,7 +252,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   font-weight: 600;
   background: var(--surface-control);
   color: var(--text-muted);
@@ -274,7 +299,7 @@
 }
 
 .wizard-indicator-label {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-muted);
   text-align: center;
   line-height: 1.3;
@@ -322,7 +347,7 @@
 }
 
 .wizard-step-subtitle {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   color: var(--text-secondary);
 }
 
@@ -371,14 +396,14 @@
   margin-right: var(--spacing-md);
   align-self: center;
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   text-align: right;
 }
 
 /* ============ Agent Step Cards ============ */
 
 .wizard-agent-selection-hint {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   margin-bottom: 4px;
 }
@@ -437,12 +462,12 @@
 
 .wizard-agent-card-desc {
   margin: var(--spacing-xs) 0 var(--spacing-md);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
 }
 
 .wizard-agent-card-badge {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 500;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -463,7 +488,7 @@
 }
 
 .wizard-agent-card-items .setup-item {
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   padding: 10px 12px;
 }
 
@@ -485,13 +510,13 @@
 }
 
 .wizard-hosting-title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-h3);
   font-weight: 600;
   margin-bottom: 8px;
 }
 
 .wizard-hosting-desc {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   color: var(--text-secondary);
   margin-bottom: 24px;
   max-width: 300px;
@@ -522,7 +547,7 @@
 
 .onboarding-slack-cta span {
   flex: 1;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body-lg);
   color: var(--text-secondary);
   line-height: 1.4;
 }
@@ -586,7 +611,7 @@
 
 .celebration-subtitle {
   color: var(--text-secondary);
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-h4);
   margin-bottom: 32px;
 }
 
@@ -626,12 +651,12 @@
   gap: 12px;
   padding: 16px;
   background: var(--surface-panel);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-card);
   border: 1px solid var(--border-default);
 }
 
 .prerequisite .status {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-h3);
   width: 24px;
 }
 
@@ -651,7 +676,7 @@
 .prerequisite .path {
   color: var(--text-muted);
   font-family: var(--font-code);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
 }
 
 .prerequisite .install-info {
@@ -674,7 +699,7 @@
   background: var(--surface-control);
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-body-md);
   color: var(--text-secondary);
 }
 
@@ -735,7 +760,7 @@
 }
 
 .onboarding-terminal-title {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-subhead);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -749,7 +774,7 @@
   padding: 10px 16px;
   background: var(--surface-control);
   border-top: 1px solid var(--border-default);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.4;
   color: var(--text-secondary);
 }
@@ -769,7 +794,7 @@
   display: inline-block;
   margin-left: 8px;
   padding: 2px 8px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 500;
   color: var(--text-muted);
   background: var(--surface-control);

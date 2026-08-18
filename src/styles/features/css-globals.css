@@ -63,11 +63,11 @@
 .ss-vars__scope-sel {
   color: var(--code-property);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 .ss-vars__scope-note {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 
 /* Variable as a value */
@@ -95,7 +95,7 @@
   margin: 0 -4px; /* css-ok: edge-to-edge row */
   border-radius: var(--radius-sm);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
   line-height: 1.5;
 }
 .ss-var-row:hover {
@@ -133,7 +133,7 @@
   background: var(--surface-control);
   color: var(--text-muted);
   font-family: var(--font-ui);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 700;
   line-height: 1;
 }
@@ -220,7 +220,7 @@
   background: var(--surface-control);
   color: var(--text-primary);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }
 .ss-var-input:focus {
   outline: 1px solid var(--accent-active);
@@ -259,5 +259,5 @@
   flex: 0 0 auto;
   color: var(--code-property);
   font-family: var(--font-code);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-body-sm);
 }

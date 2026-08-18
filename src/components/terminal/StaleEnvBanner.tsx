@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { WarningIcon } from '../icons';
+import { WarningIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { sessionRegistry } from '../../lib/sessionRegistry';
 import {

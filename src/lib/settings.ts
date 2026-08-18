@@ -8,6 +8,23 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+/** Event fired after a dashboard visibility preference is persisted. */
+export const DASHBOARD_VISIBILITY_CHANGED_EVENT = 'shipstudio:dashboard-visibility-changed';
+
+/** Dashboard visibility preference changed by a settings control or inline action. */
+export interface DashboardVisibilityChangedDetail {
+  key: 'calendar' | 'slackCta' | 'dashboardHeader';
+  hidden: boolean;
+}
+
+function notifyDashboardVisibilityChanged(detail: DashboardVisibilityChangedDetail): void {
+  window.dispatchEvent(
+    new CustomEvent<DashboardVisibilityChangedDetail>(DASHBOARD_VISIBILITY_CHANGED_EVENT, {
+      detail,
+    })
+  );
+}
+
 /**
  * Check if the GitHub contribution calendar is hidden on the dashboard.
  */
@@ -25,6 +42,7 @@ export async function getCalendarHidden(): Promise<boolean> {
 export async function setCalendarHidden(hidden: boolean): Promise<void> {
   try {
     await invoke('set_calendar_hidden', { hidden });
+    notifyDashboardVisibilityChanged({ key: 'calendar', hidden });
   } catch {
     // Silently fail
   }
@@ -47,6 +65,26 @@ export async function getSlackCtaHidden(): Promise<boolean> {
 export async function setSlackCtaHidden(hidden: boolean): Promise<void> {
   try {
     await invoke('set_slack_cta_hidden', { hidden });
+    notifyDashboardVisibilityChanged({ key: 'slackCta', hidden });
+  } catch {
+    // Silently fail
+  }
+}
+
+/** Check if the dashboard home header is hidden. */
+export async function getDashboardHeaderHidden(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('get_dashboard_header_hidden');
+  } catch {
+    return false;
+  }
+}
+
+/** Set whether the dashboard home header is hidden (persisted across sessions). */
+export async function setDashboardHeaderHidden(hidden: boolean): Promise<void> {
+  try {
+    await invoke('set_dashboard_header_hidden', { hidden });
+    notifyDashboardVisibilityChanged({ key: 'dashboardHeader', hidden });
   } catch {
     // Silently fail
   }

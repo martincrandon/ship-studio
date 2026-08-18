@@ -6,7 +6,7 @@ import {
   PullRequestIcon,
   PushIcon,
   WarningIcon,
-} from '../components/icons';
+} from '@/components/icons';
 
 /**
  * Workspace-scoped palette commands (Branches, PR flows).

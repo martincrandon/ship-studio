@@ -56,7 +56,7 @@ import {
   isNodeMissingError,
 } from '../../lib/terminalDiagnostics';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { SlackIcon } from '../icons';
+import { SlackIcon } from '@/components/icons';
 import {
   alreadySignedInMessage,
   authFailureMessage,

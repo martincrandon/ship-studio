@@ -67,7 +67,7 @@
   border: 1px solid rgba(var(--accent-active-rgb), 0.5);
   border-radius: var(--radius-pill);
   color: var(--text-primary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-badge);
   font-weight: 500;
   white-space: nowrap;
   box-shadow: var(--shadow-md);

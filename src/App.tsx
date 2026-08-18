@@ -70,7 +70,7 @@ import { useAppCommands } from './commands/useAppCommands';
 import { useProjectNumberShortcuts } from './hooks/useProjectNumberShortcuts';
 import { ToastList } from './components/primitives/ToastList';
 import { TooltipProvider } from './components/primitives/Tooltip';
-import { IconAuditGallery } from './components/icons/IconAuditGallery';
+import { DevDesignSystemTools } from './components/design-system/DevDesignSystemTools';
 import { logger } from './lib/logger';
 import { asCommandError, formatCommandError } from './lib/errors';
 import { trackEvent, setActiveProject, trackPageview } from './lib/analytics';
@@ -110,7 +110,7 @@ function App({ initialProjectPath }: AppProps) {
               <AppContents initialProjectPath={initialProjectPath} />
               <CommandPaletteHost />
               <AppGlobalModals />
-              <IconAuditGallery />
+              <DevDesignSystemTools />
             </AgentBridgeProvider>
           </PaletteContextProvider>
         </ModalProvider>
@@ -1056,6 +1056,7 @@ function AppContents({ initialProjectPath }: AppProps) {
     <ModalFrame
       isOpen
       onClose={() => setShowQuitConfirm(false)}
+      ariaLabel="Quit Ship Studio"
       showCloseButton={false}
       className="quit-confirm-modal"
     >

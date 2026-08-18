@@ -90,6 +90,7 @@ vi.mock('../icons', () => ({
   DownloadIcon: () => <span data-testid="download-icon" />,
   GitHubIcon: () => <span data-testid="github-icon" />,
   LoginIcon: () => <span data-testid="login-icon" />,
+  MoreHorizontalIcon: () => <span data-testid="more-horizontal-icon" />,
   PlugIcon: () => <span data-testid="plug-icon" />,
   VercelIcon: () => <span data-testid="vercel-icon" />,
 }));
