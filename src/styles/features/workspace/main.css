@@ -5,14 +5,16 @@
   font-family: var(--font-ui);
 }
 
-/* Title bar — sits alongside macOS traffic lights */
+/* Title bar — sits alongside macOS traffic lights and the workspace controls */
 .workspace-titlebar {
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 32px;
-  /* Left padding clears the macOS traffic lights (overlay mode) */
-  padding: 0 16px 0 78px;
+  height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  /* Clear the macOS traffic lights, then preserve the same 6px gap used
+     between the Sidebar and Home buttons. */
+  padding: 0 var(--space-16) 0
+    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap));
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border-default);
   -webkit-user-select: none;
@@ -20,6 +22,31 @@
   cursor: default;
   flex-shrink: 0;
   position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-titlebar-navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--button-gap);
+  flex: 0 0 auto;
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-titlebar-home {
+  flex: 0 0 auto;
+}
+
+/* Home and loading share the same titlebar but not the project body layout. */
+.app.workspace > .projects-with-rail {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.app.workspace-home.has-workspace-titlebar .project-loading-body {
+  padding-top: 0;
 }
 
 .workspace-title-group {
@@ -173,21 +200,6 @@
 
 .workspace-body > .panel-resize-handle {
   z-index: var(--z-dropdown);
-}
-
-/* Collapse the project sidebar into a contained icon-only navigation rail. */
-.workspace-body.is-sidebar-hidden > .workspace-sidebar {
-  width: calc(var(--control-height-standard) + (var(--space-08) * 2)) !important;
-  border-right: var(--stroke-1) solid var(--border-default);
-}
-
-.workspace-body.is-sidebar-hidden .workspace-sidebar-ws-switch,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-footer-divider {
-  display: none;
-}
-
-.workspace-body.is-sidebar-hidden > .panel-resize-handle {
-  display: none;
 }
 
 .workspace-main {

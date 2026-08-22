@@ -345,6 +345,10 @@ export interface WorkspaceViewProps {
   /** Predicate: is a dev server currently tracked for the given project path?
    *  Used by the sidebar to populate background projects' Commands section. */
   isProjectDevServerRunning: (projectPath: string) => boolean;
+  /** Whether the shared project sidebar is in its compact state. */
+  isSidebarHidden: boolean;
+  /** Toggle the shared project sidebar between full and compact states. */
+  onToggleSidebar: () => void;
 }
 
 export const WorkspaceView = memo(function WorkspaceView({
@@ -374,6 +378,8 @@ export const WorkspaceView = memo(function WorkspaceView({
   onUnpinProject,
   onOpenProjectPicker,
   isProjectDevServerRunning,
+  isSidebarHidden,
+  onToggleSidebar,
 }: WorkspaceViewProps) {
   // Window-width gate for the compact layout. Purely reactive — no Tauri
   // resize calls, no pinning. See src/hooks/useIsCompact.ts for the threshold.
@@ -688,12 +694,6 @@ export const WorkspaceView = memo(function WorkspaceView({
     },
     [currentProject.path, terminalTabs, activeTerminalTab]
   );
-  // Sidebar visibility is workspace-local (not persisted). The home / projects
-  // view renders its own sidebar instance unconditionally, so this state does
-  // not affect it. Compact mode never renders the full sidebar — the narrow
-  // layout owns its own chrome (see `CompactWorkspace`).
-  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
-  const effectiveSidebarHidden = isSidebarHidden;
   // Naming note: `showPreviewLogs` is the legacy state for the inspect panel
   // (which hosts dev-server logs + browser tools). The event keeps the
   // generic name so future inspect-only telemetry doesn't have to migrate.
@@ -986,6 +986,9 @@ export const WorkspaceView = memo(function WorkspaceView({
   const header = WorkspaceHeader({
     projectPath: currentProject.path,
     projectName: currentProject.name,
+    onGoHome,
+    isSidebarHidden,
+    onToggleSidebar,
     onOpenAssetsPanel: assetsPanelModal.open,
     assetsPanelVisible: assetsPanelModal.isOpen,
     elementTreeVisible: elementTreePanelVisible,
@@ -1091,16 +1094,14 @@ export const WorkspaceView = memo(function WorkspaceView({
             handleTabTitleChange={handleTabTitleChange}
           />
         ) : (
-          <div className={`workspace-body${effectiveSidebarHidden ? ' is-sidebar-hidden' : ''}`}>
+          <div className="workspace-body">
             <WorkspaceSidebar
               isHomeActive={false}
               onGoHome={onGoHome}
               onOpenProjectPicker={onOpenProjectPicker}
-              isSidebarHidden={effectiveSidebarHidden}
-              onToggleSidebar={() => {
-                void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
-                setIsSidebarHidden(!isSidebarHidden);
-              }}
+              isSidebarHidden={isSidebarHidden}
+              onToggleSidebar={onToggleSidebar}
+              showNavigationControls={false}
               projects={projectRows}
               onCloseProject={onCloseProject}
               onUnpinProject={onUnpinProject}

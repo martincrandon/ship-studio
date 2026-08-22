@@ -13,6 +13,9 @@ function headerProps(): WorkspaceHeaderProps {
   return {
     projectPath,
     projectName: 'A very long project name',
+    onGoHome: vi.fn(),
+    isSidebarHidden: false,
+    onToggleSidebar: vi.fn(),
     onOpenAssetsPanel: vi.fn(),
     assetsPanelVisible: false,
     elementTreeVisible: false,
@@ -69,6 +72,14 @@ function TitlebarHarness() {
 describe('WorkspaceHeader title bar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('places sidebar navigation controls in the titlebar', () => {
+    const { container } = render(<TitlebarHarness />);
+
+    expect(container.querySelector('.workspace-titlebar-navigation')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
   });
 
   it('keeps the whole path action labelled with the full path', () => {

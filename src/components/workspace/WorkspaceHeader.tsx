@@ -14,15 +14,31 @@
  * @module components/WorkspaceHeader
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { BranchIndicator } from '../branches/BranchIndicator';
 import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { AgentsIcon, ElementsIcon, FolderOpenIcon, ImageIcon } from '@/components/icons';
+import {
+  AgentsIcon,
+  ElementsIcon,
+  FolderOpenIcon,
+  HomeIcon,
+  ImageIcon,
+  PanelLeftIcon,
+} from '@/components/icons';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ToggleButton } from '../primitives/ToggleButton';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
@@ -38,6 +54,9 @@ export interface WorkspaceHeaderProps {
   // Project
   projectPath: string;
   projectName: string;
+  onGoHome: () => void;
+  isSidebarHidden: boolean;
+  onToggleSidebar: () => void;
 
   // Workspace tools that remain directly accessible from the toolbar.
   // Env editor, backups, plugin manager, learn mode, and IDE launch moved
@@ -119,9 +138,83 @@ export interface WorkspaceHeaderProps {
   pluginTheme: PluginThemeData;
 }
 
+export interface WorkspaceNavigationProps {
+  onGoHome: () => void;
+  isHomeActive?: boolean;
+  isSidebarHidden: boolean;
+  onToggleSidebar: () => void;
+}
+
+/** Shared navigation controls used by the project and home titlebars. */
+export function WorkspaceNavigation({
+  onGoHome,
+  isHomeActive = false,
+  isSidebarHidden,
+  onToggleSidebar,
+}: WorkspaceNavigationProps) {
+  return (
+    <div className="workspace-titlebar-navigation" aria-label="Workspace navigation">
+      <IconButton
+        variant="ghost"
+        className="workspace-titlebar-toggle"
+        icon={<PanelLeftIcon size={12} />}
+        onClick={onToggleSidebar}
+        title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+        aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+        data-education-id="toggle-sidebar"
+      />
+      <Button
+        variant="default"
+        className="workspace-titlebar-home"
+        onClick={onGoHome}
+        disabled={isHomeActive}
+        aria-current={isHomeActive ? 'page' : undefined}
+        title="Home"
+        leftIcon={
+          <span className="workspace-sidebar-home-icon" aria-hidden="true">
+            <HomeIcon size={12} />
+          </span>
+        }
+      >
+        <span>Home</span>
+      </Button>
+    </div>
+  );
+}
+
+interface WorkspaceTitlebarProps {
+  children: ReactNode;
+}
+
+/** Window-drag region shared by the titlebars that sit below macOS traffic lights. */
+export function WorkspaceTitlebar({ children }: WorkspaceTitlebarProps) {
+  const handleDrag = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
+    event.preventDefault();
+    void getCurrentWindow().startDragging();
+  }, []);
+
+  const handleDoubleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
+    const win = getCurrentWindow();
+    void win.isMaximized().then((maximized) => {
+      void (maximized ? win.unmaximize() : win.maximize());
+    });
+  }, []);
+
+  return (
+    <div className="workspace-titlebar" onMouseDown={handleDrag} onDoubleClick={handleDoubleClick}>
+      {children}
+    </div>
+  );
+}
+
 export function WorkspaceHeader({
   projectPath,
   projectName,
+  onGoHome,
+  isSidebarHidden,
+  onToggleSidebar,
   onOpenAssetsPanel,
   assetsPanelVisible,
   elementTreeVisible,
@@ -169,20 +262,6 @@ export function WorkspaceHeader({
     (branches.find((branch) => branch.name === currentBranch)?.isDefault ?? false);
   const projectPathContainerRef = useRef<HTMLDivElement>(null);
   const [expandedProjectPathWidth, setExpandedProjectPathWidth] = useState<number | null>(null);
-  // Window dragging — only from the title bar (not the toolbar with plugins)
-  const handleDrag = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
-    e.preventDefault();
-    void getCurrentWindow().startDragging();
-  }, []);
-
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
-    const win = getCurrentWindow();
-    void win.isMaximized().then((maximized) => {
-      void (maximized ? win.unmaximize() : win.maximize());
-    });
-  }, []);
 
   const expandProjectPath = useCallback(() => {
     const measure = projectPathContainerRef.current?.querySelector<HTMLElement>(
@@ -238,7 +317,12 @@ export function WorkspaceHeader({
   // now live in the Cmd+K palette. See src/commands/useAppCommands.tsx.
 
   const titlebar = (
-    <div className="workspace-titlebar" onMouseDown={handleDrag} onDoubleClick={handleDoubleClick}>
+    <WorkspaceTitlebar>
+      <WorkspaceNavigation
+        onGoHome={onGoHome}
+        isSidebarHidden={isSidebarHidden}
+        onToggleSidebar={onToggleSidebar}
+      />
       <div className="workspace-title-group">
         <h1>{projectName}</h1>
         <div
@@ -269,7 +353,7 @@ export function WorkspaceHeader({
           </button>
         </div>
       </div>
-    </div>
+    </WorkspaceTitlebar>
   );
 
   const toolbar = (

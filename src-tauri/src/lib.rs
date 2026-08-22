@@ -173,11 +173,18 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     main_builder = main_builder
+                        .decorations(true)
                         .title_bar_style(tauri::TitleBarStyle::Overlay)
+                        // `y` sizes Tao's native titlebar container to 14 + 32 = 46px;
+                        // `center_macos_traffic_lights` below performs the missing Y move.
+                        .traffic_light_position(tauri::LogicalPosition::new(16.0, 32.0))
                         .hidden_title(true);
                 }
 
-                main_builder.build()?;
+                let main_window = main_builder.build()?;
+
+                #[cfg(target_os = "macos")]
+                commands::window::center_macos_traffic_lights(&main_window)?;
             }
 
             // The static asset-protocol scope (tauri.conf.json) only covers
@@ -290,6 +297,22 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::WindowEvent::Resized(_) = event {
+                if let Some(webview_window) = window.app_handle().get_webview_window(window.label())
+                {
+                    if let Err(error) =
+                        commands::window::center_macos_traffic_lights_during_resize(&webview_window)
+                    {
+                        tracing::warn!(
+                            window = window.label(),
+                            %error,
+                            "Failed to preserve macOS traffic-light position during resize"
+                        );
+                    }
+                }
+            }
+
             if let tauri::WindowEvent::Destroyed = event {
                 let label = window.label().to_string();
                 tracing::info!("Window {} destroyed, cleaning up", label);

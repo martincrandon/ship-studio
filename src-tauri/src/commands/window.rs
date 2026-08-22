@@ -8,6 +8,61 @@ use crate::errors::CommandError;
 use crate::types::{CompactModePreferences, WindowPosition};
 use tauri::{LogicalPosition, LogicalSize, Window};
 
+/// Vertically centers the native macOS window controls in Ship Studio's 46px
+/// custom titlebar. Tao's `traffic_light_position` uses `y` only to resize its
+/// private titlebar container, and AppKit relayout can replace the requested X;
+/// apply both final frame corrections after the window is built.
+#[cfg(target_os = "macos")]
+pub fn center_macos_traffic_lights(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let ns_window = window.ns_window()? as usize;
+    window.run_on_main_thread(move || unsafe {
+        position_macos_traffic_lights(ns_window as *mut objc2::runtime::AnyObject);
+    })
+}
+
+/// Tauri delivers `on_window_event` on macOS's main event loop. Correcting the
+/// frames synchronously there prevents AppKit's resize layout from being drawn
+/// before a separately queued correction.
+#[cfg(target_os = "macos")]
+pub fn center_macos_traffic_lights_during_resize(
+    window: &tauri::WebviewWindow,
+) -> tauri::Result<()> {
+    let ns_window = window.ns_window()? as *mut objc2::runtime::AnyObject;
+    unsafe { position_macos_traffic_lights(ns_window) };
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn position_macos_traffic_lights(ns_window: *mut objc2::runtime::AnyObject) {
+    use objc2::msg_send;
+    use objc2_foundation::{CGPoint, CGRect};
+
+    const CUSTOM_TITLEBAR_HEIGHT: f64 = 46.0;
+    const NATIVE_CLOSE_BUTTON_X: f64 = 16.0;
+
+    let close_button: *mut objc2::runtime::AnyObject =
+        msg_send![ns_window, standardWindowButton: 0usize];
+    if close_button.is_null() {
+        return;
+    }
+    let close_frame: CGRect = msg_send![close_button, frame];
+    let horizontal_adjustment = NATIVE_CLOSE_BUTTON_X - close_frame.origin.x;
+
+    // NSWindowButton: close = 0, miniaturize = 1, zoom = 2.
+    for button_kind in 0usize..=2 {
+        let button: *mut objc2::runtime::AnyObject =
+            msg_send![ns_window, standardWindowButton: button_kind];
+        if button.is_null() {
+            continue;
+        }
+        let frame: CGRect = msg_send![button, frame];
+        let centered_y =
+            ((CUSTOM_TITLEBAR_HEIGHT - frame.size.height) / 2.0 - frame.size.height).round();
+        let origin = CGPoint::new(frame.origin.x + horizontal_adjustment, centered_y);
+        let _: () = msg_send![button, setFrameOrigin: origin];
+    }
+}
+
 /// Compact mode dimensions
 const COMPACT_WIDTH: f64 = 450.0;
 const COMPACT_HEIGHT_DEFAULT: f64 = 600.0;

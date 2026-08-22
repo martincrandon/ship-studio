@@ -126,6 +126,11 @@ const loadingSpinner = <Spinner size="lg" style={{ color: 'var(--text-muted)' }}
 function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+  const toggleSidebar = useCallback(() => {
+    void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
+    setIsSidebarHidden(!isSidebarHidden);
+  }, [isSidebarHidden]);
   const isCompact = useIsCompact();
   const setPaletteContext = useSetPaletteContext();
   useEffect(() => {
@@ -1126,65 +1131,73 @@ function AppContents({ initialProjectPath }: AppProps) {
   if (view === 'projects') {
     return (
       <>
-        <div className={`projects-with-rail${isCompact ? ' is-compact' : ''}`} key="view-projects">
-          {!isCompact && (
-            <WorkspaceSidebar
-              key="sidebar-projects"
-              isHomeActive={true}
-              onGoHome={() => {
-                /* already on Home */
-              }}
-              onOpenProjectPicker={openProjectPicker}
-              projects={pinnedProjects.rows}
-              currentProjectPath={null}
-              currentProjectName={null}
-              onSelectProject={handleRailClick}
-              onCloseProject={handleCloseProject}
-              onSelectProjectTab={handleSelectProjectTab}
-              terminalTabs={[]}
-              activeTerminalTab={0}
-              tabTitles={EMPTY_TAB_TITLES}
-              attentionTabs={EMPTY_ATTENTION_TABS}
-              maxTabs={5}
-              onSelectTab={noop}
-              onAddTab={noop}
-              onCloseTab={noop}
-              hasDevServer={false}
-              isRestartingDevServer={false}
-              devServerRunning={false}
-              isProjectDevServerRunning={isServerRunning}
+        <div className="app workspace workspace-home">
+          <div
+            className={`projects-with-rail${isCompact ? ' is-compact' : ''}`}
+            key="view-projects"
+          >
+            {!isCompact && (
+              <WorkspaceSidebar
+                key="sidebar-projects"
+                isHomeActive={true}
+                onGoHome={() => {
+                  /* already on Home */
+                }}
+                onOpenProjectPicker={openProjectPicker}
+                isSidebarHidden={isSidebarHidden}
+                onToggleSidebar={toggleSidebar}
+                showNavigationControls
+                projects={pinnedProjects.rows}
+                currentProjectPath={null}
+                currentProjectName={null}
+                onSelectProject={handleRailClick}
+                onCloseProject={handleCloseProject}
+                onSelectProjectTab={handleSelectProjectTab}
+                terminalTabs={[]}
+                activeTerminalTab={0}
+                tabTitles={EMPTY_TAB_TITLES}
+                attentionTabs={EMPTY_ATTENTION_TABS}
+                maxTabs={5}
+                onSelectTab={noop}
+                onAddTab={noop}
+                onCloseTab={noop}
+                hasDevServer={false}
+                isRestartingDevServer={false}
+                devServerRunning={false}
+                isProjectDevServerRunning={isServerRunning}
+                onSwitchAccount={() => setView('account-select')}
+              />
+            )}
+            <ProjectsView
+              onSelectProject={handleSelectProjectCallback}
+              onCreateProject={handleCreateProject}
+              onImportProject={handleImportProject}
+              onImportLocalFolder={handleImportLocalFolderCallback}
+              isGitHubAuthenticated={integrations.github.cliStatus.authenticated}
+              githubUsername={integrations.github.username}
+              isAuthCheckDone={isInitialCheckDone}
+              onGitHubConnect={handleGitHubConnectFromOverlay}
+              showCreateModal={showCreateModal}
+              onCloseCreateModal={handleCloseCreateModal}
+              onProjectCreated={(path) => void handleProjectCreated(path)}
+              importView={importView}
+              setImportView={setImportView}
+              onProjectImported={(path) => void handleProjectImported(path)}
+              authTerminalConfig={authTerminalConfig}
+              closeAuthTerminal={closeAuthTerminal}
+              onAuthTerminalExit={handleAuthTerminalExitForProjects}
+              pluginProject={pluginProject}
+              pluginActions={pluginActions}
+              pluginTheme={pluginTheme}
+              getSlotPlugins={getSlotPlugins}
+              projectsLoading={projectsLoading}
+              onLoadingChange={setProjectsLoading}
+              cleanupStatus={cleanupStatus}
+              pinnedSet={pinnedProjects.pinnedSet}
+              onTogglePin={(path, pinned) => void handleTogglePin(path, pinned)}
               onSwitchAccount={() => setView('account-select')}
             />
-          )}
-          <ProjectsView
-            onSelectProject={handleSelectProjectCallback}
-            onCreateProject={handleCreateProject}
-            onImportProject={handleImportProject}
-            onImportLocalFolder={handleImportLocalFolderCallback}
-            isGitHubAuthenticated={integrations.github.cliStatus.authenticated}
-            githubUsername={integrations.github.username}
-            isAuthCheckDone={isInitialCheckDone}
-            onGitHubConnect={handleGitHubConnectFromOverlay}
-            showCreateModal={showCreateModal}
-            onCloseCreateModal={handleCloseCreateModal}
-            onProjectCreated={(path) => void handleProjectCreated(path)}
-            importView={importView}
-            setImportView={setImportView}
-            onProjectImported={(path) => void handleProjectImported(path)}
-            authTerminalConfig={authTerminalConfig}
-            closeAuthTerminal={closeAuthTerminal}
-            onAuthTerminalExit={handleAuthTerminalExitForProjects}
-            pluginProject={pluginProject}
-            pluginActions={pluginActions}
-            pluginTheme={pluginTheme}
-            getSlotPlugins={getSlotPlugins}
-            projectsLoading={projectsLoading}
-            onLoadingChange={setProjectsLoading}
-            cleanupStatus={cleanupStatus}
-            pinnedSet={pinnedProjects.pinnedSet}
-            onTogglePin={(path, pinned) => void handleTogglePin(path, pinned)}
-            onSwitchAccount={() => setView('account-select')}
-          />
+          </div>
         </div>
         {/* .projects-with-rail */}
         {pendingMonorepoPick && (
@@ -1206,35 +1219,40 @@ function AppContents({ initialProjectPath }: AppProps) {
   if (view === 'project-loading') {
     return (
       <>
-        <div className="projects-with-rail" key="view-project-loading">
-          <WorkspaceSidebar
-            key="sidebar-project-loading"
-            isHomeActive={false}
-            onGoHome={handleBackToProjects}
-            onOpenProjectPicker={openProjectPicker}
-            projects={pinnedProjects.rows}
-            currentProjectPath={currentProject?.path ?? null}
-            currentProjectName={currentProject?.name ?? null}
-            onSelectProject={handleRailClick}
-            onCloseProject={handleCloseProject}
-            onSelectProjectTab={handleSelectProjectTab}
-            terminalTabs={[]}
-            activeTerminalTab={0}
-            tabTitles={EMPTY_TAB_TITLES}
-            attentionTabs={EMPTY_ATTENTION_TABS}
-            maxTabs={5}
-            onSelectTab={noop}
-            onAddTab={noop}
-            onCloseTab={noop}
-            hasDevServer={false}
-            isRestartingDevServer={false}
-            devServerRunning={false}
-            isProjectDevServerRunning={isServerRunning}
-            onSwitchAccount={() => setView('account-select')}
-          />
-          <div className="project-loading-body">
-            {loadingSpinner}
-            <p>Opening {currentProject?.name}...</p>
+        <div className="app workspace workspace-home">
+          <div className="projects-with-rail" key="view-project-loading">
+            <WorkspaceSidebar
+              key="sidebar-project-loading"
+              isHomeActive={false}
+              onGoHome={handleBackToProjects}
+              onOpenProjectPicker={openProjectPicker}
+              isSidebarHidden={isSidebarHidden}
+              onToggleSidebar={toggleSidebar}
+              showNavigationControls
+              projects={pinnedProjects.rows}
+              currentProjectPath={currentProject?.path ?? null}
+              currentProjectName={currentProject?.name ?? null}
+              onSelectProject={handleRailClick}
+              onCloseProject={handleCloseProject}
+              onSelectProjectTab={handleSelectProjectTab}
+              terminalTabs={[]}
+              activeTerminalTab={0}
+              tabTitles={EMPTY_TAB_TITLES}
+              attentionTabs={EMPTY_ATTENTION_TABS}
+              maxTabs={5}
+              onSelectTab={noop}
+              onAddTab={noop}
+              onCloseTab={noop}
+              hasDevServer={false}
+              isRestartingDevServer={false}
+              devServerRunning={false}
+              isProjectDevServerRunning={isServerRunning}
+              onSwitchAccount={() => setView('account-select')}
+            />
+            <div className="project-loading-body">
+              {loadingSpinner}
+              <p>Opening {currentProject?.name}...</p>
+            </div>
           </div>
         </div>
         {quitConfirmModal}
@@ -1280,6 +1298,8 @@ function AppContents({ initialProjectPath }: AppProps) {
         onOpenProjectPicker={openProjectPicker}
         onSwitchAccount={() => setView('account-select')}
         isProjectDevServerRunning={isServerRunning}
+        isSidebarHidden={isSidebarHidden}
+        onToggleSidebar={toggleSidebar}
       />
       <ThumbnailConsentModal
         isOpen={showThumbnailConsent}
