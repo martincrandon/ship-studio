@@ -163,21 +163,16 @@ export function WorkspaceNavigation({
         aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
         data-education-id="toggle-sidebar"
       />
-      <Button
-        variant="default"
+      <IconButton
+        variant="ghost"
         className="workspace-titlebar-home"
+        icon={<HomeIcon size={12} />}
         onClick={onGoHome}
         disabled={isHomeActive}
         aria-current={isHomeActive ? 'page' : undefined}
         title="Home"
-        leftIcon={
-          <span className="workspace-sidebar-home-icon" aria-hidden="true">
-            <HomeIcon size={12} />
-          </span>
-        }
-      >
-        <span>Home</span>
-      </Button>
+        aria-label="Home"
+      />
     </div>
   );
 }

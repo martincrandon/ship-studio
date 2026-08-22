@@ -297,22 +297,6 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            #[cfg(target_os = "macos")]
-            if let tauri::WindowEvent::Resized(_) = event {
-                if let Some(webview_window) = window.app_handle().get_webview_window(window.label())
-                {
-                    if let Err(error) =
-                        commands::window::center_macos_traffic_lights_during_resize(&webview_window)
-                    {
-                        tracing::warn!(
-                            window = window.label(),
-                            %error,
-                            "Failed to preserve macOS traffic-light position during resize"
-                        );
-                    }
-                }
-            }
-
             if let tauri::WindowEvent::Destroyed = event {
                 let label = window.label().to_string();
                 tracing::info!("Window {} destroyed, cleaning up", label);

@@ -8,37 +8,24 @@ use crate::errors::CommandError;
 use crate::types::{CompactModePreferences, WindowPosition};
 use tauri::{LogicalPosition, LogicalSize, Window};
 
-/// Vertically centers the native macOS window controls in Ship Studio's 46px
-/// custom titlebar. Tao's `traffic_light_position` uses `y` only to resize its
-/// private titlebar container, and AppKit relayout can replace the requested X;
-/// apply both final frame corrections after the window is built.
+/// Pins the native macOS window controls inside Ship Studio's 46pt custom
+/// titlebar. Persistent Auto Layout constraints are required here: AppKit and
+/// Wry both lay out the titlebar during live resize, so one-off frame changes
+/// visibly alternate with the system position.
 #[cfg(target_os = "macos")]
 pub fn center_macos_traffic_lights(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let ns_window = window.ns_window()? as usize;
     window.run_on_main_thread(move || unsafe {
-        position_macos_traffic_lights(ns_window as *mut objc2::runtime::AnyObject);
+        constrain_macos_traffic_lights(ns_window as *mut objc2::runtime::AnyObject);
     })
 }
 
-/// Tauri delivers `on_window_event` on macOS's main event loop. Correcting the
-/// frames synchronously there prevents AppKit's resize layout from being drawn
-/// before a separately queued correction.
 #[cfg(target_os = "macos")]
-pub fn center_macos_traffic_lights_during_resize(
-    window: &tauri::WebviewWindow,
-) -> tauri::Result<()> {
-    let ns_window = window.ns_window()? as *mut objc2::runtime::AnyObject;
-    unsafe { position_macos_traffic_lights(ns_window) };
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-unsafe fn position_macos_traffic_lights(ns_window: *mut objc2::runtime::AnyObject) {
+unsafe fn constrain_macos_traffic_lights(ns_window: *mut objc2::runtime::AnyObject) {
     use objc2::msg_send;
-    use objc2_foundation::{CGPoint, CGRect};
+    use objc2_foundation::CGRect;
 
-    const CUSTOM_TITLEBAR_HEIGHT: f64 = 46.0;
-    const NATIVE_CLOSE_BUTTON_X: f64 = 16.0;
+    const TRAFFIC_LIGHT_INSET: f64 = 16.0;
 
     let close_button: *mut objc2::runtime::AnyObject =
         msg_send![ns_window, standardWindowButton: 0usize];
@@ -46,7 +33,26 @@ unsafe fn position_macos_traffic_lights(ns_window: *mut objc2::runtime::AnyObjec
         return;
     }
     let close_frame: CGRect = msg_send![close_button, frame];
-    let horizontal_adjustment = NATIVE_CLOSE_BUTTON_X - close_frame.origin.x;
+    let miniaturize_button: *mut objc2::runtime::AnyObject =
+        msg_send![ns_window, standardWindowButton: 1usize];
+    if miniaturize_button.is_null() {
+        return;
+    }
+    let miniaturize_frame: CGRect = msg_send![miniaturize_button, frame];
+    let button_spacing = miniaturize_frame.origin.x - close_frame.origin.x;
+
+    let titlebar_view: *mut objc2::runtime::AnyObject = msg_send![close_button, superview];
+    if titlebar_view.is_null() {
+        return;
+    }
+    let titlebar_container: *mut objc2::runtime::AnyObject = msg_send![titlebar_view, superview];
+    if titlebar_container.is_null() {
+        return;
+    }
+    let container_leading_anchor: *mut objc2::runtime::AnyObject =
+        msg_send![titlebar_container, leadingAnchor];
+    let container_top_anchor: *mut objc2::runtime::AnyObject =
+        msg_send![titlebar_container, topAnchor];
 
     // NSWindowButton: close = 0, miniaturize = 1, zoom = 2.
     for button_kind in 0usize..=2 {
@@ -55,12 +61,18 @@ unsafe fn position_macos_traffic_lights(ns_window: *mut objc2::runtime::AnyObjec
         if button.is_null() {
             continue;
         }
-        let frame: CGRect = msg_send![button, frame];
-        let centered_y =
-            ((CUSTOM_TITLEBAR_HEIGHT - frame.size.height) / 2.0 - frame.size.height).round();
-        let origin = CGPoint::new(frame.origin.x + horizontal_adjustment, centered_y);
-        let _: () = msg_send![button, setFrameOrigin: origin];
+
+        let _: () = msg_send![button, setTranslatesAutoresizingMaskIntoConstraints: false];
+        let leading_anchor: *mut objc2::runtime::AnyObject = msg_send![button, leadingAnchor];
+        let top_anchor: *mut objc2::runtime::AnyObject = msg_send![button, topAnchor];
+        let leading = TRAFFIC_LIGHT_INSET + button_kind as f64 * button_spacing;
+        let leading_constraint: *mut objc2::runtime::AnyObject = msg_send![leading_anchor, constraintEqualToAnchor: container_leading_anchor constant: leading];
+        let top_constraint: *mut objc2::runtime::AnyObject = msg_send![top_anchor, constraintEqualToAnchor: container_top_anchor constant: TRAFFIC_LIGHT_INSET];
+        let _: () = msg_send![leading_constraint, setActive: true];
+        let _: () = msg_send![top_constraint, setActive: true];
     }
+
+    let _: () = msg_send![titlebar_container, layoutSubtreeIfNeeded];
 }
 
 /// Compact mode dimensions

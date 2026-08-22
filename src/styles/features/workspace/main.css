@@ -11,10 +11,9 @@
   align-items: center;
   gap: 12px;
   height: calc(var(--control-height-standard) + (var(--space-08) * 2));
-  /* Clear the macOS traffic lights, then preserve the same 6px gap used
-     between the Sidebar and Home buttons. */
+  /* Clear the macOS traffic lights with a little breathing room. */
   padding: 0 var(--space-16) 0
-    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap));
+    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--space-12));
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border-default);
   -webkit-user-select: none;
@@ -28,7 +27,7 @@
 .workspace-titlebar-navigation {
   display: flex;
   align-items: center;
-  gap: var(--button-gap);
+  gap: 0;
   flex: 0 0 auto;
   position: relative;
   z-index: var(--z-workspace-header);

@@ -79,7 +79,7 @@ describe('WorkspaceHeader title bar', () => {
 
     expect(container.querySelector('.workspace-titlebar-navigation')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home' })).toHaveClass('button--icon-only');
   });
 
   it('keeps the whole path action labelled with the full path', () => {
