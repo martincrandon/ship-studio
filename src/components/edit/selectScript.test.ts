@@ -590,3 +590,107 @@ it('posts ss:selRect on scroll while selected (host toolbar tracking)', async ()
   }
   send({ type: 'ss:deactivate' });
 });
+
+/* ===== Ancestor-style inheritance (typography + text color) ===== */
+
+interface InheritedPropMsg {
+  cssValue: string;
+  tagName: string;
+  className: string;
+  ancestorClasses: string[];
+  token?: string | null;
+}
+
+/** jsdom doesn't cascade computed styles (an `inherit:` keyword comes back
+ *  unresolved), so "inherited" chains are simulated by declaring the SAME value
+ *  on child and ancestor — the equal-consecutive-values condition the scan's
+ *  walk-up actually keys on, identical to what real browsers produce for an
+ *  unstyled child under a styled parent. These tests live at the END of the
+ *  file: they replace document.body, which earlier mutate tests still rely on. */
+it('flags typography values inherited from a classed ancestor and attributes tokens', async () => {
+  document.body.innerHTML =
+    '<style>.card{font-size:18px;font-weight:600}.leaf{font-size:18px;font-weight:600}</style>' +
+    '<section class="hero"><div class="card text-lg font-semibold"><p class="leaf">x</p></div></section>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  document.querySelector('.leaf')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  const inh = msg.signature.inheritedProps as Record<string, InheritedPropMsg>;
+  // 18px == text-lg (1.125rem × 16px root); weight 600 == font-semibold.
+  expect(inh['font-size']).toMatchObject({
+    cssValue: '18px',
+    tagName: 'div',
+    className: 'card text-lg font-semibold',
+    token: 'text-lg',
+  });
+  // Classes ABOVE the definer anchor resolving the definer's own source.
+  expect(inh['font-size'].ancestorClasses).toEqual(['hero']);
+  expect(inh['font-weight']).toMatchObject({ cssValue: '600', token: 'font-semibold' });
+});
+
+it('reports an inherited value without a token when no utility matches it', async () => {
+  document.body.innerHTML =
+    '<style>.big{font-size:19px}.leaf{font-size:19px}</style>' +
+    '<div class="big"><p class="leaf">x</p></div>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  document.querySelector('.leaf')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  const inh = msg.signature.inheritedProps as Record<string, InheritedPropMsg>;
+  // 19px is on no static Tailwind scale (and custom CSS may be the real source),
+  // so the popover gets the honest raw value instead of a guessed token.
+  expect(inh['font-size']).toMatchObject({ cssValue: '19px', className: 'big', token: null });
+});
+
+it('does not flag locally-defined values or classless/global definers', async () => {
+  document.body.innerHTML =
+    '<style>.own{font-size:20px}.plain{font-size:21px}</style>' +
+    '<div style="font-size:21px"><span class="plain">a</span><span class="own">b</span></div>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  document.querySelector('.own')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  let inh = (msg.signature.inheritedProps ?? {}) as Record<string, InheritedPropMsg>;
+  // Set on the element itself — differs right at the parent, so not inherited.
+  expect(inh['font-size']).toBeUndefined();
+
+  // The value's definer has NO class (inline styles on a plain div): baseline
+  // styling, not an authored ancestor utility worth surfacing.
+  const second = nextSelect();
+  document.querySelector('.plain')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg2 = await second;
+  inh = (msg2.signature.inheritedProps ?? {}) as Record<string, InheritedPropMsg>;
+  expect(inh['font-size']).toBeUndefined();
+});
+
+
+it('flags a decoration PROPAGATING from an ancestor (not inherited — drawn through)', async () => {
+  // text-decoration never computes as inherited (children stay 'none' while the
+  // line is drawn through them), so this needs its own ancestor scan.
+  document.body.innerHTML =
+    '<style>.deco{text-decoration-line:underline}</style>' +
+    '<div class="deco underline"><p class="leaf">x</p></div>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  document.querySelector('.leaf')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  const inh = msg.signature.inheritedProps as Record<string, InheritedPropMsg>;
+  expect(inh['text-decoration-line']).toMatchObject({
+    cssValue: 'underline',
+    tagName: 'div',
+    className: 'deco underline',
+    token: 'underline',
+  });
+});
+
+it('does not flag decoration when the element draws its own line', async () => {
+  document.body.innerHTML =
+    '<style>.deco{text-decoration-line:underline}.own{text-decoration-line:line-through}</style>' +
+    '<div class="deco"><p class="own">x</p></div>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  document.querySelector('.own')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  const inh = (msg.signature.inheritedProps ?? {}) as Record<string, InheritedPropMsg>;
+  expect(inh['text-decoration-line']).toBeUndefined();
+});

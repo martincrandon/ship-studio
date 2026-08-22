@@ -299,6 +299,7 @@
 }
 
 .sidebar-project-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-06);
@@ -430,6 +431,21 @@
   flex-shrink: 0;
 }
 
+/* Keep the project status slot stable when a collapsed project promotes a
+ * thinking tab's PixelLoader from its hidden body to the project row. */
+.sidebar-project-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pixel-loader-size-sm);
+  height: var(--pixel-loader-size-sm);
+  flex-shrink: 0;
+}
+
+.sidebar-project-pixel-loader {
+  color: var(--accent-success);
+}
+
 /* When the row has a Cmd+N shortcut, the initials slot shows the shortcut
  * instead. Matches the ⌘K badge sizing on the dashboard search trigger. */
 .sidebar-project-initials.is-shortcut {
@@ -447,11 +463,16 @@
   background: var(--surface-app);
 }
 
-/* Per-row close button — appears on hover. Rendered LEFT of the status
- * dot so the rightmost element stays as the always-visible state
- * indicator. Hover-only to keep rows calm at rest. */
+/* Per-row close/unpin button — appears on hover directly OVER the status
+ * indicator, centered on the same slot so it hides it. Hover-only to keep
+ * rows calm at rest. */
 .sidebar-project-close {
-  margin-left: auto;
+  position: absolute;
+  top: 50%;
+  /* Center on the status slot: right padding + half the slot/button size
+   * difference (the button is larger than the slot it covers). */
+  right: calc(var(--space-16) + (var(--pixel-loader-size-sm) - var(--button-height-compact)) / 2);
+  transform: translateY(-50%);
   opacity: 0;
   transition:
     opacity var(--transition-fast),
@@ -462,6 +483,14 @@
 .sidebar-project-row:hover .sidebar-project-close,
 .sidebar-project-close:focus-visible {
   opacity: 1;
+}
+
+/* While the hover action covers the status slot, hide the indicator itself
+ * so the two never render on top of each other. Scoped via :has() so rows
+ * without a hover action keep their always-visible dot. */
+.sidebar-project-row:has(.sidebar-project-close):hover .sidebar-project-status,
+.sidebar-project-row:has(.sidebar-project-close:focus-visible) .sidebar-project-status {
+  visibility: hidden;
 }
 
 /* Placeholder for non-current expanded projects (pre-Slice 2 / 3). */
@@ -797,8 +826,21 @@
   background: var(--text-muted);
 }
 
-.sidebar-row > .sidebar-row-dot {
-  margin-right: var(--space-06);
+/* Both the ordinary dot and the pixel loader share this fixed status slot, so
+ * switching states cannot move the row label. The wrapper owns the gap so it
+ * remains identical for either indicator. */
+.sidebar-row-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pixel-loader-size-sm);
+  height: var(--pixel-loader-size-sm);
+  margin-right: var(--button-gap);
+  flex-shrink: 0;
+}
+
+.sidebar-row-pixel-loader {
+  color: var(--accent-success);
 }
 
 .sidebar-row-dot.dot-idle {
@@ -812,22 +854,6 @@
 .sidebar-row-dot.dot-active {
   background: var(--accent-success);
   box-shadow: 0 0 0 2px rgba(var(--accent-success-rgb), 0.15);
-}
-
-/* Agent is actively thinking — the green dot becomes a small spinning wheel:
- * a grey track ring with one bright green arc (border-top) chasing around it.
- * Can't use `transform: scale()` here because the shared `spin` keyframe sets
- * `transform: rotate()` and would clobber it; instead the ring is 12px but
- * pulled back with `margin: -3px` so it stays centered on the original 6px
- * dot and the row label never shifts. */
-.sidebar-row-dot.dot-thinking {
-  width: var(--font-size-12);
-  height: var(--font-size-12);
-  margin: -3px;
-  background: transparent;
-  border: 2px solid var(--border-default);
-  border-top-color: var(--accent-success);
-  animation: spin 0.6s linear infinite;
 }
 
 .sidebar-row-dot.dot-attention {
@@ -1003,16 +1029,46 @@
 
 /* Footer is the button itself — no inner outline, no padding gap. */
 .workspace-sidebar-footer {
+  --workspace-sidebar-footer-fade-height: calc(var(--space-32) + var(--space-16));
+  position: relative;
+  z-index: var(--z-dropdown);
   flex-shrink: 0;
-  padding: var(--space-08);
+  margin-top: calc(-1 * var(--workspace-sidebar-footer-fade-height));
+  padding: calc(var(--workspace-sidebar-footer-fade-height) + var(--space-08)) var(--space-08)
+    var(--space-08);
   border-top: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .workspace-sidebar-footer-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--button-gap);
+}
+
+.workspace-sidebar-footer-actions > * {
+  position: relative;
+  z-index: var(--z-dropdown);
+}
+
+/* Keep the fade attached to the fixed action group so it stays at the bottom
+ * while the sidebar content scrolls behind it. The gradient reaches full
+ * opacity exactly at the scroll area's clip line (fade height minus the 8px
+ * gap between them), so rows are fully invisible before they're cut off, then
+ * stay solid behind the buttons and the footer's bottom padding. */
+.workspace-sidebar-footer-actions::before {
+  position: absolute;
+  inset-inline: calc(-1 * var(--space-08));
+  top: calc(-1 * var(--workspace-sidebar-footer-fade-height));
+  bottom: calc(-1 * var(--space-08));
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--surface-panel) calc(var(--workspace-sidebar-footer-fade-height) - var(--space-08))
+  );
+  content: '';
+  pointer-events: none;
 }
 
 /* Belt-and-suspenders against a horizontal scrollbar appearing inside a

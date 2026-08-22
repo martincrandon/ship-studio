@@ -185,7 +185,7 @@
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-04",
-      "count": 2,
+      "count": 3,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -203,7 +203,7 @@
     {
       "path": "src/styles/components/value-field.css",
       "token": "--space-12",
-      "count": 2,
+      "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -443,7 +443,7 @@
     {
       "path": "src/styles/features/branches/main.css",
       "token": "--transition",
-      "count": 7,
+      "count": 8,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
     {
@@ -1702,20 +1702,26 @@
     },
     {
       "path": "src/styles/features/workspace/compact-workspace.css",
+      "token": "--space-04",
+      "count": 1,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/features/workspace/compact-workspace.css",
+      "token": "--space-08",
+      "count": 1,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/features/workspace/compact-workspace.css",
       "token": "--transition",
-      "count": 9,
+      "count": 11,
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
     {
       "path": "src/styles/features/workspace/main.css",
       "token": "--space-04",
       "count": 2,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/workspace/main.css",
-      "token": "--space-08",
-      "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -1727,12 +1733,6 @@
     {
       "path": "src/styles/features/workspace/main.css",
       "token": "--space-32",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/workspace/main.css",
-      "token": "--stroke-1",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
@@ -1757,7 +1757,7 @@
     {
       "path": "src/styles/features/workspace/sidebar.css",
       "token": "--font-size-12",
-      "count": 5,
+      "count": 3,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -1805,13 +1805,13 @@
     {
       "path": "src/styles/features/workspace/sidebar.css",
       "token": "--space-06",
-      "count": 10,
+      "count": 9,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/workspace/sidebar.css",
       "token": "--space-08",
-      "count": 11,
+      "count": 17,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -1835,7 +1835,7 @@
     {
       "path": "src/styles/features/workspace/sidebar.css",
       "token": "--stroke-1",
-      "count": 7,
+      "count": 8,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {

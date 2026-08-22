@@ -6,7 +6,7 @@ import {
   type ValueFieldVariable,
 } from '../primitives/ValueField';
 import { ResettableLabel } from './ResettableLabel';
-import { readLayer, type LayerContext, type ResetSpec } from '../../lib/edit';
+import { readLayer, type InheritedProp, type LayerContext, type ResetSpec } from '../../lib/edit';
 
 type ValuePropertyKind =
   | 'border'
@@ -332,6 +332,9 @@ export function ValuePropertyControl({
   variables,
   onApplyEnum,
   onReset,
+  inherited = null,
+  projectPath,
+  onOpenInCode,
 }: {
   kind: ValuePropertyKind;
   currentClass: string;
@@ -339,8 +342,24 @@ export function ValuePropertyControl({
   variables?: ValueFieldVariable[];
   onApplyEnum: (token: string, style: Record<string, string>) => void;
   onReset: (spec: ResetSpec) => void;
+  /** Ancestor-defined value for this property (only for inheritable kinds). */
+  inherited?: InheritedProp | null;
+  projectPath?: string;
+  onOpenInCode?: (file: string, line: number) => void;
 }) {
   const { value, definedAt } = readLayer(currentClass, layer, (tokens) => readValue(kind, tokens));
+  // With nothing set locally, the field shows the ancestor's effective value —
+  // editable as ever; committing writes a local token and flips the label blue.
+  const shown = value ?? inherited?.cssValue ?? '';
+  // "Set here explicitly": adopt the inherited value as a local utility. Only
+  // offered when it parses into a valid token for this control.
+  const adopt =
+    inherited && parseValue(kind, inherited.cssValue)
+      ? () => {
+          const parsed = parseValue(kind, inherited.cssValue);
+          if (parsed) onApplyEnum(parsed.token, parsed.style);
+        }
+      : undefined;
   return (
     <div className="ss-edit-panel__control">
       <ResettableLabel
@@ -348,13 +367,17 @@ export function ValuePropertyControl({
         definedAt={definedAt}
         active={layer.bp}
         onReset={() => onReset(resetSpec(kind))}
+        inherited={inherited}
+        onAdopt={adopt}
+        projectPath={projectPath}
+        onOpenInCode={onOpenInCode}
       />
       <ValueField
         className="ss-edit-panel__text"
         variant={VARIANTS[kind]}
         keywords={KEYWORDS[kind]}
         variables={variables}
-        value={value ?? ''}
+        value={shown}
         aria-label={LABELS[kind]}
         placeholder={
           kind === 'z-index'

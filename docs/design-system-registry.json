@@ -214,6 +214,31 @@
       "lifecycle": "canonical"
     },
     {
+      "name": "PixelLoader",
+      "file": "src/components/primitives/PixelLoader.tsx",
+      "exports": ["PixelLoaderSize", "PixelLoaderVariant", "PixelLoaderProps", "PixelLoader"],
+      "purpose": "Accessible square-pixel activity indicator with customizable grid geometry and animated light patterns.",
+      "owner": "primitives/status",
+      "props": ["size", "variant", "gridSize", "coreSize", "label", "native div attributes"],
+      "variants": [
+        "rings",
+        "ripple",
+        "ripple-isolated",
+        "ripple-decay",
+        "ripple-quad",
+        "ripple-quad-tight",
+        "scan",
+        "spark"
+      ],
+      "sizes": ["sm", "md", "lg"],
+      "states": ["loading", "custom label", "reduced motion"],
+      "accessibility": "Uses role=status and announces the supplied loading label while hiding decorative pixels from assistive technology.",
+      "style": "src/styles/components/pixel-loader.css",
+      "example": "docs/design-system.md#pixelloader--pixelloadertsx",
+      "tests": ["src/components/primitives/PixelLoader.test.tsx"],
+      "lifecycle": "experimental"
+    },
+    {
       "name": "PropertyField",
       "file": "src/components/primitives/PropertyField.tsx",
       "exports": [

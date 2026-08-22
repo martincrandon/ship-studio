@@ -145,6 +145,24 @@ describe('PublishBranchDropdown trigger label', () => {
 });
 
 describe('PublishBranchDropdown open panel', () => {
+  it('closes on outside click and Escape', () => {
+    render(<PublishBranchDropdown {...makeProps()} />);
+
+    const trigger = screen.getByRole('button', { name: 'Push' });
+    fireEvent.click(trigger);
+    expect(screen.getByText('Push to GitHub')).toBeInTheDocument();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText('Push to GitHub')).not.toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(screen.getByText('Push to GitHub')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByText('Push to GitHub')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it('uses push terminology throughout the idle panel (feature branch)', () => {
     render(<PublishBranchDropdown {...makeProps({ currentBranch: 'feature/thing' })} />);
 

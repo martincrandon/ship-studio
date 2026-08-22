@@ -1,7 +1,7 @@
 /* Project Grid */
 
 :root {
-  --project-table-select-w: var(--spacing-2xl);
+  --project-table-select-w: var(--spacing-lg);
   --project-table-menu-w: calc(var(--spacing-2xl) + var(--spacing-xs));
 }
 
@@ -36,9 +36,9 @@
     var(--project-table-select-w) minmax(0, 2.4fr) minmax(0, 0.9fr) minmax(0, 0.75fr)
     minmax(0, 0.85fr) var(--project-table-menu-w);
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   min-height: calc(var(--spacing-2xl) + var(--spacing-md));
-  padding: 0 var(--spacing-md);
+  padding: 0 var(--spacing-md) 0 var(--spacing-sm);
   border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
 }
@@ -81,7 +81,7 @@
 .project-table-select-cell {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   width: var(--project-table-select-w);
 }
 
@@ -94,6 +94,21 @@
   height: var(--spacing-lg);
   margin: 0;
   accent-color: var(--accent-active);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-interaction-fast);
+}
+
+.project-table-row:hover .project-table-select-cell input[type='checkbox'],
+.project-table-header:hover ~ .project-table-row .project-table-select-cell input[type='checkbox'],
+.project-table-select-cell input[type='checkbox']:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.project-table.has-selection .project-table-select-cell input[type='checkbox'] {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .project-table-open {
@@ -462,7 +477,6 @@
 
   .project-table-row {
     grid-template-columns: var(--project-table-select-w) minmax(0, 1fr) var(--project-table-menu-w);
-    gap: var(--spacing-sm);
   }
 
   .project-table-header span:not(:first-of-type),

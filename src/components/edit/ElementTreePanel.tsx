@@ -242,7 +242,7 @@ export function ElementTreePanel({
               <ToggleButton
                 variant="ghost"
                 size="compact"
-                className="button--icon-only"
+                className="button--icon-only panel-pin-toggle"
                 onClick={onTogglePin}
                 title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
                 aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}
@@ -305,7 +305,7 @@ export function ElementTreePanel({
               <ToggleButton
                 variant="ghost"
                 size="compact"
-                className="button--icon-only"
+                className="button--icon-only panel-pin-toggle"
                 onClick={onTogglePin}
                 title={pinned ? 'Unpin — float over the workspace' : 'Pin to the window'}
                 aria-label={pinned ? 'Unpin Elements panel' : 'Pin Elements panel to the window'}

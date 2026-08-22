@@ -221,6 +221,18 @@ describe('VisualEditorPanel', () => {
     expect(screen.getByRole('button', { name: 'Letter spacing format' })).toHaveTextContent('EM');
   });
 
+  it('splits unit-bearing typography defaults between the placeholder and format trigger', () => {
+    renderPanel(resolvedSelection);
+
+    expect(screen.getByRole('textbox', { name: 'Size' })).toHaveAttribute('placeholder', '1');
+    expect(screen.getByRole('button', { name: 'Size format' })).toHaveTextContent('REM');
+    expect(screen.getByRole('textbox', { name: 'Letter spacing' })).toHaveAttribute(
+      'placeholder',
+      '0'
+    );
+    expect(screen.getByRole('button', { name: 'Letter spacing format' })).toHaveTextContent('EM');
+  });
+
   it('surfaces an active overflowed Display value and moves None into the menu', () => {
     renderPanel(resolvedSelection, 'inline-flex');
 

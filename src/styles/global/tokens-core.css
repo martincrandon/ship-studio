@@ -83,6 +83,7 @@
 
   --stroke-1: 1px;
   --stroke-2: 2px;
+  --stroke-hairline: 0.5px;
 
   --radius-2: 2px;
   --radius-4: 4px;
@@ -123,6 +124,11 @@
   --duration-fast: 100ms;
   --duration-standard: 150ms;
   --duration-slow: 300ms;
+  --duration-loader-fast: 900ms;
+  --duration-loader-tight: 1050ms;
+  --duration-loader-standard: 1200ms;
+  --duration-loader-decay: 1350ms;
+  --duration-loader-isolated: 1800ms;
   --ease-standard: ease;
   --ease-icon-swap: cubic-bezier(0.2, 0, 0, 1);
 }

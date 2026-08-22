@@ -438,8 +438,22 @@ export function VisualEditorPanel({
         color: selection?.signature.computedColor,
         'background-color': selection?.signature.computedBackgroundColor,
       },
+      inherited: selection?.signature.inheritedProps,
+      projectPath,
+      onOpenInCode,
     }),
-    [currentClass, layer, onApplyEnum, onReset, onSetSide, onStepGap, selection, variables]
+    [
+      currentClass,
+      layer,
+      onApplyEnum,
+      onReset,
+      onSetSide,
+      onStepGap,
+      selection,
+      variables,
+      projectPath,
+      onOpenInCode,
+    ]
   );
 
   // Contextual mobile-first explainer (shown in the "?" tooltip by the label).
@@ -510,7 +524,7 @@ export function VisualEditorPanel({
             <ToggleButton
               variant="ghost"
               size="compact"
-              className="button--icon-only"
+              className="button--icon-only panel-pin-toggle"
               onClick={onTogglePin}
               title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
               aria-label={pinned ? 'Unpin Edit panel' : 'Pin Edit panel to the window'}

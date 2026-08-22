@@ -9,7 +9,7 @@
 
   --size-titlebar-project-path: 30ch;
   --size-element-toolbar-selector: 140px;
-  --size-preview-dimensions: 96px;
+  --size-preview-dimensions: 84px;
 
   --size-sidebar-project-shortcut: 24px;
   --size-sidebar-project: 214px;
@@ -21,6 +21,43 @@
   --size-icon-button: 16px;
   --size-icon-md: 18px;
   --icon-size-full: 24px;
+
+  --pixel-loader-size-sm: var(--size-icon-sm);
+  --pixel-loader-size-md: var(--size-control-compact);
+  --pixel-loader-size-lg: var(--size-control-standard);
+  --pixel-loader-gap: var(--stroke-hairline);
+  --pixel-loader-color: var(--accent-active);
+  --pixel-loader-glow-tight: var(--space-04);
+  --pixel-loader-glow-wide: var(--space-08);
+  --pixel-loader-glow-tight-opacity: 72%;
+  --pixel-loader-glow-wide-opacity: 32%;
+  --pixel-loader-rest-opacity: 0.16;
+  --pixel-loader-dim-opacity: 0.28;
+  --pixel-loader-mid-opacity: 0.58;
+  --pixel-loader-reduced-motion-opacity: 0.32;
+  --pixel-loader-bright-opacity: 1;
+  --pixel-loader-rest-brightness: 0.76;
+  --pixel-loader-brightness: 1.25;
+  --pixel-loader-spark-rest-brightness: 0.82;
+  --pixel-loader-spark-brightness: 1.18;
+  --pixel-loader-easing: ease-in-out;
+  --pixel-loader-direction: normal;
+  --pixel-loader-duration-ripple: var(--duration-loader-standard);
+  --pixel-loader-duration-decay: var(--duration-loader-decay);
+  --pixel-loader-duration-quad-tight: var(--duration-loader-tight);
+  --pixel-loader-duration-isolated: var(--duration-loader-isolated);
+  --pixel-loader-duration-scan: var(--duration-loader-standard);
+  --pixel-loader-duration-spark: var(--duration-loader-fast);
+  --pixel-loader-delay-step: var(--duration-standard);
+  --pixel-loader-delay-ring: var(--duration-slow);
+  --pixel-loader-delay-three: calc(var(--duration-slow) + var(--duration-standard));
+  --pixel-loader-delay-four: calc(var(--duration-slow) + var(--duration-slow));
+  --pixel-loader-delay-isolated-inner: calc(var(--duration-slow) + var(--duration-slow));
+  --pixel-loader-delay-isolated-outer: var(--duration-loader-standard);
+  --pixel-loader-delay-decay-inner: calc(var(--duration-slow) + var(--duration-standard));
+  --pixel-loader-delay-decay-outer: var(--duration-loader-fast);
+  --pixel-loader-delay-quad-tight-inner: 350ms;
+  --pixel-loader-delay-quad-tight-outer: 700ms;
 
   --size-icon-gallery-width: 480px;
   --size-icon-gallery-column: 120px;
@@ -181,6 +218,7 @@
   --editor-panel-w: 300px;
   --editor-panel-visual-w: 240px;
   --editor-panel-inline-pad: var(--spacing-md);
+  --editor-panel-row-gap: var(--space-06);
   --editor-panel-section-h: 40px;
   --editor-panel-label-w: 72px;
   --editor-panel-field-w: 100%;

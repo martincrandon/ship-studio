@@ -21,7 +21,7 @@
   height: var(--control-height-standard);
   min-height: var(--control-height-standard);
   width: 100%;
-  padding: 0 var(--spacing-sm);
+  padding: 0 var(--spacing-xs);
   border: var(--stroke-1) solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
@@ -38,10 +38,22 @@
     border-color var(--transition);
 }
 
-.preview-dimensions:hover:not(:disabled),
-.preview-dimensions:focus-visible {
+.preview-dimensions:hover:not(:disabled):not([aria-expanded='true']) {
+  background: var(--surface-control-hover);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.preview-dimensions[aria-expanded='true'],
+.preview-dimensions[aria-expanded='true']:hover:not(:disabled) {
   background: var(--surface-control);
-  border-color: var(--border-strong);
+  border-color: transparent;
+  box-shadow: var(--shadow-button);
+  color: var(--text-primary);
+}
+
+.preview-dimensions:focus-visible {
+  border-color: transparent;
   color: var(--text-primary);
 }
 
@@ -69,35 +81,23 @@
   box-shadow: var(--shadow-md);
 }
 
+.preview-size-title {
+  margin: 0 0 var(--spacing-xs);
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+  line-height: var(--line-height-control);
+}
+
 .preview-size-inputs {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
 }
 
-.preview-size-input {
-  width: 72px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--surface-app);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--font-size-body-sm);
-  font-variant-numeric: tabular-nums;
-  /* WebKit's native number spinners don't theme (black on our dark UI). */
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-
-.preview-size-input::-webkit-outer-spin-button,
-.preview-size-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.preview-size-input:focus {
-  outline: none;
-  border-color: var(--accent-active);
+.preview-size-field {
+  flex: 0 0 var(--size-preview-dimensions);
+  width: var(--size-preview-dimensions);
 }
 
 .preview-size-x {

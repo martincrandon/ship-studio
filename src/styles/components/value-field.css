@@ -140,10 +140,22 @@
   max-width: calc(100vw - var(--space-16));
   max-height: min(var(--value-field-variable-menu-max-height), calc(100vh - var(--space-32)));
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.value-field__variable-menu::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .value-field__variable-option {
-  grid-template-columns: var(--space-12) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+  padding-inline: var(--space-04);
+}
+
+.value-field__variable-option .value-field__check {
+  display: none;
 }
 
 .value-field__variable-name {
@@ -160,6 +172,8 @@
   color: var(--text-muted);
   font-family: var(--font-code);
   font-size: var(--font-size-badge);
+  justify-self: end;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

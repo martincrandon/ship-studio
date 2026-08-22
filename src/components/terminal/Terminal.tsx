@@ -53,6 +53,7 @@ import { asCommandError, formatCommandError } from '../../lib/errors';
 import { isPointInRect, dropPointToLogical } from '../../lib/dropTarget';
 import { getTerminalGpuEnabled } from '../../lib/settings';
 import { attachedLibraryDirs } from '../../lib/attached-libraries';
+import { sanitizeTerminalTitle } from '../../lib/terminalTitle';
 import { decideStartupTimeoutAction } from './startupWatchdog';
 import { createTerminalOptions } from './terminalTheme';
 import type { AgentConfig } from '../../lib/agent';
@@ -463,7 +464,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     // - Star (* char ~10035) when done/waiting for input
     term.onTitleChange((title) => {
       // Forward the display title (strip leading status icon if present)
-      const displayTitle = title.replace(/^[·•✳✱✲*\u2802\u2810\u00B7]\s*/, '').trim();
+      const displayTitle = sanitizeTerminalTitle(title);
       // Skip UUIDs and empty titles — these come from session naming, not user-facing content
       if (
         displayTitle &&

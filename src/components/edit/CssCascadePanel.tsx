@@ -151,7 +151,7 @@ export function CssCascadePanel({
             <ToggleButton
               variant="ghost"
               size="compact"
-              className="button--icon-only"
+              className="button--icon-only panel-pin-toggle"
               onClick={onTogglePin}
               title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
               aria-label={pinned ? 'Unpin CSS panel' : 'Pin CSS panel to the window'}

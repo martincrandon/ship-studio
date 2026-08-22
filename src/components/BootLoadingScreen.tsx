@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { relaunch } from '@tauri-apps/plugin-process';
-import { Spinner } from './primitives/Spinner';
+import { PixelLoaderRings } from './workspace/PixelLoaderRings';
 import { Button } from './primitives/Button';
 import { logger } from '../lib/logger';
 
@@ -62,7 +62,7 @@ export function BootLoadingScreen() {
           </p>
         </div>
       ) : (
-        <Spinner size="lg" style={{ color: 'var(--text-muted)' }} />
+        <PixelLoaderRings size="lg" />
       )}
     </div>
   );

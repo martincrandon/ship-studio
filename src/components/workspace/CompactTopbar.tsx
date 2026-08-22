@@ -9,7 +9,9 @@
  */
 
 import { useCallback, useState } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PinIcon, ChevronIcon } from '@/components/icons';
+import { Button } from '../primitives/Button';
 import { useOpenPalette } from '../CommandPalette/paletteContext';
 import { setAlwaysOnTop } from '../../lib/window';
 import { logger } from '../../lib/logger';
@@ -40,6 +42,14 @@ export function CompactTopbar({
   const openProjectPalette = useCallback(() => openPalette({ tab: 'project' }), [openPalette]);
   const openAllPalette = useCallback(() => openPalette(), [openPalette]);
 
+  const handleDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, select, [role="menu"]')) return;
+    event.preventDefault();
+    void getCurrentWindow().startDragging();
+  }, []);
+
   const [isPinned, setIsPinned] = useState(false);
   const togglePin = useCallback(() => {
     const next = !isPinned;
@@ -50,12 +60,8 @@ export function CompactTopbar({
     });
   }, [isPinned]);
 
-  // React state controls whether the project menu is mounted; CSS owns its
-  // static layout and the visual hover/focus treatments.
-  const [menuOpen, setMenuOpen] = useState(false);
-
   return (
-    <div className={`compact-topbar ${topbarPlatformClass}`}>
+    <div className={`compact-topbar ${topbarPlatformClass}`} onMouseDown={handleDragStart}>
       <div className="compact-topbar__spacer" aria-hidden="true" />
       <div className="compact-topbar__actions">
         {hasDevServer && (
@@ -73,22 +79,20 @@ export function CompactTopbar({
         >
           <PinIcon size={12} />
         </button>
-        <button
-          type="button"
-          className="compact-topbar__palette-button"
+        <Button
+          variant="default"
+          size="medium"
+          className="compact-topbar__palette-button workspace-sidebar-filter-shortcut"
           onClick={openAllPalette}
           title="Open command palette"
           aria-label="Open command palette"
         >
           {kbd('mod', 'K')}
-        </button>
-        <div
-          className="compact-topbar__project-picker"
-          onMouseEnter={() => setMenuOpen(true)}
-          onMouseLeave={() => setMenuOpen(false)}
-        >
-          <button
-            type="button"
+        </Button>
+        <div className="compact-topbar__project-picker">
+          <Button
+            variant="default"
+            size="medium"
             className="compact-topbar__project-button"
             onClick={openProjectPalette}
             title={`Switch project (currently ${projectLabel})`}
@@ -96,34 +100,36 @@ export function CompactTopbar({
           >
             <span className="compact-topbar__project-label">{projectLabel}</span>
             <ChevronIcon size={10} />
-          </button>
-          {menuOpen && switchableProjects.length > 0 && (
-            <div role="menu" className="compact-topbar-project-menu">
-              <button type="button" className="compact-topbar-project-menu-item" onClick={onGoHome}>
-                Home
-              </button>
-              {switchableProjects.map((row) => (
-                <button
-                  key={row.projectPath}
-                  type="button"
-                  className="compact-topbar-project-menu-item"
-                  onClick={() => onSelectProject(row.projectPath)}
-                >
-                  {row.fallbackName}
-                </button>
-              ))}
-              <div className="compact-topbar-project-menu-divider" />
-              <button
-                type="button"
-                className="compact-topbar-project-menu-item is-subtle"
-                onClick={openProjectPalette}
-              >
-                All projects…
-              </button>
-            </div>
-          )}
+          </Button>
         </div>
       </div>
+      {switchableProjects.length > 0 && (
+        <div role="menu" className="compact-topbar-project-menu">
+          <div className="compact-topbar-project-menu__surface">
+            <button type="button" className="compact-topbar-project-menu-item" onClick={onGoHome}>
+              Home
+            </button>
+            {switchableProjects.map((row) => (
+              <button
+                key={row.projectPath}
+                type="button"
+                className="compact-topbar-project-menu-item"
+                onClick={() => onSelectProject(row.projectPath)}
+              >
+                {row.fallbackName}
+              </button>
+            ))}
+            <div className="compact-topbar-project-menu-divider" />
+            <button
+              type="button"
+              className="compact-topbar-project-menu-item is-subtle"
+              onClick={openProjectPalette}
+            >
+              All projects…
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

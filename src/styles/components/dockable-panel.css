@@ -3,6 +3,16 @@
   min-height: 0;
 }
 
+/*
+ * Pinned panel toggles keep the idle ghost look while pinned — the pin icon
+ * itself communicates state, so no persistent pressed background. Hover and
+ * active feedback still come from the shared .button rules.
+ */
+.panel-pin-toggle[aria-pressed='true'] {
+  background: transparent;
+  color: var(--button-text-default);
+}
+
 .dockable-panel__placeholder--floating {
   display: none;
 }

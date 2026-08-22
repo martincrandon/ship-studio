@@ -193,7 +193,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                 <ToggleButton
                   variant="ghost"
                   size="compact"
-                  className="button--icon-only"
+                  className="button--icon-only panel-pin-toggle"
                   onClick={toggleAgentPanelPinned}
                   title={
                     agentPanelPinned ? 'Unpin — float over the workspace' : 'Pin to the window'

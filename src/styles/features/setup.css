@@ -8,6 +8,18 @@
 
 /* ============ Onboarding Screen ============ */
 
+/* Drag region — fixed strip at the very top so the window is movable during
+ * setup. Mirrors account-select-drag-region. */
+.onboarding-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  z-index: var(--z-dropdown);
+  cursor: default;
+}
+
 .onboarding-screen {
   display: flex;
   flex-direction: column;

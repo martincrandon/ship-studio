@@ -286,7 +286,7 @@
   color: var(--accent-error-light);
 }
 
-.workspace-body.is-sidebar-hidden .update-indicator {
+.workspace-sidebar.is-hidden .update-indicator {
   display: none;
 }
 

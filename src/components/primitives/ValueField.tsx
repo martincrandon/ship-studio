@@ -127,6 +127,7 @@ export function ValueField({
   onCommit,
   className,
   onKeyDown,
+  placeholder,
   'aria-label': ariaLabel,
   ...inputProps
 }: ValueFieldProps) {
@@ -146,8 +147,14 @@ export function ValueField({
   ];
   const isFormatField = variant === 'color';
   const initial = splitValueFieldValue(value, options);
+  const placeholderValue =
+    typeof placeholder === 'string' ? splitValueFieldValue(placeholder, options) : null;
+  const hasControlledValue = value.trim() !== '';
+  const displayPlaceholder = placeholderValue?.unit ? placeholderValue.text : placeholder;
   const [text, setText] = useState(initial.text);
-  const [unit, setUnit] = useState(initial.unit);
+  const [unit, setUnit] = useState(
+    hasControlledValue ? initial.unit : (placeholderValue?.unit ?? initial.unit)
+  );
   const [selectedFormat, setSelectedFormat] = useState(
     format ?? options.find((option) => option.kind === 'format')?.value ?? ''
   );
@@ -181,13 +188,13 @@ export function ValueField({
   useEffect(() => {
     const next = splitValueFieldValue(value, options);
     setText(next.text);
-    setUnit(next.unit);
+    setUnit(value.trim() !== '' ? next.unit : (placeholderValue?.unit ?? next.unit));
     if (format !== undefined) setSelectedFormat(format);
     setInvalid(false);
     // The options are intentionally derived from stable primitive presets and
     // caller-owned keyword literals; the controlled value is the sync signal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, variant, format]);
+  }, [value, variant, format, placeholder]);
 
   const reposition = () => {
     const root = rootRef.current;
@@ -252,8 +259,8 @@ export function ValueField({
   };
 
   const commit = (nextText = text, nextUnit = unit) => {
+    if (!nextText.trim()) return true;
     const nextValue = combinedValue(nextText, nextUnit);
-    if (!nextValue) return true;
     if (onCommit(nextValue) === false) {
       const restored = splitValueFieldValue(value, options);
       setText(restored.text);
@@ -418,6 +425,7 @@ export function ValueField({
         {...inputProps}
         ref={inputRef}
         className="value-field__input"
+        placeholder={displayPlaceholder}
         value={text}
         aria-label={ariaLabel}
         aria-invalid={invalid}
@@ -437,8 +445,9 @@ export function ValueField({
         onChange={(event) => {
           const next = event.target.value;
           const isVariableInput = next.trimStart().startsWith('--');
-          setText(next);
+          const parsed = splitValueFieldValue(next, options);
           if (isVariableInput) {
+            setText(next);
             setUnit('var');
             if (availableVariables.length > 0) {
               setVariableQuery(next);
@@ -446,17 +455,19 @@ export function ValueField({
               setVariableOpen(true);
               setOpen(false);
             }
-          } else if (unit === 'var') {
-            setUnit('');
-            setVariableOpen(false);
-            setVariableQuery('');
+          } else {
+            if (unit === 'var') {
+              setVariableOpen(false);
+              setVariableQuery('');
+            }
+            if (!isFormatField && parsed.unit) {
+              setText(parsed.text);
+              setUnit(parsed.unit);
+            } else {
+              setText(next);
+              if (!isFormatField && /[a-z%)]$/i.test(next.trim())) setUnit('');
+            }
           }
-          if (
-            !isVariableInput &&
-            !isFormatField &&
-            (splitValueFieldValue(next, options).unit || /[a-z%)]$/i.test(next.trim()))
-          )
-            setUnit('');
           if (invalid) setInvalid(false);
         }}
         onFocus={(event) => {

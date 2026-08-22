@@ -8,6 +8,7 @@ import { MenuButton } from '../primitives/MenuButton';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
+import { PixelLoader } from '../primitives/PixelLoader';
 import { PropertyField, type PropertyFieldVariant } from '../primitives/PropertyField';
 import { SegmentedControl } from '../primitives/SegmentedControl';
 import { Spinner } from '../primitives/Spinner';
@@ -328,6 +329,29 @@ export function DesignSystemLab() {
             </span>
             <span>
               <Spinner size="lg" /> lg
+            </span>
+          </div>
+          <div className="ss-design-system-lab__pixel-loader-showcase" aria-label="Pixel loaders">
+            <span>
+              <PixelLoader size="lg" variant="ripple" /> Ripple
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="ripple-isolated" /> Isolated ripple
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="ripple-decay" /> Decay ripple
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="ripple-quad" /> 2×2 core
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="ripple-quad-tight" /> 2×2 core tight
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="scan" /> Scan
+            </span>
+            <span>
+              <PixelLoader size="lg" variant="spark" /> Spark
             </span>
           </div>
           <EmptyState

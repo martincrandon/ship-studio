@@ -119,7 +119,8 @@
 
 .ss-design-system-lab__section-heading,
 .ss-design-system-lab__inline-row,
-.ss-design-system-lab__spinner-row {
+.ss-design-system-lab__spinner-row,
+.ss-design-system-lab__pixel-loader-showcase {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -198,6 +199,22 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-label);
+}
+
+.ss-design-system-lab__pixel-loader-showcase {
+  gap: var(--spacing-xl);
+  padding: var(--spacing-md);
+  background: var(--surface-recessed);
+  border-radius: var(--radius-card);
+}
+
+.ss-design-system-lab__pixel-loader-showcase > span {
+  display: inline-grid;
+  justify-items: center;
+  gap: var(--spacing-sm);
+  min-width: var(--control-height-large);
   color: var(--text-secondary);
   font-size: var(--font-size-label);
 }

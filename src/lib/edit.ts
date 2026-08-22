@@ -9,6 +9,24 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+/** A CSS property whose effective value on the selected element is INHERITED from
+ *  an ancestor element's own styles (detected by the selection script's computed
+ *  walk-up; global defaults like preflight on html/body are not reported). */
+export interface InheritedProp {
+  /** The effective computed value at selection time (e.g. "18px", "600"). */
+  cssValue: string;
+  /** The ancestor that defines the value. */
+  tagName: string;
+  className: string;
+  /** Classed ancestors ABOVE the definer, nearest-first — anchors source
+   *  resolution of the definer's own class literal. */
+  ancestorClasses: string[];
+  /** The attributed Tailwind utility from the definer's classes ("text-lg"),
+   *  when confidently matched against the computed value. Absent when the value
+   *  comes from custom CSS or an unverifiable utility. */
+  token?: string;
+}
+
 /** Signature of a clicked element, produced by the in-iframe selection script. */
 export interface ElementSignature {
   className: string;
@@ -24,6 +42,10 @@ export interface ElementSignature {
   /** CSS properties this element gets from UNLAYERED rules (custom CSS that beats
    *  Tailwind utilities). Edits touching these need the important modifier to win. */
   unlayeredProps?: string[];
+  /** Properties the element inherits from ANCESTOR elements' styles (typography +
+   *  text color), keyed by CSS property. Only present when an ancestor actually
+   *  defines them — never for unset/browser-default values. */
+  inheritedProps?: Record<string, InheritedProp>;
   /** The element's raw `src` attribute (images) — the image resolver's search key. */
   attrSrc?: string | null;
   /** The absolute URL the browser actually loaded for an `<img>` (resolves

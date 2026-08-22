@@ -48,6 +48,45 @@ describe('ValueField', () => {
     expect(screen.getByRole('button', { name: 'Width format' })).toHaveTextContent('PX');
   });
 
+  it('splits a recognized unit while typing instead of leaving it in the field', () => {
+    render(<ValueField aria-label="Size" variant="length" value="" onCommit={vi.fn()} />);
+
+    const input = screen.getByRole('textbox', { name: 'Size' });
+    fireEvent.change(input, { target: { value: '1rem' } });
+
+    expect(input).toHaveValue('1');
+    expect(screen.getByRole('button', { name: 'Size format' })).toHaveTextContent('REM');
+  });
+
+  it('splits a recognized unit from an initial controlled value', () => {
+    render(
+      <ValueField aria-label="Letter spacing" variant="length" value="0em" onCommit={vi.fn()} />
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Letter spacing' })).toHaveValue('0');
+    expect(screen.getByRole('button', { name: 'Letter spacing format' })).toHaveTextContent('EM');
+  });
+
+  it('splits a unit-bearing placeholder into its magnitude and format trigger', () => {
+    const onCommit = vi.fn();
+    render(
+      <ValueField
+        aria-label="Size"
+        variant="length"
+        value=""
+        placeholder="1rem"
+        onCommit={onCommit}
+      />
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Size' });
+    expect(input).toHaveAttribute('placeholder', '1');
+    expect(screen.getByRole('button', { name: 'Size format' })).toHaveTextContent('REM');
+
+    fireEvent.blur(input);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
   it('changes the format without changing the magnitude', () => {
     const onCommit = vi.fn(() => true);
     render(<ValueField aria-label="Height" variant="length" value="24px" onCommit={onCommit} />);

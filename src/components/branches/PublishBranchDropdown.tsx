@@ -111,6 +111,7 @@ export function PublishBranchDropdown({
   const [internalOpen, setInternalOpen] = useState(false);
   const [publishState, setPublishState] = useState<PublishState>({ status: 'idle' });
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const hostingRef = useRef<HTMLDivElement>(null);
 
   const hasGitHubRepo =
@@ -158,6 +159,20 @@ export function PublishBranchDropdown({
     ? `${excludeClickOutsideSelector}, .modal-frame-overlay, .cf-modal-overlay`
     : '.modal-frame-overlay, .cf-modal-overlay';
   useClickOutside(dropdownRef, closeDropdown, isOpen, clickOutsideExclusions);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, setOpen]);
 
   // Drop a stale `success` state when the dropdown closes by any path —
   // click-outside, toggle, controlled-mode close, etc. Without this, the
@@ -286,6 +301,7 @@ export function PublishBranchDropdown({
         ref={dropdownRef}
       >
         <MenuButton
+          ref={triggerRef}
           expanded={false}
           className="source-control-push-button"
           data-education-id="publish-button"
@@ -310,6 +326,7 @@ export function PublishBranchDropdown({
         ref={dropdownRef}
       >
         <MenuButton
+          ref={triggerRef}
           expanded={false}
           className="source-control-push-button"
           data-education-id="publish-button"
@@ -335,6 +352,7 @@ export function PublishBranchDropdown({
       ref={dropdownRef}
     >
       <MenuButton
+        ref={triggerRef}
         expanded={isOpen}
         variant={canSync ? 'primary' : 'default'}
         className={`${isPublishing ? 'publishing ' : ''}source-control-push-button`}

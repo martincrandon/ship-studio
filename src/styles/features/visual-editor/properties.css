@@ -56,7 +56,7 @@
 .ss-edit-panel__section-body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: var(--editor-panel-row-gap);
   padding: var(--editor-panel-inline-pad);
 }
 .ss-edit-panel__section--size .ss-edit-panel__section-body {
@@ -463,6 +463,70 @@
   border-color: var(--text-muted);
   background: var(--surface-panel);
 }
+
+/* Provenance popover for an ancestor-inherited value (the orange label state) —
+   same portal + fixed positioning contract as the Reset pill above. */
+.ss-inherit-pop__anchor {
+  position: fixed;
+  z-index: calc(var(--z-modal-overlay) + 2);
+}
+.ss-inherit-pop {
+  width: 216px;
+  padding: var(--space-04);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-02);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-primary);
+  background: var(--surface-control);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.ss-inherit-pop__title {
+  margin: 0;
+  color: var(--property-label-inherited-text);
+  font-weight: 600;
+}
+.ss-inherit-pop__from {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+.ss-inherit-pop__from code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+.ss-inherit-pop__token {
+  padding: 0 var(--space-02);
+  border-radius: var(--radius-sm);
+  background: var(--property-label-inherited-surface);
+  color: var(--property-label-inherited-text);
+}
+.ss-inherit-pop__value {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.ss-inherit-pop__value code {
+  color: var(--text-primary);
+}
+.ss-inherit-pop__source {
+  display: flex;
+  align-items: center;
+  min-height: var(--space-06);
+}
+.ss-inherit-pop__nosrc {
+  color: var(--text-muted);
+}
+.ss-inherit-pop__hint {
+  margin: 0;
+  color: var(--text-muted);
+}
+
 
 .ss-edit-panel__stepper {
   display: flex;

@@ -96,7 +96,7 @@
   width: 100%;
   box-sizing: border-box;
   overflow: auto;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  padding: var(--spacing-xs);
 }
 
 .ss-tree-node {

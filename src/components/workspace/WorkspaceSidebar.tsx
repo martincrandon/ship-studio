@@ -31,6 +31,7 @@ import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
+import { PixelLoaderRings } from './PixelLoaderRings';
 import { UpdateBanner } from '../UpdateBanner';
 import { useOpenPalette } from '../CommandPalette/paletteContext';
 import { useModal } from '../../contexts/ModalContext';
@@ -227,7 +228,7 @@ function projectInitials(name: string): string {
  *   - tab has attention flag               → `attention` (amber pulse)
  *   - status === 'crashed'                 → `attention` (amber; TODO: red)
  *   - status === 'exited'                  → `muted` (grey, dimmed)
- *   - status === 'thinking'                → `thinking` (green; dot spins)
+ *   - status === 'thinking'                → `thinking` (green; PixelLoader)
  *   - status === 'waiting'                 → `active` (green; agent busy)
  *   - status === 'running' | 'starting'    → `active` (green; PTY alive)
  *   - no status yet (freshly-created tab)  → `active`
@@ -595,6 +596,18 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     return rows;
   }, [pinnedPaths, currentFamily, registryVersion, familiesVersion]);
 
+  // A collapsed project hides its tab rows, so surface the same working state
+  // in the project row when any tab in the family is actively thinking.
+  const workingProjectFamilies = useMemo(() => {
+    const families = new Set<string>();
+    for (const snapshot of sessionRegistry.snapshotAll()) {
+      if (snapshot.terminalTabs.some((tab) => tab.status === 'thinking')) {
+        families.add(familyRootOf(snapshot.projectPath));
+      }
+    }
+    return families;
+  }, [registryVersion, familiesVersion]);
+
   // Edge case: current project isn't in pinned or active (e.g. the session
   // registry hasn't picked it up yet during the initial open). Synthesize
   // a row so the workspace still has a sidebar entry.
@@ -701,6 +714,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         isCurrent={isCurrent}
         compact={!!isSidebarHidden}
         isExpanded={expanded}
+        isWorking={workingProjectFamilies.has(familyRootOf(row.projectPath))}
         shortcutNumber={shortcutNumberFor(row)}
         onToggleExpand={() => toggleProjectExpanded(row.projectPath)}
         onSelectProject={onSelectProject}
@@ -1108,6 +1122,7 @@ function ProjectGroup({
   isCurrent,
   compact,
   isExpanded,
+  isWorking,
   shortcutNumber,
   onToggleExpand,
   onSelectProject,
@@ -1119,6 +1134,7 @@ function ProjectGroup({
   isCurrent: boolean;
   compact: boolean;
   isExpanded: boolean;
+  isWorking: boolean;
   /** Cmd+N shortcut badge (1..9). Null for rows beyond the shortcut range. */
   shortcutNumber: number | null;
   onToggleExpand: () => void;
@@ -1140,6 +1156,7 @@ function ProjectGroup({
   const dot = baseDot === 'muted' && row.status === 'active' ? 'active' : baseDot;
   const memoryLabel =
     row.memoryBytes > 0 ? `${Math.round(row.memoryBytes / (1024 * 1024))}MB` : null;
+  const showWorkingIndicator = !isExpanded && isWorking;
 
   return (
     <div className={`sidebar-project ${isCurrent ? 'is-current' : ''}`}>
@@ -1221,7 +1238,19 @@ function ProjectGroup({
             title="Unpin from sidebar"
           />
         )}
-        {!compact && <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />}
+        {!compact && (
+          <span className="sidebar-project-status">
+            {showWorkingIndicator ? (
+              <PixelLoaderRings
+                className="sidebar-project-pixel-loader"
+                size="sm"
+                label={`Working on ${row.fallbackName}`}
+              />
+            ) : (
+              <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
+            )}
+          </span>
+        )}
       </div>
       {!compact && isExpanded && children && <div className="sidebar-project-body">{children}</div>}
     </div>
@@ -1507,7 +1536,17 @@ function SidebarRow({ item }: { item: SidebarItem }) {
       onDoubleClick={item.onRename ? enterEditMode : undefined}
       onKeyDown={handleKeyDown}
     >
-      <span className={`sidebar-row-dot dot-${item.dotState}`} aria-hidden="true" />
+      <span className="sidebar-row-status">
+        {item.dotState === 'thinking' ? (
+          <PixelLoaderRings
+            className="sidebar-row-pixel-loader"
+            size="sm"
+            label={`Working on ${item.label}`}
+          />
+        ) : (
+          <span className={`sidebar-row-dot dot-${item.dotState}`} aria-hidden="true" />
+        )}
+      </span>
       {isEditing ? (
         <input
           ref={inputRef}

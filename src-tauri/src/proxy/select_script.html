@@ -261,7 +261,108 @@ function clearRulePreview(key){
    one onto the other; it's also stable across an HMR reload of the same tree. */
 function ssDomPath(el){var parts=[],e=el;while(e&&e!==document.documentElement){var p=e.parentElement;if(!p)break;var idx=0,sib=p.firstElementChild;while(sib&&sib!==e){idx++;sib=sib.nextElementSibling;}parts.unshift((e.tagName||'').toLowerCase()+':'+idx);e=p;}return parts.join('>');}
 
-function sig(el){var anc=[],p=el.parentElement,n=0;while(p&&p!==document.body&&n<8){var c=p.getAttribute('class');if(c&&c.trim()){anc.push(c);n++;}p=p.parentElement;}var r=el.getBoundingClientRect();var cs=getComputedStyle(el);return{className:el.getAttribute('class')||'',tagName:(el.tagName||'').toLowerCase(),text:(el.innerText||el.textContent||'').trim().slice(0,SS_TEXT_CAP),domPath:ssDomPath(el),ancestorClasses:anc,rect:{top:r.top,left:r.left,width:r.width,height:r.height},computedColor:cs.color,computedBackgroundColor:cs.backgroundColor,unlayeredProps:uLayered(el),attrSrc:el.getAttribute('src'),currentSrc:(el.tagName==='IMG'&&el.currentSrc)||null};}
+/* ── Ancestor-style inheritance (typography + text color) ──
+   For each CSS-inherited property the panel edits, report when the element's
+   effective value comes from an ANCESTOR's own styles. Method: walk up while
+   consecutive computed values stay EQUAL — the first ancestor whose value
+   differs from its own parent's is the definer. A classless/global definer
+   (html, preflight defaults) is NOT reported: that's the page baseline, not an
+   authored style worth surfacing. When found, try to attribute a Tailwind
+   utility from the definer's class list — verified against the computed value
+   where a static scale exists, so `text-lg` is never blamed for a custom-CSS
+   18px (then the popover shows the raw value instead of a token). */
+var SS_INHERIT={
+ 'font-size':{pats:[/^text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)$/],rem:{'text-xs':0.75,'text-sm':0.875,'text-base':1,'text-lg':1.125,'text-xl':1.25,'text-2xl':1.5,'text-3xl':1.875,'text-4xl':2.25,'text-5xl':3,'text-6xl':3.75,'text-7xl':4.5,'text-8xl':6,'text-9xl':8}},
+ 'line-height':{pats:[/^leading-(none|tight|snug|normal|relaxed|loose)$/],ratio:{'leading-none':1,'leading-tight':1.25,'leading-snug':1.375,'leading-normal':1.5,'leading-relaxed':1.625,'leading-loose':2}},
+ 'letter-spacing':{pats:[/^tracking-(tighter|tight|normal|wide|wider|widest)$/],em:{'tracking-tighter':-0.05,'tracking-tight':-0.025,'tracking-normal':0,'tracking-wide':0.025,'tracking-wider':0.05,'tracking-widest':0.1}},
+ 'font-weight':{pats:[/^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/],exact:{'font-thin':'100','font-extralight':'200','font-light':'300','font-normal':'400','font-medium':'500','font-semibold':'600','font-bold':'700','font-extrabold':'800','font-black':'900'}},
+ 'font-style':{pats:[/^(italic|not-italic)$/],exact:{'italic':'italic','not-italic':'normal'}},
+ 'text-transform':{pats:[/^(uppercase|lowercase|capitalize|normal-case)$/],exact:{'uppercase':'uppercase','lowercase':'lowercase','capitalize':'capitalize','normal-case':'none'}},
+ /* Color has no cheap numeric check (the palette is huge), so the last matching
+    utility wins unverified — competing text-color utilities on one class string
+    are rare, and the shown VALUE is always the true computed one regardless. */
+ 'color':{pats:[/^text-(?:\[.+\]|(?:(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?|white|black|transparent|current|inherit))$/]}};
+
+/* text-decoration is handled OUTSIDE SS_INHERIT: it is never inherited (the
+   line propagates through descendant inline boxes while children compute
+   'none'), so the equal-value walk can't see it — and worse, a plain middle
+   ancestor computing 'none' under an underlined grandparent would break the
+   walk's monotonic assumption and get misattributed as the definer. */
+var SS_DECORATION={pats:[/^(no-underline|underline|overline|line-through)$/],exact:{'no-underline':'none','underline':'underline','overline':'overline','line-through':'line-through'}};
+
+/* Attribute one property to a utility on `def`'s class list, or null. Variant-
+   prefixed tokens (`hover:text-lg`) are skipped — they apply conditionally, so
+   they can't be the source of an always-on computed value. */
+function ssInheritToken(def,cfg,val,fsPx){
+  if(!cfg)return null;
+  var cls=(def.getAttribute('class')||'').split(/\s+/),hit=null;
+  for(var i=cls.length-1;i>=0;i--){ /* later utilities usually override earlier */
+    var t=cls[i];if(!t||t.indexOf(':')!==-1)continue;
+    for(var pi=0;pi<cfg.pats.length;pi++){if(cfg.pats[pi].test(t)){hit=t;break;}}
+    if(hit)break;
+  }
+  if(!hit)return null;
+  if(cfg.exact)return val===cfg.exact[hit]?hit:null;
+  var px=parseFloat(val);
+  if(cfg.rem){var root=parseFloat(getComputedStyle(document.documentElement).fontSize)||16;return Math.abs(px-cfg.rem[hit]*root)<=0.51?hit:null;}
+  var base=fsPx||px;
+  if(cfg.ratio)return Math.abs(px-cfg.ratio[hit]*base)<=0.51?hit:null;
+  if(cfg.em)return Math.abs(px-cfg.em[hit]*base)<=0.51?hit:null;
+  return hit;
+}
+
+/* Classes above `def`, nearest-first — mirrors sig()'s ancestor walk so the host
+   can resolve the DEFINDER's class literal with proper anchoring context. */
+function ssAncestorsAbove(def){
+  var out=[],p=def.parentElement,n=0;
+  while(p&&p!==document.body&&n<8){var c=p.getAttribute('class');if(c&&c.trim()){out.push(c);n++;}p=p.parentElement;}
+  return out;
+}
+
+function ssInherited(el){
+  var cs=getComputedStyle(el),out={};
+  for(var prop in SS_INHERIT){
+    var v=cs.getPropertyValue(prop);
+    if(!v)continue;
+    var par=el.parentElement;
+    if(!par)continue;
+    /* Differs right at the parent ⇒ el defines it locally (an inherited value
+       would MATCH the parent's) — the panel already shows that from the class. */
+    if(getComputedStyle(par).getPropertyValue(prop)!==v)continue;
+    var node=par,nodeV=v,def=null,depth=0;
+    while(node&&node!==document.body&&depth<8){
+      var pn=node.parentElement,pnv=pn?getComputedStyle(pn).getPropertyValue(prop):null;
+      if(pn&&pnv!==nodeV){def=node;break;}
+      node=pn;nodeV=pnv;depth++;
+    }
+    if(!def)continue; /* equal all the way up — global default, not authored here */
+    var dcls=def.getAttribute('class');
+    if(!dcls||!dcls.trim())continue; /* classless definer = baseline/preflight */
+    var dfs=getComputedStyle(def).getPropertyValue('font-size');
+    out[prop]={cssValue:v,tagName:(def.tagName||'').toLowerCase(),className:dcls,ancestorClasses:ssAncestorsAbove(def),token:ssInheritToken(def,SS_INHERIT[prop],v,parseFloat(dfs))};
+  }
+
+  /* Decoration propagation: report the nearest classed ancestor that draws a
+     line, only when the element itself doesn't (its own value would already
+     show from its class). */
+  if((cs.getPropertyValue('text-decoration-line')||'none')==='none'){
+    var dp=el.parentElement,ddepth=0;
+    while(dp&&dp!==document.body&&ddepth<8){
+      var dline=getComputedStyle(dp).getPropertyValue('text-decoration-line');
+      if(dline&&dline!=='none'){
+        var ddcls=dp.getAttribute('class');
+        if(ddcls&&ddcls.trim()){
+          out['text-decoration-line']={cssValue:dline,tagName:(dp.tagName||'').toLowerCase(),className:ddcls,ancestorClasses:ssAncestorsAbove(dp),token:ssInheritToken(dp,SS_DECORATION,dline,null)};
+        }
+        break; /* nearest propagating ancestor wins */
+      }
+      dp=dp.parentElement;ddepth++;
+    }
+  }
+  return out;
+}
+
+function sig(el){var anc=[],p=el.parentElement,n=0;while(p&&p!==document.body&&n<8){var c=p.getAttribute('class');if(c&&c.trim()){anc.push(c);n++;}p=p.parentElement;}var r=el.getBoundingClientRect();var cs=getComputedStyle(el);return{className:el.getAttribute('class')||'',tagName:(el.tagName||'').toLowerCase(),text:(el.innerText||el.textContent||'').trim().slice(0,SS_TEXT_CAP),domPath:ssDomPath(el),ancestorClasses:anc,rect:{top:r.top,left:r.left,width:r.width,height:r.height},computedColor:cs.color,computedBackgroundColor:cs.backgroundColor,unlayeredProps:uLayered(el),inheritedProps:ssInherited(el),attrSrc:el.getAttribute('src'),currentSrc:(el.tagName==='IMG'&&el.currentSrc)||null};}
 
 function ensureStyle(){if(!styleEl){styleEl=document.createElement('style');styleEl.id='ss-preview';document.head.appendChild(styleEl);}return styleEl;}
 

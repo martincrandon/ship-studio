@@ -12,6 +12,7 @@ import {
   readLayer,
   enumResetSpec,
   type EnumControl,
+  type InheritedProp,
   type LayerContext,
   type ResetSpec,
 } from '../../lib/edit';
@@ -114,6 +115,10 @@ interface Props {
   onApplyEnum: (token: string, style: Record<string, string>) => void;
   /** Clear a control's value at the active breakpoint. */
   onReset: (spec: ResetSpec) => void;
+  /** Ancestor-defined value for this control's CSS property. */
+  inherited?: InheritedProp | null;
+  projectPath?: string;
+  onOpenInCode?: (file: string, line: number) => void;
 }
 
 /** One enum control row (icons / dropdown / segmented) with its resettable label.
@@ -124,20 +129,35 @@ export function EnumControlRow({
   layer,
   onApplyEnum,
   onReset,
+  inherited = null,
+  projectPath,
+  onOpenInCode,
 }: { control: EnumControl } & Props) {
   const { value: active, definedAt } = readLayer(currentClass, layer, (s) =>
     activeEnumToken(s, control)
   );
+
+  // With nothing set locally, an attributed ancestor token preselects its option
+  // (the orange label signals it isn't actually set on this element). Adopting
+  // writes that same option locally.
+  const inheritedOption =
+    inherited?.token != null
+      ? (control.options.find((option) => option.token === inherited.token) ?? null)
+      : null;
+  const shown = active ?? inheritedOption?.token ?? null;
+  const adopt = inheritedOption
+    ? () => onApplyEnum(inheritedOption.token, inheritedOption.style)
+    : undefined;
 
   let body: ReactNode;
   if (control.label === 'Display') {
     const primaryDefaults = control.options.filter((option) =>
       ['block', 'flex', 'grid', 'hidden'].includes(option.token)
     );
-    const activeIsPrimary = primaryDefaults.some((option) => option.token === active);
+    const activeIsPrimary = primaryDefaults.some((option) => option.token === shown);
     const selectedOverflow =
-      !activeIsPrimary && active
-        ? (control.options.find((option) => option.token === active) ?? null)
+      !activeIsPrimary && shown
+        ? (control.options.find((option) => option.token === shown) ?? null)
         : null;
     const displacedPrimary = selectedOverflow
       ? (primaryDefaults[primaryDefaults.length - 1] ?? null)
@@ -157,7 +177,7 @@ export function EnumControlRow({
       <div className="ss-edit-panel__display-controls">
         <SegmentedControl
           className="ss-edit-panel__segmented ss-edit-panel__segmented--icons"
-          value={active ?? ''}
+          value={shown ?? ''}
           size="medium"
           options={primary.map((option) => ({
             value: option.token,
@@ -170,7 +190,7 @@ export function EnumControlRow({
         />
         <EnumDropdown
           label="More display options"
-          value={active}
+          value={shown}
           options={overflowOptions}
           optionIcons={ICONS}
           compactTrigger
@@ -182,7 +202,7 @@ export function EnumControlRow({
     body = (
       <EnumDropdown
         label={control.label}
-        value={active}
+        value={shown}
         options={control.options}
         onChange={(token) => {
           const opt = control.options.find((o) => o.token === token);
@@ -194,7 +214,7 @@ export function EnumControlRow({
     body = (
       <SegmentedControl
         className="ss-edit-panel__align-tabs"
-        value={active ?? ''}
+        value={shown ?? ''}
         size="medium"
         options={control.options.map((option) => ({
           value: option.token,
@@ -214,7 +234,7 @@ export function EnumControlRow({
     body = (
       <SegmentedControl
         className={`ss-edit-panel__segmented${isIcons ? ' ss-edit-panel__segmented--icons' : ''}`}
-        value={active ?? ''}
+        value={shown ?? ''}
         size="medium"
         options={control.options.map((option) => ({
           value: option.token,
@@ -238,6 +258,10 @@ export function EnumControlRow({
         definedAt={definedAt}
         active={layer.bp}
         onReset={() => onReset(enumResetSpec(control))}
+        inherited={inherited}
+        onAdopt={adopt}
+        projectPath={projectPath}
+        onOpenInCode={onOpenInCode}
       />
       {body}
     </div>

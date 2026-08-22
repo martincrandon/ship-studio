@@ -20,7 +20,7 @@
 import { Terminal } from '../terminal/Terminal';
 import { StaleEnvBanner } from '../terminal/StaleEnvBanner';
 import type { TerminalHandle, AgentStatus } from '../terminal/Terminal';
-import { PlusIcon } from '@/components/icons';
+import { CloseIcon, PlusIcon } from '@/components/icons';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { CompactTopbar } from './CompactTopbar';
 import { getAgentById } from '../../lib/agent';
@@ -184,7 +184,7 @@ export function CompactWorkspace({
                     aria-label={`Close ${label}`}
                     title="Close tab"
                   >
-                    ×
+                    <CloseIcon size={12} />
                   </button>
                 )}
               </div>

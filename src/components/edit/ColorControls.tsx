@@ -13,6 +13,7 @@ import {
   colorResetSpec,
   readLayer,
   type ColorPrefix,
+  type InheritedProp,
   type LayerContext,
   type ResetSpec,
 } from '../../lib/edit';
@@ -45,6 +46,10 @@ interface Props {
    *  arbitrary value in the class. */
   computed?: Record<string, string | undefined>;
   variables?: ValueFieldVariable[];
+  /** Ancestor-defined value for this color (text color inherits). */
+  inherited?: InheritedProp | null;
+  projectPath?: string;
+  onOpenInCode?: (file: string, line: number) => void;
 }
 
 function formatForValue(value: string): ColorFormat {
@@ -67,6 +72,9 @@ export function ColorField({
   onReset,
   computed,
   variables,
+  inherited = null,
+  projectPath,
+  onOpenInCode,
 }: {
   label: string;
   css: string;
@@ -145,6 +153,15 @@ export function ColorField({
     [prefix, css, onApplyEnum]
   );
 
+  // "Set here explicitly": prefer the attributed palette token (`text-red-500`);
+  // without one, write the actual color as an arbitrary value via the picker path.
+  const adopt = inherited
+    ? () => {
+        if (inherited.token) onApplyEnum(inherited.token, { [css]: inherited.cssValue });
+        else handlePick(inherited.cssValue);
+      }
+    : undefined;
+
   const handleTextCommit = useCallback(
     (next: string) => {
       const raw = next.trim();
@@ -175,6 +192,10 @@ export function ColorField({
         definedAt={definedAt}
         active={layer.bp}
         onReset={() => onReset(colorResetSpec(prefix, css))}
+        inherited={inherited}
+        onAdopt={adopt}
+        projectPath={projectPath}
+        onOpenInCode={onOpenInCode}
       />
       <div className="ss-color-field">
         <ValueField

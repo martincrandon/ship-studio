@@ -338,6 +338,32 @@ Gotcha: the spinning arc uses `currentColor` — tint it by setting `color` on t
 (`style={{ color: 'var(--accent-active)' }}`) or let it inherit; inside a green action button it's
 automatically dark. The track stays `var(--border)`.
 
+### PixelLoader — [PixelLoader.tsx](../src/components/primitives/PixelLoader.tsx)
+
+`PixelLoader` is a separate experimental activity indicator; it does not replace or modify
+`Spinner`. Its default 5×5 grid contains one centre pixel, an eight-pixel inner ring, and a
+sixteen-pixel outer ring, separated by a hairline gap. The `ripple-quad` variant uses a 6×6 grid
+with a four-pixel centre, twelve-pixel inner ring, and twenty-pixel outer ring.
+
+| Prop | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | 14px, 20px, or 30px square. |
+| `variant` | `'rings' \| 'ripple' \| 'ripple-isolated' \| 'ripple-decay' \| 'ripple-quad' \| 'ripple-quad-tight' \| 'scan' \| 'spark'` | `'ripple'` | Centre-out rings, separated ring beats, overlapping decay, 2×2-core ripples, column scan, or alternating-cell shimmer. |
+| `gridSize` | `number` | Variant-dependent | Custom row/column count, clamped from 1–16. Defaults to 5 or 6 for quad variants. |
+| `coreSize` | `number` | Variant-dependent | Width and height of the centred core, clamped to the grid. Defaults to 1 or 2 for quad variants. |
+| `label` | `string` | `'Loading'` | Screen-reader announcement (`role="status"`). |
+
+```tsx
+<PixelLoader variant="ripple" label="Building preview" />
+```
+
+All variants animate only light intensity and glow—the pixel grid itself never moves, rotates, or
+distorts. `rings` uses the supplied centre-out pulse with fully dimmed cells between light passes.
+`ripple-isolated` narrows and separates each ring's bright interval so adjacent rings
+overlap less. `ripple-decay` runs faster and retains a mid-glow while the next ring lights, creating
+a slight overlap. `ripple-quad-tight` applies that narrower handoff to the 2×2-core geometry.
+Reduced-motion users see a static centre-and-rings hierarchy.
+
 ### Extension manager contracts
 
 MCP, Skills, and Plugins use the shared structural pieces in
