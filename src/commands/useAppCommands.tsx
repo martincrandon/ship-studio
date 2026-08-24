@@ -42,6 +42,10 @@ export interface UseAppCommandsParams {
   handleImportLocalFolder: () => void | Promise<void>;
   handleGitHubConnect: () => void | Promise<void>;
   handleRestartDevServer: () => Promise<void> | void;
+  /** Start the dev server on demand (used when it isn't running). */
+  handleStartDevServer: () => Promise<void> | void;
+  /** Predicate: is a dev server currently tracked for the given project? */
+  isDevServerRunning: (projectPath: string) => boolean;
   /** Current education-mode state, so the command can read "Enter" vs "Exit". */
   isEducationMode: boolean;
   setIsEducationMode: (mode: boolean) => void;
@@ -58,6 +62,8 @@ export function useAppCommands({
   handleImportLocalFolder,
   handleGitHubConnect,
   handleRestartDevServer,
+  handleStartDevServer,
+  isDevServerRunning,
   isEducationMode,
   setIsEducationMode,
   showToast,
@@ -120,7 +126,16 @@ export function useAppCommands({
   }, [showToast]);
 
   // Wrappers to keep `run` type Promise<void> | void clean for the registry.
-  const restart = useCallback(() => void handleRestartDevServer(), [handleRestartDevServer]);
+  // When nothing is running, "restart" degrades to a plain start — same
+  // behavior as selecting the Preview tab while stopped.
+  const restart = useCallback(() => {
+    if (!currentProject) return;
+    if (!isDevServerRunning(currentProject.path)) {
+      void handleStartDevServer();
+      return;
+    }
+    void handleRestartDevServer();
+  }, [currentProject, isDevServerRunning, handleStartDevServer, handleRestartDevServer]);
 
   // Subscribe to the session registry so the project list updates when live
   // sessions come and go. The returned key is a newline-joined, sorted list
@@ -305,11 +320,14 @@ export function useAppCommands({
       },
       {
         id: 'devserver.restart',
-        title: 'Restart dev server',
+        title:
+          currentProject && isDevServerRunning(currentProject.path)
+            ? 'Restart dev server'
+            : 'Start dev server',
         icon: <ResetIcon size={14} />,
         category: 'action' as const,
         when: 'project' as const,
-        keywords: ['dev', 'server', 'vite', 'next'],
+        keywords: ['dev', 'server', 'vite', 'next', 'start', 'restart'],
         run: restart,
       },
       {

@@ -153,31 +153,14 @@
 }
 
 .worktree-mode-toggle {
-  display: flex;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs);
-  background: var(--surface-control);
-  border-radius: var(--radius-card);
+  width: 100%;
 }
 
-.worktree-mode-btn {
+.worktree-mode-toggle .tabs__tab {
   flex: 1;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
+  width: auto;
+  min-width: 0;
   font-size: var(--font-size-body-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background-color var(--transition),
-    color var(--transition);
-}
-
-.worktree-mode-btn.is-active {
-  background: var(--surface-panel);
-  color: var(--text-primary);
 }
 
 .worktree-field {

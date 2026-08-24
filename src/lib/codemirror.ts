@@ -10,8 +10,8 @@
  */
 
 import type { Extension } from '@codemirror/state';
-import { Prec } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { Prec, Range } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { css } from '@codemirror/lang-css';
@@ -23,22 +23,24 @@ import { markdown } from '@codemirror/lang-markdown';
 /* Shared syntax palette, with semantic colors matching the visual editor. */
 export const ghDarkHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier, t.operatorKeyword], color: '#ff7b72' },
-  { tag: [t.propertyName], color: '#79c0ff' },
+  { tag: [t.propertyName], color: 'var(--property-text)' },
   { tag: [t.variableName], color: 'var(--variable-text)' },
   { tag: [t.function(t.variableName), t.labelName], color: '#d2a8ff' },
   {
     tag: [t.number, t.bool, t.atom, t.color, t.constant(t.name), t.standard(t.name)],
-    color: '#79c0ff',
+    color: 'var(--property-text)',
   },
   {
     tag: [t.typeName, t.namespace, t.changed, t.annotation, t.self],
-    color: '#79c0ff',
+    color: 'var(--property-text)',
   },
   { tag: [t.className], color: 'var(--class-text)' },
-  { tag: [t.string, t.special(t.string)], color: 'var(--text-primary)' },
+  // Quoted attribute values (Tailwind class lists) render as Class-orange;
+  // unquoted element text inherits the editor's base --text-inverse.
+  { tag: [t.string, t.special(t.string)], color: 'var(--class-text)' },
   { tag: [t.comment, t.meta], color: '#8b949e', fontStyle: 'italic' },
   { tag: [t.tagName], color: 'var(--tag-text)' },
-  { tag: [t.attributeName], color: '#79c0ff' },
+  { tag: [t.attributeName], color: 'var(--property-text)' },
   { tag: [t.invalid], color: '#f85149' },
 ]);
 
@@ -52,6 +54,8 @@ export const ssEditorTheme = EditorView.theme(
       fontSize: 'var(--font-size-badge)',
     },
     '&.cm-focused': { outline: 'none' },
+    // CSS `--custom-property` names (see cssVarHighlight) in Variable-purple.
+    '.cm-css-var': { color: 'var(--variable-text)' },
     '.cm-scroller': {
       fontFamily: 'var(--font-code)',
       lineHeight: '1.6',
@@ -98,7 +102,45 @@ export const ssEditorTheme = EditorView.theme(
   { dark: true }
 );
 
-export const ghDarkExtension: Extension = syntaxHighlighting(ghDarkHighlight);
+/**
+ * Purple-mark `--custom-property` names wherever they appear (e.g. the
+ * `var(--foreground)` fragments inside Tailwind arbitrary-value class strings,
+ * which CodeMirror only sees as one orange string token). Scans visible ranges
+ * for `--name` and wraps matches in a mark styled by ssEditorTheme.
+ */
+const cssVarMark = Decoration.mark({ class: 'cm-css-var' });
+
+function buildCssVarDecorations(view: EditorView): DecorationSet {
+  const marks: Range<Decoration>[] = [];
+  const re = /--[a-zA-Z][a-zA-Z0-9-]*/g;
+  for (const { from, to } of view.visibleRanges) {
+    const text = view.state.sliceDoc(from, to);
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) {
+      marks.push(cssVarMark.range(from + match.index, from + match.index + match[0].length));
+    }
+  }
+  return Decoration.set(marks, true);
+}
+
+export const cssVarHighlight = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+
+    constructor(view: EditorView) {
+      this.decorations = buildCssVarDecorations(view);
+    }
+
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged) {
+        this.decorations = buildCssVarDecorations(update.view);
+      }
+    }
+  },
+  { decorations: (plugin) => plugin.decorations }
+);
+
+export const ghDarkExtension: Extension = [syntaxHighlighting(ghDarkHighlight), cssVarHighlight];
 
 /**
  * Render syntax-error tokens as ordinary text instead of red. The Code tab is a
@@ -120,10 +162,12 @@ export const neutralizeInvalidHighlight: Extension = Prec.high(
  */
 export const codeTabEditorTheme = EditorView.theme({
   // Larger, readable code text on a transparent surface so the code area shows
-  // the panel background.
+  // the panel background. Element text content (headings, paragraphs) has no
+  // syntax token, so this base color IS its color — white, per --text-inverse.
   '&': {
     fontSize: 'var(--font-size-h4)',
     backgroundColor: 'transparent',
+    color: 'var(--text-inverse)',
   },
   '.cm-scroller': {
     fontFamily: 'var(--font-code)',
@@ -153,6 +197,28 @@ export const codeTabEditorTheme = EditorView.theme({
   },
   '.cm-activeLineGutter': { backgroundColor: 'transparent' },
 });
+
+/**
+ * Surface-only override for the Code tab editor: repaint the editor body and
+ * gutter with `--surface-app` so they match the Agent panel instead of
+ * `ssEditorTheme`'s `--surface-control`. High precedence so it wins the
+ * cascade over `ssEditorTheme` regardless of style-mount order — and nothing
+ * else (fonts, sizes, spacing) is touched.
+ */
+export const codeTabSurfaceTheme = Prec.high(
+  EditorView.theme({
+    '&': { backgroundColor: 'var(--surface-app)' },
+    '.cm-gutters': {
+      backgroundColor: 'var(--surface-app)',
+    },
+    // Once the code is scrolled sideways, separate the sticky gutter column
+    // from the code passing beneath it. The class is toggled by the editor's
+    // scroll handler (CodeFileEditor); at scrollLeft 0 there is no border.
+    '&.ss-code-hscrolled .cm-gutters': {
+      borderRight: '1px solid var(--border-default)',
+    },
+  })
+);
 
 /**
  * Map a Shiki language id (as returned by `read_project_file`) to a CodeMirror

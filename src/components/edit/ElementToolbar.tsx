@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DuplicateIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { InsertMenu } from './InsertMenu';
+import { getElementIcon } from './element-icons';
 import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
 import type { StructureSelection } from '../../hooks/useElementStructure';
 
@@ -89,6 +90,7 @@ export function ElementToolbar({
 
   const insideDisabled = VOID_ELEMENTS.has(selection.signature.tagName);
   const tagName = selection.signature.tagName.toLowerCase();
+  const elementIcon = getElementIcon(tagName);
   const firstClass = selection.signature.className.split(/\s+/).find(Boolean);
   const selector = firstClass ? `.${firstClass}` : null;
   const selectionLabel = selector ? `${tagName} ${selector}` : tagName;
@@ -102,13 +104,21 @@ export function ElementToolbar({
           aria-label={`Selected element: ${selectionLabel}`}
           title={selectionLabel}
         >
-          <span style={{ color: 'var(--text-primary)' }}>{tagName}</span>
-          {selector && <span style={{ color: 'var(--text-white)' }}>{selector}</span>}
+          {elementIcon ? (
+            <span className="ss-el-toolbar__tag-icon" title={`<${tagName}>`}>
+              {elementIcon}
+            </span>
+          ) : (
+            <span className="ss-el-toolbar__tag">{tagName}</span>
+          )}
+          {selector && <span className="ss-el-toolbar__selector">{selector}</span>}
         </div>
         {busy ? (
-          <span className="ss-el-toolbar__busy">
-            <Spinner size="sm" />
-          </span>
+          <div className="ss-el-toolbar__actions" role="group" aria-label="Element actions">
+            <span className="ss-el-toolbar__busy">
+              <Spinner size="sm" />
+            </span>
+          </div>
         ) : (
           <div className="ss-el-toolbar__actions" role="group" aria-label="Element actions">
             <button
@@ -124,7 +134,7 @@ export function ElementToolbar({
                 );
               }}
             >
-              <PlusIcon size={14} />
+              <PlusIcon size={12} className="ss-el-toolbar__control-icon" />
             </button>
             <button
               type="button"
@@ -133,7 +143,7 @@ export function ElementToolbar({
               title="Duplicate element"
               onClick={onDuplicate}
             >
-              <DuplicateIcon size={12} />
+              <DuplicateIcon size={12} className="ss-el-toolbar__control-icon" />
             </button>
             <button
               type="button"
@@ -142,7 +152,7 @@ export function ElementToolbar({
               title="Delete element"
               onClick={onDelete}
             >
-              <TrashIcon size={12} />
+              <TrashIcon size={12} className="ss-el-toolbar__control-icon" />
             </button>
           </div>
         )}

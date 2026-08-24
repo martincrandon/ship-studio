@@ -36,6 +36,7 @@ import {
   HomeIcon,
   ImageIcon,
   PanelLeftIcon,
+  VariablesIcon,
 } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
@@ -68,6 +69,9 @@ export interface WorkspaceHeaderProps {
   onToggleElementTree: () => void;
   agentPanelVisible: boolean;
   onToggleAgentPanel: () => void;
+  variablesPanelVisible: boolean;
+  variablesPanelAvailable: boolean;
+  onToggleVariablesPanel: () => void;
 
   // Extra dropdown node rendered after Assets in the left cluster. Currently
   // used for the Plugins dropdown. Provided as a
@@ -217,6 +221,9 @@ export function WorkspaceHeader({
   onToggleElementTree,
   agentPanelVisible,
   onToggleAgentPanel,
+  variablesPanelVisible,
+  variablesPanelAvailable,
+  onToggleVariablesPanel,
   headerExtras,
   modes,
   integrations,
@@ -353,7 +360,7 @@ export function WorkspaceHeader({
 
   const toolbar = (
     <header className="workspace-header">
-      {/* Left side — Elements and Assets. Learn mode, env vars, backups,
+      {/* Left side — Elements, Agent, Variables, and Assets. Learn mode, env vars, backups,
           plugin manager, and IDE launch are reachable via ⌘K. */}
       <div className="workspace-header-left">
         <ToggleButton
@@ -362,36 +369,37 @@ export function WorkspaceHeader({
           pressed={elementTreeVisible}
           onClick={onToggleElementTree}
           disabled={!elementTreeAvailable}
-          title={
-            !elementTreeAvailable
-              ? 'Elements are available in Preview'
-              : elementTreeVisible
-                ? 'Hide element tree'
-                : 'Show element tree'
-          }
+          title={elementTreeAvailable ? 'Elements' : 'Elements are available in Preview'}
           leftIcon={<ElementsIcon size={16} />}
-        >
-          <span className="toolbar-btn-label">Elements</span>
-        </ToggleButton>
+          aria-label="Elements"
+        />
         <ToggleButton
           variant={agentPanelVisible ? 'secondary' : 'default'}
           className="workspace-panel-toggle"
           pressed={agentPanelVisible}
           onClick={onToggleAgentPanel}
-          title={agentPanelVisible ? 'Hide Agent panel' : 'Show Agent panel'}
+          title="Agent"
           leftIcon={<AgentsIcon size={16} />}
-        >
-          <span className="toolbar-btn-label">Agent</span>
-        </ToggleButton>
+          aria-label="Agent"
+        />
+        <ToggleButton
+          variant={variablesPanelVisible ? 'secondary' : 'default'}
+          className="workspace-panel-toggle"
+          pressed={variablesPanelVisible}
+          onClick={onToggleVariablesPanel}
+          disabled={!variablesPanelAvailable}
+          title={variablesPanelAvailable ? 'Variables' : 'Variables are available for web projects'}
+          leftIcon={<VariablesIcon size={16} />}
+          aria-label="Variables"
+        />
         <Button
           onClick={onOpenAssetsPanel}
           title="Assets"
+          aria-label="Assets"
           aria-pressed={assetsPanelVisible}
           data-education-id="assets-button"
           leftIcon={<ImageIcon size={16} />}
-        >
-          <span className="toolbar-btn-label">Assets</span>
-        </Button>
+        />
         {headerExtras}
       </div>
 

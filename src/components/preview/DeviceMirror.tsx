@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { SegmentedControl } from '../primitives/SegmentedControl';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { logger } from '../../lib/logger';
 import {
   startMobilePreview,
@@ -600,15 +600,16 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
       <div className="device-mirror">
         <div className="device-mirror-toolbar">
           {showPicker && (
-            <SegmentedControl
+            <Tabs
               value={activePlatform}
-              options={[
-                { value: 'ios', label: 'iOS' },
-                { value: 'android', label: 'Android' },
-              ]}
-              onValueChange={switchPlatform}
-              aria-label="Preview platform"
-            />
+              mode="navigation"
+              onValueChange={(next) => switchPlatform(next as Platform)}
+            >
+              <TabsList aria-label="Preview platform">
+                <TabsTab value="ios">iOS</TabsTab>
+                <TabsTab value="android">Android</TabsTab>
+              </TabsList>
+            </Tabs>
           )}
           <span className="device-mirror-label">
             {mirror.device_name

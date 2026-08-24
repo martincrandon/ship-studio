@@ -476,6 +476,13 @@
   pointer-events: none;
   transition: opacity var(--transition-fast);
 }
+/* Read-only cards show both the status and the candidate source files. Keep the
+   provenance chip in the flex row so it sits beside, rather than underneath,
+   the status label. */
+.ss-cascade-card.is-readonly .ss-cascade-card__src-chip {
+  position: static;
+  flex: 0 1 auto;
+}
 .ss-cascade-card__src-chip svg {
   flex: 0 0 auto;
   opacity: 0.7;

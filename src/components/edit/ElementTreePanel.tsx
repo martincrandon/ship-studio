@@ -9,10 +9,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { ChevronRightIcon, CloseIcon, PinIcon } from '@/components/icons';
+import { ChevronRightIcon, CloseIcon, ElementsIcon, PinIcon } from '@/components/icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
+import { getElementIcon } from './element-icons';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
@@ -71,11 +72,18 @@ function buildAncestors(root: ElementTreeNode): Map<number, number[]> {
   return out;
 }
 
-function RowLabel({ node }: { node: ElementTreeNode }) {
+function RowLabel({ node, showTagIcons }: { node: ElementTreeNode; showTagIcons: boolean }) {
   const firstClass = node.cls.split(/\s+/)[0] ?? '';
+  const elementIcon = showTagIcons ? getElementIcon(node.tag) : undefined;
   return (
     <>
-      <span className="ss-tree-tag">{node.tag}</span>
+      {elementIcon ? (
+        <span className="ss-tree-tag-icon" title={`<${node.tag}>`}>
+          {elementIcon}
+        </span>
+      ) : (
+        <span className="ss-tree-tag">{node.tag}</span>
+      )}
       {firstClass && <span className="ss-tree-class">.{firstClass}</span>}
       {node.text && <span className="ss-tree-text">{node.text}</span>}
     </>
@@ -100,6 +108,7 @@ export function ElementTreePanel({
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
+  const [showTagIcons, setShowTagIcons] = useState(false);
   // Context menu + insert palette, both anchored to the right-clicked row.
   const [ctxMenu, setCtxMenu] = useState<{
     nodeId: number;
@@ -213,7 +222,7 @@ export function ElementTreePanel({
           ) : (
             <span className="ss-tree-chevron-spacer" />
           )}
-          <RowLabel node={node} />
+          <RowLabel node={node} showTagIcons={showTagIcons} />
         </div>
         {hasChildren && !isCollapsed && node.children.map((c) => renderNode(c, depth + 1))}
       </div>
@@ -338,6 +347,18 @@ export function ElementTreePanel({
           </div>
         </>
       )}
+      <div className="ss-tree-panel__footer">
+        <ToggleButton
+          variant="ghost"
+          size="compact"
+          className="button--icon-only ss-tree-panel__tag-toggle"
+          onClick={() => setShowTagIcons((shown) => !shown)}
+          title={showTagIcons ? 'Show tag names' : 'Show tag icons'}
+          aria-label={showTagIcons ? 'Show tag names' : 'Show tag icons'}
+          pressed={showTagIcons}
+          leftIcon={<ElementsIcon size={14} />}
+        />
+      </div>
       {structure && (
         <>
           <ElementTreeContextMenu

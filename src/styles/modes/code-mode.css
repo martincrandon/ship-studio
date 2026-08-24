@@ -281,6 +281,9 @@
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
   overflow: hidden;
+  /* Only `top` is animated (vertical tracking of the selection); `left` stays
+     pinned to where the highlight starts, so it must not transition. */
+  transition: top var(--duration-slow) var(--ease-standard);
 }
 
 .code-selection-reference {

@@ -79,8 +79,8 @@ export function PluginsDropdown({
         title="Plugins"
         data-education-id="plugins-dropdown"
         leftIcon={<PuzzleIcon size={16} />}
+        aria-label="Plugins"
       >
-        <span className="toolbar-btn-label">Plugins</span>
         <ChevronIcon size={10} className={isOpen ? 'chevron-flipped' : undefined} />
       </MenuButton>
 

@@ -40,6 +40,8 @@ interface CommonHeader {
   selector: string;
   file?: string;
   line?: number;
+  /** Candidate source files when the selector is defined by multiple rules. */
+  sourceFiles?: string[];
   /** The raw `@media` condition (e.g. `(max-width: 768px)`) — for editing the chip. */
   mediaText?: string | null;
   layer?: string | null;
@@ -137,6 +139,9 @@ export function CascadeRuleCard(props: Props) {
   // itself is never a keyframes container, even if oddly named.)
   const isKeyframes = !isStep && isKeyframesSelector(props.selector);
   const onRenameAtRule = props.editable ? props.onRenameAtRule : undefined;
+  const sourcePaths = props.file ? [props.file] : Array.from(new Set(props.sourceFiles ?? []));
+  const sourceTitle = props.file ? `${props.file}:${props.line}` : sourcePaths.join('\n');
+  const sourceLabel = sourcePaths.map(fileLabel).join(', ');
 
   // Focus management after a destructive action (#14): the focused button unmounts, so
   // without intervention focus falls to <body>. Capture a stable target *before* mutating,
@@ -277,10 +282,10 @@ export function CascadeRuleCard(props: Props) {
             <TrashIcon size={12} />
           </button>
         )}
-        {props.file && (
-          <span className="ss-cascade-card__src-chip" title={`${props.file}:${props.line}`}>
+        {sourcePaths.length > 0 && (
+          <span className="ss-cascade-card__src-chip" title={sourceTitle}>
             <FileTextIcon size={11} />
-            {fileLabel(props.file)}
+            {sourceLabel}
           </span>
         )}
       </div>

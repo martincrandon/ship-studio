@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ElementTreePanel } from './ElementTreePanel';
 
 describe('ElementTreePanel', () => {
@@ -57,5 +57,44 @@ describe('ElementTreePanel', () => {
     expect(
       screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
     ).toHaveClass('affected');
+  });
+
+  it('swaps supported tag names for the Insert Element icons', () => {
+    render(
+      <ElementTreePanel
+        tree={{
+          id: 1,
+          tag: 'body',
+          cls: '',
+          text: '',
+          children: [
+            { id: 2, tag: 'div', cls: 'card', text: '', children: [] },
+            { id: 3, tag: 'main', cls: '', text: '', children: [] },
+          ],
+        }}
+        truncated={false}
+        selectedId={1}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+
+    const panel = screen.getByTestId('element-tree-panel');
+    const toggle = screen.getByRole('button', { name: 'Show tag icons' });
+    expect(panel.querySelector('[data-tree-id="2"] .ss-tree-tag')).toHaveTextContent('div');
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole('button', { name: 'Show tag names' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(
+      panel.querySelector('[data-tree-id="2"] [data-icon-name="ElementDivIcon"]')
+    ).toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="2"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="3"] .ss-tree-tag')).toHaveTextContent('main');
   });
 });

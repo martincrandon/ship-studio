@@ -67,6 +67,7 @@
 .ss-edit-panel__section--size .ss-box {
   grid-column: 1 / -1;
   justify-self: center;
+  margin-top: var(--spacing-xs);
 }
 
 /* Section rows use the Figma form proportions. Context rows intentionally keep
@@ -102,7 +103,7 @@
   justify-self: end;
 }
 .ss-edit-panel__section--size .ss-edit-panel__control {
-  grid-template-columns: minmax(0, 1fr) var(--spacing-xs) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 0.8fr) var(--spacing-xs) minmax(0, 1.2fr);
 }
 .ss-edit-panel__section--size .ss-edit-panel__control > .ss-edit-panel__label {
   width: 100%;
@@ -472,10 +473,10 @@
 }
 .ss-inherit-pop {
   width: 216px;
-  padding: var(--space-04);
+  padding: var(--spacing-md);
   display: flex;
   flex-direction: column;
-  gap: var(--space-02);
+  gap: var(--spacing-sm);
   font-size: var(--font-size-body-sm);
   color: var(--text-primary);
   background: var(--surface-control);
@@ -526,7 +527,6 @@
   margin: 0;
   color: var(--text-muted);
 }
-
 
 .ss-edit-panel__stepper {
   display: flex;
@@ -637,15 +637,12 @@
 
 .ss-color-field {
   width: 100%;
-  justify-content: flex-end;
-  gap: var(--spacing-xs);
 }
 
 .ss-color-field__value {
-  flex: 1 1 0;
-  width: calc(100% + var(--spacing-sm));
+  flex: 1 1 auto;
+  width: 100%;
   min-width: calc(var(--spacing-2xl) * 3);
-  margin-inline-start: calc(-1 * var(--spacing-xs));
 }
 
 .ss-color-field__value .value-field__unit {

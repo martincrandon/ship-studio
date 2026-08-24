@@ -149,6 +149,7 @@
   --text-field-disabled-border: var(--border-default);
   --text-field-disabled-opacity: 0.55;
   --value-field-variable-menu-max-height: 244px;
+  --value-field-variable-scroll-gap: var(--space-16);
 
   --compact-topbar-height: var(--size-control-large);
   --compact-topbar-padding-inline: var(--spacing-sm);

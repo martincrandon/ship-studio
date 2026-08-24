@@ -31,6 +31,22 @@
    * ========================================================================
 */
 
+/* Standalone workspace panel shell. The dockable surface owns the outer size;
+   the shared edit-panel chrome fills it and leaves the token list as the only
+   scrollable body. */
+.ss-variables-panel.ss-variables-panel--dockable {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.ss-variables-panel .ss-edit-panel__body {
+  padding: 0;
+  gap: 0;
+  overflow-y: auto;
+}
+
 /* Container */
 .ss-vars {
   display: flex;
@@ -180,6 +196,15 @@
 }
 .ss-var-row__value.property-field:focus-visible {
   border-color: transparent;
+}
+
+/* The inline editor mirrors this cell's borderless, zero-padding display text;
+   keeping the same content box prevents both wrapping and the text's x-position
+   from changing while a variable is being edited. */
+.ss-var-row .ss-value-pop--inline .ss-value-pop__sizer,
+.ss-var-row .ss-value-pop--inline .ss-value-pop__input,
+.ss-var-row .ss-value-pop--inline .ss-value-pop__ghost {
+  padding: 0;
 }
 
 .ss-var-row__value--ro {

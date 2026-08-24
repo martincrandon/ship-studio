@@ -64,6 +64,7 @@ import {
 } from '../../lib/edit';
 import { VisualEditorPanel } from '../edit/VisualEditorPanel';
 import { ElementTreePanel } from '../edit/ElementTreePanel';
+import { VariablesPanel } from '../edit/VariablesPanel';
 import { useElementTree } from '../../hooks/useElementTree';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
 import {
@@ -191,6 +192,10 @@ interface PreviewProps {
   onCloseElementTree: () => void;
   /** Reports whether the current preview is mounted and able to show the element tree. */
   onElementTreeAvailabilityChange?: (available: boolean) => void;
+  /** Whether the standalone project Variables panel is open. */
+  variablesPanelVisible?: boolean;
+  /** Closes the standalone project Variables panel. */
+  onCloseVariablesPanel?: () => void;
 }
 
 /**
@@ -279,6 +284,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onToggleElementTreePin,
     onCloseElementTree,
     onElementTreeAvailabilityChange,
+    variablesPanelVisible = false,
+    onCloseVariablesPanel = () => undefined,
   },
   ref
 ) {
@@ -569,16 +576,14 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     signature: cssEditor.selection?.signature ?? null,
     onToast,
   });
-  // The CSS panel's active view (Style / Settings / Variables / Animate), lifted so
-  // the Cmd+K palette can open the editor straight to a given view.
-  const [cssScope, setCssScope] = useState<'style' | 'settings' | 'variables' | 'animations'>(
-    'style'
-  );
-  // Project-global scopes of the CSS panel: design tokens + animations.
+  // The CSS panel's active view (Style / Settings / Animate), lifted so the Cmd+K
+  // palette can open the editor straight to a given view.
+  const [cssScope, setCssScope] = useState<'style' | 'settings' | 'animations'>('style');
+  // Project-global CSS variables are available from their own workspace panel.
   const cssVariables = useCssVariables({
     iframeRef,
     projectPath,
-    enabled: editor.editMode || cssEditor.editMode,
+    enabled: editor.editMode || cssEditor.editMode || variablesPanelVisible,
     onToast,
   });
   const cssAnimations = useCssAnimations({
@@ -626,7 +631,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   const cssEditorOn = cssEditor.editMode;
   const cssToggleEditMode = cssEditor.toggleEditMode;
   const openCssEditor = useCallback(
-    (scope: 'style' | 'settings' | 'variables' | 'animations') => {
+    (scope: 'style' | 'settings' | 'animations') => {
       try {
         setCssScope(scope);
         if (!cssEditorOn) cssToggleEditMode();
@@ -658,14 +663,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   logger.error('[Preview] toggle CSS editor failed', { error: detail });
                 }
               },
-            },
-            {
-              id: 'css.variables',
-              title: 'CSS variables (design tokens)',
-              category: 'action' as const,
-              when: 'project' as const,
-              keywords: ['css', 'variable', 'custom property', 'token', 'theme', '--'],
-              run: () => openCssEditor('variables'),
             },
             {
               id: 'css.animations',
@@ -1125,68 +1122,70 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     >
       <div className="preview-toolbar">
         <div className="preview-toolbar-actions">
-          {editorMode ? (
-            <ToggleButton
-              type="button"
-              className="preview-edit-control"
-              variant={activeEditMode ? 'secondary' : 'default'}
-              onClick={toggleActiveEditor}
-              title="Toggle visual editor"
-              pressed={activeEditMode}
-              aria-label="Edit"
-            >
-              <EditIcon size={13} />
-              <span
-                className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
-                aria-hidden
+          <div className="preview-toolbar-control-group">
+            {editorMode ? (
+              <ToggleButton
+                type="button"
+                className="preview-edit-control"
+                variant={activeEditMode ? 'secondary' : 'default'}
+                onClick={toggleActiveEditor}
+                title="Toggle visual editor"
+                pressed={activeEditMode}
+                aria-label="Edit"
+              >
+                <EditIcon size={13} />
+                <span
+                  className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
+                  aria-hidden
+                />
+              </ToggleButton>
+            ) : (
+              // Preview-capable but not editable: show the toggle grayed out with a
+              // shared tooltip explaining why visual editing is unavailable.
+              <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
+                <span className="preview-edit-toggle-wrap preview-edit-control">
+                  <Button
+                    type="button"
+                    className="preview-edit-toggle--disabled"
+                    aria-disabled="true"
+                    tabIndex={-1}
+                    aria-label="Edit"
+                  >
+                    <EditIcon size={13} />
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+
+            {onToggleLogs && (
+              <ToggleButton
+                type="button"
+                className="preview-inspect-control"
+                variant={showLogs ? 'secondary' : 'default'}
+                pressed={showLogs}
+                onClick={onToggleLogs}
+                title={showLogs ? 'Hide inspector' : 'Show inspector'}
+                aria-label={showLogs ? 'Hide inspector' : 'Show inspector'}
+                leftIcon={<TerminalIcon size={14} />}
+              >
+                <span
+                  className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`}
+                  aria-hidden
+                />
+              </ToggleButton>
+            )}
+
+            {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
+
+            {conn.serverReady && conn.externalUrl && (
+              <BrowserDropdown
+                url={conn.externalUrl}
+                className="preview-browser-control"
+                buttonClassName="preview-browser-control"
+                iconOnly
               />
-            </ToggleButton>
-          ) : (
-            // Preview-capable but not editable: show the toggle grayed out with a
-            // shared tooltip explaining why visual editing is unavailable.
-            <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
-              <span className="preview-edit-toggle-wrap preview-edit-control">
-                <Button
-                  type="button"
-                  className="preview-edit-toggle--disabled"
-                  aria-disabled="true"
-                  tabIndex={-1}
-                  aria-label="Edit"
-                >
-                  <EditIcon size={13} />
-                </Button>
-              </span>
-            </Tooltip>
-          )}
-
-          {onToggleLogs && (
-            <ToggleButton
-              type="button"
-              className="preview-inspect-control"
-              variant={showLogs ? 'secondary' : 'default'}
-              pressed={showLogs}
-              onClick={onToggleLogs}
-              title={showLogs ? 'Hide inspector' : 'Show inspector'}
-              aria-label={showLogs ? 'Hide inspector' : 'Show inspector'}
-              leftIcon={<TerminalIcon size={14} />}
-            >
-              <span
-                className={`preview-logs-toggle-switch ${showLogs ? 'is-on' : ''}`}
-                aria-hidden
-              />
-            </ToggleButton>
-          )}
-
-          {previewPlugins && <div className="preview-toolbar-plugins">{previewPlugins}</div>}
-
-          {conn.serverReady && conn.externalUrl && (
-            <BrowserDropdown
-              url={conn.externalUrl}
-              className="preview-browser-control"
-              buttonClassName="preview-browser-control"
-              iconOnly
-            />
-          )}
+            )}
+          </div>
         </div>
 
         {/* Locale Switcher — only for projects with 2+ configured languages */}
@@ -1729,7 +1728,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   animations={cssEditor.animationSuggestions}
                   justCreatedKey={cssEditor.justCreatedKey}
                   settings={elementSettings}
-                  variablesState={cssVariables}
                   animationsState={cssAnimations}
                   onClose={cssEditor.toggleEditMode}
                   pinned={editorPinned}
@@ -1752,6 +1750,23 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             </div>
           );
         })()}
+      {variablesPanelVisible && (
+        <DockablePanel
+          docked={false}
+          ariaLabel="Variables panel"
+          positionKey="variablesPanelFloatingPosition"
+          sizeKey="variablesPanelFloatingSize"
+          floatingSize={{ width: 360, height: 680 }}
+          minFloatingSize={{ width: 280, height: 320 }}
+          initialPosition={() => ({
+            left: Math.max(24, window.innerWidth - 384),
+            top: 96,
+          })}
+          surfaceClassName="dockable-panel__surface--preview"
+        >
+          <VariablesPanel variablesState={cssVariables} onClose={onCloseVariablesPanel} />
+        </DockablePanel>
+      )}
     </div>
   );
 });

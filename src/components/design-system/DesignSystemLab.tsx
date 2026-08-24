@@ -10,7 +10,6 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { PixelLoader } from '../primitives/PixelLoader';
 import { PropertyField, type PropertyFieldVariant } from '../primitives/PropertyField';
-import { SegmentedControl } from '../primitives/SegmentedControl';
 import { Spinner } from '../primitives/Spinner';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { TextButton } from '../primitives/TextButton';
@@ -116,33 +115,54 @@ export function DesignSystemLab() {
       <div className="ss-design-system-lab__controls" aria-label="Lab test dimensions">
         <div className="ss-design-system-lab__control">
           <span className="ss-design-system-lab__label">Surface theme</span>
-          <SegmentedControl
+          <Tabs
             value={theme}
-            options={THEME_OPTIONS}
-            onValueChange={setTheme}
-            aria-label="Surface theme"
+            mode="navigation"
+            onValueChange={(next) => setTheme(next as LabTheme)}
             size="compact"
-          />
+          >
+            <TabsList aria-label="Surface theme">
+              {THEME_OPTIONS.map((option) => (
+                <TabsTab key={option.value} value={option.value}>
+                  {option.label}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
         <div className="ss-design-system-lab__control">
           <span className="ss-design-system-lab__label">Density</span>
-          <SegmentedControl
+          <Tabs
             value={density}
-            options={DENSITY_OPTIONS}
-            onValueChange={setDensity}
-            aria-label="Density"
+            mode="navigation"
+            onValueChange={(next) => setDensity(next as LabDensity)}
             size="compact"
-          />
+          >
+            <TabsList aria-label="Density">
+              {DENSITY_OPTIONS.map((option) => (
+                <TabsTab key={option.value} value={option.value}>
+                  {option.label}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
         <div className="ss-design-system-lab__control">
           <span className="ss-design-system-lab__label">Content</span>
-          <SegmentedControl
+          <Tabs
             value={content}
-            options={CONTENT_OPTIONS}
-            onValueChange={setContent}
-            aria-label="Content length and language"
+            mode="navigation"
+            onValueChange={(next) => setContent(next as LabContent)}
             size="compact"
-          />
+          >
+            <TabsList aria-label="Content length and language">
+              {CONTENT_OPTIONS.map((option) => (
+                <TabsTab key={option.value} value={option.value}>
+                  {option.label}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
       </div>
 
@@ -299,7 +319,7 @@ export function DesignSystemLab() {
             </TabsPanel>
             <TabsPanel value="guidance">
               <p className="ss-design-system-lab__panel-copy">
-                Use SegmentedControl for in-place choices and Tabs for navigation.
+                Tabs can drive compact choices as well as panel navigation.
               </p>
             </TabsPanel>
           </Tabs>

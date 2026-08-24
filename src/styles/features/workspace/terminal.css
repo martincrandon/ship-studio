@@ -636,7 +636,7 @@
   justify-content: flex-end;
   /* Match the footer's horizontal gutter so the card aligns with the Undo /
      Redo controls on the left and Agent Settings on the right. */
-  padding: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-sm);
   pointer-events: none;
 }
 

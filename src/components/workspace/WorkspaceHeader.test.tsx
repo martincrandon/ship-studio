@@ -23,7 +23,14 @@ function headerProps(): WorkspaceHeaderProps {
     onToggleElementTree: vi.fn(),
     agentPanelVisible: false,
     onToggleAgentPanel: vi.fn(),
-    integrations: {} as WorkspaceHeaderProps['integrations'],
+    variablesPanelVisible: false,
+    variablesPanelAvailable: true,
+    onToggleVariablesPanel: vi.fn(),
+    integrations: {
+      github: { cliStatus: { installed: false, authenticated: false }, username: null },
+      projectGithub: null,
+      claude: { cliStatus: { installed: false, version: null } },
+    },
     onGitHubStatusChange: vi.fn(),
     onGitHubConnect: vi.fn(),
     focusActiveTerminal: vi.fn(),
@@ -67,6 +74,11 @@ function headerProps(): WorkspaceHeaderProps {
 function TitlebarHarness() {
   const { titlebar } = WorkspaceHeader(headerProps());
   return titlebar;
+}
+
+function ToolbarHarness({ props }: { props: WorkspaceHeaderProps }) {
+  const { toolbar } = WorkspaceHeader(props);
+  return toolbar;
 }
 
 describe('WorkspaceHeader title bar', () => {
@@ -141,5 +153,21 @@ describe('WorkspaceHeader title bar', () => {
 
     fireEvent.mouseLeave(container!);
     expect(container).not.toHaveStyle({ width: '420px' });
+  });
+
+  it('places Variables between Agent and Assets and toggles it from the toolbar', () => {
+    const props = headerProps();
+    render(<ToolbarHarness props={props} />);
+
+    const agent = screen.getByRole('button', { name: 'Agent' });
+    const variables = screen.getByRole('button', { name: 'Variables' });
+    const assets = screen.getByRole('button', { name: 'Assets' });
+    const buttons = screen.getAllByRole('button');
+
+    expect(buttons.indexOf(agent)).toBeLessThan(buttons.indexOf(variables));
+    expect(buttons.indexOf(variables)).toBeLessThan(buttons.indexOf(assets));
+
+    fireEvent.click(variables);
+    expect(props.onToggleVariablesPanel).toHaveBeenCalledTimes(1);
   });
 });

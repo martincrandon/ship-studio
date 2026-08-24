@@ -14,6 +14,12 @@ const TOOLTIP_ID = 'ss-tooltip';
 const TOOLTIP_OFFSET = 8;
 const TOOLTIP_MARGIN = 8;
 const TOOLTIP_DEFAULT_DELAY_MS = 1000;
+/** Window after hiding one tooltip during which the next anchor shows instantly. */
+const TOOLTIP_CHAIN_MS = 250;
+/** Matches --duration-standard (the exit transition) plus a small buffer. */
+const TOOLTIP_EXIT_MS = 200;
+
+type TooltipPlacement = 'above' | 'below';
 
 interface TooltipProps {
   /** Text shown when the trigger is hovered or focused. */
@@ -111,10 +117,14 @@ function samePosition(a: TooltipPosition | null, b: TooltipPosition) {
 export function TooltipProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TooltipState | null>(null);
   const [position, setPosition] = useState<TooltipPosition | null>(null);
+  const [placement, setPlacement] = useState<TooltipPlacement>('below');
+  const [shown, setShown] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<Element | null>(null);
   const pendingAnchorRef = useRef<Element | null>(null);
   const showTimerRef = useRef<number | null>(null);
+  const exitTimerRef = useRef<number | null>(null);
+  const lastHiddenAtRef = useRef(0);
 
   useLayoutEffect(() => {
     promoteTitleAttributes(document.body);
@@ -151,10 +161,11 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
     const popoverRect = popover.getBoundingClientRect();
     const belowTop = anchorRect.bottom + TOOLTIP_OFFSET;
     const aboveTop = anchorRect.top - TOOLTIP_OFFSET - popoverRect.height;
-    const top =
-      belowTop + popoverRect.height <= window.innerHeight || aboveTop < TOOLTIP_MARGIN
-        ? belowTop
-        : aboveTop;
+    const useBelow =
+      belowTop + popoverRect.height <= window.innerHeight || aboveTop < TOOLTIP_MARGIN;
+    const top = useBelow ? belowTop : aboveTop;
+    const nextPlacement: TooltipPlacement = useBelow ? 'below' : 'above';
+    setPlacement((current) => (current === nextPlacement ? current : nextPlacement));
     const left = Math.max(
       TOOLTIP_MARGIN,
       Math.min(
@@ -177,19 +188,30 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (anchor: Element | null) => {
       clearShowTimer();
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
       if (!anchor) return;
       const content = readTooltipContent(anchor);
       if (!content) return;
 
       pendingAnchorRef.current = anchor;
-      showTimerRef.current = window.setTimeout(() => {
-        if (pendingAnchorRef.current !== anchor) return;
-        pendingAnchorRef.current = null;
-        showTimerRef.current = null;
-        anchorRef.current = anchor;
-        setPosition(null);
-        setState({ content });
-      }, readTooltipDelay(anchor));
+      // Moving straight from one tooltip anchor to another skips the delay so
+      // chained hovers feel instant instead of re-waiting the full delay.
+      const chained = Date.now() - lastHiddenAtRef.current < TOOLTIP_CHAIN_MS;
+      showTimerRef.current = window.setTimeout(
+        () => {
+          if (pendingAnchorRef.current !== anchor) return;
+          pendingAnchorRef.current = null;
+          showTimerRef.current = null;
+          anchorRef.current = anchor;
+          setPosition(null);
+          setShown(false);
+          setState({ content });
+        },
+        chained ? 0 : readTooltipDelay(anchor)
+      );
     },
     [clearShowTimer]
   );
@@ -197,8 +219,14 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
   const hide = useCallback(() => {
     clearShowTimer();
     anchorRef.current = null;
-    setState(null);
-    setPosition(null);
+    lastHiddenAtRef.current = Date.now();
+    // Keep the surface mounted briefly so it can animate out toward its anchor.
+    setShown(false);
+    exitTimerRef.current = window.setTimeout(() => {
+      exitTimerRef.current = null;
+      setState(null);
+      setPosition(null);
+    }, TOOLTIP_EXIT_MS);
   }, [clearShowTimer]);
 
   useEffect(() => {
@@ -233,6 +261,10 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
     document.addEventListener('focusout', onFocusOut, true);
     return () => {
       clearShowTimer();
+      if (exitTimerRef.current !== null) {
+        window.clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
       document.removeEventListener('focusin', onFocusIn, true);
@@ -242,8 +274,18 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if (!state) return;
-    updatePosition();
-    const frame = requestAnimationFrame(updatePosition);
+    const popover = popoverRef.current;
+    if (!popover) return;
+    const frame = requestAnimationFrame(() => {
+      updatePosition();
+      // Snap to the hidden styles with transitions disabled so a swapped-in
+      // tooltip (quick anchor switching) starts its enter animation from the
+      // fully hidden state instead of resuming a fade that had just begun.
+      popover.style.transition = 'none';
+      void popover.offsetHeight;
+      popover.style.transition = '';
+      setShown(true);
+    });
     return () => cancelAnimationFrame(frame);
   }, [state, updatePosition]);
 
@@ -268,6 +310,8 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
             id={TOOLTIP_ID}
             className="ss-tooltip"
             role="tooltip"
+            data-placement={placement}
+            data-shown={shown || undefined}
             style={position ? { top: position.top, left: position.left } : undefined}
           >
             {state.content}

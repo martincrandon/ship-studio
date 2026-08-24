@@ -1,12 +1,15 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type InputHTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
@@ -73,6 +76,153 @@ const NUMERIC_VALUE = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*([a-z%]*)$/i;
 const CSS_VARIABLE_VALUE = /^var\(\s*(--[\w-]+)\s*\)$/i;
 const VARIABLE_OPTION: ValueFieldOption = { value: 'var', label: 'VAR', kind: 'variable' };
 const EMPTY_VARIABLES: ValueFieldVariable[] = [];
+// Hover dwell before a truncated variable value starts its carousel loop,
+// and the constant scroll speed used to derive each loop's duration. Kept in
+// JS because the delay drives a timer and the duration is width-proportional.
+const VARIABLE_SCROLL_HOLD_MS = 2000;
+const VARIABLE_SCROLL_SPEED_PX_PER_SECOND = 32;
+const VARIABLE_OVERFLOW_EPSILON_PX = 1;
+
+/** Returns the resolved pixel length of a custom property from computed style. */
+function readPixelCustomProperty(element: Element, property: string): number {
+  const value = Number.parseFloat(window.getComputedStyle(element).getPropertyValue(property));
+  return Number.isFinite(value) ? value : 0;
+}
+
+interface VariableRowProps {
+  variable: ValueFieldVariable;
+  selected: boolean;
+  active: boolean;
+  optionId: string;
+  onSelect: () => void;
+  onActivate: () => void;
+}
+
+/**
+ * One variable picker row. The name is always rendered in full; the supporting
+ * value truncates with an ellipsis and, after the cursor rests on the row,
+ * scrolls its hidden tail into view as a seamless carousel until hover ends.
+ */
+function VariableRow({
+  variable,
+  selected,
+  active,
+  optionId,
+  onSelect,
+  onActivate,
+}: VariableRowProps) {
+  const viewportRef = useRef<HTMLSpanElement>(null);
+  const copyRef = useRef<HTMLSpanElement>(null);
+  const holdTimerRef = useRef<number | null>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const [scrolling, setScrolling] = useState(false);
+  const [loopDuration, setLoopDuration] = useState('');
+  const [marqueeDistance, setMarqueeDistance] = useState('');
+  const stopScrolling = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    setScrolling(false);
+    setLoopDuration('');
+    setMarqueeDistance('');
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current !== null) window.clearTimeout(holdTimerRef.current);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const copy = copyRef.current;
+    if (!viewport || !copy) return;
+    const measure = () => {
+      setOverflowing(copy.scrollWidth > viewport.clientWidth + VARIABLE_OVERFLOW_EPSILON_PX);
+    };
+    measure();
+    // jsdom test environments ship no ResizeObserver; the one-shot measure
+    // above already covers the fixed-width picker menu.
+    if (typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [variable.value]);
+
+  const startHold = useCallback(() => {
+    if (!overflowing || scrolling) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (holdTimerRef.current !== null) window.clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null;
+      const copy = copyRef.current;
+      if (!copy || !overflowing) return;
+      // The loop shifts by exactly one copy plus the gap so the duplicate
+      // copy lands where the first one started — seamless wrap-around.
+      const distance =
+        copy.scrollWidth + readPixelCustomProperty(copy, '--value-field-variable-scroll-gap');
+      setLoopDuration(`${Math.max(distance, 1) / VARIABLE_SCROLL_SPEED_PX_PER_SECOND}s`);
+      setMarqueeDistance(`${distance}px`);
+      setScrolling(true);
+    }, VARIABLE_SCROLL_HOLD_MS);
+  }, [overflowing, scrolling]);
+
+  return (
+    <button
+      id={optionId}
+      type="button"
+      role="option"
+      aria-selected={selected}
+      className={[
+        'value-field__option',
+        'value-field__variable-option',
+        selected ? 'value-field__option--selected' : null,
+        active ? 'value-field__option--active' : null,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseEnter={() => {
+        onActivate();
+        startHold();
+      }}
+      onMouseLeave={stopScrolling}
+      onClick={onSelect}
+    >
+      <span className="value-field__variable-name">{variable.name}</span>
+      {variable.value && (
+        <span
+          ref={viewportRef}
+          className="value-field__variable-value"
+          data-overflow={overflowing ? 'true' : undefined}
+          data-scrolling={scrolling ? 'true' : undefined}
+        >
+          <span
+            className="value-field__variable-track"
+            style={
+              scrolling
+                ? ({
+                    '--marquee-loop-duration': loopDuration,
+                    '--marquee-loop-distance': marqueeDistance,
+                  } as CSSProperties)
+                : undefined
+            }
+          >
+            <span ref={copyRef} className="value-field__variable-copy">
+              {variable.value}
+            </span>
+            {scrolling && (
+              <span className="value-field__variable-copy" aria-hidden="true">
+                {variable.value}
+              </span>
+            )}
+          </span>
+        </span>
+      )}
+    </button>
+  );
+}
 
 /** Returns the raw custom-property name from a simple `var(--name)` value. */
 export function parseValueFieldVariable(value: string): string | null {
@@ -108,6 +258,8 @@ export interface ValueFieldProps extends Omit<
   format?: string;
   /** Reformat the current color when a color representation is selected. */
   onFormatChange?: (format: string) => void;
+  /** Optional control rendered flush with the field's leading edge. */
+  leading?: ReactNode;
   /** Return false to reject the value and restore the last controlled value. */
   onCommit: (value: string) => boolean | void;
 }
@@ -124,6 +276,7 @@ export function ValueField({
   variables = EMPTY_VARIABLES,
   format,
   onFormatChange,
+  leading,
   onCommit,
   className,
   onKeyDown,
@@ -421,6 +574,7 @@ export function ValueField({
         .filter(Boolean)
         .join(' ')}
     >
+      {leading !== undefined && <span className="value-field__leading">{leading}</span>}
       <input
         {...inputProps}
         ref={inputRef}
@@ -642,38 +796,17 @@ export function ValueField({
             }}
           >
             {filteredVariables.length > 0 ? (
-              filteredVariables.map((variable, index) => {
-                const selected = variable.name === text;
-                const active = index === activeVariableIndex;
-                return (
-                  <button
-                    key={variable.name}
-                    id={`${variableListId}-option-${index}`}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    className={[
-                      'value-field__option',
-                      'value-field__variable-option',
-                      selected ? 'value-field__option--selected' : null,
-                      active ? 'value-field__option--active' : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => setActiveVariableIndex(index)}
-                    onClick={() => selectVariable(variable)}
-                  >
-                    <span className="value-field__check" aria-hidden>
-                      {selected && <CheckIcon size={14} />}
-                    </span>
-                    <span className="value-field__variable-name">{variable.name}</span>
-                    {variable.value && (
-                      <span className="value-field__variable-value">{variable.value}</span>
-                    )}
-                  </button>
-                );
-              })
+              filteredVariables.map((variable, index) => (
+                <VariableRow
+                  key={`${variable.name}:${variable.value ?? ''}`}
+                  variable={variable}
+                  selected={variable.name === text}
+                  active={index === activeVariableIndex}
+                  optionId={`${variableListId}-option-${index}`}
+                  onSelect={() => selectVariable(variable)}
+                  onActivate={() => setActiveVariableIndex(index)}
+                />
+              ))
             ) : (
               <span className="value-field__variable-empty">No matching variables</span>
             )}

@@ -35,6 +35,7 @@ import { WorkspacePreviewPane } from './WorkspacePreviewPane';
 import { WorkspaceTerminalPane } from './WorkspaceTerminalPane';
 import { WorkspaceHeader, HOSTING_PLUGIN_IDS } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
+import { VariablesIcon } from '@/components/icons';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
 import { useCommands } from '../../commands/useCommands';
@@ -270,6 +271,9 @@ interface LifecycleProps {
   setShowAutoAcceptWarning: (show: boolean) => void;
   handleBackToProjects: () => void;
   handleRestartDevServer: () => Promise<void>;
+  /** Start the dev server on demand — fired when the Preview tab is selected
+   *  while nothing is running, so picking Preview always yields a preview. */
+  handleStartDevServer: () => Promise<void>;
   handleGitHubStatusChange: () => void;
   handlePreviewReady: () => void;
   sendToClaude: (text: string) => void;
@@ -588,6 +592,7 @@ export const WorkspaceView = memo(function WorkspaceView({
     showAutoAcceptWarning,
     setShowAutoAcceptWarning,
     handleRestartDevServer,
+    handleStartDevServer,
     handleGitHubStatusChange,
     handlePreviewReady,
     sendToClaude,
@@ -725,6 +730,21 @@ export const WorkspaceView = memo(function WorkspaceView({
   const elementTreeAvailable =
     workspaceTab === 'preview' && !isPreviewHidden && elementTreePreviewAvailable;
   const elementTreePanelVisible = elementTreeAvailable && elementTreeVisible;
+  const [variablesPanelVisible, setVariablesPanelVisible] = useState(false);
+  const variablesPanelOpen =
+    isWebProject && workspaceTab === 'preview' && !isPreviewHidden && variablesPanelVisible;
+  useEffect(() => {
+    setVariablesPanelVisible(false);
+  }, [currentProject.path]);
+  const toggleVariablesPanel = useCallback(() => {
+    const shouldOpen = !variablesPanelOpen;
+    setVariablesPanelVisible(shouldOpen);
+    if (shouldOpen) {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('preview');
+      void handleStartDevServer();
+    }
+  }, [handleStartDevServer, setIsPreviewHidden, setWorkspaceTab, variablesPanelOpen]);
   const toggleAgentPanelPinned = useCallback(() => {
     setAgentPanelPinned((pinned) => {
       localStorage.setItem('agentPanelPinned', pinned ? '0' : '1');
@@ -770,6 +790,15 @@ export const WorkspaceView = memo(function WorkspaceView({
         keywords: ['elements', 'tree', 'navigator', 'pin', 'float', 'dock'],
         run: toggleElementTreePinned,
       },
+      {
+        id: 'css.variables',
+        title: variablesPanelOpen ? 'Hide Variables panel' : 'Show Variables panel',
+        icon: <VariablesIcon size={14} />,
+        category: 'action',
+        when: ({ kind }) => kind === 'project' && isWebProject,
+        keywords: ['css', 'variable', 'custom property', 'token', 'theme', '--'],
+        run: toggleVariablesPanel,
+      },
     ],
     [
       isAgentPanelHidden,
@@ -778,6 +807,9 @@ export const WorkspaceView = memo(function WorkspaceView({
       toggleAgentPanelPinned,
       elementTreePinned,
       toggleElementTreePinned,
+      isWebProject,
+      variablesPanelOpen,
+      toggleVariablesPanel,
     ]
   );
 
@@ -980,6 +1012,7 @@ export const WorkspaceView = memo(function WorkspaceView({
       setIsPreviewHidden={setIsPreviewHidden}
       setIsAgentPanelHidden={setIsAgentPanelHidden}
       setWorkspaceTab={setWorkspaceTab}
+      onSelectPreview={() => void handleStartDevServer()}
     />
   );
 
@@ -996,6 +1029,9 @@ export const WorkspaceView = memo(function WorkspaceView({
     onToggleElementTree: toggleElementTree,
     agentPanelVisible: !isAgentPanelHidden,
     onToggleAgentPanel: toggleAgentPanel,
+    variablesPanelVisible: variablesPanelOpen,
+    variablesPanelAvailable: isWebProject,
+    onToggleVariablesPanel: toggleVariablesPanel,
     modes: modesNode,
     headerExtras: (
       <PluginsDropdown
@@ -1273,6 +1309,8 @@ export const WorkspaceView = memo(function WorkspaceView({
                       toggleElementTreePinned={toggleElementTreePinned}
                       closeElementTree={closeElementTree}
                       setElementTreePreviewAvailable={setElementTreePreviewAvailable}
+                      variablesPanelVisible={variablesPanelVisible}
+                      closeVariablesPanel={() => setVariablesPanelVisible(false)}
                       pluginProject={pluginProject}
                       pluginActions={pluginActions}
                       pluginTheme={pluginTheme}

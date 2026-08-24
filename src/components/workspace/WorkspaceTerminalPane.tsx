@@ -347,6 +347,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
         >
           <div className="terminal-pane-footer-left">
             <IconButton
+              variant="ghost"
               icon={<UndoIcon size={12} />}
               onClick={() => void undoSnapshot()}
               disabled={!canUndo}
@@ -354,6 +355,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
               aria-label="Undo"
             />
             <IconButton
+              variant="ghost"
               icon={<RedoIcon size={12} />}
               onClick={() => void redoSnapshot()}
               disabled={!canRedo}
@@ -368,6 +370,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
             {isWebProject && (
               <>
                 <Button
+                  variant="ghost"
                   onClick={() => void handleCaptureScreenshot()}
                   disabled={isCapturing || isCropMode}
                   title={`Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`}
@@ -382,6 +385,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                   <span className="capture-shortcut">{kbd('mod', 'shift', 'S')}</span>
                 </Button>
                 <ToggleButton
+                  variant="ghost"
                   pressed={isCropMode}
                   onClick={() => setIsCropMode(!isCropMode)}
                   disabled={isCapturing || isCropCapturing}
@@ -403,6 +407,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
           <div className="terminal-pane-footer-right">
             {canSplit && (
               <ToggleButton
+                variant="ghost"
                 type="button"
                 pressed={isSplitActive}
                 onClick={() => (isSplitActive ? disableSplitView() : enableSplitView())}

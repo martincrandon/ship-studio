@@ -10,7 +10,16 @@
  * menu styling as the rest of the editor. Lengths/draggers etc. can slot in too.
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { DockablePanel } from '../primitives/DockablePanel';
@@ -52,7 +61,7 @@ export function EditPopover({
 }: Props) {
   const [text, setText] = useState(initial);
   const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const optionId = (i: number) => `${listId}-opt-${i}`;
@@ -161,6 +170,56 @@ export function EditPopover({
     return () => document.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
+  const setInputRef = (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = element;
+  };
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setText(event.target.value);
+    setActive(0);
+  };
+
+  const handleBlur = (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (!inline || popRef.current?.contains(event.relatedTarget)) return;
+    onCommit(textRef.current);
+    onClose();
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (event.key === 'Tab' && ghostSuffix) {
+      event.preventDefault();
+      setText(text + ghostSuffix);
+      setActive(0);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (ghostSuffix) {
+        onCommit(text + ghostSuffix);
+        onClose();
+        return;
+      }
+      const pick = showMenu ? (matches[active] ?? text) : text;
+      onCommit(pick);
+      onClose();
+    } else if (event.key === 'ArrowDown' && showMenu) {
+      event.preventDefault();
+      setActive((a) => Math.min(a + 1, matches.length - 1));
+    } else if (event.key === 'ArrowUp' && showMenu) {
+      event.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      // Menu closed: step a numeric value (same conventions as drag-to-scrub)
+      // and live-apply. Non-numeric values keep the default caret behavior.
+      const next = stepNumericValue(text, event.key === 'ArrowUp' ? 1 : -1, event);
+      if (next === null) return;
+      event.preventDefault();
+      setText(next);
+      setActive(0);
+      onCommit(next); // live-apply, like scrubbing
+    }
+  };
+
   if (!pos) return null;
   const editor = isColor ? (
     <DockablePanel
@@ -205,69 +264,54 @@ export function EditPopover({
             />
           )}
           <span className="ss-value-pop__inputwrap">
+            {inline && (
+              <span className="ss-value-pop__sizer" aria-hidden="true">
+                <CssValueText value={`${text}${ghostSuffix}` || placeholder || ' '} />
+              </span>
+            )}
             {ghostSuffix && (
               <span className="ss-value-pop__ghost" aria-hidden="true">
                 <span className="ss-value-pop__ghost-typed">{text}</span>
                 <span className="ss-value-pop__ghost-hint">{ghostSuffix}</span>
               </span>
             )}
-            <input
-              ref={inputRef}
-              className="ss-value-pop__input"
-              value={text}
-              spellCheck={false}
-              autoComplete="off"
-              role="combobox"
-              aria-expanded={showMenu}
-              aria-controls={listId}
-              aria-activedescendant={showMenu ? optionId(active) : undefined}
-              aria-autocomplete="list"
-              placeholder={placeholder}
-              onChange={(e) => {
-                setText(e.target.value);
-                setActive(0);
-              }}
-              onBlur={(e) => {
-                if (!inline || popRef.current?.contains(e.relatedTarget)) return;
-                onCommit(textRef.current);
-                onClose();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Tab' && ghostSuffix) {
-                  e.preventDefault();
-                  setText(text + ghostSuffix);
-                  setActive(0);
-                  return;
-                }
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (ghostSuffix) {
-                    onCommit(text + ghostSuffix);
-                    onClose();
-                    return;
-                  }
-                  const pick = showMenu ? (matches[active] ?? text) : text;
-                  onCommit(pick);
-                  onClose();
-                } else if (e.key === 'ArrowDown' && showMenu) {
-                  e.preventDefault();
-                  setActive((a) => Math.min(a + 1, matches.length - 1));
-                } else if (e.key === 'ArrowUp' && showMenu) {
-                  e.preventDefault();
-                  setActive((a) => Math.max(a - 1, 0));
-                } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                  // Menu closed: step a numeric value (same conventions as
-                  // drag-to-scrub) and live-apply. Non-numeric values keep
-                  // the default caret behavior.
-                  const next = stepNumericValue(text, e.key === 'ArrowUp' ? 1 : -1, e);
-                  if (next === null) return;
-                  e.preventDefault();
-                  setText(next);
-                  setActive(0);
-                  onCommit(next); // live-apply, like scrubbing
-                }
-              }}
-            />
+            {inline ? (
+              <textarea
+                ref={setInputRef}
+                className="ss-value-pop__input"
+                value={text}
+                rows={1}
+                spellCheck={false}
+                autoComplete="off"
+                role="combobox"
+                aria-multiline="true"
+                aria-expanded={showMenu}
+                aria-controls={listId}
+                aria-activedescendant={showMenu ? optionId(active) : undefined}
+                aria-autocomplete="list"
+                placeholder={placeholder}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+              />
+            ) : (
+              <input
+                ref={setInputRef}
+                className="ss-value-pop__input"
+                value={text}
+                spellCheck={false}
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={showMenu}
+                aria-controls={listId}
+                aria-activedescendant={showMenu ? optionId(active) : undefined}
+                aria-autocomplete="list"
+                placeholder={placeholder}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                onKeyDown={handleKeyDown}
+              />
+            )}
           </span>
         </div>
         {showMenu && (

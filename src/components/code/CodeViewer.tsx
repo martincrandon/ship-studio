@@ -112,6 +112,10 @@ export function CodeViewer({
   const [question, setQuestion] = useState('');
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  // Horizontal anchor captured when the popover first appears — the popover is
+  // pinned to the left edge of the highlight and must not slide as the
+  // selection grows. Cleared whenever the popover closes.
+  const popoverAnchorXRef = useRef<number | null>(null);
   // ⌘S bypasses the disabled Save button, so guard against overlapping saves
   // whose disk writes could finish out of order and leave a stale draft.
   const saveInFlightRef = useRef(false);
@@ -299,20 +303,26 @@ export function CodeViewer({
 
   const hasIde = ideAvailability.vscode || ideAvailability.cursor;
 
-  // Popover position: anchored to the selection end, clamped to viewport
+  // Popover position: pinned horizontally to the left edge of the highlight
+  // (captured once per selection), while only `top` tracks the selection —
+  // smoothed by the CSS transition on .code-selection-popover.
   const popoverWidth = 320;
   const popoverHeight = 160;
   let popoverStyle: React.CSSProperties | undefined;
   if (selectionInfo) {
+    if (popoverAnchorXRef.current == null) {
+      popoverAnchorXRef.current = Math.max(
+        8,
+        Math.min(selectionInfo.mouseX, window.innerWidth - popoverWidth - 8)
+      );
+    }
     const top = Math.max(
       8,
       Math.min(selectionInfo.mouseY + 12, window.innerHeight - popoverHeight - 8)
     );
-    const left = Math.max(
-      8,
-      Math.min(selectionInfo.mouseX - popoverWidth / 2, window.innerWidth - popoverWidth - 8)
-    );
-    popoverStyle = { top, left };
+    popoverStyle = { top, left: popoverAnchorXRef.current };
+  } else {
+    popoverAnchorXRef.current = null;
   }
 
   const lineRefLabel = selectionInfo

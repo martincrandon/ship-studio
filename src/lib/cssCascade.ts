@@ -96,6 +96,8 @@ export interface CascadeRow {
   file?: string;
   line?: number;
   innerText?: string;
+  /** Candidate source files when the selector maps to more than one rule. */
+  sourceFiles?: string[];
   /** Why a rule is read-only, surfaced in the UI. */
   readonlyReason?: string;
   /** A not-yet-created rule for one of the element's own selectors — an empty editable
@@ -405,7 +407,11 @@ export function mergeCascade(
       return { ...base, readonlyReason: notFoundReason(m.selector, opts.cssModulesHint ?? false) };
     }
     if (loc.status === 'multiple') {
-      return { ...base, readonlyReason: 'this selector is defined in multiple files' };
+      return {
+        ...base,
+        sourceFiles: [...new Set(loc.files)],
+        readonlyReason: 'this selector is defined in multiple files',
+      };
     }
     return {
       ...base,
