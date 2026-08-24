@@ -1,7 +1,14 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { RefObject } from 'react';
-import { CloudflareIcon, CopyIcon, FolderOpenIcon, NestRuleIcon, SearchIcon } from './index';
+import {
+  CloudflareIcon,
+  CopyIcon,
+  FolderOpenIcon,
+  NestRuleIcon,
+  SearchIcon,
+  VariablesIcon,
+} from './index';
 import { getGalleryIcons } from './IconGallery';
 
 describe('shared icons', () => {
@@ -15,6 +22,14 @@ describe('shared icons', () => {
     expect(icon).toHaveAttribute('aria-hidden', 'true');
     expect(icon).toHaveAttribute('stroke-width', '1px');
     expect(icon?.innerHTML).toContain('currentColor');
+  });
+
+  it('registers the Variables icon from the imported design-system asset', () => {
+    const { container } = render(<VariablesIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/import/variables.svg'
+    );
   });
 
   it('keeps the legacy standard-size compatibility result for size 14', () => {

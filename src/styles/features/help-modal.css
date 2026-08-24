@@ -10,10 +10,65 @@
   padding: 0;
 }
 
+.help-modal > .tabs {
+  display: contents;
+}
+
+.help-tabs {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: calc(var(--spacing-lg) * 2 + var(--font-size-body-lg));
+  flex-shrink: 0;
+}
+
+.help-tab {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: var(--spacing-lg) 0;
+  font-size: var(--font-size-body-lg);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: color var(--transition);
+  outline: none;
+}
+
+/* The shared tab primitive defaults to a compact fixed height. Let these
+   help tabs grow with their larger vertical padding, matching the command
+   palette tabs. */
+.help-tabs .tabs__tab.button.help-tab {
+  height: auto;
+  min-height: 0;
+}
+
+.help-tab:hover,
+.help-tab:focus,
+.help-tab:focus-visible {
+  color: var(--text-secondary);
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}
+
+.help-tab.is-active {
+  color: var(--text-primary);
+}
+
 .help-modal-body {
-  padding: 16px 24px 24px;
+  min-height: 0;
+  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-xl);
   overflow-y: auto;
   flex: 1;
+  border-top: var(--stroke-1) solid var(--border-default);
   scrollbar-width: thin;
   scrollbar-color: var(--border-default) transparent;
 }
@@ -111,6 +166,61 @@
   font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
   margin: 0 2px;
+}
+
+.help-shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.help-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-card);
+}
+
+.help-shortcut-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--spacing-xs);
+}
+
+.help-shortcut-label {
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+  color: var(--text-primary);
+}
+
+.help-shortcut-description {
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+  color: var(--text-secondary);
+  text-wrap: pretty;
+}
+
+.help-shortcut-keys {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--spacing-xs);
+}
+
+.help-shortcut-key-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.help-shortcut-or {
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
 }
 
 .help-example-list {

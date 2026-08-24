@@ -4,6 +4,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { ValueField, parseValueFieldVariable, splitValueFieldValue } from './ValueField';
 
 describe('ValueField', () => {
+  it('renders a leading control inside the field before the editable value', () => {
+    render(
+      <ValueField
+        aria-label="Color value"
+        variant="color"
+        value="#e2f8fd"
+        leading={
+          <button type="button" aria-label="Color swatch">
+            swatch
+          </button>
+        }
+        onCommit={vi.fn()}
+      />
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Color value' });
+    const leading = screen.getByRole('button', { name: 'Color swatch' });
+
+    expect(leading.parentElement).toHaveClass('value-field__leading');
+    expect(input.previousElementSibling).toBe(leading.parentElement);
+  });
+
   it('keeps the format menu open when activated from the focused input', async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn(() => true);

@@ -71,6 +71,8 @@ export interface WorkspacePreviewPaneProps {
   toggleElementTreePinned: () => void;
   closeElementTree: () => void;
   setElementTreePreviewAvailable: (available: boolean) => void;
+  variablesPanelVisible: boolean;
+  closeVariablesPanel: () => void;
   pluginProject: PluginProjectData | null;
   pluginActions: PluginAppActions;
   pluginTheme: PluginThemeData;
@@ -140,6 +142,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     toggleElementTreePinned,
     closeElementTree,
     setElementTreePreviewAvailable,
+    variablesPanelVisible,
+    closeVariablesPanel,
     pluginProject,
     pluginActions,
     pluginTheme,
@@ -161,6 +165,7 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     createBranchRequest,
     ...worktreeProps
   } = branchTabs;
+  const previewSlotPlugins = getSlotPlugins('preview');
 
   return (
     <div className="preview-pane">
@@ -224,14 +229,18 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             onToggleElementTreePin={toggleElementTreePinned}
             onCloseElementTree={closeElementTree}
             onElementTreeAvailabilityChange={setElementTreePreviewAvailable}
+            variablesPanelVisible={variablesPanelVisible}
+            onCloseVariablesPanel={closeVariablesPanel}
             previewPlugins={
-              <PluginSlot
-                name="preview"
-                plugins={getSlotPlugins('preview')}
-                project={pluginProject}
-                actions={pluginActions}
-                theme={pluginTheme}
-              />
+              previewSlotPlugins.length > 0 ? (
+                <PluginSlot
+                  name="preview"
+                  plugins={previewSlotPlugins}
+                  project={pluginProject}
+                  actions={pluginActions}
+                  theme={pluginTheme}
+                />
+              ) : null
             }
           />
         </div>

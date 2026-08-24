@@ -89,6 +89,32 @@ describe('Tooltip', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Fast content');
   });
 
+  it('shows the next anchor instantly when moving straight between tooltips', () => {
+    render(
+      <TooltipProvider>
+        <button title="First tooltip">First</button>
+        <button title="Second tooltip">Second</button>
+      </TooltipProvider>
+    );
+
+    const first = screen.getByRole('button', { name: 'First' });
+    const second = screen.getByRole('button', { name: 'Second' });
+
+    fireEvent.pointerOver(first);
+    void act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('First tooltip');
+
+    fireEvent.pointerOut(first);
+    fireEvent.pointerOver(second);
+    void act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Second tooltip');
+  });
+
   it('suppresses the custom tooltip for the embedded preview iframe', () => {
     render(
       <TooltipProvider>

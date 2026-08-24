@@ -70,6 +70,7 @@ export function ToolbarDropdown({
       menuClassName="toolbar-dropdown-menu"
       trigger={(p) => (
         <MenuButton
+          variant="ghost"
           expanded={Boolean(p['aria-expanded'])}
           title="Agent settings"
           data-education-id="toolbar-more"

@@ -60,7 +60,11 @@
 }
 
 .ss-tree-panel > .tabs {
-  display: contents;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
 .ss-tree-panel__active-view {
@@ -114,6 +118,25 @@
   position: relative;
   padding: 0;
   overflow: hidden;
+}
+
+.ss-tree-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-top: var(--border-width-default) solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+
+.ss-tree-panel__tag-toggle {
+  color: var(--text-muted);
+}
+
+.ss-tree-panel__tag-toggle:hover:not(:disabled),
+.ss-tree-panel__tag-toggle[aria-pressed='true'] {
+  color: var(--text-primary);
 }
 
 /* ── HTML code tab ──────────────────────────────────────────────────
@@ -244,6 +267,16 @@
   flex-shrink: 0;
   color: var(--tag-text);
   font-family: var(--font-code);
+}
+
+.ss-tree-tag-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--size-icon-button);
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  color: var(--tag-text);
 }
 
 .ss-tree-class {

@@ -140,16 +140,13 @@
   order: 20;
   display: flex;
   align-items: center;
-  gap: var(--button-gap);
   margin-left: auto;
 }
 
-.preview-toolbar-actions > .preview-edit-control {
-  order: 20;
-}
-
-.preview-toolbar-actions > .preview-inspect-control {
-  order: 21;
+.preview-toolbar-control-group {
+  display: flex;
+  align-items: center;
+  gap: var(--button-group-spacing);
 }
 
 /* Preview toolbar toggles use the outlined active treatment: the panel remains
@@ -157,26 +154,25 @@
    engaged. The shared button primitive's pressed state is intentionally a
    filled surface for ordinary toggles, so keep this override local to these
    panel controls. */
-.preview-toolbar-actions > .preview-edit-control.button--secondary[aria-pressed='true'],
-.preview-toolbar-actions > .preview-inspect-control.button--secondary[aria-pressed='true'] {
+.preview-toolbar-control-group .preview-edit-control.button--secondary[aria-pressed='true'],
+.preview-toolbar-control-group .preview-inspect-control.button--secondary[aria-pressed='true'] {
   background: var(--surface-panel);
   color: var(--button-text-default);
   border-color: var(--button-border);
 }
 
 .preview-toolbar
-  .preview-toolbar-actions
-  > .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
+  .preview-toolbar-control-group
+  .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
 .preview-toolbar
-  .preview-toolbar-actions
-  > .preview-inspect-control.button--secondary[aria-pressed='true']:hover:not(:disabled) {
+  .preview-toolbar-control-group
+  .preview-inspect-control.button--secondary[aria-pressed='true']:hover:not(:disabled) {
   background: var(--surface-panel);
   color: var(--button-text-hover);
   border-color: var(--button-border-outline);
 }
 
-.preview-toolbar-actions > .preview-toolbar-plugins {
-  order: 22;
+.preview-toolbar-control-group > .preview-toolbar-plugins {
   display: flex;
   align-items: center;
   gap: var(--button-gap);
@@ -185,12 +181,8 @@
 /* PluginSlot returns null when no preview plugins are installed, but the
    toolbar wrapper remains mounted. Remove that empty flex item so it cannot
    create an extra gap between Inspect and Open in Browser. */
-.preview-toolbar-actions > .preview-toolbar-plugins:empty {
+.preview-toolbar-control-group > .preview-toolbar-plugins:empty {
   display: none;
-}
-
-.preview-toolbar-actions > .preview-browser-control {
-  order: 23;
 }
 
 /* Page Switcher */

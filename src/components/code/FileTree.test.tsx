@@ -20,6 +20,40 @@ const directory: FileTreeNode = {
 };
 
 describe('FileTree', () => {
+  it('shows the open folder icon for expanded directories', () => {
+    const { rerender } = render(
+      <FileTree
+        nodes={[directory]}
+        expandedPaths={new Set()}
+        selectedFilePath={null}
+        onToggleDirectory={vi.fn()}
+        onSelectFile={vi.fn()}
+      />
+    );
+
+    const directoryRow = screen.getByRole('treeitem', { name: 'src' });
+    expect(directoryRow.querySelector('[data-icon-name="FolderIcon"]')).toBeInTheDocument();
+    expect(directoryRow.querySelector('[data-icon-name="FolderOpenIcon"]')).not.toBeInTheDocument();
+
+    rerender(
+      <FileTree
+        nodes={[directory]}
+        expandedPaths={new Set(['src'])}
+        selectedFilePath={null}
+        onToggleDirectory={vi.fn()}
+        onSelectFile={vi.fn()}
+      />
+    );
+
+    const expandedDirectoryRow = screen.getByRole('treeitem', { name: 'src' });
+    expect(
+      expandedDirectoryRow.querySelector('[data-icon-name="FolderOpenIcon"]')
+    ).toBeInTheDocument();
+    expect(
+      expandedDirectoryRow.querySelector('[data-icon-name="FolderIcon"]')
+    ).not.toBeInTheDocument();
+  });
+
   it('toggles a collapsed directory when its row is activated', () => {
     const onToggleDirectory = vi.fn();
 

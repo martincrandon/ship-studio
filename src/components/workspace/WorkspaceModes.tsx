@@ -10,6 +10,9 @@ export interface WorkspaceModesProps {
   setIsPreviewHidden: (hidden: boolean) => void;
   setIsAgentPanelHidden: (hidden: boolean) => void;
   setWorkspaceTab: (tab: WorkspaceTab) => void;
+  /** Fired when the Preview tab is picked. The parent starts the dev server
+   *  if it isn't running, so selecting Preview always leads to a preview. */
+  onSelectPreview?: () => void;
 }
 
 /** Renders the workspace mode tabs and focus toggle. */
@@ -20,6 +23,7 @@ export function WorkspaceModes({
   setIsPreviewHidden,
   setIsAgentPanelHidden,
   setWorkspaceTab,
+  onSelectPreview,
 }: WorkspaceModesProps) {
   return (
     <Tabs
@@ -34,6 +38,7 @@ export function WorkspaceModes({
         }
         setIsPreviewHidden(false);
         setWorkspaceTab(next as WorkspaceTab);
+        if (next === 'preview') onSelectPreview?.();
       }}
     >
       <TabsList

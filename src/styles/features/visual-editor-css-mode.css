@@ -373,7 +373,7 @@
   width: 100%;
 }
 
-.ss-css-modes > .button {
+.ss-css-modes .tabs__tab {
   flex: 1;
 }
 

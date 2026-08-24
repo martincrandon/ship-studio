@@ -386,9 +386,12 @@ function ColorControl({
           }}
         >
           {value ? (
-            <span className="ss-color-swatch__chip" style={{ background: value }} />
+            <span className="ss-color-swatch__chip" style={{ backgroundColor: value }} />
           ) : (
-            <span className="ss-color-swatch__empty">—</span>
+            <span
+              className="ss-color-swatch__chip ss-color-swatch__chip--checkerboard"
+              aria-hidden="true"
+            />
           )}
         </button>
         <input

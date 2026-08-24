@@ -12,6 +12,7 @@
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-button);
   transition:
+    background-color var(--transition),
     border-color var(--transition),
     color var(--transition);
 }
@@ -30,6 +31,29 @@
 
 .value-field--variable:not(.value-field--invalid) {
   color: var(--variable-text);
+  background: var(--variable-field-hover);
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-button);
+  padding: var(--space-02) var(--space-04);
+}
+
+.value-field--variable:not(.value-field--invalid):hover {
+  background: var(--variable-field-selected);
+}
+
+.value-field--variable:not(.value-field--invalid):focus-within,
+.value-field--variable:not(.value-field--invalid).value-field--open {
+  color: var(--variable-text-hover);
+  background: var(--variable-field-selected);
+  border-color: var(--variable-surface);
+}
+
+.value-field__leading {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 100%;
 }
 
 .value-field__input {
@@ -44,6 +68,10 @@
   font: inherit;
   font-size: var(--font-size-body-sm);
   font-variant-numeric: tabular-nums;
+}
+
+.value-field--variable .value-field__input {
+  padding-inline: 0;
 }
 
 .value-field__input::placeholder {
@@ -71,6 +99,17 @@
 .value-field__unit:hover,
 .value-field__unit[aria-expanded='true'] {
   background: var(--surface-control-hover);
+}
+
+.value-field--variable .value-field__unit {
+  min-width: auto;
+  padding-inline: var(--space-02) 0;
+  border-radius: 0;
+}
+
+.value-field--variable .value-field__unit:hover,
+.value-field--variable .value-field__unit[aria-expanded='true'] {
+  background: var(--variable-field-selected);
 }
 
 .value-field__unit:active {
@@ -150,7 +189,12 @@
 }
 
 .value-field__variable-option {
-  grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+  /* The name track is sized before the flexible value track so a very long
+     value can never squeeze the variable name out of view; the value takes
+     only what remains and truncates instead. The column gap keeps the name
+     and value from ever sitting flush against each other. */
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  column-gap: var(--space-08);
   padding-inline: var(--space-04);
 }
 
@@ -167,15 +211,63 @@
 }
 
 .value-field__variable-value {
+  display: flex;
+  justify-content: flex-end;
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-code);
   font-size: var(--font-size-badge);
-  justify-self: end;
-  text-align: end;
+}
+
+/* Once the value no longer fits, read from its start and truncate the end. */
+.value-field__variable-value[data-overflow='true'] {
+  justify-content: flex-start;
+}
+
+.value-field__variable-track {
+  display: flex;
+  min-width: 0;
+}
+
+.value-field__variable-copy {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* While scrolling, each copy keeps its natural width so the loop shift of one
+   copy plus the gap wraps seamlessly. */
+.value-field__variable-value[data-scrolling='true'] .value-field__variable-track {
+  flex: 0 0 auto;
+  animation: value-field-variable-marquee var(--marquee-loop-duration) linear infinite;
+}
+
+.value-field__variable-value[data-scrolling='true'] .value-field__variable-copy {
+  flex: 0 0 max-content;
+  min-width: max-content;
+}
+
+.value-field__variable-copy + .value-field__variable-copy {
+  margin-inline-start: var(--value-field-variable-scroll-gap);
+}
+
+@keyframes value-field-variable-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-1 * var(--marquee-loop-distance)));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .value-field__variable-value[data-scrolling='true'] .value-field__variable-track {
+    animation: none;
+  }
 }
 
 .value-field__variable-empty {

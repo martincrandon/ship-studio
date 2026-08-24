@@ -10,7 +10,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ELEMENT_KINDS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
 import { Button } from '../primitives/Button';
-import { SegmentedControl } from '../primitives/SegmentedControl';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
+import { ELEMENT_ICONS } from './element-icons';
 
 interface Props {
   /** Where to anchor the popover (viewport coords); null = closed. */
@@ -110,20 +111,29 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
         }
       }}
     >
-      <SegmentedControl<InsertPosition>
+      <Tabs
         value={effectivePosition}
-        onValueChange={setPosition}
-        aria-label="Placement"
-        className="ss-insert-menu__positions"
-        size="compact"
-        options={POSITIONS.map((p) => ({
-          value: p.id,
-          label: p.label,
-          disabled: p.id === 'inside' && insideDisabled,
-          title:
-            p.id === 'inside' && insideDisabled ? 'This element can’t contain children' : undefined,
-        }))}
-      />
+        mode="navigation"
+        onValueChange={(next) => setPosition(next as InsertPosition)}
+      >
+        <TabsList className="ss-insert-menu__positions" aria-label="Placement">
+          {POSITIONS.map((p) => (
+            <TabsTab
+              key={p.id}
+              value={p.id}
+              size="compact"
+              disabled={p.id === 'inside' && insideDisabled}
+              title={
+                p.id === 'inside' && insideDisabled
+                  ? 'This element can’t contain children'
+                  : undefined
+              }
+            >
+              {p.label}
+            </TabsTab>
+          ))}
+        </TabsList>
+      </Tabs>
       <div
         ref={listRef}
         className="ss-insert-menu__list"
@@ -133,24 +143,27 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
         aria-activedescendant={optionId(active)}
         tabIndex={0}
       >
-        {ELEMENT_KINDS.map((row, i) => (
-          <Button
-            key={row.kind}
-            variant="ghost"
-            size="compact"
-            width="fill"
-            role="option"
-            id={optionId(i)}
-            aria-selected={i === active}
-            className={`ss-insert-menu__item${i === active ? ' is-active' : ''}`}
-            onMouseDown={(e) => e.preventDefault()}
-            onMouseEnter={() => setActive(i)}
-            onClick={() => pick(row.kind)}
-          >
-            <span className="ss-insert-menu__label">{row.label}</span>
-            <code className="ss-insert-menu__tag">{`<${row.kind}>`}</code>
-          </Button>
-        ))}
+        {ELEMENT_KINDS.map((row, i) => {
+          return (
+            <Button
+              key={row.kind}
+              variant="ghost"
+              size="compact"
+              width="fill"
+              role="option"
+              id={optionId(i)}
+              aria-selected={i === active}
+              className={`ss-insert-menu__item${i === active ? ' is-active' : ''}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => pick(row.kind)}
+              leftIcon={ELEMENT_ICONS[row.kind]}
+            >
+              <span className="ss-insert-menu__label">{row.label}</span>
+              <code className="ss-insert-menu__tag">{`<${row.kind}>`}</code>
+            </Button>
+          );
+        })}
       </div>
     </div>,
     document.body

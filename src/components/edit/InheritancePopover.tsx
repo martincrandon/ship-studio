@@ -65,7 +65,7 @@ export function InheritancePopover({
 
       {onAdopt && (
         <Button
-          variant="secondary"
+          variant="default"
           size="compact"
           block
           onClick={() => {

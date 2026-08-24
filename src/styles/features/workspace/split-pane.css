@@ -92,9 +92,9 @@
    sit directly over the terminal surface. */
 .terminal-pane-footer {
   position: absolute;
-  right: var(--spacing-md);
+  right: var(--spacing-sm);
   bottom: var(--spacing-sm);
-  left: var(--spacing-md);
+  left: var(--spacing-sm);
   z-index: var(--z-dropdown);
   display: flex;
   align-items: center;

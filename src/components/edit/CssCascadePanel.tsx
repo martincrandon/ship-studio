@@ -22,7 +22,6 @@ import { ToggleButton } from '../primitives/ToggleButton';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { CascadeRuleCard } from './CascadeRuleCard';
 import { ElementSettingsPanel } from './ElementSettingsPanel';
-import { CssVariablesPanel } from './CssVariablesPanel';
 import { CssAnimationsPanel } from './CssAnimationsPanel';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
 import { WRAP_ITEMS, searchStructures, parseRulePrelude } from '../../lib/cssStructures';
@@ -30,11 +29,10 @@ import { rowKey, type CascadeRow } from '../../lib/cssCascade';
 import type { RuleBody } from '../../lib/cssBody';
 import type { CascadeSelection } from '../../hooks/useCssCascadeEditor';
 import type { ElementSettings } from '../../hooks/useElementSettings';
-import type { useCssVariables } from '../../hooks/useCssVariables';
 import type { useCssAnimations } from '../../hooks/useCssAnimations';
 
-/** The panel's top-level view: element style/settings, or project-global CSS. */
-type Scope = 'style' | 'settings' | 'variables' | 'animations';
+/** The panel's top-level view: element style/settings, or project-global animation CSS. */
+type Scope = 'style' | 'settings' | 'animations';
 
 interface Props {
   selection: CascadeSelection | null;
@@ -60,8 +58,6 @@ interface Props {
   /** rowKey of a just-created rule — its card auto-opens its "+ Add" menu (editing flow). */
   justCreatedKey?: string | null;
   settings: ElementSettings;
-  /** Project-global Variables editor state (custom properties / design tokens). */
-  variablesState: ReturnType<typeof useCssVariables>;
   /** Project-global Animations editor state (`@keyframes`). */
   animationsState: ReturnType<typeof useCssAnimations>;
   onClose: () => void;
@@ -91,7 +87,6 @@ export function CssCascadePanel({
   animations,
   justCreatedKey,
   settings,
-  variablesState,
   animationsState,
   onClose,
   pinned = false,
@@ -102,14 +97,11 @@ export function CssCascadePanel({
   const [localScope, setLocalScope] = useState<Scope>('style');
   const scope = controlledScope ?? localScope;
   const setScope = onScopeChange ?? setLocalScope;
-  // Refresh the project-global data when its scope becomes visible — works whether the
-  // scope was entered via the tabs or opened directly from the Cmd+K palette.
-  const reloadVariables = variablesState.reload;
+  // Refresh the project-global data when its scope becomes visible.
   const reloadAnimations = animationsState.reload;
   useEffect(() => {
-    if (scope === 'variables') void reloadVariables();
-    else if (scope === 'animations') void reloadAnimations();
-  }, [scope, reloadVariables, reloadAnimations]);
+    if (scope === 'animations') void reloadAnimations();
+  }, [scope, reloadAnimations]);
   // "Copy id": the element's selector (tag + classes), so you can paste it to your agent
   // and describe the change you want ("make a .button--secondary hover state pop").
   const { showToast } = useOptionalToast();
@@ -175,21 +167,12 @@ export function CssCascadePanel({
           <TabsList className="ss-cascade-scope" aria-label="CSS panel view">
             <TabsTab value="style">Style</TabsTab>
             <TabsTab value="settings">Settings</TabsTab>
-            <TabsTab value="variables">Variables</TabsTab>
             <TabsTab value="animations">Animate</TabsTab>
           </TabsList>
         </Tabs>
 
         <div className="ss-cascade-content">
-          {scope === 'variables' ? (
-            <CssVariablesPanel
-              variables={variablesState.variables}
-              loading={variablesState.loading}
-              variableNames={variables}
-              onSetValue={variablesState.setValue}
-              onAddVariable={(n, v) => void variablesState.addVariable(n, v)}
-            />
-          ) : scope === 'animations' ? (
+          {scope === 'animations' ? (
             <CssAnimationsPanel
               animations={animationsState.animations}
               loading={animationsState.loading}
@@ -313,6 +296,7 @@ export function CssCascadePanel({
                             selector={row.selector ?? 'element.style'}
                             file={row.file}
                             line={row.line}
+                            sourceFiles={row.sourceFiles}
                             mediaText={row.mediaText}
                             layer={row.layer}
                             container={row.container}

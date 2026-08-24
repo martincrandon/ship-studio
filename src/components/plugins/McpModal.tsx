@@ -12,7 +12,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
-import { SegmentedControl } from '../primitives/SegmentedControl';
 import {
   type McpServer,
   listMcpServers,
@@ -289,16 +288,17 @@ export function McpModal({
                       autoCapitalize="off"
                       spellCheck={false}
                     />
-                    <SegmentedControl
+                    <Tabs
                       value={scopeFilter}
-                      options={[
-                        { value: 'all', label: 'All' },
-                        { value: 'user', label: 'User' },
-                        { value: 'project', label: 'Project' },
-                      ]}
-                      onValueChange={setScopeFilter}
-                      aria-label="Filter MCP servers by scope"
-                    />
+                      mode="navigation"
+                      onValueChange={(next) => setScopeFilter(next as ScopeFilter)}
+                    >
+                      <TabsList aria-label="Filter MCP servers by scope">
+                        <TabsTab value="all">All</TabsTab>
+                        <TabsTab value="user">User</TabsTab>
+                        <TabsTab value="project">Project</TabsTab>
+                      </TabsList>
+                    </Tabs>
                   </div>
 
                   {isLoadingServers && servers.length === 0 && (
@@ -390,15 +390,18 @@ export function McpModal({
                     </div>
                     <div className="mcp-scope-toggle">
                       <span className="mcp-scope-toggle-label">Scope:</span>
-                      <SegmentedControl
+                      <Tabs
                         value={addScope}
-                        options={[
-                          { value: 'user', label: 'User' },
-                          { value: 'project', label: 'Project', disabled: !projectPath },
-                        ]}
-                        onValueChange={setAddScope}
-                        aria-label="MCP server scope"
-                      />
+                        mode="navigation"
+                        onValueChange={(next) => setAddScope(next as AddScope)}
+                      >
+                        <TabsList aria-label="MCP server scope">
+                          <TabsTab value="user">User</TabsTab>
+                          <TabsTab value="project" disabled={!projectPath}>
+                            Project
+                          </TabsTab>
+                        </TabsList>
+                      </Tabs>
                     </div>
                   </div>
 

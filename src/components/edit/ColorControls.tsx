@@ -93,6 +93,13 @@ export function ColorField({
     (explicit && toHex(explicit) ? explicit : null) ??
     (computedRaw && visibleHex(computedRaw) ? computedRaw : null);
   const swatch = renderable ? rgbaToCss(toRgba(renderable)) : null;
+  const hasValue = explicit !== null || Boolean(computedRaw?.trim());
+  const chipClassName = [
+    'ss-color-swatch__chip',
+    !hasValue ? 'ss-color-swatch__chip--checkerboard' : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
   const [format, setFormat] = useState<ColorFormat>(() => formatForValue(seed));
 
   const [open, setOpen] = useState(false);
@@ -209,23 +216,25 @@ export function ColorField({
           aria-label={`${label} value`}
           placeholder="#000000"
           title={`${label} value`}
+          leading={
+            <button
+              ref={triggerRef}
+              type="button"
+              className="ss-color-swatch ss-color-swatch--embedded"
+              title={`${label} color picker`}
+              aria-label={`${label} color`}
+              aria-haspopup="dialog"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <span
+                className={chipClassName}
+                style={swatch ? { backgroundColor: swatch } : undefined}
+                aria-hidden="true"
+              />
+            </button>
+          }
         />
-        <button
-          ref={triggerRef}
-          type="button"
-          className="ss-color-swatch"
-          title={`${label} color picker`}
-          aria-label={`${label} color`}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {swatch ? (
-            <span className="ss-color-swatch__chip" style={{ background: swatch }} />
-          ) : (
-            <span className="ss-color-swatch__empty">—</span>
-          )}
-        </button>
       </div>
       {open && rect && (
         <DockablePanel

@@ -19,7 +19,7 @@ import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent }
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
-import { SegmentedControl } from '../primitives/SegmentedControl';
+import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { EnumDropdown } from './EnumDropdown';
 import { PinIcon } from '@/components/icons';
 import { SaveIcon } from '@/components/icons';
@@ -413,16 +413,16 @@ export function CssEditorPanel({
               </p>
             )}
 
-            <SegmentedControl
-              className="ss-css-modes"
+            <Tabs
               value={view}
-              options={[
-                { value: 'visual', label: 'Visual' },
-                { value: 'code', label: 'Code' },
-              ]}
-              onValueChange={setViewMode}
-              aria-label="Editor view"
-            />
+              mode="navigation"
+              onValueChange={(next) => setViewMode(next as 'visual' | 'code')}
+            >
+              <TabsList className="ss-css-modes" aria-label="Editor view">
+                <TabsTab value="visual">Visual</TabsTab>
+                <TabsTab value="code">Code</TabsTab>
+              </TabsList>
+            </Tabs>
 
             {view === 'visual' ? (
               <>

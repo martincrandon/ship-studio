@@ -70,6 +70,16 @@ describe('EditPopover', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it('uses a wrapping inline editor with a matching text sizer', () => {
+    const { container, input } = renderInlineEditor('var(--font-display), Impact, sans-serif');
+
+    expect(input.tagName).toBe('TEXTAREA');
+    expect(input).toHaveAttribute('aria-multiline', 'true');
+    expect(container.querySelector('.ss-value-pop__sizer')).toHaveTextContent(
+      'var(--font-display), Impact, sans-serif'
+    );
+  });
+
   // ── Arrow-key stepping (ArrowUp/Down; Shift ×10, Alt ÷10) ──
 
   it('steps a numeric value with ArrowUp/ArrowDown and live-applies it', () => {

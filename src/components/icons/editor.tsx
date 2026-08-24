@@ -17,6 +17,16 @@ import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
 import ReloadSvg from '../../assets/icons/reload.svg?react';
 import ImageSvg from '../../assets/icons/image.svg?react';
 import SaveSvg from '../../assets/icons/save.svg?react';
+import VariablesSvg from '../../assets/icons/import/variables.svg?react';
+import ElementButtonSvg from '../../assets/icons/element-button.svg?react';
+import ElementDivSvg from '../../assets/icons/element-div.svg?react';
+import ElementHeadingSvg from '../../assets/icons/element-heading.svg?react';
+import ElementHeading1Svg from '../../assets/icons/element-heading1.svg?react';
+import ElementHeading2Svg from '../../assets/icons/element-heading2.svg?react';
+import ElementHeading3Svg from '../../assets/icons/element-heading3.svg?react';
+import ElementLinkSvg from '../../assets/icons/element-link.svg?react';
+import ElementListSvg from '../../assets/icons/element-list.svg?react';
+import ElementSectionSvg from '../../assets/icons/element-section.svg?react';
 import NestRuleSvg from '../../assets/icons/old-icons/nest-rule.svg?react';
 import ScrubHorizontalSvg from '../../assets/icons/old-icons/scrub-horizontal.svg?react';
 import PasteSvg from '../../assets/icons/old-icons/paste.svg?react';
@@ -147,6 +157,76 @@ export const ResetIcon = createIcon(ReloadSvg, {
 export const ImageIcon = createIcon(ImageSvg, {
   name: 'ImageIcon',
   source: 'icons/image.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const VariablesIcon = createIcon(VariablesSvg, {
+  name: 'VariablesIcon',
+  source: 'icons/import/variables.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementButtonIcon = createIcon(ElementButtonSvg, {
+  name: 'ElementButtonIcon',
+  source: 'icons/element-button.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementDivIcon = createIcon(ElementDivSvg, {
+  name: 'ElementDivIcon',
+  source: 'icons/element-div.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementHeadingIcon = createIcon(ElementHeadingSvg, {
+  name: 'ElementHeadingIcon',
+  source: 'icons/element-heading.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementHeading1Icon = createIcon(ElementHeading1Svg, {
+  name: 'ElementHeading1Icon',
+  source: 'icons/element-heading1.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementHeading2Icon = createIcon(ElementHeading2Svg, {
+  name: 'ElementHeading2Icon',
+  source: 'icons/element-heading2.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementHeading3Icon = createIcon(ElementHeading3Svg, {
+  name: 'ElementHeading3Icon',
+  source: 'icons/element-heading3.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementLinkIcon = createIcon(ElementLinkSvg, {
+  name: 'ElementLinkIcon',
+  source: 'icons/element-link.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementListIcon = createIcon(ElementListSvg, {
+  name: 'ElementListIcon',
+  source: 'icons/element-list.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementSectionIcon = createIcon(ElementSectionSvg, {
+  name: 'ElementSectionIcon',
+  source: 'icons/element-section.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',
