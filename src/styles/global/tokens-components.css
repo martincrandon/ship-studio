@@ -210,12 +210,7 @@
   --popover-color-picker-width: var(--size-color-picker-width);
   --popover-source-control-width: var(--size-source-control-popover);
   --source-control-branch-max-width: var(--size-source-control-branch);
-  --z-dropdown: 100;
-  /* Header popovers must paint above preview error/status overlays. */
-  --z-workspace-header: 200;
-  --z-preview-fullscreen: 900;
-  --z-floating-panel: 950;
-
+  
   --editor-panel-w: 300px;
   --editor-panel-visual-w: 240px;
   --editor-panel-inline-pad: var(--spacing-md);
@@ -223,6 +218,7 @@
   --editor-panel-section-h: 40px;
   --editor-panel-label-w: 72px;
   --editor-panel-field-w: 100%;
+  
   --editor-panel-spacing-w: 224px;
   --editor-panel-spacing-h: 112px;
   --editor-panel-spacing-margin-inner-x: 36px;
@@ -246,14 +242,25 @@
   --editor-panel-spacing-padding-side-hover: var(--surface-selected);
   --editor-panel-spacing-padding-bottom: var(--surface-selected);
   --editor-panel-spacing-padding-bottom-hover: var(--color-gray-700);
-  --z-editor-spacing-band: 1;
-  --z-editor-spacing-surface: 2;
-  --z-editor-spacing-field: 3;
+  
   --panel-header-h: 47px;
   --preview-toolbar-h: var(--panel-header-h);
   --tree-panel-w: 240px;
   --tree-code-w: 420px;
   --hint-card-max-w: 720px;
+  
+  --z-editor-spacing-band: 1;
+  --z-editor-spacing-surface: 2;
+  --z-editor-spacing-field: 3;
+
+  --z-dropdown: 100;
+  
+  /* Header popovers must paint above preview error/status overlays. */
+  --z-workspace-header: 200;
+  --z-preview-fullscreen: 900;
+  --z-floating-panel: 950;
+
+  
   --z-modal-overlay: 1000;
   --z-modal: 1001;
   --z-tooltip: 1100;
