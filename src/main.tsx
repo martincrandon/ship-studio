@@ -175,6 +175,11 @@ const OS_SKIP_SELECTOR = [
   // out of CodeMirror's flex row — the line-number gutter collapses to full
   // width and the code stacks below it (Code tab editor, visual editor).
   '.cm-editor',
+  // The Code file browser hides its native scrollbar and owns a flex layout.
+  // OverlayScrollbars changes the sidebar's child layout while relocating the
+  // tree into a viewport, which can leave visible file rows outside the
+  // clickable hit-test area in WKWebView.
+  '.code-tab-sidebar-content',
 ].join(', ');
 
 function initScrollbars() {

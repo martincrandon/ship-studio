@@ -194,6 +194,10 @@ interface PreviewProps {
   onElementTreeAvailabilityChange?: (available: boolean) => void;
   /** Whether the standalone project Variables panel is open. */
   variablesPanelVisible?: boolean;
+  /** Whether Variables occupies the preview's left-side dock. */
+  variablesPanelPinned?: boolean;
+  /** Switch Variables between its docked and floating modes. */
+  onToggleVariablesPanelPin?: () => void;
   /** Closes the standalone project Variables panel. */
   onCloseVariablesPanel?: () => void;
 }
@@ -285,6 +289,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onCloseElementTree,
     onElementTreeAvailabilityChange,
     variablesPanelVisible = false,
+    variablesPanelPinned = false,
+    onToggleVariablesPanelPin,
     onCloseVariablesPanel = () => undefined,
   },
   ref
@@ -360,16 +366,18 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   });
 
   // Fullscreen: the container goes position:fixed over the window below the
-  // workspace header (kept visible — it carries the project name and makes
+  // active workspace chrome (kept visible for navigation and publishing) and makes
   // room for the macOS traffic lights). The iframe never remounts, so the
   // page state survives entering/leaving. ESC exits.
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Bottom edge of the workspace header — the top of the fullscreen overlay
-  // and of the pinned editor sidebar. Measured (the header has no fixed height).
+  // Bottom edge of the active toolbar — the top of the fullscreen overlay
+  // and of the pinned editor sidebar. The classic layout has a second row.
   const [chromeTop, setChromeTop] = useState(0);
   useEffect(() => {
     const measure = () => {
-      const header = document.querySelector('.workspace-header');
+      const header =
+        document.querySelector('.workspace-header') ??
+        document.querySelector('.workspace-titlebar');
       setChromeTop(header ? Math.round(header.getBoundingClientRect().bottom) : 0);
     };
     measure();
@@ -769,10 +777,21 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // actions remain exclusive to edit mode; outside it the panel is a read-only
   // view of the rendered page.
   const showTree = elementTreeVisible;
+  const variablesPanelDocked = variablesPanelVisible && variablesPanelPinned;
   // The Elements panel's Code (markup-edit) view needs a wider column than the
   // navigator; the tree panel reports its view so we can widen the grid track.
   const [treeCodeView, setTreeCodeView] = useState(false);
   const effectiveTreeCodeView = activeEditMode && treeCodeView;
+  const [variablesPanelWidth, setVariablesPanelWidth] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem('variablesPanelDockedWidth'));
+    return Number.isFinite(saved) &&
+      saved >= TREE_PANEL_MIN_WIDTH_PX &&
+      saved <= TREE_PANEL_MAX_WIDTH_PX
+      ? saved
+      : null;
+  });
+  const [isVariablesResizing, setIsVariablesResizing] = useState(false);
+  const variablesPanelRef = useRef<HTMLDivElement | null>(null);
   const [treePanelWidth, setTreePanelWidth] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem('elementTreeDockedWidth'));
     return Number.isFinite(saved) &&
@@ -813,16 +832,48 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }, [treePanelWidth]);
 
   useEffect(() => {
+    if (variablesPanelWidth !== null) {
+      localStorage.setItem('variablesPanelDockedWidth', String(variablesPanelWidth));
+    }
+  }, [variablesPanelWidth]);
+
+  useEffect(() => {
     localStorage.setItem('cssPanelDockedWidth', String(editorPanelWidth));
     localStorage.setItem(EDITOR_PANEL_DEFAULT_VERSION_KEY, String(EDITOR_PANEL_DEFAULT_WIDTH_PX));
   }, [editorPanelWidth]);
 
-  const computeMaxTreeWidth = useCallback((containerWidth: number) => {
+  const computeMaxDockedPanelWidth = useCallback((containerWidth: number) => {
     return Math.max(
       TREE_PANEL_MIN_WIDTH_PX,
       Math.min(TREE_PANEL_MAX_WIDTH_PX, containerWidth - TREE_VIEWPORT_RESERVE_PX)
     );
   }, []);
+
+  const resizeVariablesPanel = useCallback(
+    (clientX: number) => {
+      const panel = variablesPanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const maxPanelWidth = computeMaxDockedPanelWidth(container.clientWidth);
+      const next = clientX - panel.getBoundingClientRect().left;
+      setVariablesPanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(next, maxPanelWidth)));
+    },
+    [computeMaxDockedPanelWidth]
+  );
+
+  const resizeVariablesPanelBy = useCallback(
+    (delta: number) => {
+      const panel = variablesPanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const max = computeMaxDockedPanelWidth(container.clientWidth);
+      const current = variablesPanelWidth ?? panel.offsetWidth;
+      setVariablesPanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max)));
+    },
+    [variablesPanelWidth, computeMaxDockedPanelWidth]
+  );
 
   const resizeTreePanel = useCallback(
     (clientX: number) => {
@@ -830,11 +881,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       const container = panel?.parentElement;
       if (!panel || !container) return;
 
-      const maxTreeWidth = computeMaxTreeWidth(container.clientWidth);
-      const next = clientX - container.getBoundingClientRect().left;
+      const maxTreeWidth = computeMaxDockedPanelWidth(container.clientWidth);
+      // Elements may follow Variables in the left dock. Measure from the
+      // Elements slot itself so preceding panels do not affect its width.
+      const next = clientX - panel.getBoundingClientRect().left;
       setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(next, maxTreeWidth)));
     },
-    [computeMaxTreeWidth]
+    [computeMaxDockedPanelWidth]
   );
 
   const resizeTreePanelBy = useCallback(
@@ -843,11 +896,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       const container = panel?.parentElement;
       if (!panel || !container) return;
 
-      const max = computeMaxTreeWidth(container.clientWidth);
+      const max = computeMaxDockedPanelWidth(container.clientWidth);
       const current = treePanelWidth ?? panel.offsetWidth;
       setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max)));
     },
-    [treePanelWidth, computeMaxTreeWidth]
+    [treePanelWidth, computeMaxDockedPanelWidth]
   );
 
   const resizeEditorPanel = useCallback((clientX: number) => {
@@ -870,12 +923,24 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     const container = treePanelRef.current?.parentElement;
     if (!container) return;
     const ro = new ResizeObserver(() => {
-      const max = computeMaxTreeWidth(container.clientWidth);
+      const max = computeMaxDockedPanelWidth(container.clientWidth);
       setTreePanelWidth((prev) => (prev === null || prev <= max ? prev : max));
     });
     ro.observe(container);
     return () => ro.disconnect();
-  }, [showTree, computeMaxTreeWidth]);
+  }, [showTree, computeMaxDockedPanelWidth]);
+
+  useEffect(() => {
+    if (!variablesPanelDocked) return;
+    const container = variablesPanelRef.current?.parentElement;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      const max = computeMaxDockedPanelWidth(container.clientWidth);
+      setVariablesPanelWidth((prev) => (prev === null || prev <= max ? prev : max));
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [variablesPanelDocked, computeMaxDockedPanelWidth]);
 
   const [iframeSize, setIframeSize] = useState<{ w: number; h: number } | null>(null);
   const iframeSizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -1089,6 +1154,30 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     );
   }
 
+  const hasCustomDockedWidth =
+    (variablesPanelDocked && variablesPanelWidth !== null) ||
+    (showTree && elementTreePinned && treePanelWidth !== null);
+  const dockedGridTemplateColumns = hasCustomDockedWidth
+    ? [
+        variablesPanelDocked
+          ? variablesPanelWidth !== null
+            ? `${variablesPanelWidth}px`
+            : 'var(--tree-panel-w)'
+          : null,
+        showTree && elementTreePinned
+          ? treePanelWidth !== null
+            ? `${treePanelWidth}px`
+            : effectiveTreeCodeView
+              ? 'var(--tree-code-w)'
+              : 'var(--tree-panel-w)'
+          : null,
+        'minmax(0, 1fr)',
+        activeEditMode && editorPinned ? 'var(--editor-panel-visual-w)' : null,
+      ]
+        .filter((column): column is string => column !== null)
+        .join(' ')
+    : undefined;
+
   return (
     <div
       className={`preview-container${isFullscreen ? ' preview-container--fullscreen' : ''}${
@@ -1097,15 +1186,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         showTree && elementTreePinned && effectiveTreeCodeView
           ? ' preview-container--tree-code'
           : ''
-      }`}
+      }${variablesPanelDocked ? ' preview-container--variables-pinned' : ''}`}
       data-logs={showLogs ? 'open' : 'closed'}
       style={{
-        ...(showTree && elementTreePinned && treePanelWidth !== null
-          ? {
-              gridTemplateColumns: `${treePanelWidth}px minmax(0, 1fr)${
-                activeEditMode && editorPinned ? ' var(--editor-panel-visual-w)' : ''
-              }`,
-            }
+        ...(dockedGridTemplateColumns
+          ? { gridTemplateColumns: dockedGridTemplateColumns }
           : undefined),
         ...(showLogs && inspectPanelHeight !== null
           ? {
@@ -1565,7 +1650,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             sizeKey="elementTreeFloatingSize"
             floatingSize={ELEMENT_TREE_FLOATING_SIZE}
             initialPosition={() => ({ left: 72, top: 96 })}
-            placeholderClassName="ss-tree-panel-dock"
+            placeholderClassName={`ss-tree-panel-dock${
+              variablesPanelDocked ? ' ss-tree-panel-dock--after-variables' : ''
+            }`}
+            dockLayoutKey={variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}
             surfaceClassName="dockable-panel__surface--preview"
             placeholderRef={treePanelRef}
             dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
@@ -1608,7 +1696,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               min={TREE_PANEL_MIN_WIDTH_PX}
               max={TREE_PANEL_MAX_WIDTH_PX}
               label="Resize Elements panel"
-              className="panel-resize-handle--tree"
+              className={`panel-resize-handle--tree${
+                variablesPanelDocked ? ' panel-resize-handle--tree-after-variables' : ''
+              }`}
               onResize={resizeTreePanel}
               onResizeBy={resizeTreePanelBy}
               onDragChange={setIsTreeResizing}
@@ -1616,7 +1706,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           )}
         </>
       )}
-      {isTreeResizing && <div className="panel-resize-overlay panel-resize-overlay--vertical" />}
+      {(isTreeResizing || isVariablesResizing) && (
+        <div className="panel-resize-overlay panel-resize-overlay--vertical" />
+      )}
       {editor.editMode &&
         (() => {
           // Floating mode portals to <body> (position:fixed is the only way to
@@ -1751,21 +1843,44 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           );
         })()}
       {variablesPanelVisible && (
-        <DockablePanel
-          docked={false}
-          ariaLabel="Variables panel"
-          positionKey="variablesPanelFloatingPosition"
-          sizeKey="variablesPanelFloatingSize"
-          floatingSize={{ width: 360, height: 680 }}
-          minFloatingSize={{ width: 280, height: 320 }}
-          initialPosition={() => ({
-            left: Math.max(24, window.innerWidth - 384),
-            top: 96,
-          })}
-          surfaceClassName="dockable-panel__surface--preview"
-        >
-          <VariablesPanel variablesState={cssVariables} onClose={onCloseVariablesPanel} />
-        </DockablePanel>
+        <>
+          <DockablePanel
+            docked={variablesPanelDocked}
+            ariaLabel="Variables panel"
+            positionKey="variablesPanelFloatingPosition"
+            sizeKey="variablesPanelFloatingSize"
+            floatingSize={{ width: 360, height: 680 }}
+            minFloatingSize={{ width: 280, height: 320 }}
+            initialPosition={() => ({
+              left: Math.max(24, window.innerWidth - 384),
+              top: 96,
+            })}
+            placeholderClassName="ss-variables-panel-dock"
+            dockLayoutKey={variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}
+            placeholderRef={variablesPanelRef}
+            surfaceClassName="dockable-panel__surface--preview"
+            dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
+          >
+            <VariablesPanel
+              variablesState={cssVariables}
+              pinned={variablesPanelDocked}
+              onTogglePin={onToggleVariablesPanelPin}
+              onClose={onCloseVariablesPanel}
+            />
+          </DockablePanel>
+          {variablesPanelDocked && (
+            <PanelResizeHandle
+              value={variablesPanelWidth ?? TREE_PANEL_DEFAULT_WIDTH_PX}
+              min={TREE_PANEL_MIN_WIDTH_PX}
+              max={TREE_PANEL_MAX_WIDTH_PX}
+              label="Resize Variables panel"
+              className="panel-resize-handle--variables"
+              onResize={resizeVariablesPanel}
+              onResizeBy={resizeVariablesPanelBy}
+              onDragChange={setIsVariablesResizing}
+            />
+          )}
+        </>
       )}
     </div>
   );

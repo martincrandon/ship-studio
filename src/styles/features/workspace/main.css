@@ -7,13 +7,14 @@
 
 /* Title bar — sits alongside macOS traffic lights and the workspace controls */
 .workspace-titlebar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 0;
   height: calc(var(--control-height-standard) + (var(--space-08) * 2));
   /* Clear the macOS traffic lights with a little breathing room. */
-  padding: 0 var(--space-16) 0
-    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--space-12));
+  padding: 0 var(--spacing-lg) 0
+    calc(var(--spacing-2xl) + var(--spacing-2xl) + var(--spacing-md) + var(--spacing-md));
   background: var(--surface-panel);
   border-bottom: 1px solid var(--border-default);
   -webkit-user-select: none;
@@ -24,11 +25,71 @@
   z-index: var(--z-workspace-header);
 }
 
+.workspace-titlebar-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
 .workspace-titlebar-navigation {
   display: flex;
   align-items: center;
   gap: 0;
   flex: 0 0 auto;
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-titlebar-divider {
+  width: var(--border-width-default);
+  height: var(--size-control-compact);
+  margin-inline: var(--spacing-xs);
+  background: var(--border-default);
+  flex: 0 0 auto;
+}
+
+.workspace-titlebar-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 0 1 auto;
+  min-width: 0;
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-titlebar-center {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  width: 100%;
+  margin-inline-start: var(--spacing-2xl);
+  min-width: 0;
+  overflow: visible;
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-titlebar-modes {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.workspace-titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  justify-self: end;
   position: relative;
   z-index: var(--z-workspace-header);
 }
@@ -49,16 +110,14 @@
 }
 
 .workspace-title-group {
-  position: absolute;
-  inset-block: 0;
-  left: 50%;
   display: flex;
   align-items: center;
-  gap: var(--space-12);
-  width: max-content;
-  max-width: calc(100% - var(--space-32));
+  gap: var(--spacing-sm);
+  width: auto;
+  max-width: calc(50% - var(--spacing-lg));
   min-width: 0;
-  transform: translateX(-50%);
+  flex: 0 1 auto;
+  overflow: hidden;
 }
 
 .workspace-titlebar h1 {
@@ -78,6 +137,13 @@
   flex: 0 1 auto;
   overflow: hidden;
   transition: width var(--transition-fast);
+}
+
+.workspace-titlebar .project-path-full {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: block;
 }
 
 .workspace-titlebar .project-path-expansion-measure {
@@ -122,7 +188,7 @@
   flex: 0 0 auto;
 }
 
-.workspace-titlebar .project-path > .middle-truncate {
+.workspace-titlebar .project-path-full > .middle-truncate {
   width: auto;
   flex: 1 1 auto;
 }
@@ -148,20 +214,6 @@
   color: var(--text-primary);
 }
 
-/* Toolbar — action buttons below the title bar */
-.workspace-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-  padding: 8px 10px;
-  background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
-  /* Keep header popovers above preview error/status overlays. */
-  position: relative;
-  z-index: var(--z-workspace-header);
-}
-
 /* An open workspace panel is signalled by the standard outlined button state,
    not the filled selected treatment used by ordinary toggles. */
 .workspace-panel-toggle.button--secondary[aria-pressed='true'] {
@@ -183,6 +235,110 @@
    well before they actually overflow. Keep this breakpoint in sync with the
    terminal toolbar's (workspace/terminal.css) so every label collapses in
    unison. */
+@media (max-width: 1600px) {
+  .workspace-titlebar .toolbar-btn-label {
+    display: none;
+  }
+}
+
+/* The titlebar has three independent clusters. Compact the mode labels before
+   reducing the side clusters, but preserve the mode group's centered position. */
+@media (max-width: 1000px) {
+  .workspace-titlebar .workspace-mode-label {
+    display: none;
+  }
+
+  .workspace-titlebar .workspace-tab.button {
+    gap: 0;
+    padding-inline: var(--spacing-md);
+  }
+
+  .workspace-titlebar-center {
+    margin-inline-start: var(--spacing-lg);
+  }
+}
+
+/* Once the center is icon-only, remove inter-cluster breathing room so the
+   controls meet cleanly at the smallest supported desktop widths. */
+@media (max-width: 900px) {
+  .workspace-titlebar-tools,
+  .workspace-titlebar-actions,
+  .workspace-titlebar-center {
+    gap: 0;
+  }
+
+  .workspace-titlebar-center {
+    margin-inline-start: var(--spacing-sm);
+  }
+
+  .workspace-titlebar-tools > .button,
+  .workspace-titlebar-tools > .toolbar-dropdown-container > .button {
+    width: var(--button-height);
+    min-width: var(--button-height);
+    padding-inline: 0;
+  }
+
+  .workspace-titlebar-tools > .toolbar-dropdown-container > .button {
+    gap: 0;
+  }
+
+  .workspace-titlebar .source-control-actions {
+    gap: 0;
+  }
+}
+
+/* Classic layout keeps project identity in the titlebar and actions in a
+   separate toolbar. These overrides deliberately live beside the compact
+   rules so switching the persisted preference never requires a reload. */
+.app.workspace:not(.workspace--compact-toolbar) .workspace-titlebar {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding-inline-end: var(--spacing-lg);
+}
+
+.app.workspace:not(.workspace--compact-toolbar) .workspace-title-group {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  width: max-content;
+  max-width: calc(100% - var(--spacing-2xl));
+  gap: var(--space-12);
+  transform: translateX(-50%);
+  overflow: visible;
+}
+
+.workspace-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-panel);
+  border-bottom: var(--border-width-default) solid var(--border-default);
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.workspace-header-left,
+.workspace-header-center,
+.workspace-header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.workspace-header-left {
+  min-width: 0;
+}
+
+.workspace-header-center {
+  align-self: stretch;
+}
+
+.workspace-header-right {
+  justify-self: end;
+}
+
 @media (max-width: 1600px) {
   .workspace-header .toolbar-btn-label {
     display: none;

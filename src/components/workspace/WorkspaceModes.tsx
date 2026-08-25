@@ -53,8 +53,9 @@ export function WorkspaceModes({
             className="workspace-tab"
             leftIcon={<EyeIcon size={14} />}
             data-tooltip-disabled
+            aria-label="Preview"
           >
-            <span>Preview</span>
+            <span className="workspace-mode-label">Preview</span>
           </TabsTab>
         )}
         <TabsTab
@@ -62,16 +63,18 @@ export function WorkspaceModes({
           className="workspace-tab"
           leftIcon={<EyeOffIcon size={14} />}
           title={isPreviewHidden ? 'Exit focus mode' : 'Hide preview — agent only'}
+          aria-label="Focus"
         >
-          <span>Focus</span>
+          <span className="workspace-mode-label">Focus</span>
         </TabsTab>
         <TabsTab
           value="code"
           className="workspace-tab"
           leftIcon={<CodeIcon size={14} />}
           title="Code"
+          aria-label="Code"
         >
-          <span>Code</span>
+          <span className="workspace-mode-label">Code</span>
         </TabsTab>
       </TabsList>
     </Tabs>

@@ -4,7 +4,7 @@
  * Renders the top header of the workspace view including:
  * - Back button to return to projects
  * - Project name and path
- * - Toolbar action buttons (education, plugins, assets, IDE, env, backups)
+ * - Topbar action buttons (education, plugins, assets, IDE, env, backups)
  * - GitHub button and publish dropdown
  * - Plugin toolbar/publish slots
  *
@@ -58,8 +58,10 @@ export interface WorkspaceHeaderProps {
   onGoHome: () => void;
   isSidebarHidden: boolean;
   onToggleSidebar: () => void;
+  /** Consolidate navigation, tools, modes, and publishing into the titlebar. */
+  compactWorkspaceToolbarEnabled: boolean;
 
-  // Workspace tools that remain directly accessible from the toolbar.
+  // Workspace tools that remain directly accessible from the topbar.
   // Env editor, backups, plugin manager, learn mode, and IDE launch moved
   // to the Cmd+K palette.
   onOpenAssetsPanel: () => void;
@@ -79,8 +81,8 @@ export interface WorkspaceHeaderProps {
   // WorkspaceView. Omit to hide.
   headerExtras?: ReactNode;
 
-  // Primary workspace modes (Preview/Focus/Code), rendered in their own center
-  // cluster between the workspace tools and repository/publishing actions.
+  // Primary workspace modes (Preview/Focus/Code), rendered in the topbar
+  // between the project location and repository/publishing actions.
   // Pre-composed in WorkspaceView since they drive the right-pane state.
   modes?: ReactNode;
 
@@ -188,13 +190,23 @@ interface WorkspaceTitlebarProps {
 /** Window-drag region shared by the titlebars that sit below macOS traffic lights. */
 export function WorkspaceTitlebar({ children }: WorkspaceTitlebarProps) {
   const handleDrag = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
+    if (
+      (event.target as HTMLElement).closest(
+        'button, a, input, select, [role="button"], [role="menu"]'
+      )
+    )
+      return;
     event.preventDefault();
     void getCurrentWindow().startDragging();
   }, []);
 
   const handleDoubleClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('button, a, input, select, [role="button"]')) return;
+    if (
+      (event.target as HTMLElement).closest(
+        'button, a, input, select, [role="button"], [role="menu"]'
+      )
+    )
+      return;
     const win = getCurrentWindow();
     void win.isMaximized().then((maximized) => {
       void (maximized ? win.unmaximize() : win.maximize());
@@ -214,6 +226,7 @@ export function WorkspaceHeader({
   onGoHome,
   isSidebarHidden,
   onToggleSidebar,
+  compactWorkspaceToolbarEnabled,
   onOpenAssetsPanel,
   assetsPanelVisible,
   elementTreeVisible,
@@ -318,192 +331,220 @@ export function WorkspaceHeader({
   // IDE launch, env editor, backups, plugin manager, and learn-mode toggle
   // now live in the Cmd+K palette. See src/commands/useAppCommands.tsx.
 
-  const titlebar = (
-    <WorkspaceTitlebar>
-      <WorkspaceNavigation
-        onGoHome={onGoHome}
-        isSidebarHidden={isSidebarHidden}
-        onToggleSidebar={onToggleSidebar}
+  const sourceControlActions = (
+    <div className="source-control-actions">
+      <BranchesMenu
+        githubState={integrations.github}
+        projectStatus={integrations.projectGithub}
+        projectPath={projectPath}
+        projectName={projectName}
+        currentBranch={currentBranch}
+        branches={branches}
+        openPRs={openPRs}
+        isPulling={isPulling}
+        isBranchSwitching={isBranchSwitching}
+        isRepositoryViewActive={isRepositoryViewActive}
+        isOpen={openSourceMenu === 'branches'}
+        onOpenChange={(open) => setOpenSourceMenu(open ? 'branches' : null)}
+        onPullLatest={onPullLatest}
+        onBranchSwitch={onBranchSwitch}
+        onViewBranches={onViewBranches}
+        onCreateBranch={onCreateBranch}
+        onViewPRs={onViewPRs}
+        onStartPR={(branch) => onCreatePR(branch)}
+        onGitHubConnect={onGitHubConnect}
+        onGitHubStatusChange={onGitHubStatusChange}
+        onModalClose={focusActiveTerminal}
       />
-      <div className="workspace-title-group">
-        <h1>{projectName}</h1>
-        <div
-          ref={projectPathContainerRef}
-          className="project-path-container"
-          style={
-            expandedProjectPathWidth !== null
-              ? { width: `${expandedProjectPathWidth}px` }
-              : undefined
-          }
-          onMouseEnter={expandProjectPath}
-          onMouseLeave={collapseProjectPath}
-          onFocus={expandProjectPath}
-          onBlur={handleProjectPathBlur}
-        >
-          <span className="project-path-expansion-measure" aria-hidden="true">
-            <FolderOpenIcon size={14} />
-            {projectPath}
-          </span>
-          <button
-            className="project-path"
-            onClick={() => projectPath && void openInFinder(projectPath)}
-            title="Open in Finder"
-            aria-label={`Open ${projectPath} in Finder`}
-          >
-            <FolderOpenIcon size={14} />
-            <MiddleTruncate text={projectPath} />
-          </button>
-        </div>
-      </div>
-    </WorkspaceTitlebar>
-  );
-
-  const toolbar = (
-    <header className="workspace-header">
-      {/* Left side — Elements, Agent, Variables, and Assets. Learn mode, env vars, backups,
-          plugin manager, and IDE launch are reachable via ⌘K. */}
-      <div className="workspace-header-left">
-        <ToggleButton
-          variant={elementTreeVisible ? 'secondary' : 'default'}
-          className="workspace-panel-toggle"
-          pressed={elementTreeVisible}
-          onClick={onToggleElementTree}
-          disabled={!elementTreeAvailable}
-          title={elementTreeAvailable ? 'Elements' : 'Elements are available in Preview'}
-          leftIcon={<ElementsIcon size={16} />}
-          aria-label="Elements"
-        />
-        <ToggleButton
-          variant={agentPanelVisible ? 'secondary' : 'default'}
-          className="workspace-panel-toggle"
-          pressed={agentPanelVisible}
-          onClick={onToggleAgentPanel}
-          title="Agent"
-          leftIcon={<AgentsIcon size={16} />}
-          aria-label="Agent"
-        />
-        <ToggleButton
-          variant={variablesPanelVisible ? 'secondary' : 'default'}
-          className="workspace-panel-toggle"
-          pressed={variablesPanelVisible}
-          onClick={onToggleVariablesPanel}
-          disabled={!variablesPanelAvailable}
-          title={variablesPanelAvailable ? 'Variables' : 'Variables are available for web projects'}
-          leftIcon={<VariablesIcon size={16} />}
-          aria-label="Variables"
-        />
-        <Button
-          onClick={onOpenAssetsPanel}
-          title="Assets"
-          aria-label="Assets"
-          aria-pressed={assetsPanelVisible}
-          data-education-id="assets-button"
-          leftIcon={<ImageIcon size={16} />}
-        />
-        {headerExtras}
-      </div>
-
-      {/* Center — the primary workspace mode switcher is deliberately isolated
-          from both local workspace tools and publishing/hosting actions. */}
-      <div className="workspace-header-center">{modes}</div>
-
-      {/* Right side — hosting, repository workflow, and publishing */}
-      <div className="workspace-header-right">
-        <PluginSlot
-          name="publish"
-          plugins={getSlotPlugins('publish')}
-          project={pluginProject}
-          actions={pluginActions}
-          theme={pluginTheme}
-        />
-        <PluginSlot
-          name="toolbar"
-          plugins={headerHostingPlugins}
-          project={pluginProject}
-          actions={pluginActions}
-          theme={pluginTheme}
-        />
-        <div className="source-control-actions">
-          <BranchesMenu
-            githubState={integrations.github}
-            projectStatus={integrations.projectGithub}
-            projectPath={projectPath}
-            projectName={projectName}
+      <div
+        className={`source-control-push${hasUncommittedChanges ? ' has-unsaved-changes' : ''}`}
+        onClick={(event) => {
+          if (!hasUncommittedChanges) return;
+          if ((event.target as HTMLElement).closest('button')) return;
+          setOpenSourceMenu(openSourceMenu === 'push' ? null : 'push');
+        }}
+      >
+        {hasUncommittedChanges && currentBranch && (
+          <BranchIndicator
             currentBranch={currentBranch}
-            branches={branches}
-            openPRs={openPRs}
-            isPulling={isPulling}
-            isBranchSwitching={isBranchSwitching}
-            isRepositoryViewActive={isRepositoryViewActive}
-            isOpen={openSourceMenu === 'branches'}
-            onOpenChange={(open) => setOpenSourceMenu(open ? 'branches' : null)}
-            onPullLatest={onPullLatest}
-            onBranchSwitch={onBranchSwitch}
-            onViewBranches={onViewBranches}
-            onCreateBranch={onCreateBranch}
-            onViewPRs={onViewPRs}
-            onStartPR={(branch) => onCreatePR(branch)}
-            onGitHubConnect={onGitHubConnect}
-            onGitHubStatusChange={onGitHubStatusChange}
-            onModalClose={focusActiveTerminal}
+            hasUncommittedChanges={hasUncommittedChanges}
+            changedFiles={changedFiles}
+            projectPath={projectPath}
+            onDiscard={onDiscardChanges}
+            isOpen={openSourceMenu === 'push'}
+            onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
+            opensPushMenu
+            isLive={currentBranchIsLive}
           />
-          <div
-            className={`source-control-push${hasUncommittedChanges ? ' has-unsaved-changes' : ''}`}
-            onClick={(event) => {
-              if (!hasUncommittedChanges) return;
-              if ((event.target as HTMLElement).closest('button')) return;
-              setOpenSourceMenu(openSourceMenu === 'push' ? null : 'push');
-            }}
-          >
-            {hasUncommittedChanges && currentBranch && (
-              <BranchIndicator
-                currentBranch={currentBranch}
-                hasUncommittedChanges={hasUncommittedChanges}
-                changedFiles={changedFiles}
-                projectPath={projectPath}
-                onDiscard={onDiscardChanges}
-                isOpen={openSourceMenu === 'push'}
-                onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
-                opensPushMenu
-                isLive={currentBranchIsLive}
+        )}
+        <PublishBranchDropdown
+          currentBranch={currentBranch || 'main'}
+          projectGithubStatus={integrations.projectGithub}
+          projectPath={projectPath}
+          hasChangesToSync={hasUncommittedChanges}
+          onStatusChange={onPublishStatusChange}
+          onModalClose={focusActiveTerminal}
+          isPublishing={isPublishing}
+          setIsPublishing={setIsPublishing}
+          onPublishError={onPublishError}
+          onCreatePR={onCreatePR}
+          forceOpen={forcePublishOpen}
+          onForceOpenHandled={onForcePublishOpenHandled}
+          open={openSourceMenu === 'push'}
+          onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
+          grouped={hasUncommittedChanges}
+          changedFiles={changedFiles}
+          onDiscardChanges={onDiscardChanges}
+          excludeClickOutsideSelector=".source-control-push"
+          hostingControls={
+            pushHostingPlugins.length > 0 ? (
+              <PluginSlot
+                name="toolbar"
+                plugins={pushHostingPlugins}
+                project={pluginProject}
+                actions={pluginActions}
+                theme={pluginTheme}
               />
-            )}
-            <PublishBranchDropdown
-              currentBranch={currentBranch || 'main'}
-              projectGithubStatus={integrations.projectGithub}
-              projectPath={projectPath}
-              hasChangesToSync={hasUncommittedChanges}
-              onStatusChange={onPublishStatusChange}
-              onModalClose={focusActiveTerminal}
-              isPublishing={isPublishing}
-              setIsPublishing={setIsPublishing}
-              onPublishError={onPublishError}
-              onCreatePR={onCreatePR}
-              forceOpen={forcePublishOpen}
-              onForceOpenHandled={onForcePublishOpenHandled}
-              open={openSourceMenu === 'push'}
-              onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
-              grouped={hasUncommittedChanges}
-              changedFiles={changedFiles}
-              onDiscardChanges={onDiscardChanges}
-              excludeClickOutsideSelector=".source-control-push"
-              hostingControls={
-                pushHostingPlugins.length > 0 ? (
-                  <PluginSlot
-                    name="toolbar"
-                    plugins={pushHostingPlugins}
-                    project={pluginProject}
-                    actions={pluginActions}
-                    theme={pluginTheme}
-                  />
-                ) : undefined
-              }
-            />
-          </div>
-        </div>
+            ) : undefined
+          }
+        />
       </div>
-    </header>
+    </div>
   );
 
-  return { titlebar, toolbar };
+  const workspaceToolButtons = (
+    <>
+      <ToggleButton
+        variant={elementTreeVisible ? 'secondary' : 'default'}
+        className="workspace-panel-toggle"
+        pressed={elementTreeVisible}
+        onClick={onToggleElementTree}
+        disabled={!elementTreeAvailable}
+        title={elementTreeAvailable ? 'Elements' : 'Elements are available in Preview'}
+        leftIcon={<ElementsIcon size={16} />}
+        aria-label="Elements"
+      />
+      <ToggleButton
+        variant={agentPanelVisible ? 'secondary' : 'default'}
+        className="workspace-panel-toggle"
+        pressed={agentPanelVisible}
+        onClick={onToggleAgentPanel}
+        title="Agent"
+        leftIcon={<AgentsIcon size={16} />}
+        aria-label="Agent"
+      />
+      <ToggleButton
+        variant={variablesPanelVisible ? 'secondary' : 'default'}
+        className="workspace-panel-toggle"
+        pressed={variablesPanelVisible}
+        onClick={onToggleVariablesPanel}
+        disabled={!variablesPanelAvailable}
+        title={variablesPanelAvailable ? 'Variables' : 'Variables are available for web projects'}
+        leftIcon={<VariablesIcon size={16} />}
+        aria-label="Variables"
+      />
+      <Button
+        onClick={onOpenAssetsPanel}
+        title="Assets"
+        aria-label="Assets"
+        aria-pressed={assetsPanelVisible}
+        data-education-id="assets-button"
+        leftIcon={<ImageIcon size={16} />}
+      />
+      {headerExtras}
+    </>
+  );
+  const projectTitle = (
+    <div className="workspace-title-group">
+      <h1>{projectName}</h1>
+      <div
+        ref={projectPathContainerRef}
+        className="project-path-container"
+        style={
+          expandedProjectPathWidth !== null ? { width: `${expandedProjectPathWidth}px` } : undefined
+        }
+        onMouseEnter={expandProjectPath}
+        onMouseLeave={collapseProjectPath}
+        onFocus={expandProjectPath}
+        onBlur={handleProjectPathBlur}
+      >
+        <span className="project-path-expansion-measure" aria-hidden="true">
+          <FolderOpenIcon size={14} />
+          {projectPath}
+        </span>
+        <button
+          className="project-path"
+          onClick={() => projectPath && void openInFinder(projectPath)}
+          title="Open in Finder"
+          aria-label={`Open ${projectPath} in Finder`}
+        >
+          <FolderOpenIcon size={14} />
+          <span className="project-path-full">
+            <MiddleTruncate text={projectPath} />
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+  const publishingActions = (
+    <>
+      <PluginSlot
+        name="publish"
+        plugins={getSlotPlugins('publish')}
+        project={pluginProject}
+        actions={pluginActions}
+        theme={pluginTheme}
+      />
+      <PluginSlot
+        name="toolbar"
+        plugins={headerHostingPlugins}
+        project={pluginProject}
+        actions={pluginActions}
+        theme={pluginTheme}
+      />
+      {sourceControlActions}
+    </>
+  );
+
+  if (!compactWorkspaceToolbarEnabled) {
+    return {
+      titlebar: <WorkspaceTitlebar>{projectTitle}</WorkspaceTitlebar>,
+      toolbar: (
+        <header className="workspace-header">
+          <div className="workspace-header-left">{workspaceToolButtons}</div>
+          <div className="workspace-header-center">{modes}</div>
+          <div className="workspace-header-right">{publishingActions}</div>
+        </header>
+      ),
+    };
+  }
+
+  return {
+    titlebar: (
+      <WorkspaceTitlebar>
+        <div className="workspace-titlebar-left">
+          <WorkspaceNavigation
+            onGoHome={onGoHome}
+            isSidebarHidden={isSidebarHidden}
+            onToggleSidebar={onToggleSidebar}
+          />
+          <IconButton
+            variant="ghost"
+            className="workspace-titlebar-project-location"
+            icon={<FolderOpenIcon size={12} />}
+            onClick={() => projectPath && void openInFinder(projectPath)}
+            title="Open project location"
+            aria-label={`Open ${projectPath} in Finder`}
+          />
+          <div className="workspace-titlebar-divider" aria-hidden="true" />
+          <div className="workspace-titlebar-tools">{workspaceToolButtons}</div>
+        </div>
+        <div className="workspace-titlebar-center">
+          <div className="workspace-titlebar-modes">{modes}</div>
+        </div>
+        <div className="workspace-titlebar-actions">{publishingActions}</div>
+      </WorkspaceTitlebar>
+    ),
+    toolbar: null,
+  };
 }

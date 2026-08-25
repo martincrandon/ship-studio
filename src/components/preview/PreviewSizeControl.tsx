@@ -6,7 +6,8 @@
  * = full available height).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MoreHorizontalIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { ValueField } from '../primitives/ValueField';
 import { trackEvent } from '../../lib/analytics';
@@ -50,21 +51,24 @@ export function PreviewSizeControl({
   const wrapRef = useRef<HTMLSpanElement>(null);
 
   // Seed the inputs from the live size each time the popover opens.
-  const openPopover = () => {
+  const openPopover = useCallback(() => {
     setWidthText(String(width));
     setHeightText(hasCustomHeight ? String(height) : '');
     widthDraftRef.current = String(width);
     heightDraftRef.current = hasCustomHeight ? String(height) : '';
     setOpen(true);
-  };
+  }, [hasCustomHeight, height, width]);
 
-  // External open requests (the Cmd+K "Set exact preview size…" command) —
-  // guarded render-time state adjustment, per the React derived-state pattern.
-  const [seenSignal, setSeenSignal] = useState(openSignal);
-  if (openSignal !== seenSignal) {
-    setSeenSignal(openSignal);
-    if (openSignal > 0 && !open) openPopover();
-  }
+  // External open requests (the Cmd+K "Set exact preview size…" command).
+  const seenSignalRef = useRef(openSignal);
+  useEffect(() => {
+    if (openSignal === seenSignalRef.current) return;
+    seenSignalRef.current = openSignal;
+    if (openSignal > 0 && !open) {
+      const timeoutId = window.setTimeout(openPopover, 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [open, openPopover, openSignal]);
 
   useEffect(() => {
     if (open) void trackEvent('preview_size_popover_opened');
@@ -141,11 +145,15 @@ export function PreviewSizeControl({
         type="button"
         className="preview-dimensions"
         title="Set an exact preview size"
+        aria-label={`Set preview size: ${width} × ${height}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => (open ? setOpen(false) : openPopover())}
       >
-        {width} × {height}
+        <MoreHorizontalIcon size={14} aria-hidden="true" />
+        <span className="preview-dimensions-label">
+          {width} × {height}
+        </span>
       </button>
       {open && (
         <div className="preview-size-popover" role="dialog" aria-labelledby="preview-size-title">

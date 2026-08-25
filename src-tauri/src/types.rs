@@ -859,6 +859,10 @@ pub struct AppState {
     /// macOS beta / GPU-driver combinations).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_gpu_enabled: Option<bool>,
+    /// Whether workspace actions are consolidated into the window titlebar.
+    /// Defaults to false so existing users retain the classic two-row layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compact_workspace_toolbar_enabled: Option<bool>,
     /// Consent for automatic project-thumbnail capture. `None` = the user has
     /// never been asked (the in-app explainer is shown before the first
     /// auto-capture), `Some(true)` = allowed, `Some(false)` = opted out or a

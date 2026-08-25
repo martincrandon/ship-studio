@@ -47,6 +47,11 @@
   overflow-y: auto;
 }
 
+.ss-variables-panel.ss-edit-panel--pinned {
+  border-left: none;
+  border-right: var(--border-width-default) solid var(--border-subtle);
+}
+
 /* Container */
 .ss-vars {
   display: flex;

@@ -38,6 +38,15 @@
     border-color var(--transition);
 }
 
+.preview-dimensions > svg {
+  display: none;
+  flex-shrink: 0;
+}
+
+.preview-dimensions-label {
+  white-space: nowrap;
+}
+
 .preview-dimensions:hover:not(:disabled):not([aria-expanded='true']) {
   background: var(--surface-control-hover);
   border-color: transparent;
@@ -116,4 +125,24 @@
 .preview-size-actions {
   display: flex;
   gap: var(--spacing-sm);
+}
+
+@container preview-pane (max-width: 800px) {
+  .preview-size-wrap {
+    width: var(--control-height-standard);
+    min-width: var(--control-height-standard);
+  }
+
+  .preview-dimensions {
+    width: var(--control-height-standard);
+    padding-inline: 0;
+  }
+
+  .preview-dimensions > svg {
+    display: block;
+  }
+
+  .preview-dimensions-label {
+    display: none;
+  }
 }

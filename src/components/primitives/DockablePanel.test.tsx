@@ -82,6 +82,49 @@ describe('DockablePanel', () => {
     });
   });
 
+  it('remeasures when a dock slot moves without resizing', () => {
+    let dockRect = {
+      x: 120,
+      y: 80,
+      left: 120,
+      top: 80,
+      right: 520,
+      bottom: 680,
+      width: 400,
+      height: 600,
+      toJSON: () => ({}),
+    };
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => dockRect);
+
+    const props = {
+      docked: true,
+      ariaLabel: 'Moving panel',
+      positionKey: 'movingPanelPosition',
+      sizeKey: 'movingPanelSize',
+      floatingSize: { width: 360, height: 520 },
+      initialPosition: () => ({ left: 40, top: 60 }),
+    };
+    const { rerender } = render(
+      <DockablePanel {...props} placeholderClassName="dock-slot" dockLayoutKey="first-position">
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+
+    dockRect = { ...dockRect, x: 520, left: 520, right: 920 };
+    rerender(
+      <DockablePanel {...props} placeholderClassName="dock-slot" dockLayoutKey="second-position">
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+
+    expect(screen.getByLabelText('Moving panel')).toHaveStyle({
+      left: '520px',
+      top: '80px',
+      width: '400px',
+      height: '600px',
+    });
+  });
+
   it('can elevate a docked portal above a fullscreen owner', () => {
     render(
       <DockablePanel

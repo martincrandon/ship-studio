@@ -833,7 +833,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               />
             )}
             <Button
-              variant="ghost"
+              variant="default"
               width="fill"
               className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
               onClick={onGoHome}

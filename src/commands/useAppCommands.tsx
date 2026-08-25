@@ -15,6 +15,7 @@ import {
   FolderOpenIcon,
   GlobeIcon,
   HomeIcon,
+  PanelLeftIcon,
   PlusIcon,
   ResetIcon,
   SharedLibraryIcon,
@@ -49,6 +50,8 @@ export interface UseAppCommandsParams {
   /** Current education-mode state, so the command can read "Enter" vs "Exit". */
   isEducationMode: boolean;
   setIsEducationMode: (mode: boolean) => void;
+  compactWorkspaceToolbarEnabled: boolean;
+  setCompactWorkspaceToolbarEnabled: (enabled: boolean) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -66,6 +69,8 @@ export function useAppCommands({
   isDevServerRunning,
   isEducationMode,
   setIsEducationMode,
+  compactWorkspaceToolbarEnabled,
+  setCompactWorkspaceToolbarEnabled,
   showToast,
 }: UseAppCommandsParams) {
   const openModal = useOpenModal();
@@ -263,6 +268,16 @@ export function useAppCommands({
         run: () => void handleGitHubConnect(),
       },
       {
+        id: 'settings.compactWorkspaceToolbar',
+        title: compactWorkspaceToolbarEnabled
+          ? 'Use classic workspace toolbar'
+          : 'Use compact workspace toolbar',
+        icon: <PanelLeftIcon size={14} />,
+        category: 'settings',
+        keywords: ['compact', 'toolbar', 'topbar', 'layout', 'single row'],
+        run: () => setCompactWorkspaceToolbarEnabled(!compactWorkspaceToolbarEnabled),
+      },
+      {
         id: 'settings.changelog',
         title: "What's new",
         icon: <SettingsIcon size={14} />,
@@ -301,6 +316,8 @@ export function useAppCommands({
       handleImportProject,
       handleImportLocalFolder,
       handleGitHubConnect,
+      compactWorkspaceToolbarEnabled,
+      setCompactWorkspaceToolbarEnabled,
       openModal,
       runCheckUpdates,
     ]

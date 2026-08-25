@@ -530,6 +530,8 @@ pub fn run() {
             commands::settings::set_dashboard_header_hidden,
             commands::settings::get_terminal_gpu_enabled,
             commands::settings::set_terminal_gpu_enabled,
+            commands::settings::get_compact_workspace_toolbar_enabled,
+            commands::settings::set_compact_workspace_toolbar_enabled,
             commands::settings::get_thumbnails_enabled,
             commands::settings::set_thumbnails_enabled,
             // Accounts (Workspaces)

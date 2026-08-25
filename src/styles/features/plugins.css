@@ -7,12 +7,21 @@
   display: contents;
 }
 
+.workspace-titlebar .plugin-slot-item [class*='dropdown'],
+.workspace-titlebar .plugin-slot-item [class*='popover'],
+.workspace-titlebar .plugin-slot-item [class*='menu'],
 .workspace-header .plugin-slot-item [class*='dropdown'],
 .workspace-header .plugin-slot-item [class*='popover'],
 .workspace-header .plugin-slot-item [class*='menu'] {
   z-index: var(--z-modal-overlay) !important;
 }
 
+.workspace-titlebar .plugin-slot-item[data-plugin-id='cloudflare'] [class*='dropdown'],
+.workspace-titlebar .plugin-slot-item[data-plugin-id='cloudflare'] [class*='popover'],
+.workspace-titlebar .plugin-slot-item[data-plugin-id='cloudflare'] [class*='menu'],
+.workspace-titlebar .plugin-slot-item[data-plugin-id='vercel'] [class*='dropdown'],
+.workspace-titlebar .plugin-slot-item[data-plugin-id='vercel'] [class*='popover'],
+.workspace-titlebar .plugin-slot-item[data-plugin-id='vercel'] [class*='menu'],
 .workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='dropdown'],
 .workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='popover'],
 .workspace-header .plugin-slot-item[data-plugin-id='cloudflare'] [class*='menu'],

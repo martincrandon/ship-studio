@@ -3,7 +3,7 @@
  *
  * Contains:
  * - Projects folder (where projects are listed/created), with an optional move
- * - Home screen visibility, terminal GPU, and project thumbnail toggles
+ * - Home screen visibility, workspace layout, terminal GPU, and project thumbnail toggles
  * - Analytics opt-out toggle
  *
  * @module components/SettingsModal
@@ -25,6 +25,8 @@ import {
   setDashboardHeaderHidden,
   getTerminalGpuEnabled,
   setTerminalGpuEnabled,
+  getCompactWorkspaceToolbarEnabled,
+  setCompactWorkspaceToolbarEnabled,
   getThumbnailsEnabled,
   setThumbnailsEnabled,
   getProjectsRoot,
@@ -79,6 +81,7 @@ export function SettingsModal({
   const [calendarVisible, setLocalCalendarVisible] = useState(true);
   const [slackCtaVisible, setLocalSlackCtaVisible] = useState(true);
   const [terminalGpuEnabled, setLocalTerminalGpuEnabled] = useState(true);
+  const [compactWorkspaceToolbarEnabled, setLocalCompactWorkspaceToolbarEnabled] = useState(false);
   const [thumbnailsOn, setLocalThumbnailsOn] = useState(true);
   const [loading, setLoading] = useState(true);
 
@@ -92,23 +95,34 @@ export function SettingsModal({
     if (!isOpen) return;
     let cancelled = false;
     void (async () => {
-      const [enabled, headerHidden, calHidden, slackHidden, gpuEnabled, thumbnails, root, custom] =
-        await Promise.all([
-          getAnalyticsEnabled(),
-          getDashboardHeaderHidden(),
-          getCalendarHidden(),
-          getSlackCtaHidden(),
-          getTerminalGpuEnabled(),
-          getThumbnailsEnabled(),
-          getProjectsRoot().catch(() => ''),
-          isCustomProjectsRoot(),
-        ]);
+      const [
+        enabled,
+        headerHidden,
+        calHidden,
+        slackHidden,
+        gpuEnabled,
+        compactToolbarEnabled,
+        thumbnails,
+        root,
+        custom,
+      ] = await Promise.all([
+        getAnalyticsEnabled(),
+        getDashboardHeaderHidden(),
+        getCalendarHidden(),
+        getSlackCtaHidden(),
+        getTerminalGpuEnabled(),
+        getCompactWorkspaceToolbarEnabled(),
+        getThumbnailsEnabled(),
+        getProjectsRoot().catch(() => ''),
+        isCustomProjectsRoot(),
+      ]);
       if (!cancelled) {
         setLocalAnalyticsEnabled(enabled);
         setLocalDashboardHeaderVisible(!headerHidden);
         setLocalCalendarVisible(!calHidden);
         setLocalSlackCtaVisible(!slackHidden);
         setLocalTerminalGpuEnabled(gpuEnabled);
+        setLocalCompactWorkspaceToolbarEnabled(compactToolbarEnabled);
         // `null` = not asked yet; the toggle reflects the default-on behavior
         // (the first auto-capture will show the in-app explainer).
         setLocalThumbnailsOn(thumbnails !== false);
@@ -182,6 +196,16 @@ export function SettingsModal({
       $screen_name: 'Settings',
     });
   }, [terminalGpuEnabled]);
+
+  const handleCompactWorkspaceToolbarToggle = useCallback(() => {
+    const enabled = !compactWorkspaceToolbarEnabled;
+    setLocalCompactWorkspaceToolbarEnabled(enabled);
+    void setCompactWorkspaceToolbarEnabled(enabled);
+    void trackEvent('compact_workspace_toolbar_toggled', {
+      enabled,
+      $screen_name: 'Settings',
+    });
+  }, [compactWorkspaceToolbarEnabled]);
 
   const handleThumbnailsToggle = useCallback(() => {
     const newEnabled = !thumbnailsOn;
@@ -320,6 +344,27 @@ export function SettingsModal({
                   </button>
                 )}
               </div>
+            </div>
+            <div className="settings-row">
+              <div className="settings-row-info">
+                <span className="settings-row-label">Compact workspace toolbar</span>
+                <span className="settings-row-description">
+                  Combine workspace controls into a single top bar and move Home and sidebar
+                  controls there.
+                </span>
+              </div>
+              <button
+                className={`settings-toggle ${compactWorkspaceToolbarEnabled ? 'on' : 'off'}`}
+                onClick={handleCompactWorkspaceToolbarToggle}
+                disabled={loading}
+                role="switch"
+                aria-label="Compact workspace toolbar"
+                aria-checked={compactWorkspaceToolbarEnabled}
+              >
+                <span className="settings-toggle-track">
+                  <span className="settings-toggle-thumb" />
+                </span>
+              </button>
             </div>
             <div className="settings-row">
               <div className="settings-row-info">

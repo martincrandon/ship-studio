@@ -42,6 +42,7 @@ import { ProjectsView } from './components/dashboard/ProjectsView';
 import { AccountSelectScreen } from './components/accounts/AccountSelectScreen';
 import { WorkspaceView } from './components/workspace/WorkspaceView';
 import { WorkspaceSidebar } from './components/workspace/WorkspaceSidebar';
+import { WorkspaceNavigation, WorkspaceTitlebar } from './components/workspace/WorkspaceHeader';
 import { useProjectRail } from './hooks/useProjectRail';
 import { OnboardingRouter } from './components/setup';
 import { Project, setTerminalState } from './lib/project';
@@ -73,6 +74,11 @@ import { DevDesignSystemTools } from './components/design-system/DevDesignSystem
 import { logger } from './lib/logger';
 import { asCommandError, formatCommandError } from './lib/errors';
 import { trackEvent, setActiveProject, trackPageview } from './lib/analytics';
+import {
+  COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT,
+  getCompactWorkspaceToolbarEnabled,
+  setCompactWorkspaceToolbarEnabled,
+} from './lib/settings';
 import { endProjectSession } from './lib/session';
 import { installAppLifecycleTracking, quitAppWithTracking } from './lib/appLifecycle';
 import type { AppView } from './lib/types';
@@ -127,10 +133,29 @@ function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
+  const [compactWorkspaceToolbarEnabled, setCompactWorkspaceToolbarState] = useState(false);
   const toggleSidebar = useCallback(() => {
     void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
     setIsSidebarHidden(!isSidebarHidden);
   }, [isSidebarHidden]);
+  useEffect(() => {
+    let cancelled = false;
+    void getCompactWorkspaceToolbarEnabled().then((enabled) => {
+      if (!cancelled) setCompactWorkspaceToolbarState(enabled);
+    });
+    const handleChanged = (event: Event) => {
+      setCompactWorkspaceToolbarState((event as CustomEvent<boolean>).detail);
+    };
+    window.addEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, handleChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, handleChanged);
+    };
+  }, []);
+  const updateCompactWorkspaceToolbar = useCallback((enabled: boolean) => {
+    setCompactWorkspaceToolbarState(enabled);
+    void setCompactWorkspaceToolbarEnabled(enabled);
+  }, []);
   const isCompact = useIsCompact();
   const setPaletteContext = useSetPaletteContext();
   useEffect(() => {
@@ -537,6 +562,8 @@ function AppContents({ initialProjectPath }: AppProps) {
     isDevServerRunning: isServerRunning,
     isEducationMode,
     setIsEducationMode,
+    compactWorkspaceToolbarEnabled,
+    setCompactWorkspaceToolbarEnabled: updateCompactWorkspaceToolbar,
     showToast,
   });
 
@@ -1134,9 +1161,26 @@ function AppContents({ initialProjectPath }: AppProps) {
   }
 
   if (view === 'projects') {
+    const showCompactWorkspaceTitlebar = !isCompact && compactWorkspaceToolbarEnabled;
     return (
       <>
-        <div className="app workspace workspace-home">
+        <div
+          className={`app workspace workspace-home${
+            showCompactWorkspaceTitlebar ? ' has-workspace-titlebar workspace--compact-toolbar' : ''
+          }`}
+        >
+          {showCompactWorkspaceTitlebar && (
+            <WorkspaceTitlebar>
+              <WorkspaceNavigation
+                onGoHome={() => {
+                  /* already on Home */
+                }}
+                isHomeActive
+                isSidebarHidden={isSidebarHidden}
+                onToggleSidebar={toggleSidebar}
+              />
+            </WorkspaceTitlebar>
+          )}
           <div
             className={`projects-with-rail${isCompact ? ' is-compact' : ''}`}
             key="view-projects"
@@ -1151,7 +1195,7 @@ function AppContents({ initialProjectPath }: AppProps) {
                 onOpenProjectPicker={openProjectPicker}
                 isSidebarHidden={isSidebarHidden}
                 onToggleSidebar={toggleSidebar}
-                showNavigationControls
+                showNavigationControls={!compactWorkspaceToolbarEnabled}
                 projects={pinnedProjects.rows}
                 currentProjectPath={null}
                 currentProjectName={null}
@@ -1222,9 +1266,23 @@ function AppContents({ initialProjectPath }: AppProps) {
   }
 
   if (view === 'project-loading') {
+    const showCompactWorkspaceTitlebar = !isCompact && compactWorkspaceToolbarEnabled;
     return (
       <>
-        <div className="app workspace workspace-home">
+        <div
+          className={`app workspace workspace-home${
+            showCompactWorkspaceTitlebar ? ' has-workspace-titlebar workspace--compact-toolbar' : ''
+          }`}
+        >
+          {showCompactWorkspaceTitlebar && (
+            <WorkspaceTitlebar>
+              <WorkspaceNavigation
+                onGoHome={handleBackToProjects}
+                isSidebarHidden={isSidebarHidden}
+                onToggleSidebar={toggleSidebar}
+              />
+            </WorkspaceTitlebar>
+          )}
           <div className="projects-with-rail" key="view-project-loading">
             <WorkspaceSidebar
               key="sidebar-project-loading"
@@ -1233,7 +1291,7 @@ function AppContents({ initialProjectPath }: AppProps) {
               onOpenProjectPicker={openProjectPicker}
               isSidebarHidden={isSidebarHidden}
               onToggleSidebar={toggleSidebar}
-              showNavigationControls
+              showNavigationControls={!compactWorkspaceToolbarEnabled}
               projects={pinnedProjects.rows}
               currentProjectPath={currentProject?.path ?? null}
               currentProjectName={currentProject?.name ?? null}
@@ -1305,6 +1363,7 @@ function AppContents({ initialProjectPath }: AppProps) {
         isProjectDevServerRunning={isServerRunning}
         isSidebarHidden={isSidebarHidden}
         onToggleSidebar={toggleSidebar}
+        compactWorkspaceToolbarEnabled={compactWorkspaceToolbarEnabled}
       />
       <ThumbnailConsentModal
         isOpen={showThumbnailConsent}

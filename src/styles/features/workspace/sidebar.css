@@ -50,6 +50,15 @@
   display: none;
 }
 
+/* Compact-toolbar Home has real window chrome above the sidebar. Keep the
+ * sidebar divider out of that shared titlebar instead of drawing through its
+ * navigation controls. */
+.app.workspace-home.has-workspace-titlebar .workspace-sidebar::after {
+  inset-block-start: calc(
+    var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default)
+  );
+}
+
 /* Every descendant uses border-box so `width: 100%` + padding never
  * overflows. Without this, rows that set width: 100% with padding
  * pushed a few pixels past the 240px sidebar and forced a horizontal
