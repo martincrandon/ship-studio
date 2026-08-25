@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { ModalProvider } from '../../contexts/ModalContext';
 import { PaletteContextProvider } from '../CommandPalette/paletteContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
@@ -84,6 +84,14 @@ describe('WorkspaceSidebar project activity indicator', () => {
   afterEach(() => {
     localStorage.clear();
     sessionRegistry._resetForTests();
+  });
+
+  it('uses the default button treatment for Home in the classic sidebar', async () => {
+    render(<WorkspaceSidebar {...sidebarProps()} />, { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Home' })).toHaveClass('button--default');
+    });
   });
 
   it('shows the PixelLoader in a collapsed project row when a tab is thinking', async () => {

@@ -72,6 +72,8 @@ export interface WorkspacePreviewPaneProps {
   closeElementTree: () => void;
   setElementTreePreviewAvailable: (available: boolean) => void;
   variablesPanelVisible: boolean;
+  variablesPanelPinned: boolean;
+  toggleVariablesPanelPinned: () => void;
   closeVariablesPanel: () => void;
   pluginProject: PluginProjectData | null;
   pluginActions: PluginAppActions;
@@ -143,6 +145,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     closeElementTree,
     setElementTreePreviewAvailable,
     variablesPanelVisible,
+    variablesPanelPinned,
+    toggleVariablesPanelPinned,
     closeVariablesPanel,
     pluginProject,
     pluginActions,
@@ -230,6 +234,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             onCloseElementTree={closeElementTree}
             onElementTreeAvailabilityChange={setElementTreePreviewAvailable}
             variablesPanelVisible={variablesPanelVisible}
+            variablesPanelPinned={variablesPanelPinned}
+            onToggleVariablesPanelPin={toggleVariablesPanelPinned}
             onCloseVariablesPanel={closeVariablesPanel}
             previewPlugins={
               previewSlotPlugins.length > 0 ? (

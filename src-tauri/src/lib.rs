@@ -173,11 +173,18 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     main_builder = main_builder
+                        .decorations(true)
                         .title_bar_style(tauri::TitleBarStyle::Overlay)
+                        // `y` sizes Tao's native titlebar container to 14 + 32 = 46px;
+                        // `center_macos_traffic_lights` below performs the missing Y move.
+                        .traffic_light_position(tauri::LogicalPosition::new(16.0, 32.0))
                         .hidden_title(true);
                 }
 
-                main_builder.build()?;
+                let main_window = main_builder.build()?;
+
+                #[cfg(target_os = "macos")]
+                commands::window::center_macos_traffic_lights(&main_window)?;
             }
 
             // The static asset-protocol scope (tauri.conf.json) only covers
@@ -523,6 +530,8 @@ pub fn run() {
             commands::settings::set_dashboard_header_hidden,
             commands::settings::get_terminal_gpu_enabled,
             commands::settings::set_terminal_gpu_enabled,
+            commands::settings::get_compact_workspace_toolbar_enabled,
+            commands::settings::set_compact_workspace_toolbar_enabled,
             commands::settings::get_thumbnails_enabled,
             commands::settings::set_thumbnails_enabled,
             // Accounts (Workspaces)

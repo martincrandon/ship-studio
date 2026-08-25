@@ -93,6 +93,7 @@
   color: var(--accent-warning-light);
 }
 
+.workspace-titlebar .branch-name,
 .workspace-header .branch-name {
   max-width: var(--source-control-branch-max-width);
 }
@@ -157,6 +158,21 @@
   font-size: var(--font-size-10);
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
+}
+
+/* The warning segment sheds secondary context in stages as the titlebar
+   narrows: the live marker first, then the branch name. The Push affordance
+   and its unsaved state remain visible throughout. */
+@media (max-width: 1100px) {
+  .workspace-titlebar .source-control-push .branch-live-badge {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-titlebar .source-control-push .branch-name {
+    display: none;
+  }
 }
 
 /* Changed-files review */

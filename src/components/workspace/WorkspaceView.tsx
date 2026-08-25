@@ -349,6 +349,12 @@ export interface WorkspaceViewProps {
   /** Predicate: is a dev server currently tracked for the given project path?
    *  Used by the sidebar to populate background projects' Commands section. */
   isProjectDevServerRunning: (projectPath: string) => boolean;
+  /** Whether the shared project sidebar is in its compact state. */
+  isSidebarHidden: boolean;
+  /** Toggle the shared project sidebar between full and compact states. */
+  onToggleSidebar: () => void;
+  /** Whether workspace controls are consolidated into the window titlebar. */
+  compactWorkspaceToolbarEnabled: boolean;
 }
 
 export const WorkspaceView = memo(function WorkspaceView({
@@ -378,6 +384,9 @@ export const WorkspaceView = memo(function WorkspaceView({
   onUnpinProject,
   onOpenProjectPicker,
   isProjectDevServerRunning,
+  isSidebarHidden,
+  onToggleSidebar,
+  compactWorkspaceToolbarEnabled,
 }: WorkspaceViewProps) {
   // Window-width gate for the compact layout. Purely reactive — no Tauri
   // resize calls, no pinning. See src/hooks/useIsCompact.ts for the threshold.
@@ -693,12 +702,6 @@ export const WorkspaceView = memo(function WorkspaceView({
     },
     [currentProject.path, terminalTabs, activeTerminalTab]
   );
-  // Sidebar visibility is workspace-local (not persisted). The home / projects
-  // view renders its own sidebar instance unconditionally, so this state does
-  // not affect it. Compact mode never renders the full sidebar — the narrow
-  // layout owns its own chrome (see `CompactWorkspace`).
-  const [isSidebarHidden, setIsSidebarHidden] = useState(false);
-  const effectiveSidebarHidden = isSidebarHidden;
   // Naming note: `showPreviewLogs` is the legacy state for the inspect panel
   // (which hosts dev-server logs + browser tools). The event keeps the
   // generic name so future inspect-only telemetry doesn't have to migrate.
@@ -731,6 +734,9 @@ export const WorkspaceView = memo(function WorkspaceView({
     workspaceTab === 'preview' && !isPreviewHidden && elementTreePreviewAvailable;
   const elementTreePanelVisible = elementTreeAvailable && elementTreeVisible;
   const [variablesPanelVisible, setVariablesPanelVisible] = useState(false);
+  const [variablesPanelPinned, setVariablesPanelPinned] = useState(
+    () => localStorage.getItem('variablesPanelPinned') === '1'
+  );
   const variablesPanelOpen =
     isWebProject && workspaceTab === 'preview' && !isPreviewHidden && variablesPanelVisible;
   useEffect(() => {
@@ -754,6 +760,12 @@ export const WorkspaceView = memo(function WorkspaceView({
   const toggleElementTreePinned = useCallback(() => {
     setElementTreePinned((pinned) => {
       localStorage.setItem('elementTreePinned', pinned ? '0' : '1');
+      return !pinned;
+    });
+  }, []);
+  const toggleVariablesPanelPinned = useCallback(() => {
+    setVariablesPanelPinned((pinned) => {
+      localStorage.setItem('variablesPanelPinned', pinned ? '0' : '1');
       return !pinned;
     });
   }, []);
@@ -791,6 +803,15 @@ export const WorkspaceView = memo(function WorkspaceView({
         run: toggleElementTreePinned,
       },
       {
+        id: 'workspace.toggleVariablesPanelPin',
+        title: variablesPanelPinned ? 'Float Variables panel' : 'Dock Variables panel',
+        icon: <VariablesIcon size={14} />,
+        category: 'action',
+        when: ({ kind }) => kind === 'project' && isWebProject,
+        keywords: ['variables', 'css', 'token', 'pin', 'float', 'dock'],
+        run: toggleVariablesPanelPinned,
+      },
+      {
         id: 'css.variables',
         title: variablesPanelOpen ? 'Hide Variables panel' : 'Show Variables panel',
         icon: <VariablesIcon size={14} />,
@@ -807,6 +828,8 @@ export const WorkspaceView = memo(function WorkspaceView({
       toggleAgentPanelPinned,
       elementTreePinned,
       toggleElementTreePinned,
+      variablesPanelPinned,
+      toggleVariablesPanelPinned,
       isWebProject,
       variablesPanelOpen,
       toggleVariablesPanel,
@@ -1019,6 +1042,10 @@ export const WorkspaceView = memo(function WorkspaceView({
   const header = WorkspaceHeader({
     projectPath: currentProject.path,
     projectName: currentProject.name,
+    onGoHome,
+    isSidebarHidden,
+    onToggleSidebar,
+    compactWorkspaceToolbarEnabled,
     onOpenAssetsPanel: assetsPanelModal.open,
     assetsPanelVisible: assetsPanelModal.isOpen,
     elementTreeVisible: elementTreePanelVisible,
@@ -1092,7 +1119,11 @@ export const WorkspaceView = memo(function WorkspaceView({
 
   return (
     <>
-      <div className="app workspace">
+      <div
+        className={`app workspace${
+          compactWorkspaceToolbarEnabled ? ' workspace--compact-toolbar' : ''
+        }`}
+      >
         {!isCompact && header.titlebar}
 
         {isCompact ? (
@@ -1127,16 +1158,14 @@ export const WorkspaceView = memo(function WorkspaceView({
             handleTabTitleChange={handleTabTitleChange}
           />
         ) : (
-          <div className={`workspace-body${effectiveSidebarHidden ? ' is-sidebar-hidden' : ''}`}>
+          <div className="workspace-body">
             <WorkspaceSidebar
               isHomeActive={false}
               onGoHome={onGoHome}
               onOpenProjectPicker={onOpenProjectPicker}
-              isSidebarHidden={effectiveSidebarHidden}
-              onToggleSidebar={() => {
-                void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
-                setIsSidebarHidden(!isSidebarHidden);
-              }}
+              isSidebarHidden={isSidebarHidden}
+              onToggleSidebar={onToggleSidebar}
+              showNavigationControls={!compactWorkspaceToolbarEnabled}
               projects={projectRows}
               onCloseProject={onCloseProject}
               onUnpinProject={onUnpinProject}
@@ -1309,6 +1338,8 @@ export const WorkspaceView = memo(function WorkspaceView({
                       closeElementTree={closeElementTree}
                       setElementTreePreviewAvailable={setElementTreePreviewAvailable}
                       variablesPanelVisible={variablesPanelVisible}
+                      variablesPanelPinned={variablesPanelPinned}
+                      toggleVariablesPanelPinned={toggleVariablesPanelPinned}
                       closeVariablesPanel={() => setVariablesPanelVisible(false)}
                       pluginProject={pluginProject}
                       pluginActions={pluginActions}

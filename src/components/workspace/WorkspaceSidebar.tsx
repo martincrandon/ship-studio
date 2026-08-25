@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type KeyboardEvent,
   type MouseEvent,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -93,6 +94,8 @@ interface Props {
   onOpenProjectPicker: () => void;
   isSidebarHidden?: boolean;
   onToggleSidebar?: () => void;
+  /** Hide the sidebar-owned navigation row when the workspace titlebar owns it. */
+  showNavigationControls?: boolean;
 
   // Projects
   /** Pinned projects (in pin order). Have live registry data. */
@@ -274,6 +277,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   onOpenProjectPicker,
   isSidebarHidden,
   onToggleSidebar,
+  showNavigationControls = true,
   projects,
   currentProjectPath,
   currentProjectName,
@@ -801,37 +805,50 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     setSidebarWidth((width) => Math.max(150, Math.min(width + delta, 500)));
   }, []);
 
+  const sidebarStyle = {
+    width: sidebarWidth,
+    '--workspace-sidebar-width': isSidebarHidden
+      ? 'calc(var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default))'
+      : `${sidebarWidth}px`,
+  } as CSSProperties;
+
   return (
     <>
-      <aside className="workspace-sidebar" aria-label="Processes" style={{ width: sidebarWidth }}>
-        <div className="workspace-sidebar-top-row">
-          {onToggleSidebar && (
-            <IconButton
-              variant="ghost"
-              className="workspace-sidebar-toggle"
-              icon={<PanelLeftIcon size={12} />}
-              onClick={onToggleSidebar}
-              title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
-              aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
-              data-education-id="toggle-sidebar"
-            />
-          )}
-          <Button
-            variant="default"
-            width="fill"
-            className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
-            onClick={onGoHome}
-            disabled={isHomeActive}
-            aria-current={isHomeActive ? 'page' : undefined}
-            leftIcon={
-              <span className="workspace-sidebar-home-icon" aria-hidden="true">
-                <HomeIcon size={12} />
-              </span>
-            }
-          >
-            <span>Home</span>
-          </Button>
-        </div>
+      <aside
+        className={`workspace-sidebar${isSidebarHidden ? ' is-hidden' : ''}`}
+        aria-label="Processes"
+        style={sidebarStyle}
+      >
+        {showNavigationControls && (
+          <div className="workspace-sidebar-top-row">
+            {onToggleSidebar && (
+              <IconButton
+                variant="ghost"
+                className="workspace-sidebar-toggle"
+                icon={<PanelLeftIcon size={12} />}
+                onClick={onToggleSidebar}
+                title={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+                aria-label={isSidebarHidden ? 'Show sidebar' : 'Hide sidebar'}
+                data-education-id="toggle-sidebar"
+              />
+            )}
+            <Button
+              variant="default"
+              width="fill"
+              className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
+              onClick={onGoHome}
+              disabled={isHomeActive}
+              aria-current={isHomeActive ? 'page' : undefined}
+              leftIcon={
+                <span className="workspace-sidebar-home-icon" aria-hidden="true">
+                  <HomeIcon size={12} />
+                </span>
+              }
+            >
+              <span>Home</span>
+            </Button>
+          </div>
+        )}
 
         <div className="workspace-sidebar-search-panel">
           <button

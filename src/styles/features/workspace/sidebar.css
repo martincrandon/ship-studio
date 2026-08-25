@@ -15,6 +15,50 @@
   color: var(--text-primary);
 }
 
+/* The project titlebar is rendered above `.workspace-body`, while the
+ * sidebar's resize handle starts inside that body. Keep the divider visually
+ * continuous through the titlebar without changing the handle's layout or
+ * pointer target. The custom property follows the live resize width. */
+.app.workspace .workspace-sidebar::before {
+  position: fixed;
+  inset-block-start: calc(
+    var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default)
+  );
+  inset-inline-start: 0;
+  width: var(--workspace-sidebar-width);
+  height: var(--border-width-default);
+  background: var(--surface-panel);
+  content: '';
+  pointer-events: none;
+  z-index: var(--z-dropdown);
+}
+
+.app.workspace .workspace-sidebar::after {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: var(--workspace-sidebar-width);
+  width: var(--border-width-default);
+  background: var(--border-default);
+  content: '';
+  pointer-events: none;
+  z-index: var(--z-dropdown);
+}
+
+/* Home owns no full-width titlebar: its navigation row is the top of the
+ * sidebar, so the project-workspace titlebar fill is not needed here. */
+.app.workspace-home .workspace-sidebar::before {
+  display: none;
+}
+
+/* Compact-toolbar Home has real window chrome above the sidebar. Keep the
+ * sidebar divider out of that shared titlebar instead of drawing through its
+ * navigation controls. */
+.app.workspace-home.has-workspace-titlebar .workspace-sidebar::after {
+  inset-block-start: calc(
+    var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default)
+  );
+}
+
 /* Every descendant uses border-box so `width: 100%` + padding never
  * overflows. Without this, rows that set width: 100% with padding
  * pushed a few pixels past the 240px sidebar and forced a horizontal
@@ -26,13 +70,53 @@
   box-sizing: border-box;
 }
 
-/*
- * On the home/projects view there's no workspace titlebar above the sidebar,
- * so the sidebar runs to y=0 — right under the macOS traffic lights (overlay
- * mode). Reserve the titlebar height at the top so Home doesn't collide.
- */
+/* Home and loading render their navigation controls inside the sidebar. */
 .projects-with-rail .workspace-sidebar {
-  padding-top: 32px;
+  padding-top: 0;
+}
+
+.app.workspace-home .workspace-sidebar {
+  z-index: var(--z-workspace-header);
+}
+
+.app.workspace-home .workspace-sidebar-top-row {
+  height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  min-height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  padding: 0 var(--space-08) 0
+    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap));
+}
+
+/* Keep the complete navigation group at the default expanded-sidebar width.
+ * The Home button must not grow with the resizable sidebar or shrink when the
+ * process rail collapses. */
+.app.workspace-home .workspace-sidebar-top-row .workspace-sidebar-home {
+  width: calc(var(--space-32) + var(--space-32) + var(--space-24));
+  min-width: calc(var(--space-32) + var(--space-32) + var(--space-24));
+  flex: 0 0 calc(var(--space-32) + var(--space-32) + var(--space-24));
+  padding-inline: var(--space-08);
+}
+
+/* Collapsing Home reduces the process rail, but the window/navigation row
+ * remains intact. Let that one row extend over the canvas and keep the rail's
+ * vertical divider below it so it never cuts through the controls. */
+.app.workspace-home .workspace-sidebar.is-hidden {
+  overflow: visible;
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden::after {
+  inset-block-start: calc(var(--control-height-standard) + (var(--space-08) * 2));
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-top-row {
+  position: relative;
+  width: max-content;
+  flex-direction: row;
+  background: var(--surface-panel);
+  z-index: var(--z-workspace-header);
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-home > span:last-child {
+  display: inline;
 }
 
 /* Top row — wraps the Home button and workspace switcher dot side-by-side.
@@ -50,16 +134,34 @@
   flex-shrink: 0;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-top-row {
+/* Collapsed rail: only as wide as the icon controls plus their padding.
+   !important beats the inline resize width on the aside. */
+.workspace-sidebar.is-hidden {
+  width: calc(var(--control-height-standard) + (var(--space-08) * 2)) !important;
+  border-right: var(--stroke-1) solid var(--border-default);
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-ws-switch,
+.workspace-sidebar.is-hidden .workspace-sidebar-footer-divider {
+  display: none;
+}
+
+/* The resize handle is a sibling of the aside; hide it while collapsed
+   since the collapsed rail is not user-resizable. */
+.workspace-sidebar.is-hidden + .panel-resize-handle {
+  display: none;
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-top-row {
   flex-direction: column;
   gap: var(--button-gap);
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-toggle,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-home,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-add-project,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-support,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-settings {
+.workspace-sidebar.is-hidden .workspace-sidebar-toggle,
+.workspace-sidebar.is-hidden .workspace-sidebar-home,
+.workspace-sidebar.is-hidden .workspace-sidebar-add-project,
+.workspace-sidebar.is-hidden .workspace-sidebar-support,
+.workspace-sidebar.is-hidden .workspace-sidebar-settings {
   width: var(--control-height-standard);
   min-width: var(--control-height-standard);
   height: var(--control-height-standard);
@@ -67,16 +169,16 @@
   padding: 0;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-footer-actions {
+.workspace-sidebar.is-hidden .workspace-sidebar-footer-actions {
   flex-direction: column;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-home {
+.workspace-sidebar.is-hidden .workspace-sidebar-home {
   justify-content: center;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-home > span:last-child,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-add-project > span:last-child {
+.workspace-sidebar.is-hidden .workspace-sidebar-home > span:last-child,
+.workspace-sidebar.is-hidden .workspace-sidebar-add-project > span:last-child {
   display: none;
 }
 
@@ -133,13 +235,13 @@
   color: var(--text-secondary);
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-filter {
+.workspace-sidebar.is-hidden .workspace-sidebar-filter {
   justify-content: center;
   padding: 0;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-filter-placeholder,
-.workspace-body.is-sidebar-hidden .workspace-sidebar-filter-shortcut {
+.workspace-sidebar.is-hidden .workspace-sidebar-filter-placeholder,
+.workspace-sidebar.is-hidden .workspace-sidebar-filter-shortcut {
   display: none;
 }
 
@@ -207,15 +309,15 @@
   height: 0;
 }
 
-.workspace-body.is-sidebar-hidden .workspace-sidebar-scroll {
+.workspace-sidebar.is-hidden .workspace-sidebar-scroll {
   padding-bottom: 0;
 }
 
-.workspace-body.is-sidebar-hidden .sidebar-project {
+.workspace-sidebar.is-hidden .sidebar-project {
   border-bottom: var(--stroke-1) solid var(--border-subtle);
 }
 
-.workspace-body.is-sidebar-hidden .sidebar-project-row {
+.workspace-sidebar.is-hidden .sidebar-project-row {
   justify-content: center;
   height: calc(var(--control-height-standard) + (var(--space-08) * 2));
   padding: var(--space-08);

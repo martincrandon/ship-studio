@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkspaceHeader, type WorkspaceHeaderProps } from './WorkspaceHeader';
+import { WorkspaceHeader, WorkspaceTitlebar, type WorkspaceHeaderProps } from './WorkspaceHeader';
 import { openInFinder } from '../../lib/ide';
+
+const { startDragging } = vi.hoisted(() => ({ startDragging: vi.fn() }));
+
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({ startDragging }),
+}));
 
 vi.mock('../../lib/ide', () => ({
   openInFinder: vi.fn(),
@@ -13,6 +19,10 @@ function headerProps(): WorkspaceHeaderProps {
   return {
     projectPath,
     projectName: 'A very long project name',
+    onGoHome: vi.fn(),
+    isSidebarHidden: false,
+    onToggleSidebar: vi.fn(),
+    compactWorkspaceToolbarEnabled: true,
     onOpenAssetsPanel: vi.fn(),
     assetsPanelVisible: false,
     elementTreeVisible: false,
@@ -68,14 +78,19 @@ function headerProps(): WorkspaceHeaderProps {
   };
 }
 
-function TitlebarHarness() {
-  const { titlebar } = WorkspaceHeader(headerProps());
+function TitlebarHarness({ props = headerProps() }: { props?: WorkspaceHeaderProps } = {}) {
+  const { titlebar } = WorkspaceHeader(props);
   return titlebar;
 }
 
-function ToolbarHarness({ props }: { props: WorkspaceHeaderProps }) {
-  const { toolbar } = WorkspaceHeader(props);
-  return toolbar;
+function HeaderHarness({ props = headerProps() }: { props?: WorkspaceHeaderProps } = {}) {
+  const { titlebar, toolbar } = WorkspaceHeader(props);
+  return (
+    <>
+      {titlebar}
+      {toolbar}
+    </>
+  );
 }
 
 describe('WorkspaceHeader title bar', () => {
@@ -83,8 +98,67 @@ describe('WorkspaceHeader title bar', () => {
     vi.clearAllMocks();
   });
 
+  it('places sidebar navigation controls in the titlebar', () => {
+    const { container } = render(<TitlebarHarness />);
+
+    expect(container.querySelector('.workspace-titlebar-navigation')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Home' })).toHaveClass('button--icon-only');
+  });
+
+  it('puts an icon-only project location action after Home and hides the project name', () => {
+    const { container } = render(<TitlebarHarness />);
+    const home = screen.getByRole('button', { name: 'Home' });
+    const location = screen.getByRole('button', {
+      name: `Open ${projectPath} in Finder`,
+    });
+
+    expect(location).toHaveClass('button--icon-only');
+    expect(home.compareDocumentPosition(location)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(container.querySelector('.workspace-title-group')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'A very long project name' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(location);
+    expect(openInFinder).toHaveBeenCalledWith(projectPath);
+  });
+
+  it('restores sidebar navigation ownership and the second toolbar in classic layout', () => {
+    const props = headerProps();
+    props.compactWorkspaceToolbarEnabled = false;
+    const { container } = render(<HeaderHarness props={props} />);
+
+    expect(container.querySelector('.workspace-titlebar-navigation')).not.toBeInTheDocument();
+    expect(container.querySelector('.workspace-header')).toBeInTheDocument();
+    expect(container.querySelector('.workspace-header-left')).toContainElement(
+      screen.getByRole('button', { name: 'Elements' })
+    );
+  });
+
+  it('starts dragging from non-interactive middle sections of the titlebar', () => {
+    const { container } = render(
+      <WorkspaceTitlebar>
+        <div className="workspace-titlebar-center">
+          <span>Project location</span>
+          <button type="button">Action</button>
+        </div>
+      </WorkspaceTitlebar>
+    );
+
+    fireEvent.mouseDown(screen.getByText('Project location'), { button: 0 });
+    expect(startDragging).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Action' }), { button: 0 });
+    expect(startDragging).toHaveBeenCalledTimes(1);
+
+    expect(container.querySelector('.workspace-titlebar-center')).toBeInTheDocument();
+  });
+
   it('keeps the whole path action labelled with the full path', () => {
-    render(<TitlebarHarness />);
+    const props = headerProps();
+    props.compactWorkspaceToolbarEnabled = false;
+    render(<TitlebarHarness props={props} />);
 
     const actionLabel = `Open ${projectPath} in Finder`;
     const title = screen.getByRole('heading', { name: 'A very long project name' });
@@ -94,9 +168,41 @@ describe('WorkspaceHeader title bar', () => {
     expect(pathButton.parentElement).toHaveClass('project-path-container');
     expect(pathButton).toHaveAttribute('title', 'Open in Finder');
     expect(pathButton.querySelector('svg')).toBeInTheDocument();
-
     fireEvent.click(pathButton);
     expect(openInFinder).toHaveBeenCalledWith(projectPath);
+  });
+
+  it('places the workspace controls in the titlebar', () => {
+    const { container } = render(<TitlebarHarness />);
+
+    expect(container.querySelector('.workspace-titlebar-divider')).toBeInTheDocument();
+    expect(container.querySelector('.workspace-titlebar-tools')).toBeInTheDocument();
+    expect(container.querySelector('.workspace-titlebar-actions')).toBeInTheDocument();
+    expect(
+      container.querySelector('.workspace-titlebar .source-control-actions')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Elements' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agent' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Variables' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Assets' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Branches' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled();
+  });
+
+  it('places the mode switcher between workspace tools and source controls', () => {
+    const props = headerProps();
+    props.modes = <div data-testid="workspace-modes" />;
+    const { container } = render(<TitlebarHarness props={props} />);
+
+    const tools = container.querySelector('.workspace-titlebar-tools');
+    const modes = container.querySelector('[data-testid="workspace-modes"]');
+    const actions = container.querySelector('.workspace-titlebar-actions');
+
+    expect(tools).toBeInTheDocument();
+    expect(modes).toBeInTheDocument();
+    expect(actions).toBeInTheDocument();
+    expect(tools!.compareDocumentPosition(modes!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(modes!.compareDocumentPosition(actions!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('expands to the measured full path while hovered', () => {
@@ -130,7 +236,9 @@ describe('WorkspaceHeader title bar', () => {
       } as DOMRect;
     });
 
-    render(<TitlebarHarness />);
+    const props = headerProps();
+    props.compactWorkspaceToolbarEnabled = false;
+    render(<TitlebarHarness props={props} />);
     const pathButton = screen.getByRole('button', {
       name: `Open ${projectPath} in Finder`,
     });
@@ -144,9 +252,9 @@ describe('WorkspaceHeader title bar', () => {
     expect(container).not.toHaveStyle({ width: '420px' });
   });
 
-  it('places Variables between Agent and Assets and toggles it from the toolbar', () => {
+  it('places Variables between Agent and Assets and toggles it from the titlebar', () => {
     const props = headerProps();
-    render(<ToolbarHarness props={props} />);
+    render(<TitlebarHarness props={props} />);
 
     const agent = screen.getByRole('button', { name: 'Agent' });
     const variables = screen.getByRole('button', { name: 'Variables' });

@@ -33,6 +33,8 @@ interface DockablePanelProps {
   minFloatingSize?: Size;
   initialPosition: () => Point;
   placeholderClassName?: string;
+  /** Bump when the dock slot can move without changing its dimensions. */
+  dockLayoutKey?: string | number;
   surfaceClassName?: string;
   placeholderRef?: RefObject<HTMLDivElement | null>;
   /** Floating panels such as the colour picker can be movable without being resizable. */
@@ -109,6 +111,7 @@ export function DockablePanel({
   minFloatingSize = DEFAULT_MIN_FLOATING_SIZE,
   initialPosition,
   placeholderClassName,
+  dockLayoutKey,
   surfaceClassName,
   placeholderRef,
   resizable = true,
@@ -172,6 +175,12 @@ export function DockablePanel({
   useLayoutEffect(() => {
     const placeholder = internalPlaceholderRef.current;
     if (!placeholder) return;
+    // A dock slot can move without changing size when another panel is added
+    // before it in the grid. Measure immediately after that class-driven
+    // layout change so the body-portaled surface cannot remain over the old
+    // slot until a later resize or window event.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- this is a synchronous layout measurement required to keep the portal aligned before paint.
+    measureDock();
     const observer = new ResizeObserver(measureDock);
     observer.observe(placeholder);
     // The dock slot can keep the same dimensions while its containing pane
@@ -184,7 +193,7 @@ export function DockablePanel({
       observer.disconnect();
       window.removeEventListener('resize', measureDock);
     };
-  }, [measureDock]);
+  }, [measureDock, placeholderClassName, dockLayoutKey]);
 
   useEffect(() => {
     if (!docked) return;

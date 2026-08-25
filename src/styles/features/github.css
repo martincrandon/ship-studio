@@ -50,27 +50,6 @@
   color: var(--accent-success);
 }
 
-/* GitHub Integration - Workspace Header */
-.workspace-header-left,
-.workspace-header-center,
-.workspace-header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-04);
-}
-
-.workspace-header-left {
-  min-width: 0;
-}
-
-.workspace-header-center {
-  align-self: stretch;
-}
-
-.workspace-header-right {
-  justify-self: end;
-}
-
 .github-button {
   display: flex;
   align-items: center;

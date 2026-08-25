@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT,
   DASHBOARD_VISIBILITY_CHANGED_EVENT,
   setCalendarHidden,
+  setCompactWorkspaceToolbarEnabled,
   setDashboardHeaderHidden,
   setSlackCtaHidden,
 } from './settings';
@@ -36,5 +38,29 @@ describe('dashboard visibility settings', () => {
     });
 
     window.removeEventListener(DASHBOARD_VISIBILITY_CHANGED_EVENT, listener);
+  });
+});
+
+describe('workspace toolbar setting', () => {
+  const invokeMock = vi.mocked(invoke);
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+  });
+
+  it('persists and broadcasts the compact workspace toolbar preference', async () => {
+    const listener = vi.fn();
+    window.addEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, listener);
+
+    await setCompactWorkspaceToolbarEnabled(true);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_compact_workspace_toolbar_enabled', {
+      enabled: true,
+    });
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]?.[0]).toMatchObject({ detail: true });
+
+    window.removeEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, listener);
   });
 });

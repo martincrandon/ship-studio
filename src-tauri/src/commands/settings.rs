@@ -77,6 +77,23 @@ pub fn set_terminal_gpu_enabled(enabled: bool) -> Result<(), CommandError> {
     write_app_state(&state).map_err(CommandError::from)
 }
 
+/// Get whether workspace actions are consolidated into the window titlebar.
+#[tauri::command]
+#[tracing::instrument]
+pub fn get_compact_workspace_toolbar_enabled() -> Result<bool, CommandError> {
+    let state = read_app_state();
+    Ok(state.compact_workspace_toolbar_enabled.unwrap_or(false))
+}
+
+/// Set whether workspace actions are consolidated into the window titlebar.
+#[tauri::command]
+#[tracing::instrument]
+pub fn set_compact_workspace_toolbar_enabled(enabled: bool) -> Result<(), CommandError> {
+    let mut state = read_app_state();
+    state.compact_workspace_toolbar_enabled = Some(enabled);
+    write_app_state(&state).map_err(CommandError::from)
+}
+
 /// Get the project-thumbnail auto-capture consent.
 ///
 /// `None` = the user has never been asked (the frontend shows an in-app

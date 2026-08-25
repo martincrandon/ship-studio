@@ -74,6 +74,12 @@
   cursor: default;
 }
 
+/* The dashboard now sits below the shared workspace titlebar on the Home
+ * view, so keep its overlay drag region out of the titlebar controls. */
+.app.workspace-home.has-workspace-titlebar .dashboard-drag-region {
+  top: calc(var(--control-height-standard) + (var(--space-08) * 2));
+}
+
 /* Dashboard Layout */
 .project-list.dashboard {
   display: flex;
@@ -89,6 +95,10 @@
   height: auto;
   min-height: 100%;
   overflow-y: visible;
+}
+
+.app.workspace-home.has-workspace-titlebar .project-list.dashboard {
+  padding-top: 0;
 }
 
 /* Explicit bottom spacer at the end of the dashboard column — the

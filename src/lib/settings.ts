@@ -1,7 +1,7 @@
 /**
  * UI Settings
  *
- * Persisted user preferences for dashboard UI elements.
+ * Persisted user preferences for dashboard and workspace UI elements.
  *
  * @module lib/settings
  */
@@ -10,6 +10,9 @@ import { invoke } from '@tauri-apps/api/core';
 
 /** Event fired after a dashboard visibility preference is persisted. */
 export const DASHBOARD_VISIBILITY_CHANGED_EVENT = 'shipstudio:dashboard-visibility-changed';
+/** Event fired after the workspace toolbar layout preference is persisted. */
+export const COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT =
+  'shipstudio:compact-workspace-toolbar-changed';
 
 /** Dashboard visibility preference changed by a settings control or inline action. */
 export interface DashboardVisibilityChangedDetail {
@@ -112,6 +115,29 @@ export async function setTerminalGpuEnabled(enabled: boolean): Promise<void> {
     await invoke('set_terminal_gpu_enabled', { enabled });
   } catch {
     // Silently fail
+  }
+}
+
+// ============ Workspace toolbar layout ============
+
+/** Whether workspace controls are consolidated into the window titlebar. */
+export async function getCompactWorkspaceToolbarEnabled(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('get_compact_workspace_toolbar_enabled');
+  } catch {
+    return false;
+  }
+}
+
+/** Persist the workspace toolbar layout and notify the active window immediately. */
+export async function setCompactWorkspaceToolbarEnabled(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_compact_workspace_toolbar_enabled', { enabled });
+    window.dispatchEvent(
+      new CustomEvent<boolean>(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, { detail: enabled })
+    );
+  } catch {
+    // Silently fail, matching the other non-critical UI preferences.
   }
 }
 

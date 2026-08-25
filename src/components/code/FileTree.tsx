@@ -6,7 +6,13 @@
  */
 
 import type { FileTreeNode } from '../../lib/code';
-import { ChevronRightIcon, FileIcon, FileTextIcon, FolderIcon, FolderOpenIcon } from '@/components/icons';
+import {
+  ChevronRightIcon,
+  FileIcon,
+  FileTextIcon,
+  FolderIcon,
+  FolderOpenIcon,
+} from '@/components/icons';
 
 const TEXT_FILE_EXTENSIONS = new Set(['.md', '.mdx', '.txt']);
 

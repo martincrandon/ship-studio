@@ -1,9 +1,9 @@
 /* Workspace Tabs
-   The tab row stretches to fill the full toolbar height so active-state
-   underlines can sit flush with the toolbar's bottom border. Each tab has
+   The tab row stretches to fill the full titlebar height so active-state
+   underlines can sit flush with the titlebar's bottom border. Each tab has
    no background/border — hover/active states are communicated by color +
    a 2px underline pinned to the bottom via ::after (overlaps the parent
-   toolbar's border-bottom at `bottom: -1px`). */
+   titlebar's border-bottom at `bottom: -1px`). */
 .workspace-tabs {
   display: flex;
   align-self: stretch;
@@ -23,12 +23,19 @@
   border-radius: 0;
 }
 
-/* The tabs live in the single header row (right cluster). Cancel the header's
-   vertical padding so they span its full height and the active underline pins
-   flush to the header's bottom border, as the tab design intends. */
+/* The tabs live in the titlebar and span its full height so the active
+   underline pins flush to the titlebar's bottom border. */
+.workspace-titlebar .workspace-tabs {
+  align-self: stretch;
+}
+
+.workspace-titlebar .workspace-tabs-list {
+  height: 100%;
+}
+
+/* In classic layout the mode tabs occupy the padded second toolbar. */
 .workspace-header .workspace-tabs {
-  margin-top: calc(var(--spacing-sm) * -1);
-  margin-bottom: calc(var(--spacing-sm) * -1);
+  margin-block: calc(var(--spacing-sm) * -1);
 }
 
 .workspace-tab.button {
