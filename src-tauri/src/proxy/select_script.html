@@ -261,6 +261,34 @@ function clearRulePreview(key){
    one onto the other; it's also stable across an HMR reload of the same tree. */
 function ssDomPath(el){var parts=[],e=el;while(e&&e!==document.documentElement){var p=e.parentElement;if(!p)break;var idx=0,sib=p.firstElementChild;while(sib&&sib!==e){idx++;sib=sib.nextElementSibling;}parts.unshift((e.tagName||'').toLowerCase()+':'+idx);e=p;}return parts.join('>');}
 
+/* Next streams hidden comment-only divs around RSC/Suspense boundaries. They are
+   renderer infrastructure, not authored elements, and have no source location. */
+function ssInternalNode(el){return!!(el&&el.hidden&&el.children.length===0&&!(el.textContent||'').trim());}
+
+/* React's development fiber retains the JSX creation stack for each host node.
+   Recover its first user-source frame so a classless/empty element selected in the
+   Elements tree can still be mapped back to source. This is a HINT, never authority:
+   Rust only accepts it when the hinted file+line contains the matching tag. */
+function ssSource(el){
+  if(!el)return null;var ks=Object.getOwnPropertyNames(el),fiber=null;
+  for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__reactFiber$')===0){fiber=el[ks[i]];break;}}
+  if(!fiber)return null;var stack=fiber._debugStack&&fiber._debugStack.stack;
+  if(!stack)return null;var lines=String(stack).split('\n'),clientChunk=null;
+  for(var j=0;j<lines.length;j++){
+    var s=lines[j];if(/node_modules|react-dom|react_stack_bottom_frame|fakeJSXCallSite/.test(s))continue;
+    /* Next/Turbopack server components report a generated server chunk. Rust maps
+       this verified .next file through its source map to the authored TSX. */
+    var tm=/about:\/\/React\/Server\/(file:\/\/\/[^\s()?]+?\.js)\?[^\s():]*:(\d+):(\d+)/i.exec(s);
+    if(tm)return{file:tm[1],line:Number(tm[2]),column:Number(tm[3])};
+    var cm=/(https?:\/\/[^/\s()]+\/_next\/static\/chunks\/[^\s()?]+?\.js)(?:\?[^\s():]*)?:(\d+):(\d+)/i.exec(s);
+    if(cm&&!clientChunk)clientChunk={file:cm[1],line:Number(cm[2]),column:Number(cm[3])};
+    if(cm)continue;
+    var m=/((?:https?:\/\/|file:\/\/\/|webpack-internal:\/\/\/|\/)[^\s()]+?\.(?:tsx|jsx|astro|vue|svelte|html))(?:\?[^\s():]*)?:(\d+):(\d+)/i.exec(s);
+    if(m)return{file:m[1],line:Number(m[2]),column:Number(m[3])};
+  }
+  return clientChunk;
+}
+
 /* ── Ancestor-style inheritance (typography + text color) ──
    For each CSS-inherited property the panel edits, report when the element's
    effective value comes from an ANCESTOR's own styles. Method: walk up while
@@ -276,6 +304,7 @@ var SS_INHERIT={
  'line-height':{pats:[/^leading-(none|tight|snug|normal|relaxed|loose)$/],ratio:{'leading-none':1,'leading-tight':1.25,'leading-snug':1.375,'leading-normal':1.5,'leading-relaxed':1.625,'leading-loose':2}},
  'letter-spacing':{pats:[/^tracking-(tighter|tight|normal|wide|wider|widest)$/],em:{'tracking-tighter':-0.05,'tracking-tight':-0.025,'tracking-normal':0,'tracking-wide':0.025,'tracking-wider':0.05,'tracking-widest':0.1}},
  'font-weight':{pats:[/^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/],exact:{'font-thin':'100','font-extralight':'200','font-light':'300','font-normal':'400','font-medium':'500','font-semibold':'600','font-bold':'700','font-extrabold':'800','font-black':'900'}},
+ 'font-family':{pats:[/^font-(sans|serif|mono)$/]},
  'font-style':{pats:[/^(italic|not-italic)$/],exact:{'italic':'italic','not-italic':'normal'}},
  'text-transform':{pats:[/^(uppercase|lowercase|capitalize|normal-case)$/],exact:{'uppercase':'uppercase','lowercase':'lowercase','capitalize':'capitalize','normal-case':'none'}},
  /* Color has no cheap numeric check (the palette is huge), so the last matching
@@ -362,7 +391,7 @@ function ssInherited(el){
   return out;
 }
 
-function sig(el){var anc=[],p=el.parentElement,n=0;while(p&&p!==document.body&&n<8){var c=p.getAttribute('class');if(c&&c.trim()){anc.push(c);n++;}p=p.parentElement;}var r=el.getBoundingClientRect();var cs=getComputedStyle(el);return{className:el.getAttribute('class')||'',tagName:(el.tagName||'').toLowerCase(),text:(el.innerText||el.textContent||'').trim().slice(0,SS_TEXT_CAP),domPath:ssDomPath(el),ancestorClasses:anc,rect:{top:r.top,left:r.left,width:r.width,height:r.height},computedColor:cs.color,computedBackgroundColor:cs.backgroundColor,unlayeredProps:uLayered(el),inheritedProps:ssInherited(el),attrSrc:el.getAttribute('src'),currentSrc:(el.tagName==='IMG'&&el.currentSrc)||null};}
+function sig(el){var anc=[],p=el.parentElement,n=0;while(p&&p!==document.body&&n<8){var c=p.getAttribute('class');if(c&&c.trim()){anc.push(c);n++;}p=p.parentElement;}var r=el.getBoundingClientRect();var cs=getComputedStyle(el),src=ssSource(el);return{className:el.getAttribute('class')||'',tagName:(el.tagName||'').toLowerCase(),text:(el.innerText||el.textContent||'').trim().slice(0,SS_TEXT_CAP),domPath:ssDomPath(el),ancestorClasses:anc,sourceFile:src&&src.file,sourceLine:src&&src.line,sourceColumn:src&&src.column,rect:{top:r.top,left:r.left,width:r.width,height:r.height},computedColor:cs.color,computedBackgroundColor:cs.backgroundColor,unlayeredProps:uLayered(el),inheritedProps:ssInherited(el),attrSrc:el.getAttribute('src'),currentSrc:(el.tagName==='IMG'&&el.currentSrc)||null};}
 
 function ensureStyle(){if(!styleEl){styleEl=document.createElement('style');styleEl.id='ss-preview';document.head.appendChild(styleEl);}return styleEl;}
 
@@ -646,12 +675,16 @@ function findBySignature(sig){
   if(!sig)return null;
   var tag=(sig.tagName||'').toLowerCase();
   var all=document.querySelectorAll(tag||'*');
+  /* A classless empty signature has no semantic discriminator. Its structural
+     path is exact across an HMR render of the same tree, so honor it before the
+     fuzzy class/text scoring below (which would otherwise pick the first div). */
+  if(sig.domPath){for(var pi=0;pi<all.length;pi++){var pe=all[pi];if(!ssInternalNode(pe)&&ssDomPath(pe)===sig.domPath)return pe;}}
   var orig=(sig.className||'').split(/\s+/).filter(Boolean);
   var wantText=(sig.text||'').trim().slice(0,80);
   var anc=sig.ancestorClasses||[];
   var best=null,bestScore=-1;
   for(var i=0;i<all.length;i++){var el=all[i];
-    if(el.getAttribute&&el.getAttribute('data-ss-overlay'))continue;
+    if((el.getAttribute&&el.getAttribute('data-ss-overlay'))||ssInternalNode(el))continue;
     var cls=((el.getAttribute&&el.getAttribute('class'))||'').split(/\s+/).filter(Boolean);
     if(orig.length){var ok=true;for(var c=0;c<orig.length;c++){if(cls.indexOf(orig[c])===-1){ok=false;break;}}if(!ok)continue;}
     var score=orig.length?10:0;
@@ -674,7 +707,7 @@ var TREE_MAX_NODES=4000,TREE_MAX_DEPTH=60;
 
 function treeIdFor(el){var id=treeIds.get(el);if(!id){id=treeNextId++;treeIds.set(el,id);}treeById[id]=el;return id;}
 
-function treeSkip(el){if(el.nodeType!==1)return true;var t=el.tagName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE'||t==='LINK'||t==='META')return true;if(el.getAttribute('data-ss-overlay'))return true;return false;}
+function treeSkip(el){if(el.nodeType!==1)return true;var t=el.tagName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE'||t==='LINK'||t==='META')return true;if(el.getAttribute('data-ss-overlay')||ssInternalNode(el))return true;return false;}
 
 function treeOwnText(el){var s='';for(var i=0;i<el.childNodes.length;i++){var c=el.childNodes[i];if(c.nodeType===3)s+=c.nodeValue;}return s.replace(/\s+/g,' ').trim().slice(0,48);}
 
@@ -763,7 +796,7 @@ else if(d.type==='ss:suppressReload'){window.__ssSuppressUntil=Date.now()+3000;}
 else if(d.type==='ss:commit'){pendingMark=null;txtRevertEl=null;snapshotOrig();window.__ssSuppressUntil=Date.now()+2000;}
 else if(d.type==='ss:requestTree'){treeOn=true;treeEnsureObserver();treeSend();}
 else if(d.type==='ss:treeOff'){treeOn=false;}
-else if(d.type==='ss:selectNode'){var tn=treeById[d.id];if(tn&&tn.isConnected&&active&&!txtEditing){try{tn.scrollIntoView({block:'nearest'});}catch(err){}selectEl(tn);}}
+else if(d.type==='ss:selectNode'){var tn=treeById[d.id];if(tn&&tn.isConnected&&!ssInternalNode(tn)&&active&&!txtEditing){try{tn.scrollIntoView({block:'nearest'});}catch(err){}selectEl(tn);}}
 else if(d.type==='ss:hoverNode'){if(!active)return;var th=d.id!=null?treeById[d.id]:null;ensureHover();place(hoverBox,th&&th.isConnected?th:null);}
 
 /* Re-select the element matching the given signature (after an HMR reload) so the

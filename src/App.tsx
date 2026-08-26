@@ -1161,26 +1161,9 @@ function AppContents({ initialProjectPath }: AppProps) {
   }
 
   if (view === 'projects') {
-    const showCompactWorkspaceTitlebar = !isCompact && compactWorkspaceToolbarEnabled;
     return (
       <>
-        <div
-          className={`app workspace workspace-home${
-            showCompactWorkspaceTitlebar ? ' has-workspace-titlebar workspace--compact-toolbar' : ''
-          }`}
-        >
-          {showCompactWorkspaceTitlebar && (
-            <WorkspaceTitlebar>
-              <WorkspaceNavigation
-                onGoHome={() => {
-                  /* already on Home */
-                }}
-                isHomeActive
-                isSidebarHidden={isSidebarHidden}
-                onToggleSidebar={toggleSidebar}
-              />
-            </WorkspaceTitlebar>
-          )}
+        <div className="app workspace workspace-home">
           <div
             className={`projects-with-rail${isCompact ? ' is-compact' : ''}`}
             key="view-projects"
@@ -1195,7 +1178,7 @@ function AppContents({ initialProjectPath }: AppProps) {
                 onOpenProjectPicker={openProjectPicker}
                 isSidebarHidden={isSidebarHidden}
                 onToggleSidebar={toggleSidebar}
-                showNavigationControls={!compactWorkspaceToolbarEnabled}
+                showNavigationControls
                 projects={pinnedProjects.rows}
                 currentProjectPath={null}
                 currentProjectName={null}

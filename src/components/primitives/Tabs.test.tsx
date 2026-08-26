@@ -1,6 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Tabs, TabsList, TabsPanel, TabsTab } from './Tabs';
+
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
 
 describe('Tabs', () => {
   it('links each tab to its labeled panel with stable, encoded ids', () => {
@@ -95,5 +109,34 @@ describe('Tabs', () => {
     // jsdom's inert support is partial; the serialized DOM still exposes the
     // boolean attribute emitted by React.
     expect(lastPanel?.outerHTML).toContain(' inert=""');
+  });
+
+  it('remeasures the active indicator when the layout changes', () => {
+    let activeWidth = 100;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      if (this.classList.contains('tabs__list')) return rect(0, 0, 120, 32);
+      if (this.dataset.tabValue === 'first') return rect(1, 1, activeWidth, 30);
+      return rect(1 + activeWidth, 1, 20, 30);
+    });
+
+    render(
+      <Tabs defaultValue="first">
+        <TabsList aria-label="Responsive views">
+          <TabsTab value="first">First</TabsTab>
+          <TabsTab value="second">Second</TabsTab>
+        </TabsList>
+      </Tabs>
+    );
+
+    const indicator = screen.getByRole('tablist').querySelector<HTMLElement>('.tabs__indicator');
+    expect(indicator).not.toBeNull();
+    expect(indicator?.style.width).toBe('100px');
+
+    activeWidth = 40;
+    fireEvent(window, new Event('resize'));
+
+    expect(indicator?.style.width).toBe('40px');
   });
 });

@@ -204,6 +204,57 @@ describe('DockablePanel', () => {
     expect(localStorage.getItem('colorPickerPosition')).toBe('{"left":220,"top":180}');
   });
 
+  it('keeps nested portaled panel drag gestures independent', () => {
+    render(
+      <DockablePanel
+        docked={false}
+        ariaLabel="Variables panel"
+        positionKey="variablesPosition"
+        sizeKey="variablesSize"
+        floatingSize={{ width: 360, height: 520 }}
+        initialPosition={() => ({ left: 40, top: 60 })}
+      >
+        <div data-dockable-drag-handle>Variables title</div>
+        <DockablePanel
+          docked={false}
+          ariaLabel="Color picker"
+          positionKey="nestedColorPickerPosition"
+          sizeKey="nestedColorPickerSize"
+          floatingSize={{ width: 336, height: 571 }}
+          initialPosition={() => ({ left: 300, top: 100 })}
+          resizable={false}
+        >
+          <div data-dockable-drag-handle>Color picker title</div>
+        </DockablePanel>
+      </DockablePanel>
+    );
+
+    const variablesSurface = screen.getByLabelText('Variables panel');
+    const colorSurface = screen.getByLabelText('Color picker');
+
+    fireEvent.pointerDown(screen.getByText('Color picker title'), {
+      pointerId: 1,
+      clientX: 130,
+      clientY: 90,
+    });
+    fireEvent.pointerMove(colorSurface, { pointerId: 1, clientX: 230, clientY: 190 });
+    fireEvent.pointerUp(colorSurface, { pointerId: 1, clientX: 230, clientY: 190 });
+
+    expect(localStorage.getItem('nestedColorPickerPosition')).toBe('{"left":220,"top":180}');
+    expect(localStorage.getItem('variablesPosition')).toBeNull();
+
+    fireEvent.pointerDown(screen.getByText('Variables title'), {
+      pointerId: 2,
+      clientX: 130,
+      clientY: 90,
+    });
+    fireEvent.pointerMove(variablesSurface, { pointerId: 2, clientX: 180, clientY: 140 });
+    fireEvent.pointerUp(variablesSurface, { pointerId: 2, clientX: 180, clientY: 140 });
+
+    expect(localStorage.getItem('variablesPosition')).toBe('{"left":170,"top":130}');
+    expect(localStorage.getItem('nestedColorPickerPosition')).toBe('{"left":220,"top":180}');
+  });
+
   it('keeps its child mounted while moving between the dock and a floating surface', () => {
     const mounted = vi.fn();
     const unmounted = vi.fn();

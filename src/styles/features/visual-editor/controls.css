@@ -123,9 +123,17 @@
   border-color: var(--accent-active);
 }
 .ss-color-swatch__chip {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   height: 100%;
   border-radius: var(--radius-2);
+}
+
+.ss-color-swatch__color {
+  position: absolute;
+  inset: 0;
+  background: transparent;
 }
 
 .ss-color-swatch__chip--checkerboard {

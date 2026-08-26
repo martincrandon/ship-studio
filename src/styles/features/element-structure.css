@@ -28,7 +28,7 @@
 .ss-el-toolbar__selection {
   align-self: stretch;
   min-width: 0;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-sm);
   padding: 0 var(--spacing-xs);
   font-family: var(--font-ui);
   font-size: var(--font-size-body-sm);

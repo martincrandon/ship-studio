@@ -5,8 +5,10 @@ import {
   CloudflareIcon,
   CopyIcon,
   FolderOpenIcon,
+  ImageUploadIcon,
   NestRuleIcon,
   SearchIcon,
+  TemplateIcon,
   VariablesIcon,
 } from './index';
 import { getGalleryIcons } from './IconGallery';
@@ -30,6 +32,22 @@ describe('shared icons', () => {
       'data-icon-source',
       'icons/import/variables.svg'
     );
+  });
+
+  it('registers imported project-action icons with currentColor artwork', () => {
+    const { container, rerender } = render(<ImageUploadIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/image-upload.svg'
+    );
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+
+    rerender(<TemplateIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/template.svg'
+    );
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
   });
 
   it('keeps the legacy standard-size compatibility result for size 14', () => {

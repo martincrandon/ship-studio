@@ -43,6 +43,16 @@
   gap: var(--spacing-xs);
 }
 
+.ss-settings__class-name {
+  all: unset;
+  cursor: text;
+  color: inherit;
+}
+
+.ss-settings__class-name:disabled {
+  cursor: default;
+}
+
 .ss-settings__class-remove {
   all: unset;
   cursor: pointer;

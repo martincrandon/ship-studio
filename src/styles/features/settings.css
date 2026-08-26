@@ -27,6 +27,14 @@
   padding: 20px;
 }
 
+.settings-modal > .tabs {
+  display: contents;
+}
+
+.settings-tab-panel {
+  border-top: var(--border-width-default) solid var(--border-default);
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;
@@ -58,6 +66,80 @@
   font-size: var(--font-size-body-md);
   color: var(--text-muted);
   line-height: 1.4;
+}
+
+.settings-icon-options {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--spacing-lg);
+  width: 100%;
+  margin-top: var(--spacing-sm);
+}
+
+.settings-icon-option {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  border: none;
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    color var(--transition-interaction),
+    transform var(--transition-interaction);
+}
+
+.settings-icon-option:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.settings-icon-option:active:not(:disabled) {
+  transform: scale(var(--button-active-scale));
+}
+
+.settings-icon-option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
+.settings-icon-option:disabled {
+  cursor: wait;
+  opacity: var(--button-disabled-opacity);
+}
+
+.settings-icon-option.is-selected {
+  color: var(--accent-active);
+}
+
+.settings-icon-option.is-selected::after {
+  width: var(--spacing-lg);
+  height: var(--border-width-default);
+  border-radius: var(--radius-pill);
+  background: var(--accent-active);
+  content: '';
+}
+
+.settings-icon-option-image {
+  display: block;
+  width: calc(var(--spacing-2xl) + var(--spacing-lg));
+  height: calc(var(--spacing-2xl) + var(--spacing-lg));
+  border-radius: var(--radius-card);
+  background: transparent;
+  object-fit: contain;
+}
+
+.settings-icon-option-label {
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--button-font-weight);
+  line-height: var(--line-height-compact);
 }
 
 /* Projects folder row (stacked: label/description/path above the actions) */

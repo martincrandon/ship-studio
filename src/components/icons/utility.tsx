@@ -17,6 +17,7 @@ import HelpAlertSvg from '../../assets/icons/help-alert.svg?react';
 import UndoSvg from '../../assets/icons/undo.svg?react';
 import RedoSvg from '../../assets/icons/redo.svg?react';
 import LayersSvg from '../../assets/icons/layers.svg?react';
+import TemplateSvg from '../../assets/icons/template.svg?react';
 import GenericAgentSvg from '../../assets/icons/old-icons/generic-agent.svg?react';
 import CollaboratorsSvg from '../../assets/icons/old-icons/collaborators.svg?react';
 import PackageSvg from '../../assets/icons/old-icons/package.svg?react';
@@ -168,6 +169,13 @@ export const RedoIcon = createIcon(RedoSvg, {
 export const LayersIcon = createIcon(LayersSvg, {
   name: 'LayersIcon',
   source: 'icons/layers.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const TemplateIcon = createIcon(TemplateSvg, {
+  name: 'TemplateIcon',
+  source: 'icons/template.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

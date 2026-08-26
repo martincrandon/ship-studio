@@ -184,6 +184,8 @@ export interface CssVariableDef {
   selector: string;
   /** Project-relative stylesheet path. */
   file: string;
+  /** One-based selector line, used to pin edits to this exact definition. */
+  line: number;
 }
 
 /** Every custom-property definition in the project (name, value, scope, file). */

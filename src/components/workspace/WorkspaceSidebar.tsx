@@ -832,21 +832,16 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
                 data-education-id="toggle-sidebar"
               />
             )}
-            <Button
-              variant="default"
-              width="fill"
+            <IconButton
+              variant="ghost"
               className={`workspace-sidebar-home ${isHomeActive ? 'is-active' : ''}`}
+              icon={<HomeIcon size={12} />}
               onClick={onGoHome}
               disabled={isHomeActive}
               aria-current={isHomeActive ? 'page' : undefined}
-              leftIcon={
-                <span className="workspace-sidebar-home-icon" aria-hidden="true">
-                  <HomeIcon size={12} />
-                </span>
-              }
-            >
-              <span>Home</span>
-            </Button>
+              title="Home"
+              aria-label="Home"
+            />
           </div>
         )}
 

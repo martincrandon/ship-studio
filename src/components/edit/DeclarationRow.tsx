@@ -27,6 +27,8 @@ interface EditableProps {
   nestTargets: string[];
   /** Move this declaration into a nested rule for `selector` (created if missing). */
   onNest: (selector: string) => void;
+  /** Hide the nest affordance when the containing editor has no nested rules. */
+  showNest?: boolean;
   /** Project CSS variables (e.g. `--accent`) for `var(--…)` value autocomplete. */
   variables?: string[];
   /** Project `@keyframes` names, suggested as `animation` values. */
@@ -34,6 +36,8 @@ interface EditableProps {
   /** Open the value editor automatically on mount — for the editing flow (right after
    *  adding a property, land in its value input without a second click). */
   autoEditValue?: boolean;
+  /** Called whenever an inline editor closes, including cancellation. */
+  onEditClose?: () => void;
 }
 interface ReadonlyProps {
   decl: Decl;
@@ -89,7 +93,10 @@ export function DeclarationRow(props: Props) {
           enableColorPicker={false}
           placeholder="property"
           onCommit={(prop) => onChange({ ...decl, prop })}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            props.onEditClose?.();
+          }}
         />
       ) : (
         <button
@@ -118,7 +125,10 @@ export function DeclarationRow(props: Props) {
                 : { ...decl, value: raw.trim(), important: false }
             );
           }}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            props.onEditClose?.();
+          }}
         />
       ) : (
         <button
@@ -137,7 +147,7 @@ export function DeclarationRow(props: Props) {
       )}
 
       <span className="ss-decl__actions">
-        <NestControl nestTargets={nestTargets} onNest={onNest} />
+        {props.showNest !== false && <NestControl nestTargets={nestTargets} onNest={onNest} />}
         <button
           type="button"
           className="ss-decl__remove"

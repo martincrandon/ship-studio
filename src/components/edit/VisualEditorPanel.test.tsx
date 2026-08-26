@@ -96,17 +96,43 @@ describe('VisualEditorPanel', () => {
     // Gap stepper + enum controls
     expect(screen.getByText('Gap')).toBeInTheDocument();
     expect(screen.getByText('Align')).toBeInTheDocument();
+    expect(screen.getByText('Font')).toBeInTheDocument();
     expect(screen.getByText('Weight')).toBeInTheDocument();
     // Align renders icon buttons ("Left" is unique to Align)
     expect(screen.getByRole('button', { name: 'Left' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Uppercase' })).toHaveAttribute('title', 'Uppercase');
-    expect(screen.getByRole('button', { name: 'Row' })).toHaveAttribute('title', 'Row');
     // New properties
     expect(screen.getByText('Opacity')).toBeInTheDocument();
     // Color controls render as swatch buttons that open the picker popover
     expect(screen.getByRole('button', { name: 'Text color' })).toBeInTheDocument();
     // Save button
     expect(screen.getByText('Saved')).toBeInTheDocument();
+    const classesSection = document.querySelector<HTMLElement>('.ss-edit-panel__section--classes');
+    expect(classesSection).not.toBeNull();
+    expect(classesSection).toHaveTextContent('Applied classes');
+    expect(classesSection).toHaveAttribute('open');
+    expect(classesSection).toHaveTextContent('p-3');
+
+    const customSection = document.querySelector<HTMLElement>('.ss-edit-panel__section--custom');
+    expect(customSection).toHaveAttribute('open');
+  });
+
+  it('groups Position and Z-index under their own section', () => {
+    renderPanel(resolvedSelection);
+
+    const positionSection = document.querySelector<HTMLElement>(
+      '.ss-edit-panel__section--position'
+    );
+    const layoutSection = document.querySelector<HTMLElement>('.ss-edit-panel__section--layout');
+
+    expect(positionSection).not.toBeNull();
+    expect(layoutSection).not.toBeNull();
+    expect(positionSection).toHaveAttribute('open');
+    expect(layoutSection).toHaveAttribute('open');
+    expect(positionSection).toHaveTextContent('Position');
+    expect(positionSection).toHaveTextContent('Z-index');
+    expect(layoutSection).not.toHaveTextContent('Position');
+    expect(layoutSection).not.toHaveTextContent('Z-index');
   });
 
   it('shows read-only reason and no controls for a read-only element', () => {
@@ -360,7 +386,7 @@ describe('VisualEditorPanel', () => {
       onReset
     );
     expect(screen.queryByRole('button', { name: 'Reset' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Gap/ })); // click the name
+    fireEvent.click(document.querySelector('.ss-edit-panel__labelbtn')!); // click the name
     fireEvent.click(screen.getByRole('button', { name: 'Reset' })); // confirm
     expect(onReset).toHaveBeenCalledTimes(1);
   });
@@ -535,7 +561,7 @@ describe('VisualEditorPanel', () => {
   it('does not offer Reset for an inherited value (only set-here)', () => {
     // gap-4 at Base, viewing md → inherited; the Gap label is plain text, no button.
     renderPanel(resolvedSelection, 'gap-4', MD);
-    expect(screen.queryByRole('button', { name: /Gap/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gap' })).not.toBeInTheDocument();
     expect(screen.getByText('Gap')).toBeInTheDocument();
   });
 

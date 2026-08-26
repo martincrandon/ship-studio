@@ -176,17 +176,35 @@ export function TabsList({
 
   useLayoutEffect(() => {
     if (!tabs || !listRef.current) return;
-    const active = tabsRefElement(activeValue ?? '', listRef.current);
-    if (!active) return;
-    const listRect = listRef.current.getBoundingClientRect();
-    const activeRect = active.getBoundingClientRect();
-    const borderInset = listRef.current.clientLeft;
-    setIndicator({
-      left: activeRect.left - listRect.left - borderInset,
-      top: activeRect.top - listRect.top - borderInset,
-      width: activeRect.width,
-      height: activeRect.height,
-    });
+    const list = listRef.current;
+    const measure = () => {
+      const active = tabsRefElement(activeValue ?? '', list);
+      if (!active) return;
+      const listRect = list.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      const borderInset = list.clientLeft;
+      setIndicator({
+        left: activeRect.left - listRect.left - borderInset,
+        top: activeRect.top - listRect.top - borderInset,
+        width: activeRect.width,
+        height: activeRect.height,
+      });
+    };
+
+    measure();
+
+    const resizeObserver =
+      typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    resizeObserver?.observe(list);
+    list
+      .querySelectorAll<HTMLButtonElement>('[data-tab-value]')
+      .forEach((tab) => resizeObserver?.observe(tab));
+    window.addEventListener('resize', measure);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, [activeValue, tabs]);
 
   return (

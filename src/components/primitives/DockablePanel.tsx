@@ -228,8 +228,13 @@ export function DockablePanel({
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (docked) return;
-      bringToFront();
       const target = event.target as HTMLElement;
+      // Portaled panels can still be React descendants of another panel (the
+      // Variables colour picker is one example). React bubbles those pointer
+      // events through the component tree even though the surfaces are DOM
+      // siblings, so only the closest surface may claim this gesture.
+      if (target.closest('.dockable-panel__surface') !== event.currentTarget) return;
+      bringToFront();
       if (!target.closest('[data-dockable-drag-handle]')) return;
       if (target.closest('button, a, input, select, [role="button"], [role="tablist"]')) return;
       const rect = surfaceRef.current?.getBoundingClientRect();
@@ -247,6 +252,8 @@ export function DockablePanel({
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('.dockable-panel__surface') !== event.currentTarget) return;
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
       setPosition(
@@ -258,6 +265,8 @@ export function DockablePanel({
 
   const handlePointerUp = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('.dockable-panel__surface') !== event.currentTarget) return;
       const drag = dragRef.current;
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;

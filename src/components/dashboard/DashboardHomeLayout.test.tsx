@@ -62,7 +62,7 @@ describe('dashboard home layout pieces', () => {
 
     expect(screen.getByRole('img', { name: 'Ship Studio' })).toHaveAttribute(
       'src',
-      '/ship_studio_icon.png'
+      '/ShipStudio_IconBrand.png'
     );
     const logoButton = screen.getByRole('button', { name: 'Pulse Ship Studio logo' });
     fireEvent.click(logoButton);

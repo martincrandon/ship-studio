@@ -16,6 +16,7 @@ import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
 import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
 import ReloadSvg from '../../assets/icons/reload.svg?react';
 import ImageSvg from '../../assets/icons/image.svg?react';
+import ImageUploadSvg from '../../assets/icons/image-upload.svg?react';
 import SaveSvg from '../../assets/icons/save.svg?react';
 import VariablesSvg from '../../assets/icons/import/variables.svg?react';
 import ElementButtonSvg from '../../assets/icons/element-button.svg?react';
@@ -157,6 +158,13 @@ export const ResetIcon = createIcon(ReloadSvg, {
 export const ImageIcon = createIcon(ImageSvg, {
   name: 'ImageIcon',
   source: 'icons/image.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ImageUploadIcon = createIcon(ImageUploadSvg, {
+  name: 'ImageUploadIcon',
+  source: 'icons/image-upload.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

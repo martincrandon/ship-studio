@@ -62,6 +62,12 @@ export function VariablesPanel({
           variableNames={variableNames}
           onSetValue={variablesState.setValue}
           onAddVariable={(name, value) => void variablesState.addVariable(name, value)}
+          onAnalyzeDelete={(variable) =>
+            variablesState.analyzeDeletion(variable.name, variable.value)
+          }
+          onDeleteVariable={(variable, impact) =>
+            variablesState.deleteVariable(variable.name, variable.value, impact)
+          }
         />
       </div>
     </div>

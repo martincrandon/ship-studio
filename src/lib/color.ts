@@ -69,6 +69,13 @@ export function visibleHex(color: string): string | null {
   return formatHex(c);
 }
 
+/** Whether a parseable CSS color has any transparency. Unresolved values such
+ *  as `var(--x)` return false because their rendered alpha is not known here. */
+export function hasColorTransparency(color: string): boolean {
+  const c = parse(color);
+  return Boolean(c && (c.alpha ?? 1) < 1);
+}
+
 /** Any CSS color → react-colorful's {r,g,b,a}, falling back to opaque black. */
 export function toRgba(color: string): Rgba {
   const c = parse(color);

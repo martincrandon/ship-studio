@@ -9,6 +9,8 @@ function variablesState(): ReturnType<typeof useCssVariables> {
     loading: false,
     setValue: vi.fn(),
     addVariable: vi.fn(),
+    analyzeDeletion: vi.fn(),
+    deleteVariable: vi.fn(),
     reload: vi.fn(),
   };
 }

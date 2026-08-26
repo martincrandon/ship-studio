@@ -120,6 +120,12 @@ SVG asset. Static inline SVG is prohibited in feature components; use the shared
 `src/assets/graphics/` for feature artwork. The marked dynamic `BranchGraph.tsx` exception is the
 only inline SVG. See [Icons and SVG graphics](docs/design-system.md#icons-and-svg-graphics).
 
+When a request adds an icon to a feature, always follow
+[Importing a new icon](docs/design-system.md#importing-a-new-icon): process files from the temporary
+`src/assets/icons/import/` inbox, convert UI artwork colours to `currentColor` without changing
+transparency, move the finished asset to its owned location, register a semantic `createIcon`
+export in the correct category, consume it through `@/components/icons`, and validate it.
+
 #### Frontend Libraries
 Key modules in `src/lib/` (not exhaustive — `ls src/lib` for the full list):
 - `agents-management.ts` / `agent.ts` - Agent CLI detection, install state, default-agent selection
