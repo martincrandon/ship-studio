@@ -301,7 +301,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
-  padding: var(--editor-panel-inline-pad) 0;
+  /* The panel body already supplies the top inset; keeping another one here
+     makes the space above the source row larger than the space below it. */
+  padding: 0 0 var(--editor-panel-inline-pad);
 }
 .ss-edit-panel__multisrc {
   display: flex;

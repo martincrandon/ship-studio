@@ -53,6 +53,16 @@ describe('ResettableLabel provenance states', () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
+  it('Alt-clicking a set label resets immediately', () => {
+    const onReset = vi.fn();
+    renderLabel({ definedAt: BASE_BREAKPOINT, onReset });
+
+    fireEvent.click(screen.getByRole('button', { name: /Size/ }), { altKey: true });
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Reset')).toBeNull();
+  });
+
   it('breakpoint-inherited value: neutral label with a hollow dot — no orange, no button', () => {
     const { container } = renderLabel({ definedAt: BASE_BREAKPOINT, active: MD });
     const label = container.querySelector('.ss-edit-panel__label')!;

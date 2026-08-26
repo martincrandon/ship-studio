@@ -869,6 +869,9 @@ pub struct AppState {
     /// capture failed because macOS Screen Recording permission was denied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnails_enabled: Option<bool>,
+    /// Selected app icon (`brand`, `dark`, or `light`). Defaults to `brand`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_icon: Option<String>,
     /// Workspaces (org/client accounts) with isolated Claude/GitHub config and credentials
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub accounts: Vec<Account>,

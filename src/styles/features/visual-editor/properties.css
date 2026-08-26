@@ -650,109 +650,19 @@
   padding-inline: var(--spacing-xs);
 }
 
-/* Custom CSS box: a list of set arbitrary-property chips + a "prop: value" adder. */
+/* Custom CSS box: declaration rows use the same cascade-editor treatment as the
+   non-Tailwind CSS editor. */
 .ss-custom-css {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
 }
 .ss-custom-css__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
-}
-.ss-custom-css__chip {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--spacing-xs);
-  padding: 4px 6px;
-  font-size: var(--font-size-body-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-}
-.ss-custom-css__chip-text {
-  display: contents;
-}
-.ss-custom-css__chip-prop {
-  min-width: 0;
-  color: var(--property-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ss-custom-css__chip-colon {
-  color: var(--text-muted);
-}
-.ss-custom-css__chip-value {
-  min-width: 0;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ss-custom-css__chip-x {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-subhead);
-  line-height: 1;
-  color: var(--text-muted);
-  background: none;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.ss-custom-css__chip-x:hover {
-  color: var(--text-primary);
-  background: var(--surface-panel);
 }
 .ss-custom-css__add {
   display: flex;
-  gap: var(--spacing-xs);
-}
-.ss-custom-css__add .ss-edit-panel__text {
-  flex: 1 1 auto;
-  width: auto;
-}
-.ss-custom-css__addbtn {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-h4);
-  line-height: 1;
-  color: var(--text-secondary);
-  background: var(--surface-control);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.ss-custom-css__addbtn:hover {
-  color: var(--text-primary);
-  border-color: var(--accent-active);
-}
-.ss-custom-css__hint {
-  margin: 0;
-  font-size: var(--font-size-body-sm);
-  color: var(--text-muted);
-}
-.ss-custom-css__hint code {
-  font-size: var(--font-size-badge);
-  padding: 1px 3px;
-  background: var(--surface-control);
-  border-radius: var(--radius-sm);
 }
 
 .ss-edit-panel__value {

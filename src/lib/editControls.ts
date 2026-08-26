@@ -92,10 +92,24 @@ function valueRow(
   return { kind: 'value', key: `value:${valueType}`, valueType };
 }
 
-/** The panel's sections, in render order. Size & Spacing leads (the most-reached-for
- *  controls), then Layout / Typography; Backgrounds & Borders, Effects and Custom CSS
+/** The panel's sections, in render order. Layout leads, then Size & Spacing / Typography;
+ *  Backgrounds & Borders, Effects and Custom CSS
  *  collapse to keep the panel calm. */
 export const CONTROL_SECTIONS: ControlSection[] = [
+  {
+    id: 'layout',
+    title: 'Layout',
+    defaultOpen: true,
+    controls: [
+      enumRow('Display'),
+      enumRow('Direction'),
+      enumRow('Wrap'),
+      enumRow('Justify'),
+      enumRow('Align items'),
+      { kind: 'gap', key: 'gap' },
+      enumRow('Overflow'),
+    ],
+  },
   {
     id: 'size',
     title: 'Size & Spacing',
@@ -111,26 +125,17 @@ export const CONTROL_SECTIONS: ControlSection[] = [
     ],
   },
   {
-    id: 'layout',
-    title: 'Layout',
-    defaultOpen: false,
-    controls: [
-      enumRow('Display'),
-      enumRow('Position'),
-      enumRow('Direction'),
-      enumRow('Wrap'),
-      enumRow('Justify'),
-      enumRow('Align items'),
-      { kind: 'gap', key: 'gap' },
-      enumRow('Overflow'),
-      valueRow('z-index'),
-    ],
+    id: 'position',
+    title: 'Position',
+    defaultOpen: true,
+    controls: [enumRow('Position'), valueRow('z-index')],
   },
   {
     id: 'typography',
     title: 'Typography',
     defaultOpen: true,
     controls: [
+      enumRow('Font'),
       valueRow('font-size'),
       enumRow('Weight'),
       valueRow('line-height'),
@@ -163,7 +168,7 @@ export const CONTROL_SECTIONS: ControlSection[] = [
   {
     id: 'custom',
     title: 'Custom CSS',
-    defaultOpen: false,
+    defaultOpen: true,
     controls: [{ kind: 'custom', key: 'custom' }],
   },
 ];

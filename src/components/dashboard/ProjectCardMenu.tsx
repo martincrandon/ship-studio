@@ -14,9 +14,9 @@ import {
   MoveToFolderIcon,
   PinIcon,
   WarningIcon,
-  DownloadIcon,
+  TemplateIcon,
   CloseIcon,
-  ImageIcon,
+  ImageUploadIcon,
   EditFieldIcon,
   MoveToWorkspaceIcon,
   MoreHorizontalIcon,
@@ -107,12 +107,12 @@ export function ProjectCardMenu({
           </DropdownItem>
         )}
         {onExportAsTemplate && (
-          <DropdownItem icon={<DownloadIcon size={14} />} onSelect={onExportAsTemplate}>
+          <DropdownItem icon={<TemplateIcon size={14} />} onSelect={onExportAsTemplate}>
             <span>Export as template</span>
           </DropdownItem>
         )}
         {onUploadThumbnail && (
-          <DropdownItem icon={<ImageIcon size={14} />} onSelect={onUploadThumbnail}>
+          <DropdownItem icon={<ImageUploadIcon size={14} />} onSelect={onUploadThumbnail}>
             <span>Upload new thumbnail</span>
           </DropdownItem>
         )}

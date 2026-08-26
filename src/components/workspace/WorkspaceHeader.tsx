@@ -415,6 +415,15 @@ export function WorkspaceHeader({
   const workspaceToolButtons = (
     <>
       <ToggleButton
+        variant={agentPanelVisible ? 'secondary' : 'default'}
+        className="workspace-panel-toggle"
+        pressed={agentPanelVisible}
+        onClick={onToggleAgentPanel}
+        title="Agent"
+        leftIcon={<AgentsIcon size={16} />}
+        aria-label="Agent"
+      />
+      <ToggleButton
         variant={elementTreeVisible ? 'secondary' : 'default'}
         className="workspace-panel-toggle"
         pressed={elementTreeVisible}
@@ -423,15 +432,6 @@ export function WorkspaceHeader({
         title={elementTreeAvailable ? 'Elements' : 'Elements are available in Preview'}
         leftIcon={<ElementsIcon size={16} />}
         aria-label="Elements"
-      />
-      <ToggleButton
-        variant={agentPanelVisible ? 'secondary' : 'default'}
-        className="workspace-panel-toggle"
-        pressed={agentPanelVisible}
-        onClick={onToggleAgentPanel}
-        title="Agent"
-        leftIcon={<AgentsIcon size={16} />}
-        aria-label="Agent"
       />
       <ToggleButton
         variant={variablesPanelVisible ? 'secondary' : 'default'}
@@ -508,7 +508,16 @@ export function WorkspaceHeader({
 
   if (!compactWorkspaceToolbarEnabled) {
     return {
-      titlebar: <WorkspaceTitlebar>{projectTitle}</WorkspaceTitlebar>,
+      titlebar: (
+        <WorkspaceTitlebar>
+          <WorkspaceNavigation
+            onGoHome={onGoHome}
+            isSidebarHidden={isSidebarHidden}
+            onToggleSidebar={onToggleSidebar}
+          />
+          {projectTitle}
+        </WorkspaceTitlebar>
+      ),
       toolbar: (
         <header className="workspace-header">
           <div className="workspace-header-left">{workspaceToolButtons}</div>

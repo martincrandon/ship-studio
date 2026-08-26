@@ -73,11 +73,32 @@ Icons are decorative by default: an unlabelled icon has `aria-hidden="true"`. A 
 caller supplies another role; labelled icons are not hidden. The caller can provide explicit
 accessible SVG props, classes, and refs.
 
-To add a primary icon, place a valid SVG in `src/assets/icons/`, import it with `?react` in the
-semantic module that owns its meaning, wrap it with `createIcon`, provide complete `IconMeta`, and
-keep the named export available through `index.tsx`. To add an app-specific icon, place it in
-`src/assets/icons/old-icons/`, use the same semantic wrapper, and record its `old-icons` source in
-the metadata. Replacing artwork at an existing asset path keeps consumers unchanged.
+### Importing a new icon
+
+Treat `src/assets/icons/import/` as a temporary inbox. When asked to add an icon to a feature:
+
+1. Check that the filename is descriptive lowercase kebab-case and that the SVG has one numeric
+   `viewBox`.
+2. For UI icons, change every artwork `stroke` and `fill` colour to `currentColor`, but preserve
+   `opacity`, `stroke-opacity`, `fill-opacity`, `fill="none"`, masks, and clip paths. Brand marks
+   keep any colours that are part of the brand.
+3. Move reusable UI or brand icons into `src/assets/icons/`. Use `old-icons/` only for
+   app-specific legacy artwork; use `graphics/` for feature artwork that has its own layout
+   contract. Move each processed file out of `import/`; never reference a newly integrated shared
+   icon from the inbox.
+4. Import the asset with `?react` in the semantic module under `src/components/icons/` that owns
+   its meaning (`common`, `editor`, `editor-controls`, `layout`, `status`, `utility`, or `brand`).
+5. Wrap it with `createIcon`, add complete `IconMeta`, and use a semantic export name ending in
+   `Icon`. The existing `index.tsx` module re-exports each category as the public boundary.
+6. Replace the feature's placeholder icon with the new export, importing only from
+   `@/components/icons`.
+7. Run `pnpm icons:check` and the smallest relevant test. Also run the repository's required CI
+   gates before declaring a larger feature complete.
+
+Replacing artwork at an existing asset path keeps consumers unchanged.
+
+To add an app-specific icon, place it in `src/assets/icons/old-icons/`, use the same semantic
+wrapper, and record its `old-icons` source in the metadata.
 
 To add feature artwork, place the SVG in `src/assets/graphics/` and import it directly with
 `?react` from the owning feature. The feature passes its class and layout props and marks

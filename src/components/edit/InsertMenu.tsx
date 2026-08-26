@@ -32,7 +32,10 @@ const POSITIONS: { id: InsertPosition; label: string }[] = [
 ];
 
 export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props) {
-  const [position, setPosition] = useState<InsertPosition>('after');
+  // Adding to a container means adding a child in the common case. This also
+  // avoids offering an unsafe sibling-by-default when the selection is a React
+  // component's sole JSX root. Void elements necessarily fall back to After.
+  const [position, setPosition] = useState<InsertPosition>(insideDisabled ? 'after' : 'inside');
   const [active, setActive] = useState(0);
   const popRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -48,6 +51,7 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
   if (anchor !== openedFor) {
     setOpenedFor(anchor);
     setActive(0);
+    setPosition(insideDisabled ? 'after' : 'inside');
   }
   // Focus the listbox on open so arrow-key nav works immediately.
   useEffect(() => {

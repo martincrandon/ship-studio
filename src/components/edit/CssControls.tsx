@@ -33,6 +33,7 @@ import {
   COLOR_PICKER_POSITION_KEY,
   COLOR_PICKER_SIZE_KEY,
   COLOR_PICKER_WIDTH,
+  hasColorTransparency,
 } from '../../lib/color';
 
 function cssSupports(prop: string, value: string): boolean {
@@ -298,6 +299,7 @@ function ColorControl({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const latestRef = useRef(value);
+  const showCheckerboard = !value.trim() || hasColorTransparency(value);
 
   const reposition = useCallback(() => {
     const el = triggerRef.current;
@@ -385,14 +387,14 @@ function ColorControl({
             }
           }}
         >
-          {value ? (
-            <span className="ss-color-swatch__chip" style={{ backgroundColor: value }} />
-          ) : (
-            <span
-              className="ss-color-swatch__chip ss-color-swatch__chip--checkerboard"
-              aria-hidden="true"
-            />
-          )}
+          <span
+            className={`ss-color-swatch__chip${showCheckerboard ? ' ss-color-swatch__chip--checkerboard' : ''}`}
+            aria-hidden="true"
+          >
+            {value && (
+              <span className="ss-color-swatch__color" style={{ backgroundColor: value }} />
+            )}
+          </span>
         </button>
         <input
           className="ss-cc-input"

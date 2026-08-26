@@ -250,6 +250,8 @@ export interface ValueFieldProps extends Omit<
 > {
   value: string;
   variant?: ValueFieldVariant;
+  /** Unit selected when the value is empty; explicit values keep their unit. */
+  defaultUnit?: string;
   /** Property-specific keywords such as `auto` or `none`. */
   keywords?: ValueFieldOption[];
   /** Project CSS custom properties available to this value. */
@@ -272,6 +274,7 @@ export interface ValueFieldProps extends Omit<
 export function ValueField({
   value,
   variant = 'number',
+  defaultUnit = '',
   keywords = [],
   variables = EMPTY_VARIABLES,
   format,
@@ -306,7 +309,7 @@ export function ValueField({
   const displayPlaceholder = placeholderValue?.unit ? placeholderValue.text : placeholder;
   const [text, setText] = useState(initial.text);
   const [unit, setUnit] = useState(
-    hasControlledValue ? initial.unit : (placeholderValue?.unit ?? initial.unit)
+    hasControlledValue ? initial.unit : (placeholderValue?.unit || initial.unit || defaultUnit)
   );
   const [selectedFormat, setSelectedFormat] = useState(
     format ?? options.find((option) => option.kind === 'format')?.value ?? ''
@@ -341,7 +344,9 @@ export function ValueField({
   useEffect(() => {
     const next = splitValueFieldValue(value, options);
     setText(next.text);
-    setUnit(value.trim() !== '' ? next.unit : (placeholderValue?.unit ?? next.unit));
+    setUnit(
+      value.trim() !== '' ? next.unit : (placeholderValue?.unit || next.unit || defaultUnit)
+    );
     if (format !== undefined) setSelectedFormat(format);
     setInvalid(false);
     // The options are intentionally derived from stable primitive presets and

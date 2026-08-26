@@ -4,7 +4,7 @@
  * (edit a value, remove, or add) are editable; TAG is shown for reference.
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { CloseIcon } from '@/components/icons';
 import { PlusIcon } from '@/components/icons';
 import type { ElementSettings } from '../../hooks/useElementSettings';
@@ -16,6 +16,7 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
     classes,
     attributes,
     addClass,
+    renameClass,
     removeClass,
     setAttribute,
     renameAttribute,
@@ -43,18 +44,13 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
         <h4 className="ss-settings__label">Classes</h4>
         <div className="ss-settings__classes">
           {classes.map((c) => (
-            <CascadeChip key={c} tone="selector" className="ss-settings__class-chip">
-              <span className="ss-cascade-chip__content">.{c}</span>
-              <button
-                type="button"
-                className="ss-settings__class-remove"
-                title={`Remove .${c}`}
-                aria-label={`Remove .${c}`}
-                onClick={() => removeClass(c)}
-              >
-                <CloseIcon size={10} />
-              </button>
-            </CascadeChip>
+            <EditableClassChip
+              key={c}
+              name={c}
+              disabled={settings.busy}
+              onRename={(next) => renameClass(c, next)}
+              onRemove={() => removeClass(c)}
+            />
           ))}
           {adding ? (
             <input
@@ -107,6 +103,93 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
         {canEditAttributes && <AddAttr onAdd={(name, value) => setAttribute(name, value)} />}
       </section>
     </div>
+  );
+}
+
+/** A class chip is its own small inline editor. Click the name, type the new
+ *  source class, and commit with Enter or blur; Escape leaves it unchanged. */
+function EditableClassChip({
+  name,
+  disabled,
+  onRename,
+  onRemove,
+}: {
+  name: string;
+  disabled: boolean;
+  onRename: (nextName: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(name);
+  const cancelled = useRef(false);
+
+  const start = () => {
+    if (disabled) return;
+    cancelled.current = false;
+    setText(name);
+    setEditing(true);
+  };
+  const finish = () => {
+    setEditing(false);
+    if (cancelled.current) return;
+    const next = text.trim();
+    if (next && next !== name) onRename(next);
+  };
+
+  return (
+    <CascadeChip
+      tone="selector"
+      editing={editing}
+      interactive={!disabled}
+      className="ss-settings__class-chip"
+    >
+      {editing ? (
+        <input
+          className="ss-cascade-chip__input"
+          autoFocus
+          value={text}
+          size={Math.max(1, text.length)}
+          spellCheck={false}
+          autoComplete="off"
+          aria-label={`Rename .${name}`}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={finish}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelled.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      ) : (
+        <>
+          <button
+            type="button"
+            className="ss-cascade-chip__content ss-settings__class-name"
+            title={`Rename .${name}`}
+            disabled={disabled}
+            onClick={start}
+          >
+            .{name}
+          </button>
+          <button
+            type="button"
+            className="ss-settings__class-remove"
+            title={`Remove .${name}`}
+            aria-label={`Remove .${name}`}
+            disabled={disabled}
+            onClick={onRemove}
+          >
+            <CloseIcon size={10} />
+          </button>
+        </>
+      )}
+    </CascadeChip>
   );
 }
 

@@ -86,11 +86,22 @@ describe('WorkspaceSidebar project activity indicator', () => {
     sessionRegistry._resetForTests();
   });
 
-  it('uses the default button treatment for Home in the classic sidebar', async () => {
+  it('uses the same icon-only ghost treatment for Home as the project titlebar', async () => {
     render(<WorkspaceSidebar {...sidebarProps()} />, { wrapper: Providers });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Home' })).toHaveClass('button--default');
+      expect(screen.getByRole('button', { name: 'Home' })).toHaveClass(
+        'button--ghost',
+        'button--icon-only'
+      );
+    });
+  });
+
+  it('disables Home while the Homepage is active', async () => {
+    render(<WorkspaceSidebar {...sidebarProps()} isHomeActive />, { wrapper: Providers });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Home' })).toBeDisabled();
     });
   });
 

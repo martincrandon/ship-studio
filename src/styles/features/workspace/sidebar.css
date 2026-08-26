@@ -44,15 +44,14 @@
   z-index: var(--z-dropdown);
 }
 
-/* Home owns no full-width titlebar: its navigation row is the top of the
- * sidebar, so the project-workspace titlebar fill is not needed here. */
-.app.workspace-home .workspace-sidebar::before {
+/* Home owns no shared titlebar: its navigation row is the top of the sidebar.
+ * Keep this exception for loading states that still render a titlebar. */
+.app.workspace-home:not(.has-workspace-titlebar) .workspace-sidebar::before {
   display: none;
 }
 
-/* Compact-toolbar Home has real window chrome above the sidebar. Keep the
- * sidebar divider out of that shared titlebar instead of drawing through its
- * navigation controls. */
+/* When a loading state has a shared titlebar, keep the sidebar divider out of
+ * that chrome instead of drawing through its navigation controls. */
 .app.workspace-home.has-workspace-titlebar .workspace-sidebar::after {
   inset-block-start: calc(
     var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default)
@@ -70,7 +69,8 @@
   box-sizing: border-box;
 }
 
-/* Home and loading render their navigation controls inside the sidebar. */
+/* Home and project-loading render their navigation controls inside the
+ * sidebar whenever a shared titlebar does not own them. */
 .projects-with-rail .workspace-sidebar {
   padding-top: 0;
 }
@@ -82,41 +82,90 @@
 .app.workspace-home .workspace-sidebar-top-row {
   height: calc(var(--control-height-standard) + (var(--space-08) * 2));
   min-height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  gap: 0;
   padding: 0 var(--space-08) 0
     calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap));
 }
 
-/* Keep the complete navigation group at the default expanded-sidebar width.
- * The Home button must not grow with the resizable sidebar or shrink when the
- * process rail collapses. */
+/* Match the titlebar's icon-only Home control instead of stretching with the
+ * resizable sidebar. */
 .app.workspace-home .workspace-sidebar-top-row .workspace-sidebar-home {
-  width: calc(var(--space-32) + var(--space-32) + var(--space-24));
-  min-width: calc(var(--space-32) + var(--space-32) + var(--space-24));
-  flex: 0 0 calc(var(--space-32) + var(--space-32) + var(--space-24));
-  padding-inline: var(--space-08);
+  width: var(--button-height);
+  min-width: var(--button-height);
+  flex: 0 0 var(--button-height);
+  padding-inline: 0;
 }
 
 /* Collapsing Home reduces the process rail, but the window/navigation row
- * remains intact. Let that one row extend over the canvas and keep the rail's
- * vertical divider below it so it never cuts through the controls. */
+ * remains intact. Keep the rail divider continuous from the window top; its
+ * row gradient masks and then reveals it smoothly around the controls. */
 .app.workspace-home .workspace-sidebar.is-hidden {
   overflow: visible;
+  border-right: var(--stroke-1) solid var(--border-default);
 }
 
 .app.workspace-home .workspace-sidebar.is-hidden::after {
-  inset-block-start: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  display: none;
 }
 
 .app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-top-row {
   position: relative;
   width: max-content;
   flex-direction: row;
-  background: var(--surface-panel);
+  gap: 0;
+  background: var(--surface-app);
+  border-bottom: none;
   z-index: var(--z-workspace-header);
 }
 
-.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-home > span:last-child {
-  display: inline;
+/* Offset the rail transition without changing its length or stops. The row
+ * remains the main-section surface behind every top control; only the
+ * rail-width overlay transitions into the sidebar below it. */
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-top-row::before {
+  position: absolute;
+  inset-block-start: var(--space-10);
+  inset-inline-start: 0;
+  width: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  background: linear-gradient(
+    to bottom,
+    var(--surface-app) 0%,
+    var(--surface-app) 70%,
+    transparent 100%
+  );
+  background-color: var(--surface-panel);
+  content: '';
+  pointer-events: none;
+  z-index: var(--z-dropdown);
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-top-row::after {
+  position: absolute;
+  inset-block-start: var(--space-10);
+  inset-inline-start: calc(
+    var(--control-height-standard) + (var(--space-08) * 2) - var(--border-width-default)
+  );
+  width: var(--border-width-default);
+  height: calc(var(--control-height-standard) + (var(--space-08) * 2));
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 70%,
+    var(--border-default) 100%
+  );
+  content: '';
+  pointer-events: none;
+  z-index: var(--z-dropdown);
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-top-row > * {
+  position: relative;
+  z-index: var(--z-workspace-header);
+}
+
+.app.workspace-home .workspace-sidebar.is-hidden .workspace-sidebar-search-panel {
+  position: relative;
+  z-index: var(--z-workspace-header);
 }
 
 /* Top row — wraps the Home button and workspace switcher dot side-by-side.
@@ -177,27 +226,14 @@
   justify-content: center;
 }
 
-.workspace-sidebar.is-hidden .workspace-sidebar-home > span:last-child,
 .workspace-sidebar.is-hidden .workspace-sidebar-add-project > span:last-child {
   display: none;
 }
 
-/* Home row — height matches the workspace header band so the sidebar's top
- * lines up with it: the header is a 28px toolbar control + 8px top/bottom
- * padding = 44px, and the top row adds its own 1px bottom border. */
+/* Home row — height matches the workspace header band so the navigation
+ * controls sit at the same vertical position as the traffic lights. */
 .workspace-sidebar-home {
   flex: 1;
-}
-
-.workspace-sidebar-home-icon {
-  width: var(--space-16);
-  height: var(--space-16);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: currentColor;
-  flex-shrink: 0;
 }
 
 /* Sidebar-top palette trigger — button styled like a search input. The

@@ -176,14 +176,13 @@
 }
 
 .preview-toolbar-control-group > .preview-toolbar-plugins {
-  display: flex;
-  align-items: center;
-  gap: var(--button-gap);
+  /* PluginSlot's isolation wrappers use `display: contents`. Keep this
+     slot transparent to the parent flex row too; otherwise it becomes a
+     zero-width flex item and inserts a second gap before Open in Browser. */
+  display: contents;
 }
 
-/* PluginSlot returns null when no preview plugins are installed, but the
-   toolbar wrapper remains mounted. Remove that empty flex item so it cannot
-   create an extra gap between Inspect and Open in Browser. */
+/* Keep an actually empty slot out of the accessibility tree as well. */
 .preview-toolbar-control-group > .preview-toolbar-plugins:empty {
   display: none;
 }

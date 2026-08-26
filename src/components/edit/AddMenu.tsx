@@ -38,6 +38,8 @@ interface Props {
   /** Add a nested rule with this selector/prelude (a nested selector or keyframe step). */
   onNest: (selector: string) => void;
   mode?: AddMode;
+  /** Replace the mode's default trigger text while retaining its behavior and aria label. */
+  triggerLabel?: string;
   /** Open the menu automatically on mount — for the editing flow (e.g. right after
    *  creating a rule, jump straight to picking its first property). */
   autoOpen?: boolean;
@@ -65,7 +67,7 @@ interface MenuAnchor {
 function getMenuAnchor(button: HTMLElement): MenuAnchor {
   return {
     card:
-      button.closest<HTMLElement>('.ss-cascade-card')?.getBoundingClientRect() ??
+      button.closest<HTMLElement>('.ss-cascade-card, .ss-custom-css')?.getBoundingClientRect() ??
       button.getBoundingClientRect(),
     trigger: button.getBoundingClientRect(),
   };
@@ -74,12 +76,18 @@ function getMenuAnchor(button: HTMLElement): MenuAnchor {
 const SEL_START = /^[&:>+~.#[*]/;
 const LOOKS_PROP = /^[a-zA-Z-]+$/;
 
-export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false }: Props) {
+export function AddMenu({
+  onAddProperty,
+  onNest,
+  mode = 'full',
+  triggerLabel,
+  autoOpen = false,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  // The selector card's rect is captured when the menu opens (never read from a ref
-  // during render) and used to position and size the portaled menu.
+  // The containing editor surface's rect is captured when the menu opens (never read
+  // from a ref during render) and used to position and size the portaled menu.
   const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -237,7 +245,9 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
     isOutside: (t) => !popRef.current?.contains(t) && !btnRef.current?.contains(t),
   });
 
-  const label = mode === 'keyframes' ? 'Add step' : mode === 'props' ? 'Add property' : 'Add';
+  const defaultLabel =
+    mode === 'keyframes' ? 'Add step' : mode === 'props' ? 'Add property' : 'Add';
+  const label = triggerLabel ?? defaultLabel;
   const placeholder =
     mode === 'keyframes'
       ? 'Add a keyframe step (from, to, 50%)…'
@@ -299,7 +309,7 @@ export function AddMenu({ onAddProperty, onNest, mode = 'full', autoOpen = false
             aria-controls={listId}
             aria-activedescendant={flat.length > 0 ? optionId(active) : undefined}
             aria-autocomplete="list"
-            aria-label={label}
+            aria-label={defaultLabel}
             placeholder={placeholder}
             onChange={(e) => {
               setQuery(e.target.value);

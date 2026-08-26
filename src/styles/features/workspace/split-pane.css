@@ -32,35 +32,11 @@
   overflow: visible;
 }
 
-.split-pane-handle {
-  width: 8px;
-  background: var(--surface-panel);
-  border-left: 1px solid var(--border-default);
-  border-right: 1px solid var(--border-default);
-  cursor: col-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-}
-
-.split-pane-handle:hover {
-  background: var(--surface-control);
-  border-color: var(--border-strong);
-}
-
-.split-pane-handle-bar {
-  width: 2px;
-  height: 40px;
-  background: var(--text-muted);
-  border-radius: 1px;
-}
-
-.split-pane-handle:hover .split-pane-handle-bar {
-  background: var(--accent-active);
+/* The pinned Agent surface is body-portaled at the dock slot's bounds. Keep
+   the shared separator above that surface so its hover cursor and hit area
+   remain available at the panel edge. */
+.split-pane > .panel-resize-handle {
+  z-index: var(--z-floating-panel);
 }
 
 .terminal-pane {

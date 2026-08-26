@@ -47,7 +47,13 @@ import { ClassBar } from './ClassBar';
 import type { CustomClass } from '../../lib/customClasses';
 import type { EditTarget } from '../../hooks/useVisualEditor';
 import { CONTROL_SECTIONS } from '../../lib/editControls';
-import { breakpointPrefixes, type UsageReport } from '../../lib/edit';
+import {
+  activeEnumToken,
+  breakpointPrefixes,
+  ENUM_CONTROLS,
+  readLayer,
+  type UsageReport,
+} from '../../lib/edit';
 import type {
   BoxType,
   Side,
@@ -455,6 +461,12 @@ export function VisualEditorPanel({
       onOpenInCode,
     ]
   );
+  const displayControl = ENUM_CONTROLS.find((control) => control.label === 'Display')!;
+  const display = readLayer(currentClass, layer, (tokens) =>
+    activeEnumToken(tokens, displayControl)
+  ).value;
+  const flexLayout = display === 'flex' || display === 'inline-flex';
+  const flexOrGridLayout = flexLayout || display === 'grid';
 
   // Contextual mobile-first explainer (shown in the "?" tooltip by the label).
   const breakpointHelp =
@@ -693,15 +705,25 @@ export function VisualEditorPanel({
                 sectionId={section.id}
                 defaultOpen={section.defaultOpen}
               >
-                {section.controls.map((control) => (
-                  <PropControlRenderer key={control.key} control={control} ctx={controlCtx} />
-                ))}
+                {section.controls.map((control) => {
+                  if (control.kind === 'enum') {
+                    const label = control.control.label;
+                    if ((label === 'Direction' || label === 'Wrap') && !flexLayout) return null;
+                    if ((label === 'Justify' || label === 'Align items') && !flexOrGridLayout)
+                      return null;
+                  }
+                  return (
+                    <PropControlRenderer key={control.key} control={control} ctx={controlCtx} />
+                  );
+                })}
               </PropSection>
             ))}
 
-            <div className="ss-edit-panel__classes" title={currentClass}>
-              {currentClass}
-            </div>
+            <PropSection title="Applied classes" sectionId="classes" defaultOpen>
+              <div className="ss-edit-panel__classes" title={currentClass}>
+                {currentClass}
+              </div>
+            </PropSection>
           </>
         )}
 

@@ -131,8 +131,14 @@ export function ResettableLabel({
         type="button"
         className="ss-edit-panel__labelbtn"
         aria-expanded={pop !== null}
-        onClick={openAt}
-        title={`Set on ${active.name} — click to reset`}
+        onClick={(e) => {
+          if (e.altKey) {
+            onReset();
+            return;
+          }
+          openAt(e);
+        }}
+        title={`Set on ${active.name} — click to reset, Alt-click to reset immediately`}
       >
         {label}
         <LayerDot definedAt={definedAt} active={active} />

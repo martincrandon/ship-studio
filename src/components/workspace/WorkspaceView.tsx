@@ -23,6 +23,7 @@ import { listen } from '@tauri-apps/api/event';
 import { logger } from '../../lib/logger';
 import { setTerminalState } from '../../lib/project';
 import type { PreviewHandle, InspectTab } from '../preview/Preview';
+import { TREE_PANEL_MIN_WIDTH_PX } from '../preview/panelSizing';
 import { SplitPane } from './SplitPane';
 import { CompactWorkspace } from './CompactWorkspace';
 import { MainBranchBanner } from '../branches/MainBranchBanner';
@@ -1165,7 +1166,7 @@ export const WorkspaceView = memo(function WorkspaceView({
               onOpenProjectPicker={onOpenProjectPicker}
               isSidebarHidden={isSidebarHidden}
               onToggleSidebar={onToggleSidebar}
-              showNavigationControls={!compactWorkspaceToolbarEnabled}
+              showNavigationControls={false}
               projects={projectRows}
               onCloseProject={onCloseProject}
               onUnpinProject={onUnpinProject}
@@ -1228,6 +1229,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                 <SplitPane
                   defaultSplit={29}
                   minLeft={20}
+                  minLeftWidthPx={TREE_PANEL_MIN_WIDTH_PX}
                   minRight={35}
                   persistenceKey="agentPanelDockedSplit"
                   rightCollapsed={isPreviewHidden}

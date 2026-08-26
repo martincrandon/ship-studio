@@ -3,9 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT,
   DASHBOARD_VISIBILITY_CHANGED_EVENT,
+  getAppIcon,
   setCalendarHidden,
   setCompactWorkspaceToolbarEnabled,
   setDashboardHeaderHidden,
+  setAppIcon,
   setSlackCtaHidden,
 } from './settings';
 
@@ -62,5 +64,33 @@ describe('workspace toolbar setting', () => {
     expect(listener.mock.calls[0]?.[0]).toMatchObject({ detail: true });
 
     window.removeEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, listener);
+  });
+});
+
+describe('app icon setting', () => {
+  const invokeMock = vi.mocked(invoke);
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+  });
+
+  it('reads a valid persisted icon', async () => {
+    invokeMock.mockResolvedValueOnce('dark');
+
+    await expect(getAppIcon()).resolves.toBe('dark');
+    expect(invokeMock).toHaveBeenCalledWith('get_app_icon');
+  });
+
+  it('falls back to the brand icon for an unknown persisted value', async () => {
+    invokeMock.mockResolvedValueOnce('unknown');
+
+    await expect(getAppIcon()).resolves.toBe('brand');
+  });
+
+  it('persists the selected icon', async () => {
+    await setAppIcon('light');
+
+    expect(invokeMock).toHaveBeenCalledWith('set_app_icon', { icon: 'light' });
   });
 });

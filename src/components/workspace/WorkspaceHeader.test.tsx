@@ -124,12 +124,13 @@ describe('WorkspaceHeader title bar', () => {
     expect(openInFinder).toHaveBeenCalledWith(projectPath);
   });
 
-  it('restores sidebar navigation ownership and the second toolbar in classic layout', () => {
+  it('keeps navigation in the titlebar while restoring the second toolbar in classic layout', () => {
     const props = headerProps();
     props.compactWorkspaceToolbarEnabled = false;
     const { container } = render(<HeaderHarness props={props} />);
 
-    expect(container.querySelector('.workspace-titlebar-navigation')).not.toBeInTheDocument();
+    expect(container.querySelector('.workspace-titlebar-navigation')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Hide sidebar' })).toBeInTheDocument();
     expect(container.querySelector('.workspace-header')).toBeInTheDocument();
     expect(container.querySelector('.workspace-header-left')).toContainElement(
       screen.getByRole('button', { name: 'Elements' })
@@ -252,15 +253,17 @@ describe('WorkspaceHeader title bar', () => {
     expect(container).not.toHaveStyle({ width: '420px' });
   });
 
-  it('places Variables between Agent and Assets and toggles it from the titlebar', () => {
+  it('places Agent first, followed by Variables and Assets, and toggles Variables', () => {
     const props = headerProps();
     render(<TitlebarHarness props={props} />);
 
+    const tools = document.querySelector('.workspace-titlebar-tools');
     const agent = screen.getByRole('button', { name: 'Agent' });
     const variables = screen.getByRole('button', { name: 'Variables' });
     const assets = screen.getByRole('button', { name: 'Assets' });
-    const buttons = screen.getAllByRole('button');
+    const buttons = Array.from(tools!.querySelectorAll('button'));
 
+    expect(buttons[0]).toBe(agent);
     expect(buttons.indexOf(agent)).toBeLessThan(buttons.indexOf(variables));
     expect(buttons.indexOf(variables)).toBeLessThan(buttons.indexOf(assets));
 

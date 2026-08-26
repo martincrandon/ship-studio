@@ -101,6 +101,7 @@
    separate anonymous flex items and long values can form parallel columns. */
 .ss-css-value-text {
   display: block;
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -124,16 +125,24 @@
 }
 
 .ss-var-row__swatch {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
   flex: 0 0 auto;
   align-self: flex-start;
   width: var(--size-icon-button);
   height: var(--size-icon-button);
+  border: var(--stroke-1) solid var(--border-default);
   border-radius: var(--radius-sm);
+}
+
+.ss-var-row__swatch-color {
+  position: absolute;
+  inset: 0;
 }
 
 .ss-var-row__swatch--button {
   padding: 0;
-  border: 0;
   cursor: pointer;
 }
 .ss-var-row__swatch--button:focus-visible {
@@ -169,22 +178,72 @@
 }
 
 .ss-var-row__name code {
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.ss-var-row__name > .ss-dropdown {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* This menu is portaled to <body>, so it must clear the floating editor panel. */
+.ss-var-row__menu {
+  z-index: var(--z-tooltip);
+}
+
+.ss-var-row__menu-trigger {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-interaction);
+}
+
+.ss-var-row:hover .ss-var-row__menu-trigger,
+.ss-var-row:focus-within .ss-var-row__menu-trigger,
+.ss-var-row__menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A closed trigger should return to its quiet ghost state immediately, even
+   when the pointer is still over the button after dismissing the menu. */
+.ss-var-row__menu-trigger[aria-expanded='false']:hover:not(:disabled) {
+  background: transparent;
+  color: var(--button-text-default);
+}
+
 .ss-var-row__colon {
   justify-self: center;
   color: var(--text-muted);
 }
+.ss-var-row__value-group {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: var(--spacing-xs);
+}
 
 .ss-var-row__value {
+  display: block;
+  align-self: start;
   min-width: 0;
   width: 100%;
+  min-height: var(--control-height-compact);
+  height: auto;
   padding: 0;
   overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: inherit;
+}
+
+.ss-var-row__value .ss-css-value-text {
+  line-height: inherit;
 }
 
 .ss-var-row__value.property-field {
+  display: block;
+  height: auto;
   border: 0;
   background: transparent;
   color: var(--variable-text);
@@ -267,6 +326,27 @@
   margin-top: var(--spacing-md);
   padding-top: var(--spacing-sm);
   border-top: 1px dashed var(--border-default);
+}
+
+.ss-variable-delete-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl);
+  text-wrap: pretty;
+}
+
+.ss-variable-delete-modal__body p {
+  margin: 0;
+}
+
+.ss-variable-delete-modal__body strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.ss-variable-delete-modal__body code {
+  color: var(--variable-text);
+  overflow-wrap: anywhere;
 }
 
 /* ========================================================================

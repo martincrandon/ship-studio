@@ -393,11 +393,11 @@
 /* The per-pane add/remove controls use canonical IconButtons, so their
    height and padding stay aligned with the MenuButton trigger. */
 
-/* Drag handle between adjacent split panes. Mirrors the visual language
-   of `.split-pane-handle` used by the workspace's preview SplitPane — 8px
-   wide track with a centered vertical bar, accent-on-hover. The pane
-   columns leave a matching 4px gutter on each side of the boundary so
-   the handle sits between panes rather than overlapping their content. */
+/* Drag handle between adjacent terminal split panes. This intentionally keeps
+   a wider track with a centered vertical bar; the workspace pane separator
+   uses the shared PanelResizeHandle primitive. The pane columns leave a
+   matching 4px gutter on each side of the boundary so the handle sits between
+   panes rather than overlapping their content. */
 .terminal-split-handle {
   position: absolute;
   top: 0;

@@ -23,6 +23,7 @@ import {
   COLOR_PICKER_POSITION_KEY,
   COLOR_PICKER_SIZE_KEY,
   COLOR_PICKER_WIDTH,
+  hasColorTransparency,
   rgbaToCss,
   toHex,
   toRgba,
@@ -31,7 +32,11 @@ import {
 import { ColorPicker } from './ColorPicker';
 import { ResettableLabel } from './ResettableLabel';
 import { DockablePanel } from '../primitives/DockablePanel';
-import { ValueField, type ValueFieldVariable } from '../primitives/ValueField';
+import {
+  parseValueFieldVariable,
+  ValueField,
+  type ValueFieldVariable,
+} from '../primitives/ValueField';
 import { toCss, toFormat, type ColorFormat } from '../../lib/color';
 
 interface Props {
@@ -60,6 +65,27 @@ function formatForValue(value: string): ColorFormat {
   return 'hex';
 }
 
+/** Resolve a simple color custom-property reference from the Variables panel's
+ * authoritative source values. Aliases are followed recursively and cycles fail
+ * closed so an unresolved token never becomes a misleading black swatch. */
+export function resolveVariableColor(
+  value: string,
+  variables: ValueFieldVariable[] | undefined
+): string | null {
+  let current = value.trim();
+  const seen = new Set<string>();
+
+  while (true) {
+    const name = parseValueFieldVariable(current);
+    if (!name) return toHex(current) ? current : null;
+    if (seen.has(name)) return null;
+    seen.add(name);
+    const resolved = variables?.find((variable) => variable.name === name)?.value?.trim();
+    if (!resolved) return null;
+    current = resolved;
+  }
+}
+
 /** One color control (text / background / border …): a swatch + popover picker.
  *  Exported so the control registry can place each color in its own section. */
 export function ColorField({
@@ -86,17 +112,19 @@ export function ColorField({
     arbitraryColorRaw(s, prefix)
   );
   const computedRaw = computed?.[css];
-  const seed = explicit ?? computedRaw ?? '#000000';
+  const resolvedExplicit = explicit ? resolveVariableColor(explicit, variables) : null;
+  const seed = resolvedExplicit ?? computedRaw ?? '#000000';
   // A parent-renderable color for the chip (alpha-aware): the explicit value if
-  // parseable (a `var()` isn't), else the element's visible computed color.
+  // parseable or resolvable through project variables, else the element's visible
+  // computed color.
   const renderable =
-    (explicit && toHex(explicit) ? explicit : null) ??
-    (computedRaw && visibleHex(computedRaw) ? computedRaw : null);
+    resolvedExplicit ?? (computedRaw && visibleHex(computedRaw) ? computedRaw : null);
   const swatch = renderable ? rgbaToCss(toRgba(renderable)) : null;
   const hasValue = explicit !== null || Boolean(computedRaw?.trim());
+  const showCheckerboard = !hasValue || Boolean(renderable && hasColorTransparency(renderable));
   const chipClassName = [
     'ss-color-swatch__chip',
-    !hasValue ? 'ss-color-swatch__chip--checkerboard' : null,
+    showCheckerboard ? 'ss-color-swatch__chip--checkerboard' : null,
   ]
     .filter(Boolean)
     .join(' ');
@@ -227,11 +255,11 @@ export function ColorField({
               aria-expanded={open}
               onClick={() => setOpen((v) => !v)}
             >
-              <span
-                className={chipClassName}
-                style={swatch ? { backgroundColor: swatch } : undefined}
-                aria-hidden="true"
-              />
+              <span className={chipClassName} aria-hidden="true">
+                {swatch && (
+                  <span className="ss-color-swatch__color" style={{ backgroundColor: swatch }} />
+                )}
+              </span>
             </button>
           }
         />

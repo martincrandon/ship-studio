@@ -41,7 +41,7 @@ export function DashboardHeader({ onHide }: DashboardHeaderProps) {
       >
         <img
           key={clickPulseCount}
-          src="/ship_studio_icon.png"
+          src="/ShipStudio_IconBrand.png"
           alt="Ship Studio"
           className={`dashboard-hero-icon${clickPulseCount > 0 ? ' dashboard-hero-icon--click-pulsing' : ''}`}
           onAnimationEnd={() => {

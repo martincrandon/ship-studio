@@ -19,7 +19,7 @@ describe('InsertMenu', () => {
     renderMenu();
 
     expect(screen.getByRole('tablist', { name: 'Placement' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'After' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Inside' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByRole('option')).toHaveLength(ELEMENT_KINDS.length);
 
     const expectedIcons: Record<string, string> = {

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { EnumControlRow } from './EnumControls';
 import { ENUM_CONTROLS, BASE_BREAKPOINT } from '../../lib/edit';
 import type { InheritedProp, LayerContext } from '../../lib/edit';
@@ -13,6 +13,7 @@ import type { InheritedProp, LayerContext } from '../../lib/edit';
 const LAYER: LayerContext = { bp: BASE_BREAKPOINT, ordered: [BASE_BREAKPOINT], known: new Set() };
 
 const WEIGHT = ENUM_CONTROLS.find((c) => c.label === 'Weight')!;
+const FONT = ENUM_CONTROLS.find((c) => c.label === 'Font')!;
 const DECORATION = ENUM_CONTROLS.find((c) => c.label === 'Decoration')!;
 
 const INHERITED: InheritedProp = {
@@ -24,6 +25,27 @@ const INHERITED: InheritedProp = {
 };
 
 describe('EnumControlRow ancestor inheritance', () => {
+  it('renders and applies the font-family dropdown', () => {
+    const onApplyEnum = vi.fn();
+    render(
+      <EnumControlRow
+        control={FONT}
+        currentClass=""
+        layer={LAYER}
+        onApplyEnum={onApplyEnum}
+        onReset={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Font')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Font' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Serif' }));
+
+    expect(onApplyEnum).toHaveBeenCalledWith('font-serif', {
+      'font-family': 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
+    });
+  });
+
   it('preselects the attributed inherited option when nothing is set locally', () => {
     render(
       <EnumControlRow

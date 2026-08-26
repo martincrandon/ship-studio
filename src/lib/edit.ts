@@ -33,6 +33,13 @@ export interface ElementSignature {
   tagName: string;
   text?: string;
   ancestorClasses: string[];
+  /** Best-effort JSX source location recovered from React's development fiber.
+   *  Used only as a narrowing hint; the backend still verifies the tag at this line. */
+  sourceFile?: string;
+  sourceLine?: number;
+  sourceColumn?: number;
+  /** Exact rendered-tree identity used for safe re-selection after HMR. */
+  domPath?: string;
   rect?: { top: number; left: number; width: number; height: number };
   /** Rendered color/background from getComputedStyle — lets the color picker seed
    *  from the actual color even when it comes from a named class, var, or
@@ -600,6 +607,30 @@ export interface EnumControl {
  *  applied option (same Tailwind group); `style` drives JIT-independent preview. */
 export const ENUM_CONTROLS: EnumControl[] = [
   {
+    label: 'Font',
+    variant: 'dropdown',
+    options: [
+      {
+        label: 'Sans',
+        token: 'font-sans',
+        style: { 'font-family': 'ui-sans-serif, system-ui, sans-serif' },
+      },
+      {
+        label: 'Serif',
+        token: 'font-serif',
+        style: { 'font-family': 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif' },
+      },
+      {
+        label: 'Mono',
+        token: 'font-mono',
+        style: {
+          'font-family':
+            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        },
+      },
+    ],
+  },
+  {
     label: 'Align',
     variant: 'icons',
     options: [
@@ -1022,7 +1053,7 @@ export function lengthResetSpec(prefix: string, css: string): ResetSpec {
 export interface ArbitraryProp {
   prop: string;
   value: string;
-  /** The bare (unprefixed) Tailwind token, e.g. `[clip-path:circle(50%)]`. */
+  /** The unprefixed Tailwind token, optionally retaining its important suffix. */
   token: string;
 }
 
@@ -1048,7 +1079,7 @@ export function parseArbitraryProp(input: string): ArbitraryProp | null {
  *  to `{prop, value}` for display in the custom-CSS list. */
 export function listArbitraryProps(className: string): ArbitraryProp[] {
   const out: ArbitraryProp[] = [];
-  const re = /(?:^|\s)(\[([a-z-]+):([^\]]+)\])/g;
+  const re = /(?:^|\s)(\[([a-z-]+):([^\]]+)\]!?)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(className)) !== null) {
     out.push({ token: m[1], prop: m[2], value: m[3].replace(/_/g, ' ') });
@@ -1081,6 +1112,7 @@ const SHORTHAND_ROOTS: Record<string, string[]> = {
   'border-color': ['border'],
   'border-width': ['border'],
   'font-size': ['font'],
+  'font-family': ['font'],
   'font-weight': ['font'],
   'font-style': ['font'],
   'line-height': ['font'],

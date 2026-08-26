@@ -44,6 +44,17 @@ function nextSelect(): Promise<{
   });
 }
 
+function nextMessage<T>(type: string): Promise<T> {
+  return new Promise((res) => {
+    const handler = (e: MessageEvent) => {
+      if ((e.data as { type?: string })?.type !== type) return;
+      window.removeEventListener('message', handler);
+      res(e.data as T);
+    };
+    window.addEventListener('message', handler);
+  });
+}
+
 beforeAll(() => {
   window.eval(scriptJs);
 });
@@ -73,6 +84,75 @@ it('reports a signature on click after activate', async () => {
   // Nearest-first ancestor class chain anchors disambiguation.
   expect(msg.signature.ancestorClasses).toEqual(['card', 'hero']);
   expect(msg.count).toBe(1);
+});
+
+it('reports React development source for an element-tree source anchor', async () => {
+  const button = document.querySelector('.btn')!;
+  Object.defineProperty(button, '__reactFiber$test', {
+    configurable: true,
+    value: {
+      _debugStack: {
+        stack:
+          'Error: react-stack-top-frame\n    at Card (http://localhost:5173/src/Card.tsx?t=123:42:7)\n    at react_stack_bottom_frame (react-dom-client.development.js:1:1)',
+      },
+    },
+  });
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  expect(msg.signature.sourceFile).toBe('http://localhost:5173/src/Card.tsx');
+  expect(msg.signature.sourceLine).toBe(42);
+  expect(msg.signature.sourceColumn).toBe(7);
+});
+
+it('reports a Next/Turbopack server chunk frame for backend source-map resolution', async () => {
+  let button = document.querySelector<HTMLElement>('.btn');
+  if (!button) {
+    button = document.createElement('button');
+    button.className = 'btn';
+    document.body.appendChild(button);
+  }
+  Object.defineProperty(button, '__reactFiber$test', {
+    configurable: true,
+    value: {
+      _debugStack: {
+        stack:
+          'Error: react-stack-top-frame\n    at fakeJSXCallSite (http://localhost:3000/_next/static/chunks/react.js:1:1)\n    at Card (about://React/Server/file:///tmp/project/.next/dev/server/chunks/ssr/%5Broot%5D.js?11:89:292)\n    at react_stack_bottom_frame (react-dom.js:1:1)',
+      },
+    },
+  });
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  expect(msg.signature.sourceFile).toBe(
+    'file:///tmp/project/.next/dev/server/chunks/ssr/%5Broot%5D.js'
+  );
+  expect(msg.signature.sourceLine).toBe(89);
+  expect(msg.signature.sourceColumn).toBe(292);
+});
+
+it('reports a Next/Turbopack client chunk frame for backend source-map resolution', async () => {
+  const button = document.querySelector('.btn')!;
+  Object.defineProperty(button, '__reactFiber$test', {
+    configurable: true,
+    value: {
+      _debugStack: {
+        stack:
+          'Error: react-stack-top-frame\n    at Card (http://localhost:3000/_next/static/chunks/app_playground_Card_tsx.js:44:120)\n    at react_stack_bottom_frame (react-dom.js:1:1)',
+      },
+    },
+  });
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const msg = await selected;
+  expect(msg.signature.sourceFile).toBe(
+    'http://localhost:3000/_next/static/chunks/app_playground_Card_tsx.js'
+  );
+  expect(msg.signature.sourceLine).toBe(44);
+  expect(msg.signature.sourceColumn).toBe(120);
 });
 
 it('live-applies a class to the selected element on ss:mutate', () => {
@@ -519,6 +599,42 @@ it('reports a distinct domPath for same-tag, same-class siblings (no aliasing)',
   send({ type: 'ss:deactivate' });
 });
 
+it('uses domPath to reselect the exact classless empty sibling', async () => {
+  document.body.innerHTML = '<section><div></div><div id="target"></div></section>';
+  send({ type: 'ss:activate' });
+  const selected = nextSelect();
+  send({
+    type: 'ss:reselect',
+    signature: {
+      className: '',
+      tagName: 'div',
+      text: '',
+      ancestorClasses: [],
+      domPath: 'body:1>section:0>div:1',
+    },
+  });
+  const msg = await selected;
+  expect(msg.signature.domPath).toBe('body:1>section:0>div:1');
+  expect(document.querySelector('#target')!.hasAttribute('data-ss-sel')).toBe(true);
+  send({ type: 'ss:deactivate' });
+});
+
+it('omits hidden comment-only Next streaming wrappers from the element tree', async () => {
+  document.body.innerHTML =
+    '<div hidden><!--$--><!--/$--></div><main><div id="authored"></div></main>';
+  send({ type: 'ss:activate' });
+  const treeMessage = nextMessage<{
+    tree: { t: string; k: Array<{ t: string; k: unknown[] }> };
+  }>('ss:tree');
+  send({ type: 'ss:requestTree' });
+  const { tree } = await treeMessage;
+  expect(tree.t).toBe('body');
+  expect(tree.k).toHaveLength(1);
+  expect(tree.k[0].t).toBe('main');
+  expect(tree.k[0].k).toHaveLength(1);
+  send({ type: 'ss:deactivate' });
+});
+
 it('previews by replacing the REAL rule in place, and restores it on clear', () => {
   document.body.innerHTML = '<style>.q{color:red}</style><button class="q">x</button>';
   // Target the project's own <style> (not a leftover #ss-preview sheet in <head>).
@@ -662,7 +778,6 @@ it('does not flag locally-defined values or classless/global definers', async ()
   inh = (msg2.signature.inheritedProps ?? {}) as Record<string, InheritedPropMsg>;
   expect(inh['font-size']).toBeUndefined();
 });
-
 
 it('flags a decoration PROPAGATING from an ancestor (not inherited — drawn through)', async () => {
   // text-decoration never computes as inherited (children stay 'none' while the

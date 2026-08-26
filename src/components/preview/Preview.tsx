@@ -88,6 +88,7 @@ import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { DockablePanel } from '../primitives/DockablePanel';
+import { TREE_PANEL_MIN_WIDTH_PX } from './panelSizing';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
@@ -234,7 +235,6 @@ const INSPECT_VIEWPORT_RESERVE_PX = 200;
 const INSPECT_PANEL_MAX_FALLBACK_PX = 160;
 
 /** Width bounds for the Element Tree's resizable left column. */
-const TREE_PANEL_MIN_WIDTH_PX = 180;
 const TREE_PANEL_MAX_WIDTH_PX = 480;
 const TREE_VIEWPORT_RESERVE_PX = 160;
 const TREE_PANEL_DEFAULT_WIDTH_PX = 240;
@@ -593,6 +593,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     projectPath,
     enabled: editor.editMode || cssEditor.editMode || variablesPanelVisible,
     onToast,
+    onVariableDeleted: editor.reconcileDeletedVariable,
   });
   const cssAnimations = useCssAnimations({
     projectPath,

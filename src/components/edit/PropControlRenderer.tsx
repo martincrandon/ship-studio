@@ -48,7 +48,10 @@ export interface ControlRenderCtx {
 }
 
 /** Resolved provenance props the ancestry-aware controls forward to their label. */
-function inheritLabelProps(ctx: ControlRenderCtx, key: string | null): {
+function inheritLabelProps(
+  ctx: ControlRenderCtx,
+  key: string | null
+): {
   inherited: InheritedProp | null;
   projectPath?: string;
   onOpenInCode?: (file: string, line: number) => void;
@@ -169,8 +172,10 @@ export function PropControlRenderer({
     case 'custom':
       return (
         <CustomCssBox
+          key={`${ctx.currentClass}:${ctx.layer.bp.name}`}
           currentClass={ctx.currentClass}
           layer={ctx.layer}
+          variables={ctx.variables}
           onApplyEnum={ctx.onApplyEnum}
           onReset={ctx.onReset}
         />

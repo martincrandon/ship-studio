@@ -14,6 +14,31 @@ export const DASHBOARD_VISIBILITY_CHANGED_EVENT = 'shipstudio:dashboard-visibili
 export const COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT =
   'shipstudio:compact-workspace-toolbar-changed';
 
+/** The app icons available for the macOS Dock. */
+export const APP_ICON_OPTIONS = [
+  {
+    id: 'brand',
+    label: 'Brand',
+    src: '/ShipStudio_IconBrand.png',
+  },
+  {
+    id: 'dark',
+    label: 'Dark',
+    src: '/ShipStudio_IconDark.png',
+  },
+  {
+    id: 'light',
+    label: 'Light',
+    src: '/ShipStudio_IconLight.png',
+  },
+] as const;
+
+export type AppIcon = (typeof APP_ICON_OPTIONS)[number]['id'];
+
+function isAppIcon(value: string): value is AppIcon {
+  return APP_ICON_OPTIONS.some((option) => option.id === value);
+}
+
 /** Dashboard visibility preference changed by a settings control or inline action. */
 export interface DashboardVisibilityChangedDetail {
   key: 'calendar' | 'slackCta' | 'dashboardHeader';
@@ -91,6 +116,21 @@ export async function setDashboardHeaderHidden(hidden: boolean): Promise<void> {
   } catch {
     // Silently fail
   }
+}
+
+/** Get the persisted Dock icon choice. */
+export async function getAppIcon(): Promise<AppIcon> {
+  try {
+    const icon = await invoke<string>('get_app_icon');
+    return isAppIcon(icon) ? icon : 'brand';
+  } catch {
+    return 'brand';
+  }
+}
+
+/** Persist the Dock icon choice and update the native app icon immediately. */
+export async function setAppIcon(icon: AppIcon): Promise<void> {
+  await invoke('set_app_icon', { icon });
 }
 
 /**
