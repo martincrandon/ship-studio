@@ -8,6 +8,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '../primitives/Breadcrumb';
+import { Dropdown, DropdownItem } from '../primitives/Dropdown';
+import { MenuButton } from '../primitives/MenuButton';
 import { getElementIcon } from '../edit/element-icons';
 import type { ElementPathItem } from '../../lib/edit';
 
@@ -20,7 +22,7 @@ const MAX_VISIBLE_PATH_ITEMS = 4;
 
 type BreadcrumbEntry =
   | { kind: 'element'; item: ElementPathItem; pathIndex: number }
-  | { kind: 'ellipsis' };
+  | { kind: 'ellipsis'; items: readonly ElementPathItem[] };
 
 function firstClass(className: string) {
   return className.split(/\s+/).find(Boolean);
@@ -38,7 +40,7 @@ function breadcrumbEntries(path: readonly ElementPathItem[]): BreadcrumbEntry[] 
 
   return [
     { kind: 'element', item: path[0], pathIndex: 0 },
-    { kind: 'ellipsis' },
+    { kind: 'ellipsis', items: path.slice(1, -2) },
     ...path.slice(-2).map((item, index) => ({
       kind: 'element' as const,
       item,
@@ -73,7 +75,35 @@ function BreadcrumbEntryContent({
   pathLength: number;
   onSelect: (item: ElementPathItem) => void;
 }) {
-  if (entry.kind === 'ellipsis') return <BreadcrumbEllipsis />;
+  if (entry.kind === 'ellipsis') {
+    return (
+      <Dropdown
+        align="left"
+        side="top"
+        portal
+        menuClassName="preview-breadcrumb__menu"
+        trigger={(triggerProps) => (
+          <MenuButton
+            {...triggerProps}
+            expanded={triggerProps['aria-expanded']}
+            variant="ghost"
+            size="compact"
+            className="breadcrumb__ellipsis-trigger"
+            aria-label="Show hidden elements"
+            title="Show hidden elements"
+          >
+            <BreadcrumbEllipsis />
+          </MenuButton>
+        )}
+      >
+        {entry.items.map((item) => (
+          <DropdownItem key={item.domPath} onSelect={() => onSelect(item)}>
+            <ElementLabel item={item} />
+          </DropdownItem>
+        ))}
+      </Dropdown>
+    );
+  }
 
   const label = itemLabel(entry.item);
   const current = entry.pathIndex === pathLength - 1;
