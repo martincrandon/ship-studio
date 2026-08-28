@@ -29,7 +29,7 @@ function ElementLabel({ item }: { item: ElementPathItem }) {
   const className = firstClass(item.className);
   const icon = getElementIcon(tagName);
   return (
-    <>
+    <span className="preview-breadcrumb__label">
       {icon && (
         <span className="preview-breadcrumb__icon" aria-hidden="true">
           {icon}
@@ -37,7 +37,7 @@ function ElementLabel({ item }: { item: ElementPathItem }) {
       )}
       <span className="preview-breadcrumb__tag">&lt;{tagName}&gt;</span>
       {className && <span className="preview-breadcrumb__class">.{className}</span>}
-    </>
+    </span>
   );
 }
 

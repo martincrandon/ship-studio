@@ -1611,9 +1611,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   : undefined
               }
             />
-            {activeEditMode && breadcrumbPath.length > 0 && (
-              <PreviewBreadcrumb path={breadcrumbPath} onSelect={selectBreadcrumbItem} />
-            )}
             {/* Structural-edit toolbar, tracking the canvas selection box */}
             {activeEditMode && (
               <ElementToolbar
@@ -1720,6 +1717,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             <div className="preview-resize-handle-bar preview-resize-handle-bar--vertical" />
           </div>
         </div>
+        {activeEditMode && breadcrumbPath.length > 0 && (
+          <PreviewBreadcrumb path={breadcrumbPath} onSelect={selectBreadcrumbItem} />
+        )}
       </div>
       {showLogs && (
         <PanelResizeHandle
