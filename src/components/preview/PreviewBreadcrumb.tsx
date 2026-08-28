@@ -94,7 +94,6 @@ function BreadcrumbEntryContent({
             size="compact"
             className="breadcrumb__ellipsis-trigger"
             aria-label="Show hidden elements"
-            title="Show hidden elements"
           >
             <BreadcrumbEllipsis />
           </MenuButton>
@@ -116,11 +115,7 @@ function BreadcrumbEntryContent({
       <ElementLabel item={entry.item} showTagIcons={showTagIcons} />
     </BreadcrumbPage>
   ) : (
-    <BreadcrumbLink
-      aria-label={`Select parent ${label}`}
-      title={`Select ${label}`}
-      onClick={() => onSelect(entry.item)}
-    >
+    <BreadcrumbLink aria-label={`Select parent ${label}`} onClick={() => onSelect(entry.item)}>
       <ElementLabel item={entry.item} showTagIcons={showTagIcons} />
     </BreadcrumbLink>
   );

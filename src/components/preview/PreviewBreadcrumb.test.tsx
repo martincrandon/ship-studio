@@ -17,7 +17,9 @@ describe('PreviewBreadcrumb', () => {
   it('shows the selected element path and reselects the clicked parent', () => {
     const onSelect = vi.fn();
 
-    render(<PreviewBreadcrumb path={path} onSelect={onSelect} showTagIcons={false} />);
+    const { container } = render(
+      <PreviewBreadcrumb path={path} onSelect={onSelect} showTagIcons={false} />
+    );
 
     expect(screen.getByRole('navigation')).toHaveClass('preview-breadcrumb');
     expect(
@@ -27,6 +29,7 @@ describe('PreviewBreadcrumb', () => {
       screen.getByRole('button', { name: 'Select parent <div> .content' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Current element <button> .primary-button')).toBeInTheDocument();
+    expect(container.querySelector('[title]')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Select parent <section> .hero' }));
     expect(onSelect).toHaveBeenCalledWith(path[0]);
@@ -55,6 +58,7 @@ describe('PreviewBreadcrumb', () => {
     expect(screen.getByLabelText('Current element <span> .label')).toBeInTheDocument();
     const ellipsis = screen.getByRole('button', { name: 'Show hidden elements' });
     expect(ellipsis).toHaveAttribute('aria-expanded', 'false');
+    expect(ellipsis).not.toHaveAttribute('title');
 
     fireEvent.click(ellipsis);
     expect(ellipsis).toHaveAttribute('aria-expanded', 'true');
