@@ -1183,6 +1183,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           },
         ]
     : [];
+  const breadcrumbVisible = activeEditMode && breadcrumbPath.length > 0;
   const selectBreadcrumbItem = useCallback(
     (item: (typeof breadcrumbPath)[number]) => {
       if (!item.domPath) return;
@@ -1542,7 +1543,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         </div>
       </div>
       <div
-        className="preview-viewport"
+        className={`preview-viewport${breadcrumbVisible ? ' preview-viewport--with-breadcrumb' : ''}`}
         ref={resize.setViewportRefs}
         data-education-id="preview-viewport"
       >
@@ -1718,7 +1719,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             <div className="preview-resize-handle-bar preview-resize-handle-bar--vertical" />
           </div>
         </div>
-        {activeEditMode && breadcrumbPath.length > 0 && (
+        {breadcrumbVisible && (
           <PreviewBreadcrumb
             path={breadcrumbPath}
             onSelect={selectBreadcrumbItem}
