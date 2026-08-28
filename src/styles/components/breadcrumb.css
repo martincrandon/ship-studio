@@ -24,6 +24,21 @@
   flex: 0 0 auto;
 }
 
+.breadcrumb__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--size-control-compact);
+  width: var(--size-control-compact);
+  height: var(--control-height-compact);
+  color: var(--text-secondary);
+}
+
+.breadcrumb__ellipsis > svg {
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+}
+
 .breadcrumb__link.button {
   min-width: var(--size-control-compact);
   max-width: var(--size-element-toolbar-selector);

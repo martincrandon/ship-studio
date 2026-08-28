@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   Breadcrumb,
+  BreadcrumbEllipsis,
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
@@ -33,5 +34,11 @@ describe('Breadcrumb', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'section.hero' }));
     expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it('renders a non-interactive ellipsis for collapsed paths', () => {
+    const { container } = render(<BreadcrumbEllipsis />);
+
+    expect(container.querySelector('.breadcrumb__ellipsis')).toHaveAttribute('aria-hidden', 'true');
   });
 });
