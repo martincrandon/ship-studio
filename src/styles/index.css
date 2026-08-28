@@ -37,6 +37,7 @@
 @import './components/middle-truncate.css';
 @import './components/value-field.css';
 @import './components/error-boundary.css';
+@import './components/breadcrumb.css';
 
 /* Features */
 @import './features/setup.css';

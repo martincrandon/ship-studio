@@ -51,6 +51,7 @@ import { useVisualEditor } from '../../hooks/useVisualEditor';
 import { useTextEditing } from '../../hooks/useTextEditing';
 import { useElementStructure } from '../../hooks/useElementStructure';
 import { ElementToolbar } from '../edit/ElementToolbar';
+import { PreviewBreadcrumb } from './PreviewBreadcrumb';
 import { useCssCascadeEditor } from '../../hooks/useCssCascadeEditor';
 import { useElementSettings } from '../../hooks/useElementSettings';
 import { useCssVariables } from '../../hooks/useCssVariables';
@@ -1228,6 +1229,38 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     devServerUnexpectedExit,
   ]);
 
+  const breadcrumbSignature =
+    editorMode === 'css' ? cssEditor.selection?.signature : editor.selection?.signature;
+  const breadcrumbPath = breadcrumbSignature
+    ? breadcrumbSignature.elementPath?.length
+      ? breadcrumbSignature.elementPath
+      : [
+          {
+            tagName: breadcrumbSignature.tagName,
+            className: breadcrumbSignature.className,
+            domPath: breadcrumbSignature.domPath ?? '',
+          },
+        ]
+    : [];
+  const selectBreadcrumbItem = useCallback(
+    (item: (typeof breadcrumbPath)[number]) => {
+      if (!item.domPath) return;
+      iframeRef.current?.contentWindow?.postMessage(
+        {
+          type: 'ss:reselect',
+          signature: {
+            className: item.className,
+            tagName: item.tagName,
+            domPath: item.domPath,
+            ancestorClasses: [],
+          },
+        },
+        '*'
+      );
+    },
+    [iframeRef]
+  );
+
   if (needsInstall) {
     return (
       <div className="preview-install-prompt">
@@ -1638,6 +1671,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   : undefined
               }
             />
+            {activeEditMode && breadcrumbPath.length > 0 && (
+              <PreviewBreadcrumb path={breadcrumbPath} onSelect={selectBreadcrumbItem} />
+            )}
             {/* Structural-edit toolbar, tracking the canvas selection box */}
             {activeEditMode && (
               <ElementToolbar
