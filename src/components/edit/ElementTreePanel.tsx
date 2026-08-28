@@ -91,6 +91,10 @@ interface Props {
   onTogglePin?: () => void;
   /** Hide the panel without changing its docked/floating preference. */
   onClose?: () => void;
+  /** Whether supported element tags should render as icons instead of names. */
+  showTagIcons?: boolean;
+  /** Toggles the shared element-tag display mode used by the preview breadcrumb. */
+  onToggleTagIcons?: () => void;
 }
 
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
@@ -151,13 +155,17 @@ export function ElementTreePanel({
   pinned = true,
   onTogglePin,
   onClose,
+  showTagIcons: controlledShowTagIcons,
+  onToggleTagIcons: controlledOnToggleTagIcons,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
-  const [showTagIcons, , toggleShowTagIcons] = useLocalStorageFlag(
+  const [storedShowTagIcons, , toggleStoredShowTagIcons] = useLocalStorageFlag(
     SHOW_TAG_ICONS_STORAGE_KEY,
     false
   );
+  const showTagIcons = controlledShowTagIcons ?? storedShowTagIcons;
+  const toggleTagIcons = controlledOnToggleTagIcons ?? toggleStoredShowTagIcons;
   // The insert palette is anchored to the most recent context-menu gesture.
   // The primitive owns menu state; this ref only bridges the menu item to the
   // existing InsertMenu, which opens after the context menu closes.
@@ -515,7 +523,7 @@ export function ElementTreePanel({
           variant="ghost"
           size="compact"
           className="button--icon-only ss-tree-panel__tag-toggle"
-          onClick={toggleShowTagIcons}
+          onClick={toggleTagIcons}
           title={showTagIcons ? 'Show tag names' : 'Show tag icons'}
           aria-label={showTagIcons ? 'Show tag names' : 'Show tag icons'}
           pressed={showTagIcons}

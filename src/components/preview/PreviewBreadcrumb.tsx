@@ -16,6 +16,7 @@ import type { ElementPathItem } from '../../lib/edit';
 interface PreviewBreadcrumbProps {
   path: readonly ElementPathItem[];
   onSelect: (item: ElementPathItem) => void;
+  showTagIcons: boolean;
 }
 
 const MAX_VISIBLE_PATH_ITEMS = 4;
@@ -49,18 +50,19 @@ function breadcrumbEntries(path: readonly ElementPathItem[]): BreadcrumbEntry[] 
   ];
 }
 
-function ElementLabel({ item }: { item: ElementPathItem }) {
+function ElementLabel({ item, showTagIcons }: { item: ElementPathItem; showTagIcons: boolean }) {
   const tagName = item.tagName.toLowerCase();
   const className = firstClass(item.className);
-  const icon = getElementIcon(tagName);
+  const icon = showTagIcons ? getElementIcon(tagName) : undefined;
   return (
     <span className="preview-breadcrumb__label">
-      {icon && (
+      {icon ? (
         <span className="preview-breadcrumb__icon" aria-hidden="true">
           {icon}
         </span>
+      ) : (
+        <span className="preview-breadcrumb__tag">&lt;{tagName}&gt;</span>
       )}
-      <span className="preview-breadcrumb__tag">&lt;{tagName}&gt;</span>
       {className && <span className="preview-breadcrumb__class">.{className}</span>}
     </span>
   );
@@ -70,10 +72,12 @@ function BreadcrumbEntryContent({
   entry,
   pathLength,
   onSelect,
+  showTagIcons,
 }: {
   entry: BreadcrumbEntry;
   pathLength: number;
   onSelect: (item: ElementPathItem) => void;
+  showTagIcons: boolean;
 }) {
   if (entry.kind === 'ellipsis') {
     return (
@@ -98,7 +102,7 @@ function BreadcrumbEntryContent({
       >
         {entry.items.map((item) => (
           <DropdownItem key={item.domPath} onSelect={() => onSelect(item)}>
-            <ElementLabel item={item} />
+            <ElementLabel item={item} showTagIcons={showTagIcons} />
           </DropdownItem>
         ))}
       </Dropdown>
@@ -109,7 +113,7 @@ function BreadcrumbEntryContent({
   const current = entry.pathIndex === pathLength - 1;
   return current ? (
     <BreadcrumbPage aria-current="page" aria-label={`Current element ${label}`}>
-      <ElementLabel item={entry.item} />
+      <ElementLabel item={entry.item} showTagIcons={showTagIcons} />
     </BreadcrumbPage>
   ) : (
     <BreadcrumbLink
@@ -117,14 +121,14 @@ function BreadcrumbEntryContent({
       title={`Select ${label}`}
       onClick={() => onSelect(entry.item)}
     >
-      <ElementLabel item={entry.item} />
+      <ElementLabel item={entry.item} showTagIcons={showTagIcons} />
     </BreadcrumbLink>
   );
 }
 
 /** Shows the selected element and its authored DOM ancestors at the bottom of
  * the preview. Parent entries reselect the exact live DOM node when clicked. */
-export function PreviewBreadcrumb({ path, onSelect }: PreviewBreadcrumbProps) {
+export function PreviewBreadcrumb({ path, onSelect, showTagIcons }: PreviewBreadcrumbProps) {
   if (path.length === 0) return null;
 
   const entries = breadcrumbEntries(path);
@@ -142,6 +146,7 @@ export function PreviewBreadcrumb({ path, onSelect }: PreviewBreadcrumbProps) {
                   entry={entry}
                   pathLength={path.length}
                   onSelect={onSelect}
+                  showTagIcons={showTagIcons}
                 />
               </BreadcrumbItem>
             </Fragment>
