@@ -17,7 +17,7 @@ describe('PreviewBreadcrumb', () => {
   it('shows the selected element path and reselects the clicked parent', () => {
     const onSelect = vi.fn();
 
-    render(<PreviewBreadcrumb path={path} onSelect={onSelect} />);
+    render(<PreviewBreadcrumb path={path} onSelect={onSelect} showTagIcons={false} />);
 
     expect(screen.getByRole('navigation')).toHaveClass('preview-breadcrumb');
     expect(
@@ -41,7 +41,9 @@ describe('PreviewBreadcrumb', () => {
     ];
 
     const onSelect = vi.fn();
-    const { container } = render(<PreviewBreadcrumb path={longPath} onSelect={onSelect} />);
+    const { container } = render(
+      <PreviewBreadcrumb path={longPath} onSelect={onSelect} showTagIcons={false} />
+    );
 
     expect(container.querySelector('.breadcrumb__ellipsis')).toBeInTheDocument();
     expect(
@@ -61,5 +63,28 @@ describe('PreviewBreadcrumb', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: '<article> .card' }));
     expect(onSelect).toHaveBeenCalledWith(longPath[3]);
+  });
+
+  it('uses the shared tag icon mode and falls back to tag text when no icon exists', () => {
+    const mixedPath: ElementPathItem[] = [
+      { tagName: 'section', className: 'hero', domPath: 'body:0>section:0' },
+      { tagName: 'custom-widget', className: 'card', domPath: 'body:0>custom-widget:0' },
+    ];
+
+    const { container, rerender } = render(
+      <PreviewBreadcrumb path={mixedPath} onSelect={vi.fn()} showTagIcons />
+    );
+
+    expect(
+      container.querySelector('.preview-breadcrumb__icon [data-icon-name="ElementSectionIcon"]')
+    ).toBeInTheDocument();
+    expect(container.querySelector('.preview-breadcrumb__tag')).toHaveTextContent(
+      '<custom-widget>'
+    );
+
+    rerender(<PreviewBreadcrumb path={mixedPath} onSelect={vi.fn()} showTagIcons={false} />);
+
+    expect(container.querySelector('.preview-breadcrumb__icon')).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.preview-breadcrumb__tag')).toHaveLength(2);
   });
 });
