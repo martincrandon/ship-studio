@@ -792,6 +792,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // view of the rendered page.
   const showTree = elementTreeVisible;
   const variablesPanelDocked = variablesPanelVisible && variablesPanelPinned;
+  const [showTagIcons, setShowTagIcons] = useState(false);
   // The Elements panel's Code (markup-edit) view needs a wider column than the
   // navigator; the tree panel reports its view so we can widen the grid track.
   const [treeCodeView, setTreeCodeView] = useState(false);
@@ -1718,7 +1719,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           </div>
         </div>
         {activeEditMode && breadcrumbPath.length > 0 && (
-          <PreviewBreadcrumb path={breadcrumbPath} onSelect={selectBreadcrumbItem} />
+          <PreviewBreadcrumb
+            path={breadcrumbPath}
+            onSelect={selectBreadcrumbItem}
+            showTagIcons={showTagIcons}
+          />
         )}
       </div>
       {showLogs && (
@@ -1789,6 +1794,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               pinned={elementTreePinned}
               onTogglePin={onToggleElementTreePin}
               onClose={onCloseElementTree}
+              showTagIcons={showTagIcons}
+              onToggleTagIcons={() => setShowTagIcons((shown) => !shown)}
               structure={
                 activeEditMode
                   ? {

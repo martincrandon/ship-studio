@@ -15,6 +15,8 @@ describe('ElementTreePanel', () => {
       projectPath: '/tmp/project',
       selectedSignature: null,
       onTogglePin,
+      showTagIcons: false,
+      onToggleTagIcons: vi.fn(),
     };
 
     const { rerender } = render(<ElementTreePanel {...props} pinned={false} />);
@@ -45,6 +47,8 @@ describe('ElementTreePanel', () => {
         onHover={vi.fn()}
         projectPath="/tmp/project"
         selectedSignature={null}
+        showTagIcons={false}
+        onToggleTagIcons={vi.fn()}
       />
     );
 
@@ -60,13 +64,13 @@ describe('ElementTreePanel', () => {
   });
 
   it('swaps supported tag names for the Insert Element icons', () => {
-    render(
-      <ElementTreePanel
-        tree={{
-          id: 1,
-          tag: 'body',
-          cls: '',
-          text: '',
+    const onToggleTagIcons = vi.fn();
+    const props = {
+      tree: {
+        id: 1,
+        tag: 'body',
+        cls: '',
+        text: '',
           children: [
             { id: 2, tag: 'div', cls: 'card', text: '', children: [] },
             { id: 3, tag: 'main', cls: '', text: '', children: [] },
@@ -74,21 +78,27 @@ describe('ElementTreePanel', () => {
             { id: 5, tag: 'nav', cls: '', text: '', children: [] },
             { id: 6, tag: 'code', cls: '', text: '', children: [] },
           ],
-        }}
-        truncated={false}
-        selectedId={1}
-        onSelect={vi.fn()}
-        onHover={vi.fn()}
-        projectPath="/tmp/project"
-        selectedSignature={null}
-      />
-    );
+      },
+      truncated: false,
+      selectedId: 1,
+      onSelect: vi.fn(),
+      onHover: vi.fn(),
+      projectPath: '/tmp/project',
+      selectedSignature: null,
+      onToggleTagIcons,
+    };
+
+    const { rerender } = render(<ElementTreePanel {...props} showTagIcons={false} />);
 
     const panel = screen.getByTestId('element-tree-panel');
     const toggle = screen.getByRole('button', { name: 'Show tag icons' });
     expect(panel.querySelector('[data-tree-id="2"] .ss-tree-tag')).toHaveTextContent('div');
 
     fireEvent.click(toggle);
+
+    expect(onToggleTagIcons).toHaveBeenCalledOnce();
+
+    rerender(<ElementTreePanel {...props} showTagIcons />);
 
     expect(screen.getByRole('button', { name: 'Show tag names' })).toHaveAttribute(
       'aria-pressed',
