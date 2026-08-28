@@ -107,8 +107,22 @@
   color: var(--text-secondary);
 }
 
+.preview-breadcrumb .breadcrumb__page {
+  height: var(--control-height-compact);
+  line-height: var(--line-height-default);
+}
+
 .preview-breadcrumb .breadcrumb__link.button:hover:not(:disabled) {
   color: var(--text-primary);
+}
+
+.preview-breadcrumb__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+  height: 100%;
+  line-height: var(--line-height-default);
 }
 
 .preview-breadcrumb__icon {
