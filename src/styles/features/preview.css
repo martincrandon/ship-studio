@@ -667,10 +667,10 @@
 }
 
 /* Keep the breadcrumb in the viewport layout rather than floating it over the
-   preview frame. The frame remains centered in the space above the footer. */
+   preview frame; the explicit full-width column keeps the frame centered above it. */
 .preview-viewport--with-breadcrumb {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
   justify-items: center;
 }
 
