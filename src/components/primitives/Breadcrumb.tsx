@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { ChevronRightIcon } from '@/components/icons';
+import { ChevronRightIcon, MoreHorizontalIcon } from '@/components/icons';
 import { Button, type ButtonProps } from './Button';
 
 function joinClassNames(...classes: Array<string | undefined>) {
@@ -38,6 +38,20 @@ export type BreadcrumbLinkProps = Omit<
   ButtonProps,
   'variant' | 'size' | 'width' | 'block' | 'leftIcon' | 'rightIcon'
 >;
+
+/** Non-interactive truncation marker for a collapsed breadcrumb path. */
+export function BreadcrumbEllipsis({ className, ...props }: ComponentPropsWithoutRef<'span'>) {
+  return (
+    <span
+      role="presentation"
+      aria-hidden="true"
+      className={joinClassNames('breadcrumb__ellipsis', className)}
+      {...props}
+    >
+      <MoreHorizontalIcon size={14} />
+    </span>
+  );
+}
 
 /** Non-interactive label for the currently selected item. */
 export function BreadcrumbPage({ className, ...props }: ComponentPropsWithoutRef<'span'>) {
