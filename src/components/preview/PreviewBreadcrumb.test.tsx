@@ -40,7 +40,8 @@ describe('PreviewBreadcrumb', () => {
       { tagName: 'span', className: 'label', domPath: 'body:0>section:0>article:0>div:0>span:0' },
     ];
 
-    const { container } = render(<PreviewBreadcrumb path={longPath} onSelect={vi.fn()} />);
+    const onSelect = vi.fn();
+    const { container } = render(<PreviewBreadcrumb path={longPath} onSelect={onSelect} />);
 
     expect(container.querySelector('.breadcrumb__ellipsis')).toBeInTheDocument();
     expect(
@@ -50,9 +51,15 @@ describe('PreviewBreadcrumb', () => {
       screen.getByRole('button', { name: 'Select parent <div> .content' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Current element <span> .label')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Select parent <div> .content' })).toHaveAttribute(
-      'title',
-      'Select <div> .content'
-    );
+    const ellipsis = screen.getByRole('button', { name: 'Show hidden elements' });
+    expect(ellipsis).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(ellipsis);
+    expect(ellipsis).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '<article> .card' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: '<article> .card' }));
+    expect(onSelect).toHaveBeenCalledWith(longPath[3]);
   });
 });
