@@ -260,6 +260,8 @@ export interface ValueFieldProps extends Omit<
   format?: string;
   /** Reformat the current color when a color representation is selected. */
   onFormatChange?: (format: string) => void;
+  /** Observe the complete in-progress value without committing it. */
+  onValueChange?: (value: string) => void;
   /** Optional control rendered flush with the field's leading edge. */
   leading?: ReactNode;
   /** Return false to reject the value and restore the last controlled value. */
@@ -279,6 +281,7 @@ export function ValueField({
   variables = EMPTY_VARIABLES,
   format,
   onFormatChange,
+  onValueChange,
   leading,
   onCommit,
   className,
@@ -309,7 +312,7 @@ export function ValueField({
   const displayPlaceholder = placeholderValue?.unit ? placeholderValue.text : placeholder;
   const [text, setText] = useState(initial.text);
   const [unit, setUnit] = useState(
-    hasControlledValue ? initial.unit : (placeholderValue?.unit || initial.unit || defaultUnit)
+    hasControlledValue ? initial.unit : placeholderValue?.unit || initial.unit || defaultUnit
   );
   const [selectedFormat, setSelectedFormat] = useState(
     format ?? options.find((option) => option.kind === 'format')?.value ?? ''
@@ -344,9 +347,7 @@ export function ValueField({
   useEffect(() => {
     const next = splitValueFieldValue(value, options);
     setText(next.text);
-    setUnit(
-      value.trim() !== '' ? next.unit : (placeholderValue?.unit || next.unit || defaultUnit)
-    );
+    setUnit(value.trim() !== '' ? next.unit : placeholderValue?.unit || next.unit || defaultUnit);
     if (format !== undefined) setSelectedFormat(format);
     setInvalid(false);
     // The options are intentionally derived from stable primitive presets and
@@ -416,9 +417,14 @@ export function ValueField({
     return isFormatField ? trimmed : `${trimmed}${nextUnit}`;
   };
 
+  const notifyValueChange = (nextText: string, nextUnit: string) => {
+    onValueChange?.(nextText.trim() ? combinedValue(nextText, nextUnit) : '');
+  };
+
   const commit = (nextText = text, nextUnit = unit) => {
     if (!nextText.trim()) return true;
     const nextValue = combinedValue(nextText, nextUnit);
+    onValueChange?.(nextValue);
     if (onCommit(nextValue) === false) {
       const restored = splitValueFieldValue(value, options);
       setText(restored.text);
@@ -608,6 +614,7 @@ export function ValueField({
           if (isVariableInput) {
             setText(next);
             setUnit('var');
+            notifyValueChange(next, 'var');
             if (availableVariables.length > 0) {
               setVariableQuery(next);
               setActiveVariableIndex(0);
@@ -615,17 +622,21 @@ export function ValueField({
               setOpen(false);
             }
           } else {
+            let nextText = next;
+            let nextUnit = unit;
             if (unit === 'var') {
               setVariableOpen(false);
               setVariableQuery('');
             }
             if (!isFormatField && parsed.unit) {
-              setText(parsed.text);
-              setUnit(parsed.unit);
-            } else {
-              setText(next);
-              if (!isFormatField && /[a-z%)]$/i.test(next.trim())) setUnit('');
+              nextText = parsed.text;
+              nextUnit = parsed.unit;
+            } else if (!isFormatField && /[a-z%)]$/i.test(next.trim())) {
+              nextUnit = '';
             }
+            setText(nextText);
+            setUnit(nextUnit);
+            notifyValueChange(nextText, nextUnit);
           }
           if (invalid) setInvalid(false);
         }}
@@ -694,6 +705,7 @@ export function ValueField({
             setText(restored.text);
             setUnit(restored.unit);
             setInvalid(false);
+            onValueChange?.(value);
             event.currentTarget.select();
           } else {
             stepNumericValue(event);

@@ -637,6 +637,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
       { label: 'Left', token: 'text-left', style: { 'text-align': 'left' } },
       { label: 'Center', token: 'text-center', style: { 'text-align': 'center' } },
       { label: 'Right', token: 'text-right', style: { 'text-align': 'right' } },
+      { label: 'Justify', token: 'text-justify', style: { 'text-align': 'justify' } },
     ],
   },
   {
@@ -698,6 +699,11 @@ export const ENUM_CONTROLS: EnumControl[] = [
       { label: 'Center', token: 'justify-center', style: { 'justify-content': 'center' } },
       { label: 'End', token: 'justify-end', style: { 'justify-content': 'flex-end' } },
       { label: 'Between', token: 'justify-between', style: { 'justify-content': 'space-between' } },
+      {
+        label: 'Space Around',
+        token: 'justify-around',
+        style: { 'justify-content': 'space-around' },
+      },
     ],
   },
   {
@@ -708,6 +714,7 @@ export const ENUM_CONTROLS: EnumControl[] = [
       { label: 'Center', token: 'items-center', style: { 'align-items': 'center' } },
       { label: 'End', token: 'items-end', style: { 'align-items': 'flex-end' } },
       { label: 'Stretch', token: 'items-stretch', style: { 'align-items': 'stretch' } },
+      { label: 'Baseline', token: 'items-baseline', style: { 'align-items': 'baseline' } },
     ],
   },
   {
