@@ -1873,16 +1873,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   bodies={cssEditor.bodies}
                   overridden={cssEditor.overridden}
                   onChangeBody={cssEditor.setBody}
-                  onDeleteRule={(key) => void cssEditor.deleteRule(key)}
+                  onDeleteRule={(key) => cssEditor.deleteRule(key)}
                   onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
                   onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
                   onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
-                  onAddSelector={(sel) => void cssEditor.addSelector(sel)}
+                  onAddSelector={(sel, atPrelude) => void cssEditor.addSelector(sel, atPrelude)}
                   selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
                   existingSelectors={cssEditor.existingSelectors}
                   variables={cssEditor.variableSuggestions}
                   animations={cssEditor.animationSuggestions}
-                  justCreatedKey={cssEditor.justCreatedKey}
                   settings={elementSettings}
                   animationsState={cssAnimations}
                   onClose={cssEditor.toggleEditMode}

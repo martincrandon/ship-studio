@@ -1,10 +1,13 @@
 import AlignLeftSvg from '../../assets/icons/align-left.svg?react';
 import AlignCenterSvg from '../../assets/icons/align-center.svg?react';
 import AlignRightSvg from '../../assets/icons/align-right.svg?react';
+import AlignJustifySvg from '../../assets/icons/align-justify.svg?react';
 import JustifyStartSvg from '../../assets/icons/justify-start.svg?react';
 import JustifyCenterSvg from '../../assets/icons/justify-center.svg?react';
 import JustifyEndSvg from '../../assets/icons/justify-end.svg?react';
 import JustifyBetweenSvg from '../../assets/icons/justify-between.svg?react';
+import JustifyAroundSvg from '../../assets/icons/justify-around.svg?react';
+import AlignItemsBaselineSvg from '../../assets/icons/align-items-baseline.svg?react';
 import AlignItemsStartSvg from '../../assets/icons/align-items-start.svg?react';
 import AlignItemsCenterSvg from '../../assets/icons/align-items-center.svg?react';
 import AlignItemsEndSvg from '../../assets/icons/align-items-end.svg?react';
@@ -49,6 +52,13 @@ export const AlignRightIcon = createIcon(AlignRightSvg, {
   defaultSize: 15,
   strokeWidth: '1px',
 });
+export const AlignJustifyIcon = createIcon(AlignJustifySvg, {
+  name: 'AlignJustifyIcon',
+  source: 'icons/align-justify.svg',
+  kind: 'ui',
+  defaultSize: 15,
+  strokeWidth: '1px',
+});
 export const JustifyStartIcon = createIcon(JustifyStartSvg, {
   name: 'JustifyStartIcon',
   source: 'icons/justify-start.svg',
@@ -73,6 +83,20 @@ export const JustifyEndIcon = createIcon(JustifyEndSvg, {
 export const JustifyBetweenIcon = createIcon(JustifyBetweenSvg, {
   name: 'JustifyBetweenIcon',
   source: 'icons/justify-between.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const JustifyAroundIcon = createIcon(JustifyAroundSvg, {
+  name: 'JustifyAroundIcon',
+  source: 'icons/justify-around.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const AlignItemsBaselineIcon = createIcon(AlignItemsBaselineSvg, {
+  name: 'AlignItemsBaselineIcon',
+  source: 'icons/align-items-baseline.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

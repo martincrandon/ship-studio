@@ -323,32 +323,96 @@ describe('VisualEditorPanel', () => {
     expect(screen.getByLabelText('Set on md')).toBeInTheDocument();
   });
 
-  it('reads an arbitrary (free-form) value into the box field', () => {
+  it('opens the full property editor for an arbitrary box value', () => {
     renderPanel(resolvedSelection, 'pt-[10rem]');
-    expect(screen.getByLabelText<HTMLInputElement>('Padding top').value).toBe('10rem');
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }));
+
+    const popover = screen.getByRole('dialog', { name: 'Padding Top' });
+    expect(popover).toHaveTextContent('Padding Top');
+    expect(within(popover).getByRole('textbox', { name: 'Padding Top' })).toHaveValue('10');
+    expect(within(popover).getByRole('button', { name: 'Padding Top format' })).toHaveTextContent(
+      'REM'
+    );
+    expect(within(popover).getByRole('textbox', { name: 'Padding Top' })).toHaveFocus();
   });
 
-  it('styles box-model values by cascade state and sizes them to their text', () => {
+  it('styles box-model value triggers by cascade state', () => {
     renderPanel(resolvedSelection, 'p-3 md:pt-6', MD);
-    const modified = screen.getByLabelText<HTMLInputElement>('Padding top');
-    const inherited = screen.getByLabelText<HTMLInputElement>('Padding right');
+    const modified = screen.getByRole('button', { name: 'Padding top' });
+    const inherited = screen.getByRole('button', { name: 'Padding right' });
 
     expect(modified).toHaveClass('ss-box__field--modified');
     expect(inherited).toHaveClass('ss-box__field--inherited');
-    expect(modified).toHaveAttribute('size', modified.value.length.toString());
-    expect(inherited).toHaveAttribute('size', inherited.value.length.toString());
+    expect(modified).toHaveTextContent('6');
+    expect(inherited).toHaveTextContent('3');
   });
 
-  it('focuses a box-model value from its full grabbable panel', () => {
+  it('opens a box-model value from its full grabbable panel', () => {
     renderPanel(resolvedSelection, 'p-3');
     const box = screen.getByTestId('spacing-box');
-    const marginTopPanel = box.querySelector<HTMLLabelElement>(
-      '.ss-box__margin .ss-box__band--top'
-    );
+    const marginTopPanel = box.querySelector<HTMLElement>('.ss-box__margin .ss-box__band--top');
 
     expect(marginTopPanel).not.toBeNull();
     fireEvent.click(marginTopPanel!);
-    expect(screen.getByLabelText('Margin top')).toHaveFocus();
+    const popover = screen.getByRole('dialog', { name: 'Margin Top' });
+    expect(within(popover).getByRole('textbox', { name: 'Margin Top' })).toHaveFocus();
+  });
+
+  it('sizes the popup from the box and places bottom values below it', () => {
+    renderPanel(resolvedSelection, 'p-3');
+    const box = screen.getByTestId('spacing-box');
+    const boxRect = {
+      top: 100,
+      right: 300,
+      bottom: 212,
+      left: 100,
+      width: 200,
+      height: 112,
+    } as DOMRect;
+    vi.spyOn(box, 'getBoundingClientRect').mockReturnValue(boxRect);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Padding bottom' }));
+
+    const popover = screen.getByRole('dialog', { name: 'Padding Bottom' });
+    const popupTop = Number.parseFloat(popover.style.top);
+    const popupWidth = Number.parseFloat(popover.style.width);
+    const popupHeight = Number.parseFloat(popover.style.height);
+
+    expect(popupTop).toBeGreaterThanOrEqual(boxRect.bottom);
+    expect(popupTop).toBeCloseTo(boxRect.bottom + 8);
+    expect(popupWidth).toBeCloseTo(boxRect.width * 0.78);
+    expect(popupHeight).toBeCloseTo(boxRect.height * 0.37);
+
+    vi.restoreAllMocks();
+  });
+
+  it('commits a manually entered spacing value from the popup', () => {
+    vi.stubGlobal('CSS', { supports: () => true });
+    const onSetSide = vi.fn();
+    renderPanel(
+      resolvedSelection,
+      'p-3',
+      BASE_BREAKPOINT,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      onSetSide
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }));
+    const input = within(screen.getByRole('dialog', { name: 'Padding Top' })).getByRole('textbox', {
+      name: 'Padding Top',
+    });
+    fireEvent.change(input, { target: { value: '10rem' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSetSide).toHaveBeenLastCalledWith('padding', 'top', {
+      kind: 'arbitrary',
+      raw: '10rem',
+    });
+    vi.unstubAllGlobals();
   });
 
   it('flags an invalid typed value and does not apply it', () => {
@@ -600,7 +664,10 @@ describe('VisualEditorPanel', () => {
       vi.fn(),
       onSetSide
     );
-    const pt = screen.getByLabelText('Padding top');
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }));
+    const pt = within(screen.getByRole('dialog', { name: 'Padding Top' })).getByRole('textbox', {
+      name: 'Padding Top',
+    });
     fireEvent.keyDown(pt, { key: 'ArrowUp' });
     expect(onSetSide).toHaveBeenLastCalledWith('padding', 'top', { kind: 'scale', n: 4 });
     fireEvent.keyDown(pt, { key: 'ArrowDown' });
@@ -622,7 +689,13 @@ describe('VisualEditorPanel', () => {
       vi.fn(),
       onSetSide
     );
-    fireEvent.keyDown(screen.getByLabelText('Padding top'), { key: 'ArrowDown' });
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }));
+    fireEvent.keyDown(
+      within(screen.getByRole('dialog', { name: 'Padding Top' })).getByRole('textbox', {
+        name: 'Padding Top',
+      }),
+      { key: 'ArrowDown' }
+    );
     expect(onSetSide).toHaveBeenLastCalledWith('padding', 'top', { kind: 'scale', n: 0 });
   });
 
@@ -639,7 +712,10 @@ describe('VisualEditorPanel', () => {
       vi.fn(),
       onSetSide
     );
-    const pt = screen.getByLabelText('Padding top');
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }));
+    const pt = within(screen.getByRole('dialog', { name: 'Padding Top' })).getByRole('textbox', {
+      name: 'Padding Top',
+    });
     fireEvent.keyDown(pt, { key: 'ArrowUp' });
     expect(onSetSide).toHaveBeenLastCalledWith('padding', 'top', {
       kind: 'arbitrary',
