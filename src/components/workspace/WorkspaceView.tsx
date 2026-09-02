@@ -1152,7 +1152,11 @@ export const WorkspaceView = memo(function WorkspaceView({
               {(currentBranch === 'main' || currentBranch === 'master') && (
                 <MainBranchBanner
                   projectPath={currentProject.path}
-                  onCreateBranch={() => setWorkspaceTab('branches')}
+                  onCreateBranch={() => {
+                    setIsPreviewHidden(false);
+                    setWorkspaceTab('branches');
+                  }}
+                  isGitHubConnected={integrations.projectGithub?.status === 'connected'}
                 />
               )}
 

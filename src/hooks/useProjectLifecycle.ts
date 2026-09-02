@@ -68,7 +68,12 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '../lib/logger';
 import { trackEvent, trackError, setActiveProject } from '../lib/analytics';
-import { asCommandError, formatCommandError, isExpectedProjectImportRefusal } from '../lib/errors';
+import {
+  asCommandError,
+  describeProcessError,
+  formatCommandError,
+  isExpectedProjectImportRefusal,
+} from '../lib/errors';
 import { describeExitStatus, extractTerminalError } from '../lib/terminalDiagnostics';
 import { getProjectId } from '../lib/projectIdentity';
 import { startProjectSession, endProjectSession } from '../lib/session';
@@ -322,15 +327,21 @@ export function useProjectLifecycle({
       // Distinguish "the folder is gone" (moved/renamed/deleted outside the
       // app — issue #365) from "the path isn't in an allowed location"; the
       // "re-add via Select Project Folder" advice only fits the latter.
-      const folderGone = formatCommandError(asCommandError(e)).includes('no longer exists');
+      const errorMessage = formatCommandError(asCommandError(e));
+      const folderGone = errorMessage.includes('no longer exists');
+      // `ensure_external_project_registered` refuses paths that don't look like
+      // a project root — a by-design security guard the backend classifies
+      // Expected (issue #598).
+      const notAProject = errorMessage.includes('does not look like a project directory');
       const message = folderGone
         ? `Can't open "${project.name}" — its folder no longer exists. It may have been moved, renamed, or deleted outside Ship Studio.`
         : `Can't open "${project.name}" — its folder isn't a recognized project location. Re-add it via "Select Project Folder".`;
-      // A folder deleted/moved outside the app is a user-caused environment
-      // change the backend already classifies Expected — info toast, NOT
-      // 'error': error toasts auto-file bug reports (issue #640, same
-      // pattern as #535's import-refusal gating below).
-      showToast(message, folderGone ? 'info' : 'error');
+      // A folder deleted/moved outside the app, or a path the auto-register
+      // guard declines, is a user-caused environment state the backend already
+      // classifies Expected — info toast, NOT 'error': error toasts auto-file
+      // bug reports (issues #640/#752, same pattern as #535's import-refusal
+      // gating below). 'error' stays for genuine I/O failures.
+      showToast(message, folderGone || notAProject ? 'info' : 'error');
       return;
     }
 
@@ -822,6 +833,25 @@ export function useProjectLifecycle({
       // libuv codes, or their huge u32 wraps from older backends) render as
       // hex instead of a nonsense number like 4294963238 (issue #622).
       const exitDesc = describeExitStatus(exitCode);
+      // Classify the raw tail the same way the import/create flows classify
+      // their install failures. Recognized package-manager conditions (npm's
+      // ERESOLVE peer conflict, a corrupted pnpm store, pnpm's build-script
+      // gate, an expired npm login…) are properties of the project or the
+      // machine, not app bugs — an unconditional 'error' toast auto-files a
+      // bug report for every one of them (issues #717/#788).
+      const classified = describeProcessError(outputTail);
+      if (classified.expected) {
+        logger.warn('[Install] Install failed for a recognized reason', {
+          packageManager: cfg.packageManager,
+          exitCode,
+          detail: scrubbedDetail,
+        });
+        showToast(
+          `${classified.message} (Install exited with ${exitDesc} — the terminal has the full output.)`,
+          'info'
+        );
+        return; // keep overlay open so user can read stderr + close manually
+      }
       showToast(
         detail
           ? `Install exited with ${exitDesc}: ${detail} — check the terminal for the full output.`

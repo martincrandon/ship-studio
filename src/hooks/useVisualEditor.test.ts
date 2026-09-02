@@ -72,6 +72,7 @@ function fakeIframeRef() {
 
 function setup() {
   const iframeRef = fakeIframeRef();
+  const onToast = vi.fn();
   const hook = renderHook(() =>
     useVisualEditor({
       iframeRef,
@@ -79,9 +80,10 @@ function setup() {
       enabled: true,
       activeBreakpoint: BASE_BREAKPOINT,
       breakpoints: BREAKPOINTS,
+      onToast,
     })
   );
-  return { ...hook, iframeRef };
+  return { ...hook, iframeRef, onToast };
 }
 
 /** Flush pending microtasks (e.g. the async resolve) under act. */
@@ -299,6 +301,137 @@ describe('useVisualEditor failure logging (issues #543/#544)', () => {
       error: 'Validation failed for `element`: could not anchor the open tag',
     });
     expect(JSON.stringify(errorLogs())).not.toContain('[object Object]');
+  });
+});
+
+describe('useVisualEditor class drift recovery (issue #739)', () => {
+  it('re-resolves and retries a class write the drift guard rejected', async () => {
+    // The file moved under us between selection and save (a formatter, HMR, an
+    // agent edit). Text edits have recovered from this since #557; class/style
+    // edits used to just lose the user's work.
+    (applyClassnameEdit as Fn).mockRejectedValueOnce({
+      type: 'Validation',
+      field: 'old_class',
+      reason: 'source no longer matches — reselect the element',
+    });
+    const { result, iframeRef, onToast } = setup();
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    // The re-resolve sees the element at a NEW line with a drifted baseline.
+    (resolveClassnameSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'app/page.tsx',
+      line: 9,
+      column: 1,
+      class_name: 'p-3 text-sm',
+      confidence: 'unique',
+    });
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    const calls = (applyClassnameEdit as Fn).mock.calls as Array<
+      [string, string, number, string, string]
+    >;
+    expect(calls).toHaveLength(2);
+    // The retry writes against the FRESH baseline at the FRESH location — the
+    // guard is honored, not bypassed.
+    expect(calls[1][2]).toBe(9);
+    expect(calls[1][3]).toBe('p-3 text-sm');
+    // Recovered drift is an expected environment state, not a bug.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the mock's calls, not invoking it bound
+    expect(vi.mocked(logger.error)).not.toHaveBeenCalled();
+    expect(onToast).toHaveBeenCalledWith('Saved to source', 'success');
+  });
+
+  it('a non-drift rejection is not retried', async () => {
+    (applyClassnameEdit as Fn).mockRejectedValue({ type: 'Io', message: 'disk full' });
+    const { result, iframeRef, onToast } = setup();
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    expect(applyClassnameEdit).toHaveBeenCalledTimes(1);
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining('disk full'), 'error');
+  });
+
+  it('refuses the retry when the drift added instances the picker never showed', async () => {
+    // Selected as a SINGLE-location element, so no multi picker was ever shown.
+    // The drift then turns it into a 3-location multi; multiTarget is still its
+    // 'all' default, so a naive retry would rewrite two spots the user never
+    // chose. It must fail loudly instead.
+    (applyClassnameEdit as Fn).mockRejectedValueOnce({
+      type: 'Validation',
+      field: 'old_class',
+      reason: 'source no longer matches — reselect the element',
+    });
+    const { result, iframeRef, onToast } = setup();
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    (resolveClassnameSource as Fn).mockResolvedValue({
+      status: 'multi',
+      class_name: 'p-3',
+      locations: [
+        { file: 'app/page.tsx', line: 9, column: 1 },
+        { file: 'app/page.tsx', line: 20, column: 1 },
+        { file: 'components/card.tsx', line: 4, column: 1 },
+      ],
+      confidence: 'ambiguous',
+    });
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    // The original (failed) write only; nothing was written to the new spots.
+    expect(applyClassnameEdit).toHaveBeenCalledTimes(1);
+    expect(applyClassnameEditMulti).not.toHaveBeenCalled();
+    expect(onToast).toHaveBeenCalledWith(
+      expect.stringContaining('more places in the source'),
+      'error'
+    );
+  });
+
+  it('still retries when the drift did not widen the write', async () => {
+    // Same multi shape at selection AND after the drift — the user's 'all' pick
+    // still covers exactly what they saw, so the recovery runs as before.
+    const multi = {
+      status: 'multi',
+      class_name: 'p-3',
+      locations: [
+        { file: 'app/page.tsx', line: 9, column: 1 },
+        { file: 'app/page.tsx', line: 20, column: 1 },
+      ],
+      confidence: 'ambiguous',
+    };
+    (resolveClassnameSource as Fn).mockResolvedValue(multi);
+    (applyClassnameEditMulti as Fn)
+      .mockRejectedValueOnce({
+        type: 'Validation',
+        field: 'old_class',
+        reason: 'source no longer matches — reselect the element',
+      })
+      .mockResolvedValue(undefined);
+    const { result, iframeRef, onToast } = setup();
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    expect(applyClassnameEditMulti).toHaveBeenCalledTimes(2);
+    expect(onToast).toHaveBeenCalledWith('Saved to source', 'success');
   });
 });
 

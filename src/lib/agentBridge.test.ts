@@ -17,6 +17,8 @@ import {
 } from './agentBridge';
 import { logger } from './logger';
 
+type Fn = ReturnType<typeof vi.fn>;
+
 const makeCtx = (overrides: Partial<BridgeToolContext> = {}): BridgeToolContext => ({
   projectPath: '/Users/me/ShipStudio/site',
   getCurrentUrl: () => 'http://localhost:4173/',
@@ -164,6 +166,48 @@ describe('executeBridgeTool', () => {
     );
   });
 
+  it('warns instead of erroring when a capture races a dev-server restart (#735)', async () => {
+    (logger.warn as Fn).mockClear();
+    (logger.error as Fn).mockClear();
+    invokeMock.mockRejectedValue({
+      type: 'Other',
+      message:
+        'The dev server at http://localhost:4173/ stopped responding while the screenshot was being captured. Wait for the preview to finish reloading, then try again.',
+    });
+    const result = await executeBridgeTool(
+      { requestId: 40, tool: 'preview_screenshot' },
+      makeCtx()
+    );
+
+    // The agent still sees the failure…
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain('stopped responding');
+    // …but logger.error would auto-file a bug report for an Expected race.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the logger mock's calls, not invoking it bound
+    expect(logger.warn as Fn).toHaveBeenCalledWith(
+      '[AgentBridge] Tool execution failed',
+      expect.objectContaining({ tool: 'preview_screenshot' })
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the logger mock's calls, not invoking it bound
+    expect(logger.error as Fn).not.toHaveBeenCalled();
+  });
+
+  it('still errors on an unclassified tool failure', async () => {
+    (logger.error as Fn).mockClear();
+    invokeMock.mockRejectedValue(new Error('kaboom'));
+    const result = await executeBridgeTool(
+      { requestId: 41, tool: 'preview_screenshot' },
+      makeCtx()
+    );
+
+    expect(result.isError).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the logger mock's calls, not invoking it bound
+    expect(logger.error as Fn).toHaveBeenCalledWith(
+      '[AgentBridge] Tool execution failed',
+      expect.objectContaining({ tool: 'preview_screenshot' })
+    );
+  });
+
   it('returns an isError result for unknown tools', async () => {
     const result = await executeBridgeTool({ requestId: 6, tool: 'preview_dance' }, makeCtx());
     expect(result.isError).toBe(true);
@@ -265,7 +309,7 @@ describe('registerPreviewMcpServer', () => {
       registerPreviewMcpServer('http://127.0.0.1:4123/mcp/abc', '/policy-blocked')
     ).resolves.toBe(false);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- asserting on the mock, not invoking it bound
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.warn as Fn).toHaveBeenCalledWith(
       expect.stringContaining('enterprise policy'),
       expect.anything()
     );
