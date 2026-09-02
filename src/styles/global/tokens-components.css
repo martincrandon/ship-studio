@@ -260,6 +260,7 @@
 
   --editor-panel-w: 300px;
   --editor-panel-visual-w: 240px;
+  --components-panel-w: 275px;
   --editor-panel-inline-pad: var(--spacing-md);
   --editor-panel-row-gap: var(--space-06);
   --editor-panel-section-h: 40px;

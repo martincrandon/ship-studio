@@ -20,6 +20,7 @@ import {
   useMemo,
   useState,
   useEffect,
+  useLayoutEffect,
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -66,12 +67,15 @@ import {
 import { VisualEditorPanel } from '../edit/VisualEditorPanel';
 import { ElementTreePanel } from '../edit/ElementTreePanel';
 import { VariablesPanel } from '../edit/VariablesPanel';
+import { ComponentsPanel } from '../edit/ComponentsPanel';
 import { useElementTree } from '../../hooks/useElementTree';
+import { useComponentCatalog } from '../../hooks/useComponentCatalog';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
 import {
   CompactIcon,
   ChevronIcon,
   CloseIcon,
+  ComponentsIcon,
   DesktopIcon,
   EditIcon,
   ExpandIcon,
@@ -99,6 +103,15 @@ import type { ProjectType } from '../../lib/static-server';
 import type { DevServerUnexpectedExit } from '../../hooks/useDevServer';
 import { isEditorFramework, resolveEditorMode } from '../../lib/editorGate';
 import { Tooltip } from '../primitives/Tooltip';
+import { resolveElementHtml } from '../../lib/edit-html';
+import type {
+  ComponentBinding,
+  ComponentId,
+  ComponentInstance,
+  SourceRef,
+  StaticValue,
+} from '../../lib/components/types';
+import { normalizeRuntimeSourcePath } from '../../lib/components/adapters/react-helpers';
 
 const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
   if (type === 'full') return <FullBreakpointIcon />;
@@ -212,6 +225,18 @@ interface PreviewProps {
   onToggleVariablesPanelPin?: () => void;
   /** Closes the standalone project Variables panel. */
   onCloseVariablesPanel?: () => void;
+  /** Whether the framework-native Components catalog is open. */
+  componentsPanelVisible?: boolean;
+  /** Whether Components occupies the preview's right-side dock. */
+  componentsPanelPinned?: boolean;
+  /** Switch Components between its docked and floating modes. */
+  onToggleComponentsPanelPin?: () => void;
+  /** Closes the Components catalog. */
+  onCloseComponentsPanel?: () => void;
+  /** Definition currently being edited through the Components workflow. */
+  componentsEditMainId?: ComponentId | null;
+  /** Persists definition-editing context while Preview is unmounted for Code. */
+  onComponentsEditMainChange?: (componentId: ComponentId | null) => void;
 }
 
 /**
@@ -250,6 +275,17 @@ const TREE_PANEL_MAX_WIDTH_PX = 480;
 const TREE_VIEWPORT_RESERVE_PX = 160;
 const TREE_PANEL_DEFAULT_WIDTH_PX = 240;
 const TREE_CODE_DEFAULT_WIDTH_PX = 420;
+const COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX = 275;
+/** The Components panel opens with equal-width catalog and details columns. */
+const COMPONENTS_PANEL_MIN_WIDTH_PX = TREE_PANEL_DEFAULT_WIDTH_PX;
+const COMPONENTS_PANEL_DEFAULT_WIDTH_PX = COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX;
+const COMPONENTS_PANEL_EXPANDED_WIDTH_PX = COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX * 2;
+const COMPONENTS_PANEL_MAX_WIDTH_PX = 640;
+// The panel's width model changed from a fixed wide split to a compact catalog
+// that expands when details are selected. Keep the obsolete preference from
+// overriding the new compact-open behavior.
+const COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY = 'componentsPanelDockedWidthV2';
+const COMPONENTS_PANEL_FLOATING_SIZE_STORAGE_KEY = 'componentsPanelFloatingSizeV2';
 const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
 const EDITOR_PANEL_MIN_WIDTH_PX = 220;
 const EDITOR_PANEL_MAX_WIDTH_PX = 560;
@@ -308,6 +344,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     variablesPanelPinned = false,
     onToggleVariablesPanelPin,
     onCloseVariablesPanel = () => undefined,
+    componentsPanelVisible = false,
+    componentsPanelPinned = false,
+    onToggleComponentsPanelPin,
+    onCloseComponentsPanel = () => undefined,
+    componentsEditMainId = null,
+    onComponentsEditMainChange = () => undefined,
   },
   ref
 ) {
@@ -646,6 +688,287 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     enabled: activeEditMode,
     onToast,
   });
+
+  const {
+    index: componentIndex,
+    loading: componentsLoading,
+    error: componentsError,
+    mutationBusy: componentMutationBusy,
+    refresh: refreshComponents,
+    place: placeCatalogComponent,
+    editProp: editCatalogProp,
+    bindSelection: bindCatalogSelection,
+  } = useComponentCatalog({
+    projectPath,
+    projectType,
+    enabled: componentsPanelVisible,
+  });
+  const [catalogSelectedId, setCatalogSelectedId] = useState<ComponentId | null>(null);
+  const [manualInstanceId, setManualInstanceId] = useState<string | null>(null);
+  const [canvasComponentBinding, setCanvasComponentBinding] = useState<ComponentBinding | null>(
+    null
+  );
+
+  // Catalog detail is an in-panel navigation state. Do not carry it into the
+  // next open, otherwise the panel reopens at its expanded detail width before
+  // the user has selected anything from the catalog in this session.
+  useEffect(() => {
+    if (componentsPanelVisible) return;
+    setCatalogSelectedId(null);
+    setManualInstanceId(null);
+    setCanvasComponentBinding(null);
+  }, [componentsPanelVisible]);
+
+  const selectedComponentId = componentIndex?.components.some(
+    (component) => component.id === catalogSelectedId
+  )
+    ? catalogSelectedId
+    : componentIndex?.components.some((component) => component.id === componentsEditMainId)
+      ? componentsEditMainId
+      : null;
+  const manuallySelectedInstance = manualInstanceId
+    ? (componentIndex?.instances.find((instance) => instance.id === manualInstanceId) ?? null)
+    : null;
+  const componentBinding = useMemo<ComponentBinding | undefined>(() => {
+    if (manuallySelectedInstance) {
+      return {
+        confidence: 'exact',
+        componentId: manuallySelectedInstance.componentId,
+        instanceId: manuallySelectedInstance.id,
+        source: manuallySelectedInstance.invocation,
+        candidates: [
+          {
+            componentId: manuallySelectedInstance.componentId,
+            instanceId: manuallySelectedInstance.id,
+            source: manuallySelectedInstance.invocation,
+            confidence: 'exact',
+          },
+        ],
+        diagnostics: [],
+      };
+    }
+    return canvasComponentBinding ?? undefined;
+  }, [canvasComponentBinding, manuallySelectedInstance]);
+
+  const rawVisualSourceFile = structure.selection?.signature.sourceFile;
+  const visualSourceFile = rawVisualSourceFile
+    ? normalizeRuntimeSourcePath(
+        rawVisualSourceFile,
+        projectPath,
+        componentIndex?.profile.workspaceRoot ?? '.'
+      )
+    : undefined;
+  const visualSourceLine = structure.selection?.signature.sourceLine;
+  const visualSourceColumn = structure.selection?.signature.sourceColumn;
+  const visualSelectionKey = `${visualSourceFile ?? ''}:${visualSourceLine ?? ''}:${visualSourceColumn ?? ''}`;
+  useEffect(() => {
+    setManualInstanceId(null);
+  }, [visualSelectionKey]);
+  useEffect(() => {
+    if (!componentsPanelVisible || manualInstanceId) return;
+    if (!visualSourceFile || !visualSourceLine) {
+      setCanvasComponentBinding(null);
+      return;
+    }
+    let cancelled = false;
+    void bindCatalogSelection({
+      file: visualSourceFile,
+      line: visualSourceLine,
+      column: visualSourceColumn ?? 1,
+      symbolHint: null,
+    }).then((binding) => {
+      if (cancelled) return;
+      // Keep the binding available for the component the user chooses in the
+      // catalog, but do not open the detail column as a side effect of opening
+      // the panel or selecting an element on the canvas.
+      setCanvasComponentBinding(binding);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    bindCatalogSelection,
+    componentIndex?.revision,
+    componentsPanelVisible,
+    manualInstanceId,
+    visualSourceColumn,
+    visualSourceFile,
+    visualSourceLine,
+  ]);
+
+  const openComponentSource = useCallback(
+    (source: SourceRef) => {
+      if (!onOpenInCode) {
+        onToast('Source navigation is not available in this workspace.', 'info');
+        return;
+      }
+      onOpenInCode(source.file, source.line);
+    },
+    [onOpenInCode, onToast]
+  );
+
+  const placeComponent = useCallback(
+    async (componentId: ComponentId, props?: Record<string, StaticValue>) => {
+      const selection = structure.selection;
+      if (!activeEditMode || !selection) {
+        onToast('Turn on edit mode and select the element to place this component after.', 'info');
+        return;
+      }
+      try {
+        const anchor = await resolveElementHtml(projectPath, selection.signature);
+        const outcome = await placeCatalogComponent({
+          componentId,
+          props,
+          anchor: {
+            file: anchor.file,
+            line: anchor.line,
+            html: anchor.html,
+            position: 'after',
+          },
+        });
+        if (outcome.status === 'applied') {
+          onToast('Component placed after the selected element.', 'success');
+        } else {
+          onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+        }
+      } catch (error) {
+        const detail = formatCommandError(asCommandError(error));
+        onToast(`Could not resolve the placement target: ${detail}`, 'error');
+      }
+    },
+    [activeEditMode, onToast, placeCatalogComponent, projectPath, structure.selection]
+  );
+
+  const editComponentProp = useCallback(
+    async (instance: ComponentInstance, propName: string, value: StaticValue) => {
+      const outcome = await editCatalogProp(instance, propName, value);
+      if (outcome.status === 'applied') {
+        onToast(`Updated ${propName} on this component instance.`, 'success');
+      } else {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [editCatalogProp, onToast]
+  );
+
+  const selectComponentUsage = useCallback((instance: ComponentInstance) => {
+    setCatalogSelectedId(instance.componentId);
+    setManualInstanceId(instance.id);
+  }, []);
+
+  const enterEditMain = useCallback(
+    (componentId: ComponentId) => {
+      const component = componentIndex?.components.find(
+        (candidate) => candidate.id === componentId
+      );
+      if (!component) return;
+      onComponentsEditMainChange(componentId);
+      openComponentSource(component.definition);
+    },
+    [componentIndex, onComponentsEditMainChange, openComponentSource]
+  );
+  const selectedCatalogComponent = componentIndex?.components.find(
+    (component) => component.id === selectedComponentId
+  );
+  const componentsPanelHasDetails = selectedCatalogComponent !== undefined;
+  const editingSelectedMain = componentsEditMainId === selectedComponentId;
+  const selectedComponentNeedsSetup = selectedCatalogComponent?.props.some(
+    (prop) => prop.required && prop.defaultValue === null
+  );
+  useCommands(() => {
+    if (!componentsPanelVisible) return [];
+    const searchCommand = {
+      id: 'components.search',
+      title: 'Search components',
+      icon: <ComponentsIcon size={14} />,
+      category: 'navigation' as const,
+      when: 'project' as const,
+      keywords: ['component', 'catalog', 'find', 'filter'],
+      run: () => document.querySelector<HTMLInputElement>('.ss-components-search input')?.focus(),
+    };
+    if (!selectedCatalogComponent) return [searchCommand];
+    return [
+      searchCommand,
+      {
+        id: 'components.openSource',
+        title: `Open source for ${selectedCatalogComponent.name}`,
+        icon: <ComponentsIcon size={14} />,
+        category: 'navigation' as const,
+        when: 'project' as const,
+        keywords: ['component', 'definition', 'code', 'source'],
+        run: () => openComponentSource(selectedCatalogComponent.definition),
+      },
+      ...(selectedCatalogComponent.usageCount > 0
+        ? [
+            {
+              id: 'components.showUsages',
+              title: `Show usages for ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'navigation' as const,
+              when: 'project' as const,
+              keywords: ['component', 'instances', 'references', 'usages'],
+              run: () =>
+                document
+                  .querySelector<HTMLButtonElement>(
+                    '.ss-components-panel [data-tab-value="usages"]'
+                  )
+                  ?.click(),
+            },
+          ]
+        : []),
+      ...(selectedCatalogComponent.capabilities.place &&
+      activeEditMode &&
+      structure.selection !== null &&
+      !selectedComponentNeedsSetup
+        ? [
+            {
+              id: 'components.placeSelected',
+              title: `Place ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'place', 'insert', 'reuse'],
+              run: () => void placeComponent(selectedCatalogComponent.id),
+            },
+          ]
+        : []),
+      ...(!editingSelectedMain && selectedCatalogComponent.capabilities.editMain
+        ? [
+            {
+              id: 'components.editMain',
+              title: `Open main source for ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'definition', 'main', 'source', 'all instances'],
+              run: () => enterEditMain(selectedCatalogComponent.id),
+            },
+          ]
+        : []),
+      ...(editingSelectedMain
+        ? [
+            {
+              id: 'components.exitMain',
+              title: `Clear main-source context for ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'definition', 'main', 'exit'],
+              run: () => onComponentsEditMainChange(null),
+            },
+          ]
+        : []),
+    ];
+  }, [
+    componentsPanelVisible,
+    editingSelectedMain,
+    enterEditMain,
+    onComponentsEditMainChange,
+    openComponentSource,
+    placeComponent,
+    selectedCatalogComponent,
+    selectedComponentNeedsSetup,
+  ]);
   // Imperative opener for the toolbar's insert palette (Cmd+K "Insert element…").
   const openInsertMenuRef = useRef<(() => void) | null>(null);
   const toggleActiveEditor =
@@ -851,6 +1174,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // view of the rendered page.
   const showTree = elementTreeVisible;
   const variablesPanelDocked = variablesPanelVisible && variablesPanelPinned;
+  const componentsPanelDocked = componentsPanelVisible && componentsPanelPinned;
   // The Elements panel's Code (markup-edit) view needs a wider column than the
   // navigator; the tree panel reports its view so we can widen the grid track.
   const [treeCodeView, setTreeCodeView] = useState(false);
@@ -865,6 +1189,18 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   });
   const [isVariablesResizing, setIsVariablesResizing] = useState(false);
   const variablesPanelRef = useRef<HTMLDivElement | null>(null);
+  const [componentsPanelWidth, setComponentsPanelWidth] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem(COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) &&
+      saved >= COMPONENTS_PANEL_MIN_WIDTH_PX &&
+      saved <= COMPONENTS_PANEL_MAX_WIDTH_PX
+      ? saved
+      : null;
+  });
+  const [isComponentsResizing, setIsComponentsResizing] = useState(false);
+  const componentsPanelRef = useRef<HTMLDivElement | null>(null);
+  const componentsPanelDetailsBaseWidthRef = useRef<number | null>(null);
+  const componentsPanelWidthManuallyChangedRef = useRef(false);
   const [treePanelWidth, setTreePanelWidth] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem('elementTreeDockedWidth'));
     return Number.isFinite(saved) &&
@@ -911,18 +1247,68 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }, [variablesPanelWidth]);
 
   useEffect(() => {
+    if (componentsPanelWidth !== null) {
+      localStorage.setItem(COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY, String(componentsPanelWidth));
+    }
+  }, [componentsPanelWidth]);
+
+  useEffect(() => {
     localStorage.setItem('cssPanelDockedWidth', String(editorPanelWidth));
     localStorage.setItem(EDITOR_PANEL_DEFAULT_VERSION_KEY, String(EDITOR_PANEL_DEFAULT_WIDTH_PX));
   }, [editorPanelWidth]);
 
-  const computeMaxDockedPanelWidth = useCallback((containerWidth: number) => {
-    return maxDockedPanelWidth(
-      containerWidth,
-      TREE_PANEL_MIN_WIDTH_PX,
-      TREE_PANEL_MAX_WIDTH_PX,
-      TREE_VIEWPORT_RESERVE_PX
-    );
-  }, []);
+  const computeMaxDockedPanelWidth = useCallback(
+    (
+      containerWidth: number,
+      minWidth = TREE_PANEL_MIN_WIDTH_PX,
+      maxWidth = TREE_PANEL_MAX_WIDTH_PX
+    ) => maxDockedPanelWidth(containerWidth, minWidth, maxWidth, TREE_VIEWPORT_RESERVE_PX),
+    []
+  );
+
+  useLayoutEffect(() => {
+    if (!componentsPanelDocked) {
+      componentsPanelDetailsBaseWidthRef.current = null;
+      componentsPanelWidthManuallyChangedRef.current = false;
+      return;
+    }
+
+    if (!componentsPanelHasDetails) {
+      const baseWidth = componentsPanelDetailsBaseWidthRef.current;
+      if (baseWidth !== null && !componentsPanelWidthManuallyChangedRef.current) {
+        setComponentsPanelWidth(baseWidth);
+      }
+      componentsPanelDetailsBaseWidthRef.current = null;
+      componentsPanelWidthManuallyChangedRef.current = false;
+      return;
+    }
+
+    if (componentsPanelDetailsBaseWidthRef.current !== null || componentsPanelWidth === null) {
+      return;
+    }
+
+    const container = componentsPanelRef.current?.parentElement;
+    const maxWidth = container
+      ? computeMaxDockedPanelWidth(
+          container.clientWidth,
+          COMPONENTS_PANEL_MIN_WIDTH_PX,
+          COMPONENTS_PANEL_MAX_WIDTH_PX
+        )
+      : COMPONENTS_PANEL_MAX_WIDTH_PX;
+    const baseWidth = componentsPanelWidth;
+    const detailsWidth = COMPONENTS_PANEL_EXPANDED_WIDTH_PX - COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
+    const expandedWidth = Math.min(baseWidth + detailsWidth, maxWidth);
+
+    componentsPanelDetailsBaseWidthRef.current = baseWidth;
+    componentsPanelWidthManuallyChangedRef.current = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronously grow the dock before the detail column paints
+    setComponentsPanelWidth(expandedWidth);
+  }, [
+    componentsPanelDocked,
+    componentsPanelHasDetails,
+    componentsPanelWidth,
+    computeMaxDockedPanelWidth,
+  ]);
 
   const resizeVariablesPanel = useCallback(
     (clientX: number) => {
@@ -989,6 +1375,47 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       EDITOR_VIEWPORT_RESERVE_PX
     );
   }, []);
+
+  const resizeComponentsPanel = useCallback(
+    (clientX: number) => {
+      const panel = componentsPanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const maxComponentsWidth = computeMaxDockedPanelWidth(
+        container.clientWidth,
+        COMPONENTS_PANEL_MIN_WIDTH_PX,
+        COMPONENTS_PANEL_MAX_WIDTH_PX
+      );
+      const next = clientX - panel.getBoundingClientRect().left;
+      componentsPanelWidthManuallyChangedRef.current = true;
+      setComponentsPanelWidth(
+        Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, Math.min(next, maxComponentsWidth))
+      );
+    },
+    [computeMaxDockedPanelWidth]
+  );
+
+  const resizeComponentsPanelBy = useCallback(
+    (delta: number) => {
+      const panel = componentsPanelRef.current;
+      const container = panel?.parentElement;
+      if (!panel || !container) return;
+
+      const max = computeMaxDockedPanelWidth(
+        container.clientWidth,
+        COMPONENTS_PANEL_MIN_WIDTH_PX,
+        COMPONENTS_PANEL_MAX_WIDTH_PX
+      );
+      const current = componentsPanelWidth ?? panel.offsetWidth;
+      componentsPanelWidthManuallyChangedRef.current = true;
+      setComponentsPanelWidth(
+        Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max))
+      );
+    },
+    [componentsPanelWidth, computeMaxDockedPanelWidth]
+  );
+
 
   const resizeEditorPanel = useCallback(
     (clientX: number) => {
@@ -1057,6 +1484,24 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     ro.observe(container);
     return () => ro.disconnect();
   }, [variablesPanelDocked, computeMaxDockedPanelWidth]);
+
+  useEffect(() => {
+    if (!componentsPanelDocked) return;
+    const container = componentsPanelRef.current?.parentElement;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      const max = computeMaxDockedPanelWidth(
+        container.clientWidth,
+        COMPONENTS_PANEL_MIN_WIDTH_PX,
+        COMPONENTS_PANEL_MAX_WIDTH_PX
+      );
+      setComponentsPanelWidth((prev) =>
+        prev === null || prev <= max ? prev : Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, max)
+      );
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [componentsPanelDocked, computeMaxDockedPanelWidth]);
 
   const [iframeSize, setIframeSize] = useState<{ w: number; h: number } | null>(null);
   const iframeSizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -1272,13 +1717,32 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
   const hasCustomDockedWidth =
     (variablesPanelDocked && variablesPanelWidth !== null) ||
-    (showTree && elementTreePinned && treePanelWidth !== null);
-  const dockedGridTemplateColumns = hasCustomDockedWidth
+    (showTree && elementTreePinned && treePanelWidth !== null) ||
+    componentsPanelDocked;
+  const componentsPanelLayoutWidth =
+    componentsPanelWidth ??
+    (componentsPanelHasDetails
+      ? COMPONENTS_PANEL_EXPANDED_WIDTH_PX
+      : COMPONENTS_PANEL_DEFAULT_WIDTH_PX);
+  const hasDockedPanelLayout =
+    hasCustomDockedWidth ||
+    variablesPanelDocked ||
+    componentsPanelDocked ||
+    (showTree && elementTreePinned) ||
+    (activeEditMode && editorPinned);
+  const dockedGridTemplateColumns = hasDockedPanelLayout
     ? [
         variablesPanelDocked
           ? variablesPanelWidth !== null
             ? `${variablesPanelWidth}px`
             : 'var(--tree-panel-w)'
+          : null,
+        componentsPanelDocked
+          ? componentsPanelWidth !== null
+            ? `${componentsPanelWidth}px`
+            : componentsPanelHasDetails
+              ? `${COMPONENTS_PANEL_EXPANDED_WIDTH_PX}px`
+              : 'var(--components-panel-w)'
           : null,
         showTree && elementTreePinned
           ? treePanelWidth !== null
@@ -1302,7 +1766,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         showTree && elementTreePinned && effectiveTreeCodeView
           ? ' preview-container--tree-code'
           : ''
-      }${variablesPanelDocked ? ' preview-container--variables-pinned' : ''}`}
+      }${variablesPanelDocked ? ' preview-container--variables-pinned' : ''}${
+        componentsPanelDocked ? ' preview-container--components-pinned' : ''
+      }`}
       data-logs={showLogs ? 'open' : 'closed'}
       style={{
         ...(dockedGridTemplateColumns
@@ -1791,7 +2257,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             placeholderClassName={`ss-tree-panel-dock${
               variablesPanelDocked ? ' ss-tree-panel-dock--after-variables' : ''
             }`}
-            dockLayoutKey={variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}
+            dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${componentsPanelDocked ? (componentsPanelWidth ?? 'default') : 'components-floating'}`}
             surfaceClassName="dockable-panel__surface--preview"
             placeholderRef={treePanelRef}
             dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
@@ -1850,7 +2316,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           )}
         </>
       )}
-      {(isTreeResizing || isVariablesResizing) && (
+      {(isTreeResizing || isVariablesResizing || isComponentsResizing) && (
         <div className="panel-resize-overlay panel-resize-overlay--vertical" />
       )}
       {editor.editMode &&
@@ -2028,6 +2494,83 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             />
           )}
         </>
+      )}
+      {componentsPanelVisible && (
+        <DockablePanel
+          docked={componentsPanelDocked}
+          ariaLabel="Components panel"
+          positionKey="componentsPanelFloatingPosition"
+          sizeKey={COMPONENTS_PANEL_FLOATING_SIZE_STORAGE_KEY}
+          floatingSize={{
+            width: componentsPanelHasDetails
+              ? COMPONENTS_PANEL_EXPANDED_WIDTH_PX
+              : COMPONENTS_PANEL_DEFAULT_WIDTH_PX,
+            height: 720,
+          }}
+          autoFloatingSize={{
+            width: componentsPanelHasDetails
+              ? COMPONENTS_PANEL_EXPANDED_WIDTH_PX
+              : COMPONENTS_PANEL_DEFAULT_WIDTH_PX,
+            height: 720,
+          }}
+          minFloatingSize={{ width: COMPONENTS_PANEL_MIN_WIDTH_PX, height: 360 }}
+          initialPosition={() => ({
+            left: Math.max(
+              24,
+              window.innerWidth -
+                (componentsPanelHasDetails
+                  ? COMPONENTS_PANEL_EXPANDED_WIDTH_PX
+                  : COMPONENTS_PANEL_DEFAULT_WIDTH_PX) -
+                24
+            ),
+            top: 96,
+          })}
+          placeholderClassName="ss-components-panel-dock"
+          dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${showTree && elementTreePinned ? (treePanelWidth ?? 'default') : 'floating'}:${activeEditMode && editorPinned ? editorPanelWidth : 'floating'}:${componentsPanelDocked ? componentsPanelLayoutWidth : 'floating'}:${componentsPanelHasDetails ? 'details' : 'catalog'}`}
+          placeholderRef={componentsPanelRef}
+          surfaceClassName="dockable-panel__surface--preview"
+        >
+          <ComponentsPanel
+            index={componentIndex}
+            loading={componentsLoading}
+            error={componentsError}
+            selectedComponentId={selectedComponentId}
+            onSelect={(componentId) => {
+              setCatalogSelectedId(componentId);
+              setManualInstanceId(null);
+              if (componentId === null) onComponentsEditMainChange(null);
+            }}
+            onPlace={(componentId, props) => void placeComponent(componentId, props)}
+            placementAvailable={activeEditMode && structure.selection !== null}
+            onOpenSource={openComponentSource}
+            onRefresh={() => void refreshComponents()}
+            onSelectUsage={selectComponentUsage}
+            onEditProp={editComponentProp}
+            instancePropsBusy={componentMutationBusy}
+            binding={componentBinding}
+            editMain={{
+              active: componentsEditMainId === selectedComponentId,
+              componentId: componentsEditMainId,
+              onEnter: enterEditMain,
+              onExit: () => onComponentsEditMainChange(null),
+            }}
+            pinned={componentsPanelDocked}
+            onTogglePin={onToggleComponentsPanelPin}
+            onClose={onCloseComponentsPanel}
+          />
+        </DockablePanel>
+      )}
+      {componentsPanelDocked && (
+        <PanelResizeHandle
+          value={componentsPanelLayoutWidth}
+          min={COMPONENTS_PANEL_MIN_WIDTH_PX}
+          max={COMPONENTS_PANEL_MAX_WIDTH_PX}
+          label="Resize Components panel"
+          className="panel-resize-handle--components"
+          onResize={resizeComponentsPanel}
+          onResizeBy={resizeComponentsPanelBy}
+          onDragChange={setIsComponentsResizing}
+        />
       )}
     </div>
   );

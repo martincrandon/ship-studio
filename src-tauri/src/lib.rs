@@ -464,6 +464,10 @@ pub fn run() {
             commands::edit::detect_breakpoints,
             commands::edit::is_tailwind_active,
             commands::edit::project_uses_react,
+            // Native component source inventory and guarded mutations
+            commands::components::get_component_source_snapshot,
+            commands::components::read_component_source_batch,
+            commands::components::apply_component_mutation,
             commands::edit_structure::insert_element,
             commands::edit_structure::duplicate_element,
             commands::edit_structure::paste_element,

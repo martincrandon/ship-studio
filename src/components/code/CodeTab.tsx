@@ -14,8 +14,9 @@ import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { IconButton } from '../primitives/IconButton';
-import { ResetIcon, SearchIcon, EditIcon } from '@/components/icons';
+import { ResetIcon, EditIcon } from '@/components/icons';
 import { type FileTreeNode } from '../../lib/code';
+import { SearchField } from '../primitives/SearchField';
 import { useCommands } from '../../commands/useCommands';
 
 interface CodeTabProps {
@@ -132,20 +133,19 @@ export function CodeTab({ projectPath, onSendToAgent, revealTarget }: CodeTabPro
             icon={<ResetIcon size={12} />}
           />
         </div>
-        <div className="code-tab-search">
-          <SearchIcon size={12} />
-          <input
-            className="code-tab-search-input"
-            type="text"
-            placeholder="Search files..."
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+        <SearchField
+          className="code-tab-search"
+          inputClassName="code-tab-search-input"
+          type="text"
+          placeholder="Search files..."
+          aria-label="Search files"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
         <div className="code-tab-sidebar-content">
           {isLoadingTree ? (
             <div className="code-tab-sidebar-loading">
