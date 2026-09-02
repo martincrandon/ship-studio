@@ -1,0 +1,94 @@
+/* Ship Studio design tokens */
+/* Frozen raw compatibility values. Do not add new product usage here. */
+
+/*
+ * ============================================================================
+ * PLUGIN-STABLE TOKEN API — do not remove or rename
+ * ============================================================================
+ * These names are Ship Studio's published contract with third-party plugins
+ * (see CLAUDE.md → "Shared CSS Classes (Plugin-Stable)" and the plugin starter
+ * repo). They predate the core/semantic/component token layers and are kept as
+ * thin aliases onto the canonical semantic roles so existing plugin
+ * stylesheets keep resolving. Removing or renaming any of them is a breaking
+ * change for every installed plugin.
+ *
+ * Product code must NOT use these — use the semantic role on the right-hand
+ * side instead. The required set is declared in token-manifest.json
+ * (`pluginStableApi`) and a missing definition fails `pnpm check:patterns`.
+ * ============================================================================
+ */
+:root {
+  /* Surfaces (--bg-*) */
+  --bg-primary: var(--surface-app);
+  --bg-secondary: var(--surface-panel);
+  --bg-tertiary: var(--surface-control);
+  --bg-deep: var(--surface-recessed);
+  --bg-hover: var(--surface-control-hover);
+
+  /* Text (--text-primary/secondary/muted are canonical in tokens-semantic.css) */
+  --text-bright: var(--text-white);
+
+  /* Brand / interactive */
+  --accent: var(--text-white);
+  --accent-hover: var(--text-primary);
+  --action: var(--accent-active);
+  --action-hover: var(--accent-active-hover);
+  --action-text: var(--text-on-accent);
+
+  /* Structure */
+  --border: var(--border-default);
+
+  /* Status */
+  --success: var(--accent-success);
+  --success-light: var(--accent-success);
+  --warning: var(--accent-warning);
+  --warning-light: var(--accent-warning-light);
+  --error: var(--accent-error);
+  --error-light: var(--accent-error-light);
+  --error-deep: var(--accent-error-deep);
+
+  /* RGB triplets — for alpha tints: rgba(var(--error-rgb), 0.1) */
+  --action-rgb: var(--accent-active-rgb);
+  --success-rgb: var(--accent-success-rgb);
+  --success-light-rgb: var(--accent-success-rgb);
+  --warning-rgb: var(--accent-warning-rgb);
+  --warning-light-rgb: var(--accent-warning-light-rgb);
+  --error-rgb: var(--accent-error-rgb);
+  --error-light-rgb: var(--accent-error-light-rgb);
+  --error-deep-rgb: var(--accent-error-deep-rgb);
+
+  /* Typography */
+  --font-mono: var(--font-code);
+
+  /* Shape (docs/plugins.md names --radius explicitly) */
+  --radius: var(--radius-control);
+}
+
+:root {
+  --modified-yellow: #eab308;
+  --info: #3b82f6;
+  --info-hover: #2563eb;
+  --info-light: #60a5fa;
+  --info-dark: #1d4ed8;
+  --purple: #a855f7;
+  --purple-light: #a78bfa;
+  --purple-deep-rgb: 147, 51, 234;
+  --slack-pink: #e9a7fb;
+  --slack-lavender: #c4b5fd;
+  --slack-lavender-bright: #ddd6fe;
+  --modified-yellow-rgb: 234, 179, 8;
+  --info-rgb: 59, 130, 246;
+  --info-light-rgb: 96, 165, 250;
+  --purple-rgb: 168, 85, 247;
+  --purple-light-rgb: 167, 139, 250;
+  --border-rgb: 40, 40, 40;
+  --border-default-rgb: 40, 40, 40;
+  --white-rgb: 255, 255, 255;
+  --black-rgb: 0, 0, 0;
+  --tint: rgba(255, 255, 255, 0.08);
+  --radius-full: 50%;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --transition-fast: 0.1s ease;
+  --transition: 0.15s ease;
+  --transition-slow: 0.3s ease;
+}

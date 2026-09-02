@@ -39,6 +39,7 @@ import {
   moveProjectToFolder,
 } from '../../lib/folders';
 import { DashboardHeader } from './DashboardHeader';
+import { DashboardSearch } from './DashboardSearch';
 import { AgentsPanel } from './AgentsPanel';
 import { MachineToolsPanel } from './MachineToolsPanel';
 import { NewFolderModal } from './NewFolderModal';
@@ -57,19 +58,14 @@ import { DashboardCommunityBanner } from './DashboardCommunityBanner';
 import { Spinner } from '../primitives/Spinner';
 import { GitHubCalendar } from './GitHubCalendar';
 import { useModal } from '../../contexts/ModalContext';
-import {
-  getCalendarHidden,
-  setCalendarHidden as persistCalendarHidden,
-  getSlackCtaHidden,
-  setSlackCtaHidden as persistSlackCtaHidden,
-} from '../../lib/settings';
+import { useDashboardVisibility } from '../../hooks/useDashboardVisibility';
 import { moveProjectToAccount, getProjectAccountId } from '../../lib/accounts';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
 import { useProjectBulkActions } from '../../hooks/useProjectBulkActions';
 import { useProjectViewModeCommands } from '../../hooks/useProjectViewModeCommands';
 import { useProjectRemovalActions } from '../../hooks/useProjectRemovalActions';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { ChevronRightIcon } from '../icons';
+import { SwitchWorkspaceIcon } from '@/components/icons';
 import type { ProjectViewMode } from './ProjectGridView';
 
 /** Basic project info for selection callback */
@@ -174,24 +170,17 @@ export function ProjectList({
   // Settings / Changelog modal state
   const [showSettings, setShowSettings] = useState(false);
   const changelogModal = useModal('changelog');
-  const [calendarHidden, setCalendarHidden] = useState(false);
-  const [slackCtaHidden, setSlackCtaHidden] = useState(false);
-
-  // Load visibility preferences
-  useEffect(() => {
-    void getCalendarHidden().then(setCalendarHidden);
-    void getSlackCtaHidden().then(setSlackCtaHidden);
-  }, []);
-
-  const hideSlackCta = useCallback(() => {
-    setSlackCtaHidden(true);
-    void persistSlackCtaHidden(true);
-  }, []);
-
-  const hideCalendar = useCallback(() => {
-    setCalendarHidden(true);
-    void persistCalendarHidden(true);
-  }, []);
+  const {
+    dashboardHeaderHidden,
+    calendarHidden,
+    slackCtaHidden,
+    hideDashboardHeader,
+    hideCalendar,
+    hideSlackCta,
+    setDashboardHeaderHidden,
+    setCalendarHidden,
+    setSlackCtaHidden,
+  } = useDashboardVisibility();
 
   // Search and sort state
   // NOTE: search filtering now flows through the Cmd+K palette; this is kept
@@ -600,25 +589,6 @@ export function ProjectList({
     });
   }, []);
 
-  if (loading) {
-    return (
-      <div className="dashboard-scroll-container">
-        <div
-          className="dashboard-drag-region"
-          onMouseDown={handleDashboardDrag}
-          onDoubleClick={handleDashboardDoubleClick}
-        />
-        <div className="project-list dashboard">
-          <div className="project-list-loading">
-            <Spinner size="lg" style={{ color: 'var(--text-muted)' }} />
-            <p>Loading projects...</p>
-            {cleanupStatus && <p className="project-list-cleanup-status">{cleanupStatus}</p>}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const totalCount = currentFolderId
     ? filteredProjects.length
     : filteredFolders.length + filteredProjects.length;
@@ -631,6 +601,8 @@ export function ProjectList({
         onDoubleClick={handleDashboardDoubleClick}
       />
       <div className="project-list dashboard">
+        {!dashboardHeaderHidden && <DashboardHeader onHide={hideDashboardHeader} />}
+
         {!slackCtaHidden && <DashboardCommunityBanner onHide={hideSlackCta} />}
 
         {!calendarHidden && (
@@ -642,88 +614,100 @@ export function ProjectList({
           />
         )}
 
-        <DashboardHeader
-          onCreateProject={onCreateProject}
-          onImportProject={onImportProject}
-          isGitHubAuthenticated={isGitHubAuthenticated}
-          onGitHubConnectForImport={onGitHubConnectForImport}
-        />
+        <DashboardSearch />
 
-        {/* Folder breadcrumb when inside a folder */}
-        {currentFolderId && currentFolder && (
-          <FolderBreadcrumb
-            folderName={currentFolder.name}
-            onBack={() => setCurrentFolderId(null)}
+        <section className="dashboard-projects-panel">
+          {currentFolderId && currentFolder && (
+            <FolderBreadcrumb
+              folderName={currentFolder.name}
+              onBack={() => setCurrentFolderId(null)}
+            />
+          )}
+
+          <SearchAndSort
+            title={currentFolderId ? 'Projects' : 'All Projects'}
+            totalCount={totalCount}
+            sortBy={sortBy}
+            viewMode={projectViewMode}
+            onSortChange={setSortBy}
+            onViewModeChange={handleProjectViewModeChange}
+            onNewFolder={() => setShowNewFolderModal(true)}
+            onCreateProject={onCreateProject}
+            onImportProject={onImportProject}
+            isGitHubAuthenticated={isGitHubAuthenticated}
+            onGitHubConnectForImport={onGitHubConnectForImport}
+            titleAccessory={
+              !currentFolderId && hasMultipleWorkspaces && activeAccount && onSwitchAccount ? (
+                <button
+                  type="button"
+                  className="dashboard-workspace-chip text-style-control-semibold"
+                  onClick={onSwitchAccount}
+                  title="Switch workspace"
+                >
+                  <span
+                    className="dashboard-workspace-chip-dot"
+                    style={{ backgroundColor: activeAccount.color }}
+                  />
+                  <span className="dashboard-workspace-chip-name">{activeAccount.name}</span>
+                  <SwitchWorkspaceIcon size={12} />
+                </button>
+              ) : undefined
+            }
           />
-        )}
 
-        <SearchAndSort
-          title={currentFolderId ? 'Projects' : 'All Projects'}
-          totalCount={totalCount}
-          sortBy={sortBy}
-          viewMode={projectViewMode}
-          onSortChange={setSortBy}
-          onViewModeChange={handleProjectViewModeChange}
-          onNewFolder={() => setShowNewFolderModal(true)}
-          titleAccessory={
-            !currentFolderId && hasMultipleWorkspaces && activeAccount && onSwitchAccount ? (
-              <button
-                type="button"
-                className="dashboard-workspace-chip"
-                onClick={onSwitchAccount}
-                title="Switch workspace"
-              >
-                <span
-                  className="dashboard-workspace-chip-dot"
-                  style={{ backgroundColor: activeAccount.color }}
+          {loading ? (
+            <div className="project-list-loading">
+              <Spinner size="lg" style={{ color: 'var(--text-muted)' }} />
+              <p className="text-style-body-medium">Loading projects...</p>
+              {cleanupStatus && (
+                <p className="project-list-cleanup-status text-style-control">{cleanupStatus}</p>
+              )}
+            </div>
+          ) : (
+            <>
+              {projectViewMode === 'list' && (
+                <ProjectBulkActionsBar
+                  selectedCount={selectedCount}
+                  selectedIncludesExternalProject={selectedIncludesExternalProject}
+                  onClear={handleClearProjectSelection}
+                  onRemove={() => handleBeginBulkProjectAction('remove')}
+                  onDelete={() => handleBeginBulkProjectAction('delete')}
                 />
-                <span className="dashboard-workspace-chip-name">{activeAccount.name}</span>
-                <ChevronRightIcon size={12} />
-              </button>
-            ) : undefined
-          }
-        />
+              )}
 
-        {projectViewMode === 'list' && (
-          <ProjectBulkActionsBar
-            selectedCount={selectedCount}
-            selectedIncludesExternalProject={selectedIncludesExternalProject}
-            onClear={handleClearProjectSelection}
-            onRemove={() => handleBeginBulkProjectAction('remove')}
-            onDelete={() => handleBeginBulkProjectAction('delete')}
-          />
-        )}
-
-        <ProjectGridView
-          viewMode={projectViewMode}
-          currentFolderId={currentFolderId}
-          searchQuery={searchQuery}
-          totalCount={totalCount}
-          filteredFolders={filteredFolders}
-          filteredProjects={filteredProjects}
-          selectedProjectPaths={selectedProjectPaths}
-          allVisibleSelected={allVisibleSelected}
-          someVisibleSelected={someVisibleSelected}
-          onSelectAllVisible={handleSelectAllVisible}
-          onToggleProjectSelection={handleToggleProjectSelection}
-          onSelectProject={(project) => onSelectProject(project)}
-          onDeleteProject={(project) => setDeleteConfirm(project)}
-          onRenameProject={(project) => setRenameTarget(project)}
-          onToggleMainBranchWarning={(path, hidden) =>
-            void handleToggleMainBranchWarning(path, hidden)
-          }
-          onOpenMoveModal={(project) => void handleOpenMoveModal(project)}
-          onOpenMoveWorkspaceModal={(project) => void handleOpenMoveWorkspaceModal(project)}
-          onExportAsTemplate={(path) => void handleExportAsTemplate(path)}
-          onUploadThumbnail={(project) => handleUploadThumbnail(project)}
-          onRemoveProject={(project) => setRemoveConfirm(project)}
-          onOpenFolder={(folderId) => setCurrentFolderId(folderId)}
-          onRenameFolder={(folder) => setRenamingFolder(folder)}
-          onDeleteFolder={(folder) => setDeleteFolderConfirm(folder)}
-          pinnedSet={pinnedSet}
-          onTogglePin={onTogglePin}
-          onCreateProject={onCreateProject}
-        />
+              <ProjectGridView
+                viewMode={projectViewMode}
+                currentFolderId={currentFolderId}
+                searchQuery={searchQuery}
+                totalCount={totalCount}
+                filteredFolders={filteredFolders}
+                filteredProjects={filteredProjects}
+                selectedProjectPaths={selectedProjectPaths}
+                allVisibleSelected={allVisibleSelected}
+                someVisibleSelected={someVisibleSelected}
+                onSelectAllVisible={handleSelectAllVisible}
+                onToggleProjectSelection={handleToggleProjectSelection}
+                onSelectProject={(project) => onSelectProject(project)}
+                onDeleteProject={(project) => setDeleteConfirm(project)}
+                onRenameProject={(project) => setRenameTarget(project)}
+                onToggleMainBranchWarning={(path, hidden) =>
+                  void handleToggleMainBranchWarning(path, hidden)
+                }
+                onOpenMoveModal={(project) => void handleOpenMoveModal(project)}
+                onOpenMoveWorkspaceModal={(project) => void handleOpenMoveWorkspaceModal(project)}
+                onExportAsTemplate={(path) => void handleExportAsTemplate(path)}
+                onUploadThumbnail={(project) => handleUploadThumbnail(project)}
+                onRemoveProject={(project) => setRemoveConfirm(project)}
+                onOpenFolder={(folderId) => setCurrentFolderId(folderId)}
+                onRenameFolder={(folder) => setRenamingFolder(folder)}
+                onDeleteFolder={(folder) => setDeleteFolderConfirm(folder)}
+                pinnedSet={pinnedSet}
+                onTogglePin={onTogglePin}
+                onCreateProject={onCreateProject}
+              />
+            </>
+          )}
+        </section>
 
         <AgentsPanel />
 
@@ -734,9 +718,6 @@ export function ProjectList({
 
         <MachineToolsPanel />
 
-        {/* Physical bottom spacer — guarantees the Integrations card never
-            butts up against the scroll edge, regardless of how the outer
-            flex/overflow containers resolve padding. */}
         <div className="dashboard-bottom-spacer" aria-hidden />
 
         {/* Hidden file picker reused across project cards for "Upload new
@@ -870,6 +851,7 @@ export function ProjectList({
         <SettingsModal
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
+          onDashboardHeaderHiddenChange={setDashboardHeaderHidden}
           onCalendarHiddenChange={setCalendarHidden}
           onSlackCtaHiddenChange={setSlackCtaHidden}
           onProjectsRootChanged={() => void loadProjects()}

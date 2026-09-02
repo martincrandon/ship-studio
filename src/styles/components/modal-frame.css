@@ -1,0 +1,53 @@
+/* ===== Primitive: ModalFrame ===== */
+.modal-frame-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-70);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal-overlay);
+  padding: var(--spacing-lg);
+}
+
+/* A modal behind a nested one stays visible — a small confirm must not make the
+   dialog that opened it vanish. The topmost overlay's own scrim is what dims it,
+   so this one drops its scrim (stacking two would black the parent out) and only
+   goes non-interactive. `inert` on the overlay does the real blocking;
+   pointer-events is belt and braces. */
+.modal-frame-overlay[data-modal-inactive='true'] {
+  pointer-events: none;
+  background: transparent;
+}
+
+.modal-frame-content {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-modal);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  width: 480px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-frame-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.modal-frame-title {
+  font-size: var(--font-size-h4);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
