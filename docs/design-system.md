@@ -297,6 +297,13 @@ All TextField typography consumes semantic text roles, and its dimensions consum
 component tokens backed by the primitive scale. Feature forms should reuse the input shell only
 when their state contract matches; `PropertyField` remains reserved for interactive editor values.
 
+### SearchField — [SearchField.tsx](../src/components/primitives/SearchField.tsx)
+
+`SearchField` is the compact search composition used by filterable panels and file browsers. It
+combines a leading search icon with the native `TextField` primitive, preserving the input's
+keyboard, focus, disabled, placeholder, and ref behavior while giving callers separate placement
+and input class hooks.
+
 ### ModalFrame — [ModalFrame.tsx](../src/components/primitives/ModalFrame.tsx)
 
 Overlay + content container + optional header with close button. ESC and click-outside built in,

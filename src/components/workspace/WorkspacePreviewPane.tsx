@@ -75,6 +75,12 @@ export interface WorkspacePreviewPaneProps {
   variablesPanelPinned: boolean;
   toggleVariablesPanelPinned: () => void;
   closeVariablesPanel: () => void;
+  componentsPanelVisible: boolean;
+  componentsPanelPinned: boolean;
+  toggleComponentsPanelPinned: () => void;
+  closeComponentsPanel: () => void;
+  componentsEditMainId: string | null;
+  setComponentsEditMainId: (componentId: string | null) => void;
   pluginProject: PluginProjectData | null;
   pluginActions: PluginAppActions;
   pluginTheme: PluginThemeData;
@@ -148,6 +154,12 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     variablesPanelPinned,
     toggleVariablesPanelPinned,
     closeVariablesPanel,
+    componentsPanelVisible,
+    componentsPanelPinned,
+    toggleComponentsPanelPinned,
+    closeComponentsPanel,
+    componentsEditMainId,
+    setComponentsEditMainId,
     pluginProject,
     pluginActions,
     pluginTheme,
@@ -237,6 +249,12 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             variablesPanelPinned={variablesPanelPinned}
             onToggleVariablesPanelPin={toggleVariablesPanelPinned}
             onCloseVariablesPanel={closeVariablesPanel}
+            componentsPanelVisible={componentsPanelVisible}
+            componentsPanelPinned={componentsPanelPinned}
+            onToggleComponentsPanelPin={toggleComponentsPanelPinned}
+            onCloseComponentsPanel={closeComponentsPanel}
+            componentsEditMainId={componentsEditMainId}
+            onComponentsEditMainChange={setComponentsEditMainId}
             previewPlugins={
               previewSlotPlugins.length > 0 ? (
                 <PluginSlot

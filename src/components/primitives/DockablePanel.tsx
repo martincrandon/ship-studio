@@ -30,6 +30,8 @@ interface DockablePanelProps {
   positionKey: string;
   sizeKey: string;
   floatingSize: Size;
+  /** Optional state-driven size used until the user manually resizes the panel. */
+  autoFloatingSize?: Size;
   minFloatingSize?: Size;
   initialPosition: () => Point;
   placeholderClassName?: string;
@@ -108,6 +110,7 @@ export function DockablePanel({
   positionKey,
   sizeKey,
   floatingSize,
+  autoFloatingSize,
   minFloatingSize = DEFAULT_MIN_FLOATING_SIZE,
   initialPosition,
   placeholderClassName,
@@ -121,6 +124,8 @@ export function DockablePanel({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [initialSavedSize] = useState(() => readSize(sizeKey));
   const savedSizeRef = useRef(initialSavedSize);
+  const floatingSizeWasManuallyChangedRef = useRef(initialSavedSize !== null);
+  const floatingPositionWasManuallyChangedRef = useRef(false);
   const [dockStyle, setDockStyle] = useState<CSSProperties>();
   const [position, setPosition] = useState<Point>(() =>
     clampPosition(readPosition(positionKey, initialPosition), floatingSize)
@@ -202,16 +207,48 @@ export function DockablePanel({
   }, [docked, measureDock]);
 
   useEffect(() => {
-    if (docked || savedSizeRef.current) return;
+    if (docked || !autoFloatingSize || floatingSizeWasManuallyChangedRef.current) return;
+
+    if (
+      floatingPanelSizeRef.current.width !== autoFloatingSize.width ||
+      floatingPanelSizeRef.current.height !== autoFloatingSize.height
+    ) {
+      // This effect keeps a stateful floating surface aligned with a state-driven
+      // content layout; the update must happen before the next paint.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      updateFloatingSize(autoFloatingSize);
+    }
+    if (!floatingPositionWasManuallyChangedRef.current) {
+      setPosition((current) => {
+        const next = clampPosition(
+          {
+            left: window.innerWidth - autoFloatingSize.width - VIEWPORT_GUTTER,
+            top: current.top,
+          },
+          autoFloatingSize
+        );
+        return current.left === next.left && current.top === next.top ? current : next;
+      });
+    }
+  }, [autoFloatingSize, docked, updateFloatingSize]);
+
+  useEffect(() => {
+    if (docked || autoFloatingSize || savedSizeRef.current) return;
     const initialSize = floatingPanelSizeRef.current;
     savedSizeRef.current = initialSize;
     localStorage.setItem(sizeKey, JSON.stringify(initialSize));
-  }, [docked, sizeKey]);
+  }, [autoFloatingSize, docked, sizeKey]);
 
   useEffect(() => {
     if (!docked && savedSizeRef.current) {
       localStorage.setItem(sizeKey, JSON.stringify(floatingPanelSize));
     }
+  }, [docked, floatingPanelSize, sizeKey]);
+
+  useEffect(() => {
+    if (docked || !floatingSizeWasManuallyChangedRef.current || savedSizeRef.current) return;
+    savedSizeRef.current = floatingPanelSize;
+    localStorage.setItem(sizeKey, JSON.stringify(floatingPanelSize));
   }, [docked, floatingPanelSize, sizeKey]);
 
   useEffect(() => {
@@ -271,6 +308,7 @@ export function DockablePanel({
       if (!drag || drag.pointerId !== event.pointerId) return;
       dragRef.current = null;
       surfaceRef.current?.releasePointerCapture?.(event.pointerId);
+      floatingPositionWasManuallyChangedRef.current = true;
       setPosition((current) => {
         localStorage.setItem(positionKey, JSON.stringify(current));
         return current;
@@ -301,6 +339,7 @@ export function DockablePanel({
 
   const resizeFloatingWidth = useCallback(
     (width: number) => {
+      floatingSizeWasManuallyChangedRef.current = true;
       updateFloatingSize({
         width: Math.max(
           minFloatingSize.width,
@@ -314,6 +353,7 @@ export function DockablePanel({
 
   const resizeFloatingHeight = useCallback(
     (height: number) => {
+      floatingSizeWasManuallyChangedRef.current = true;
       updateFloatingSize({
         width: floatingPanelSizeRef.current.width,
         height: Math.max(
@@ -327,6 +367,7 @@ export function DockablePanel({
 
   const resizeFloatingBoth = useCallback(
     (width: number, height: number) => {
+      floatingSizeWasManuallyChangedRef.current = true;
       updateFloatingSize({
         width: Math.max(
           minFloatingSize.width,
@@ -343,6 +384,7 @@ export function DockablePanel({
 
   const persistFloatingSize = useCallback(
     (isDragging: boolean) => {
+      floatingSizeWasManuallyChangedRef.current = true;
       if (isDragging) return;
       const next = floatingPanelSizeRef.current;
       savedSizeRef.current = next;

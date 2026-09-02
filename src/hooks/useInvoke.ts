@@ -14,6 +14,8 @@ interface Options<T> {
   onError?: (error: Error) => void;
   /** If true, call the command immediately on mount (no args). */
   immediate?: boolean;
+  /** If true, only the newest overlapping invocation may publish state. */
+  latestOnly?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ export function useInvoke<T>(
   command: string,
   options: Options<T> = {}
 ): UseAsyncStateReturn<T, [InvokeArgs?]> {
-  const { initial, onSuccess, onError, immediate } = options;
+  const { initial, onSuccess, onError, immediate, latestOnly } = options;
 
   const fn = useCallback(
     async (args?: InvokeArgs): Promise<T> => {
@@ -45,8 +47,8 @@ export function useInvoke<T>(
   return useAsyncState<T, [InvokeArgs?]>(
     fn,
     useMemo(
-      () => ({ initial, onSuccess, onError, immediate }),
-      [initial, onSuccess, onError, immediate]
+      () => ({ initial, onSuccess, onError, immediate, latestOnly }),
+      [initial, onSuccess, onError, immediate, latestOnly]
     )
   );
 }

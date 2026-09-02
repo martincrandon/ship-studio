@@ -74,6 +74,7 @@
 @import './features/css-globals.css';
 @import './features/css-predict.css';
 @import './features/element-tree.css';
+@import './features/components.css';
 @import './features/element-structure.css';
 @import './features/device-mirror.css';
 @import './features/browser-tools.css';

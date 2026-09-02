@@ -35,6 +35,7 @@ import {
   FolderOpenIcon,
   HomeIcon,
   ImageIcon,
+  ComponentsIcon,
   PanelLeftIcon,
   VariablesIcon,
 } from '@/components/icons';
@@ -78,6 +79,9 @@ export interface WorkspaceHeaderProps {
   variablesPanelVisible: boolean;
   variablesPanelAvailable: boolean;
   onToggleVariablesPanel: () => void;
+  componentsPanelVisible: boolean;
+  componentsPanelAvailable: boolean;
+  onToggleComponentsPanel: () => void;
 
   // Extra dropdown node rendered after Assets in the left cluster. Currently
   // used for the Plugins dropdown. Provided as a
@@ -241,6 +245,9 @@ export function WorkspaceHeader({
   variablesPanelVisible,
   variablesPanelAvailable,
   onToggleVariablesPanel,
+  componentsPanelVisible,
+  componentsPanelAvailable,
+  onToggleComponentsPanel,
   headerExtras,
   modes,
   integrations,
@@ -456,6 +463,20 @@ export function WorkspaceHeader({
         title={variablesPanelAvailable ? 'Variables' : 'Variables are available for web projects'}
         leftIcon={<VariablesIcon size={16} />}
         aria-label="Variables"
+      />
+      <ToggleButton
+        variant={componentsPanelVisible ? 'secondary' : 'default'}
+        className="workspace-panel-toggle"
+        pressed={componentsPanelVisible}
+        onClick={onToggleComponentsPanel}
+        disabled={!componentsPanelAvailable}
+        title={
+          componentsPanelAvailable
+            ? 'Components'
+            : 'Components are currently available for React web projects'
+        }
+        leftIcon={<ComponentsIcon size={16} />}
+        aria-label="Components"
       />
       <Button
         onClick={onOpenAssetsPanel}
