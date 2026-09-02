@@ -107,3 +107,49 @@
   border-color: var(--accent-error);
   outline-color: var(--accent-error);
 }
+
+/* SearchField composition: a compact TextField with a leading search icon. */
+.ss-search-field {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+  gap: var(--spacing-xs);
+  height: calc(var(--control-height-standard) - var(--spacing-2xs));
+  padding: 0 var(--spacing-sm);
+  color: var(--text-muted);
+  background: var(--surface-app);
+  border: var(--text-field-border-width) solid var(--border-default);
+  border-radius: var(--radius-control);
+}
+
+.ss-search-field:focus-within {
+  border-color: var(--accent-active);
+}
+
+.ss-search-field > svg {
+  flex: 0 0 auto;
+}
+
+.ss-search-field > .ss-text-field {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.ss-search-field > .ss-text-field:focus {
+  outline: none;
+}
+
+.ss-search-field > .ss-text-field::placeholder {
+  color: var(--text-muted);
+}

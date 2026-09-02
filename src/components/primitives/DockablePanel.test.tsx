@@ -176,6 +176,46 @@ describe('DockablePanel', () => {
     expect(surface).toHaveStyle({ width: '400px', height: '600px' });
   });
 
+  it('follows an automatic floating size until the user resizes it', () => {
+    const props = {
+      docked: false,
+      ariaLabel: 'Adaptive panel',
+      positionKey: 'adaptivePanelPosition',
+      sizeKey: 'adaptivePanelSize',
+      floatingSize: { width: 240, height: 520 },
+      autoFloatingSize: { width: 660, height: 520 },
+      initialPosition: () => ({ left: 40, top: 60 }),
+    };
+    const { rerender } = render(
+      <DockablePanel {...props}>
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+
+    const surface = screen.getByLabelText('Adaptive panel');
+    expect(surface).toHaveStyle({ width: '660px', height: '520px' });
+
+    rerender(
+      <DockablePanel {...props} autoFloatingSize={{ width: 240, height: 520 }}>
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+    expect(surface).toHaveStyle({ width: '240px', height: '520px' });
+
+    fireEvent.keyDown(screen.getByRole('separator', { name: 'Resize Adaptive panel height' }), {
+      key: 'ArrowUp',
+    });
+    expect(surface).toHaveStyle({ width: '240px', height: '510px' });
+
+    rerender(
+      <DockablePanel {...props} autoFloatingSize={{ width: 660, height: 520 }}>
+        <div>Panel contents</div>
+      </DockablePanel>
+    );
+    expect(surface).toHaveStyle({ width: '240px', height: '510px' });
+    expect(localStorage.getItem('adaptivePanelSize')).toBe('{"width":240,"height":510}');
+  });
+
   it('moves a fixed-size floating panel without adding resize handles', () => {
     render(
       <DockablePanel

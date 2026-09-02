@@ -20,6 +20,7 @@ import ImageSvg from '../../assets/icons/image.svg?react';
 import ImageUploadSvg from '../../assets/icons/image-upload.svg?react';
 import SaveSvg from '../../assets/icons/save.svg?react';
 import VariablesSvg from '../../assets/icons/variables.svg?react';
+import ComponentsSvg from '../../assets/icons/components.svg?react';
 import ElementBodySvg from '../../assets/icons/element-body.svg?react';
 import ElementButtonSvg from '../../assets/icons/element-button.svg?react';
 import ElementDivSvg from '../../assets/icons/element-div.svg?react';
@@ -186,6 +187,13 @@ export const ImageUploadIcon = createIcon(ImageUploadSvg, {
 export const VariablesIcon = createIcon(VariablesSvg, {
   name: 'VariablesIcon',
   source: 'icons/variables.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ComponentsIcon = createIcon(ComponentsSvg, {
+  name: 'ComponentsIcon',
+  source: 'icons/components.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

@@ -33,6 +33,9 @@ function headerProps(): WorkspaceHeaderProps {
     variablesPanelVisible: false,
     variablesPanelAvailable: true,
     onToggleVariablesPanel: vi.fn(),
+    componentsPanelVisible: false,
+    componentsPanelAvailable: true,
+    onToggleComponentsPanel: vi.fn(),
     integrations: {
       github: { cliStatus: { installed: false, authenticated: false }, username: null },
       projectGithub: null,
@@ -253,21 +256,25 @@ describe('WorkspaceHeader title bar', () => {
     expect(container).not.toHaveStyle({ width: '420px' });
   });
 
-  it('places Agent first, followed by Variables and Assets, and toggles Variables', () => {
+  it('orders project panels before Assets and toggles Variables and Components', () => {
     const props = headerProps();
     render(<TitlebarHarness props={props} />);
 
     const tools = document.querySelector('.workspace-titlebar-tools');
-    const agent = screen.getByRole('button', { name: 'Agent' });
-    const variables = screen.getByRole('button', { name: 'Variables' });
-    const assets = screen.getByRole('button', { name: 'Assets' });
+    const agent = screen.getByRole<HTMLButtonElement>('button', { name: 'Agent' });
+    const variables = screen.getByRole<HTMLButtonElement>('button', { name: 'Variables' });
+    const components = screen.getByRole<HTMLButtonElement>('button', { name: 'Components' });
+    const assets = screen.getByRole<HTMLButtonElement>('button', { name: 'Assets' });
     const buttons = Array.from(tools!.querySelectorAll('button'));
 
     expect(buttons[0]).toBe(agent);
     expect(buttons.indexOf(agent)).toBeLessThan(buttons.indexOf(variables));
-    expect(buttons.indexOf(variables)).toBeLessThan(buttons.indexOf(assets));
+    expect(buttons.indexOf(variables)).toBeLessThan(buttons.indexOf(components));
+    expect(buttons.indexOf(components)).toBeLessThan(buttons.indexOf(assets));
 
     fireEvent.click(variables);
     expect(props.onToggleVariablesPanel).toHaveBeenCalledTimes(1);
+    fireEvent.click(components);
+    expect(props.onToggleComponentsPanel).toHaveBeenCalledTimes(1);
   });
 });

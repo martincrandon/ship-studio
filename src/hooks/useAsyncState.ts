@@ -19,6 +19,8 @@ interface Options<T> {
   onError?: (error: Error) => void;
   /** If true, execute immediately on mount using empty args. */
   immediate?: boolean;
+  /** If true, only the newest overlapping execution may publish state. */
+  latestOnly?: boolean;
 }
 
 /**
@@ -36,22 +38,25 @@ export function useAsyncState<T, Args extends unknown[] = []>(
   fn: (...args: Args) => Promise<T>,
   options: Options<T> = {}
 ): UseAsyncStateReturn<T, Args> {
-  const { initial = null, onSuccess, onError, immediate } = options;
+  const { initial = null, onSuccess, onError, immediate, latestOnly = false } = options;
   const [data, setData] = useState<T | null>(initial);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
+  const executionRef = useRef(0);
 
   // Latest-value refs so `execute` can stay stable while callers pass inline
   // closures for `fn`, `onSuccess`, `onError` (the common case).
   const fnRef = useRef(fn);
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
+  const latestOnlyRef = useRef(latestOnly);
   useLayoutEffect(() => {
     fnRef.current = fn;
     onSuccessRef.current = onSuccess;
     onErrorRef.current = onError;
-  }, [fn, onSuccess, onError]);
+    latestOnlyRef.current = latestOnly;
+  }, [fn, onSuccess, onError, latestOnly]);
 
   // Reset mountedRef on (re-)mount so StrictMode's double-effect cycle
   // (mount → cleanup → remount) doesn't leave it permanently false.
@@ -63,11 +68,15 @@ export function useAsyncState<T, Args extends unknown[] = []>(
   }, []);
 
   const execute = useCallback(async (...args: Args): Promise<T | null> => {
+    const execution = executionRef.current + 1;
+    executionRef.current = execution;
+    const canPublish = () =>
+      mountedRef.current && (!latestOnlyRef.current || execution === executionRef.current);
     setIsLoading(true);
     setError(null);
     try {
       const result = await fnRef.current(...args);
-      if (mountedRef.current) {
+      if (canPublish()) {
         setData(result);
         onSuccessRef.current?.(result);
       }
@@ -77,17 +86,18 @@ export function useAsyncState<T, Args extends unknown[] = []>(
       // route it through the formatter so variants without a `message` field
       // (Process, Timeout, …) render properly instead of "[object Object]".
       const err = e instanceof Error ? e : new Error(formatCommandError(asCommandError(e)));
-      if (mountedRef.current) {
+      if (canPublish()) {
         setError(err);
         onErrorRef.current?.(err);
       }
       return null;
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (canPublish()) setIsLoading(false);
     }
   }, []);
 
   const reset = useCallback(() => {
+    executionRef.current += 1;
     setData(initial);
     setError(null);
     setIsLoading(false);

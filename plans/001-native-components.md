@@ -23,6 +23,67 @@
 - **Depends on**: none
 - **Category**: direction
 - **Planned at**: commit `b552fb21`, 2026-08-29
+- **Current implementation branch**: `feature/native-components`
+- **Current delivery state**: React/Next/Vite vertical slice implemented; focused
+  and full test gates still require operator approval
+
+### Feature progress
+
+- [x] Catalog framework-native React components without executing project code.
+- [x] Show definitions, explicit props/defaults, slots, usage counts,
+  capabilities, diagnostics, and source links.
+- [x] Search and group the catalog by framework, folder, and native kind.
+- [x] Register Components panel, search, source, usage, placement, and
+  main-source actions with `useCommands`.
+- [x] Place React components through parser-backed source edits after a proven
+  selected source anchor.
+- [x] Collect required prop values before placement without inventing defaults.
+- [x] Edit statically authored React instance props from an explicitly selected
+  exact usage.
+- [x] Refuse dynamic, ambiguous, stale, cyclic, colliding, or otherwise unsafe
+  source mutations.
+- [x] Use the supplied Components icon in Ship Studio's icon system and panel UI.
+- [x] Restrict the initial UI cohort to Next.js and React-flavoured Vite.
+- [ ] Add automatic source watching and incremental catalog refresh; the current
+  slice uses explicit refresh after external edits.
+- [ ] Add complete owner-chain runtime binding with source-hash validation.
+- [ ] Make **Edit main** retarget visual structure/style mutations to the proven
+  definition. The current slice truthfully opens and retains main-source
+  context instead.
+- [ ] Add insertion-position choice and source-diff confirmation; the current
+  slice inserts after the selected source anchor.
+- [ ] Add native Astro cataloging, binding, placement, and prop editing.
+- [ ] Project validated component boundaries into the Element Tree as virtual
+  component rows with the Components icon instead of an HTML tag icon.
+- [ ] Require double-clicking a component row/boundary to enter its children,
+  with nested focus breadcrumbs and `Escape` to move back out.
+- [ ] Add component-aware preview hover/selection presentation using the
+  semantic Components green rather than the normal element-selection blue.
+- [ ] Let the CSS Editor, Visual Editor, and Agent edit the proven component
+  definition from a focused preview context so changes affect every instance.
+- [ ] Add adapter-backed **Duplicate**, **Rename**, and **Delete** actions to the
+  Components panel with reviewed multi-file diffs and transactional writes.
+- [ ] Add Vue/Nuxt, Svelte/SvelteKit, Shopify, and Web Component adapters.
+- [ ] Add extraction, static slot editing, and optional preview presets.
+- [ ] Add separately designed source/runtime support for React Native and
+  Flutter.
+- [ ] Run the focused Components tests and mandatory repository test gates.
+- [ ] Commit the verified implementation on `feature/native-components`.
+
+### Immediate next implementation sequence
+
+Do not defer the Webflow-like component navigation/editing work until after the
+remaining framework adapters. Once the current React catalog slice is verified,
+execute the next deliveries in this order:
+
+- [ ] **Next 1 — Phase 3:** component rows in the Element Tree, double-click
+  focus navigation, and green component hover/selection presentation.
+- [ ] **Next 2 — Phase 4:** focused CSS Editor, Visual Editor, and Agent edits
+  that target the proven component definition.
+- [ ] **Next 3 — Phase 5:** finish safe placement/prop mutations, then add
+  Duplicate, Rename, and Delete definition refactors.
+- [ ] **After those — Phase 6+:** additional framework adapters, extraction,
+  advanced slots/presets, and mobile runtime integrations.
 
 ## Executive decision
 
@@ -36,15 +97,17 @@ the framework already supplies that behavior.
 
 The feasible first product is:
 
-1. Detect and catalog native components without running project code.
-2. Show definitions, props, slots, usage counts, diagnostics, and source links.
-3. Place components through parser-backed source edits.
-4. Edit statically-authored instance props when Ship Studio can prove the exact
-   invocation site.
-5. Enter an explicit **Edit main** mode for structure and style edits that affect
-   every instance.
-6. Refuse dynamic or ambiguous edits instead of fabricating values or source
-   locations.
+- [x] Detect and catalog native React components without running project code.
+- [x] Show definitions, props, slots, usage counts, diagnostics, and source
+  links.
+- [x] Place React components through parser-backed source edits.
+- [x] Edit statically-authored React instance props when Ship Studio can prove
+  the exact invocation site or the user explicitly chooses an exact usage row.
+- [ ] Enter an explicit **Edit main** mode in which structure and style edits
+  target the definition and affect every instance. Main-source navigation and
+  persistent context are implemented; visual mutation retargeting remains.
+- [x] Refuse dynamic or ambiguous edits instead of fabricating values or source
+  locations.
 
 The first supported visual-editing cohort should be React in Next.js/Vite and
 native Astro components. Vue/Nuxt, Svelte/SvelteKit, Shopify, and native Web
@@ -95,6 +158,12 @@ Use these terms consistently in types, UI copy, analytics, and documentation:
   slot content.
 - **Edit main**: edit the definition. Structure/style/content changes in this
   mode affect all instances by changing native source.
+- **Component boundary**: a source-validated association between one indexed
+  component instance and one or more rendered host roots. It is a Ship Studio
+  navigation projection, never a wrapper added to project markup.
+- **Component focus**: the revision-bound state entered by double-clicking an
+  exact boundary. It reveals that component's child elements and constrains
+  CSS Editor, Visual Editor, and Agent writes to its proven definition.
 - **Binding confidence**: `exact`, `sourceAnchored`, `ambiguous`, or `none`.
   Writes are permitted only for `exact`; `sourceAnchored` may open the definition
   and support main editing, but must not claim a particular invocation.
@@ -110,6 +179,10 @@ Hard invariants:
    fail-closed on ambiguity.
 5. Read-only indexing support and write support are separate capabilities.
 6. Component support is not gated by Tailwind or the existing style-editor gate.
+7. Element Tree component boundaries never add or require layout-affecting DOM
+   wrappers/markers in the user's application.
+8. Duplicate, Rename, and Delete are graph-aware, previewed source refactors;
+   no action may leave a known broken import, export, invocation, or usage.
 
 ## Current state in Ship Studio
 
@@ -139,6 +212,23 @@ drift check:
   `src/hooks/useElementTree.ts` already provide a rendered DOM navigator and a
   selection protocol. Reuse this shell and selection state; do not create a
   second iframe inspector.
+- `src/hooks/useElementTree.ts:19-44` currently serializes only DOM node ID,
+  tag, class, text, and children. `src/components/edit/ElementTreePanel.tsx:75-90`
+  therefore labels every row as an HTML tag/icon. Component rows require a new
+  validated projection layer; they cannot be inferred from capitalization or
+  DOM shape inside `RowLabel`.
+- `src-tauri/src/proxy/select_script.html:3-65` currently hard-codes blue primary
+  and hover outlines plus orange affected-element outlines. Introduce an
+  explicit selection-kind message/state and semantic color value supplied by
+  Ship Studio; do not replace the normal element palette globally.
+- `src/components/edit/ElementToolbar.tsx:91-115` derives its label/icon from the
+  selected tag. It is the host-side seam for a component-specific green toolbar
+  with `ComponentsIcon`, not a reason to add imperative HTML UI inside the
+  iframe.
+- `src-tauri/src/commands/components/types.rs:65-100` currently represents only
+  text edits to existing files. Definition Duplicate/Rename/Delete requires a
+  typed create/move/delete extension with the same expected-hash, staging, and
+  rollback guarantees; direct filesystem calls from panel handlers are banned.
 - `src-tauri/src/commands/edit_structure.rs:1-20` implements fail-closed,
   class-anchored insert/duplicate/delete operations through surgical text edits.
   It is useful precedent but not an adequate component parser.
@@ -203,6 +293,12 @@ clicked rendered node can be mapped to one exact invocation after a framework
 has compiled it. The UI must expose this honestly. A catalog entry can remain
 fully useful while its visual binding is read-only.
 
+Component-tree projection, focused visual editing, Duplicate, Rename, and
+Delete also report independent capabilities. A dialect may support catalog and
+rename while lacking trustworthy runtime boundaries, or support source-only
+duplicate while destructive delete remains disabled. Never derive these flags
+from a single generic “Components supported” value.
+
 ## User experience specification
 
 ### Components panel
@@ -215,7 +311,8 @@ The panel must provide:
 - Search by component name, source path, group, and kind.
 - Framework/folder groups with counts and collapsed state.
 - A row for each definition showing name, kind, usage count, read-only or error
-  state, and whether it is placeable.
+  state, whether it is placeable, and an accessible overflow menu for supported
+  Duplicate/Rename/Delete definition refactors.
 - Details showing description from explicit JSDoc/framework metadata, source
   file/export, declared props, slots, explicit defaults, variants, capabilities,
   diagnostics, **Open source**, and **Place**.
@@ -231,6 +328,131 @@ create `.shipstudio/components.json` in the MVP. If custom labels, groups,
 preview presets, or hidden/pinned state are later requested, add an optional,
 versioned metadata file that contains presentation metadata only. Definitions,
 props, instances, and usage counts must never be persisted there.
+
+### Component boundaries in the Element Tree
+
+The Elements panel must present a component-aware projection of the rendered
+tree rather than displaying every component only as its compiled HTML tags.
+This projection is navigation state in Ship Studio; it must not insert wrapper
+elements, persistent attributes, or Ship Studio-specific component syntax into
+the user's project.
+
+- A proven framework component instance appears as one virtual component row.
+  Its label is the indexed component name and its icon is the shared
+  `ComponentsIcon`, never the underlying root tag icon.
+- A component may render one root, a fragment with several roots, a portal, or
+  no host node. The adapter returns an explicit boundary mapping. Multi-root
+  instances remain one virtual row with several validated host roots; portals
+  and unprovable/no-host boundaries remain source-only rather than being
+  attached to a guessed DOM parent.
+- Children inside a component boundary are opaque by default. A chevron must
+  not bypass the boundary: the user double-clicks the component row (or the
+  green component boundary in Preview) to enter it and reveal its child
+  elements. Single click selects the component as a component.
+- Outside focus, a preview double-click on an exact component boundary enters
+  component focus before the existing inline-text double-click handler can run.
+  Once focused, double-clicking an eligible child text element resumes the
+  existing inline text-edit behavior.
+- Entering a nested component pushes another focus level. Show a breadcrumb
+  such as `Page / Header / NavItem`; `Escape`, the breadcrumb back action,
+  route navigation, or closing the relevant project unwinds focus safely.
+- While outside a component, the tree shows the component row but not its
+  internal DOM. While focused inside it, normal element rows are visible and
+  editable, but any nested component remains an opaque component row until it
+  is also double-clicked.
+- Selecting from the canvas and selecting from the Element Tree must converge
+  on the same `ComponentSelection` state. HMR/reindexing rebinds that state by
+  component/instance identity and source hash; if it cannot be rebound exactly,
+  exit focused editing and show a diagnostic rather than selecting a similarly
+  shaped DOM subtree.
+- `sourceAnchored`, `ambiguous`, and `none` bindings may show a component label
+  and source navigation, but only an `exact` validated boundary may hide/reveal
+  child rows or enter definition-focused visual editing.
+
+Represent the tree as a discriminated union rather than adding nullable fields
+to every DOM node:
+
+```ts
+type ComponentAwareTreeNode =
+  | {
+      kind: 'element';
+      nodeId: number;
+      tag: string;
+      className: string;
+      text: string;
+      children: ComponentAwareTreeNode[];
+    }
+  | {
+      kind: 'component';
+      key: string;
+      componentId: ComponentId;
+      instanceId: ComponentInstanceId;
+      name: string;
+      confidence: 'exact';
+      hostNodeIds: number[];
+      definition: SourceRef;
+      invocation: SourceRef;
+      children: ComponentAwareTreeNode[];
+    };
+```
+
+The injected preview bridge may collect bounded runtime owner hints for each
+host node, but the app/worker must validate them against the current component
+index before synthesizing a component row. Runtime framework internals are
+hints, not authority. Batch the binding work per tree revision; do not issue one
+filesystem or worker request per DOM node.
+
+### Component selection and focused visual editing
+
+Component selection is visually distinct from ordinary element selection:
+
+- Normal element hover/selection remains blue.
+- Component hover, component selection, its info toolbar, matching Element Tree
+  row, focus breadcrumb, and component-related action affordances use one
+  semantic `--accent-component` token backed by Ship Studio's established
+  Components green. Do not hard-code a new green in React, CSS, or the injected
+  iframe script.
+- A selected component boundary uses a solid green outline. Other rendered
+  instances affected by definition editing may use a lower-emphasis dashed
+  green outline. Do not mix the normal blue primary outline or orange
+  same-source-element outline into component selection state.
+- The selection toolbar shows `ComponentsIcon`, component name, and relevant
+  component actions instead of the root tag/icon. Accessible names must say
+  “Selected component: …”, not “Selected element”.
+- After double-clicking into the component, retain a subtle green outer boundary
+  and focus breadcrumb. An individual child element selected inside that focus
+  uses the normal blue element treatment, making “component scope” and “current
+  child element” simultaneously legible.
+- Respect forced-colors/reduced-motion settings and never rely on green alone:
+  the Components icon, label, boundary style, and accessible state text are all
+  required.
+
+Focused component editing is the completed form of **Edit main**. It keeps the
+running page context but changes the permitted source target:
+
+1. Double-clicking an exact component boundary creates a
+   `ComponentFocusSession` containing component ID, instance ID, definition and
+   invocation refs, index revision, validated host node IDs, and nested focus
+   ancestry.
+2. CSS Editor and Visual Editor resolvers must prove that each selected child
+   maps inside the focused definition's source range before planning a write.
+   They write the definition, never the invocation or an unrelated instance.
+3. The Agent receives a structured, bounded focus context (definition path and
+   hash, component name/ID, supported capabilities, selected child source ref,
+   and explicit instruction that changes affect all usages). Do not send source
+   text or absolute paths through analytics, and do not let the Agent infer a
+   target from the green outline alone.
+4. Instance prop controls remain disabled while definition focus is active.
+   Changes to an invocation still require explicit **Edit instance** mode or a
+   selected usage row.
+5. Any stale hash, HMR identity loss, ambiguous child mapping, route change, or
+   unsupported server/client boundary exits or suspends writes and asks the
+   user to refresh/re-enter. Never silently fall back to normal element editing.
+
+Register `components.focus`, `components.focusParent`, and
+`components.exitFocus` with live capability predicates. Double-click is the
+primary spatial gesture, but every focus transition must also be keyboard and
+command-palette accessible.
 
 ### Selecting and editing an instance
 
@@ -302,9 +524,95 @@ If a required prop has no explicit safe default, open a small setup form before
 writing. Do not insert `undefined`, placeholder copy, guessed asset paths, or
 fabricated data. Cancel leaves source unchanged.
 
+### Duplicating, renaming, and deleting definitions
+
+The Components panel provides an overflow/context menu for each definition and
+matching command-palette actions:
+
+- `components.duplicateDefinition`
+- `components.renameDefinition`
+- `components.deleteDefinition`
+
+These are source refactors, not catalog metadata changes. Every action is
+adapter-planned from the current immutable index, presents the exact affected
+files and source diff before commit, and uses the same guarded Rust mutation
+boundary as placement/prop editing. Disable an action when its capability is
+not proven, and show the adapter's structured reason.
+
+**Duplicate**:
+
+- Ask for the new framework-valid component name and destination source file.
+  Suggest a sibling path from explicit project conventions, but never commit a
+  guessed path without user confirmation.
+- Create a new native definition with a new source identity and zero usages.
+  Rename the copied local/export symbol and preserve only the imports, types,
+  styles, and module-private dependencies the adapter can prove are required.
+- Do not copy an entire multi-component module, story, test, route root, or
+  unrelated export merely because the selected definition shares its file.
+  If a safe dependency closure cannot be produced, refuse and offer **Open
+  source**.
+- Refuse destination collisions, case-insensitive path collisions, invalid
+  names, server/client boundary changes, unresolved aliases, or copying across
+  unsupported package/workspace boundaries.
+
+**Rename**:
+
+- Rename the actual native definition symbol/export and every statically
+  resolved import, re-export, namespace reference, and invocation in one
+  graph-aware plan. This is never a display-only label.
+- When a dedicated file's basename follows the component name, offer a checked
+  **Rename file too** option and preview the proposed path. Update every proven
+  relative import path. Do not rename a shared/multi-definition file by default.
+- Validate framework naming rules, reserved route/special-file names, symbol and
+  path collisions, filename case-only changes, public package exports, and
+  unresolved/dynamic references. Refuse if the complete internal reference set
+  cannot be proven; do not leave compatibility aliases unless the user
+  explicitly requests a separately designed public-API migration.
+- After commit, rebuild the index and select the replacement component ID. The
+  old ID must disappear and the usage graph/count must be preserved.
+
+**Delete**:
+
+- Show a destructive `ModalFrame` confirmation with component name, definition
+  path, exact source-usage count, and affected files. Never delete on a single
+  menu click or use only a toast as confirmation.
+- A zero-usage component may be deleted by removing its exact declaration or,
+  only when the adapter proves the file contains no other retained code, its
+  dedicated file. Clean up imports/re-exports made unreachable by that deletion
+  only when the graph proves they are now unused.
+- When usages remain, the default **Delete** action is blocked and the dialog
+  links to **Show usages**. A separate explicit **Remove all usages and delete**
+  action may be enabled only when every invocation and cleanup edit is exact,
+  static, and previewed. Its confirmation must state that rendered content and
+  any children/props at those invocations will be removed.
+- Ambiguous, dynamic, external-package, runtime-only, portal-only, or unresolved
+  usages block destructive deletion. Never delete the definition while leaving
+  known broken imports/invocations, and never guess a replacement component.
+
+Extend the mutation protocol from text edits against existing files to an
+explicit transactional union:
+
+```ts
+type ComponentFileOperation =
+  | { kind: 'edit'; file: string; expectedHash: string; edits: ComponentTextEdit[] }
+  | { kind: 'create'; file: string; expectedAbsent: true; contents: string }
+  | { kind: 'move'; from: string; to: string; expectedHash: string; expectedAbsent: true }
+  | { kind: 'delete'; file: string; expectedHash: string };
+```
+
+The final wire shape also carries expected result hashes, dialect/parser
+validation tokens, index revision, and expected component/usage graph delta.
+Rust canonicalizes every source and destination beneath the active workspace,
+rejects ignored/generated/vendor paths and symlink escapes, stages every
+operation before commit, preserves permissions/newlines, and rolls the complete
+transaction back on failure. Deletions retain a recovery backup until the full
+plan and graph convergence succeed. Handle case-only renames explicitly on
+case-insensitive filesystems through a validated intermediate sibling path.
+Do not shell out to `mv`, `rm`, framework CLIs, formatters, or project Node.
+
 ### Webflow features deliberately deferred
 
-- **Create component from selection**: later AST extraction flow; see Phase 6.
+- **Create component from selection**: later AST extraction flow; see Phase 7.
 - **Blank component**: later framework-native templates, never generic markup.
 - **Slots editing**: default static child content can follow prop editing after
   the adapter is stable; named/scoped/render-prop slots require dedicated AST UI.
@@ -328,11 +636,14 @@ validated project root + resolved workspace
       app-bundled parser Web Worker
                 |
    ComponentIndex snapshot (revisioned)
-        /          |           \
- catalog UI   usage/binding   mutation planner
-                    |           |
-          preview source hint   v
-                    +--> Rust hash/path/parse guard --> atomic source write
+      /          |             |                \
+catalog UI  usage/binding  component-tree   mutation/refactor
+                 |          projection          planner
+       preview owner hints      |                |
+                 +--------------+----------------v
+                         Rust hash/path/parse guard
+                                    |
+                     atomic edit/create/move/delete transaction
 ```
 
 Parsing and framework semantics live behind adapters. Rust remains the security
@@ -365,6 +676,11 @@ export interface ComponentCapabilities {
   editStaticProps: boolean;
   editSlots: boolean;
   editMain: boolean;
+  componentTreeBoundary: boolean;
+  focusedVisualEditing: boolean;
+  duplicateDefinition: boolean;
+  renameDefinition: boolean;
+  deleteDefinition: boolean;
   extract: boolean;
   isolatedPreview: boolean;
 }
@@ -484,8 +800,12 @@ export interface ComponentAdapter {
   resolveImport(edge: RawImportEdge, context: ResolveContext): ResolvedImportEdge;
   buildUsageGraph(files: ParsedComponentFile[], context: GraphContext): AdapterGraph;
   bindSelection(input: SelectionBindingInput, index: ComponentIndex): ComponentBinding;
+  projectTree(input: ComponentTreeProjectionInput, index: ComponentIndex): ComponentTreeProjection;
   planInsert(input: InsertComponentInput, index: ComponentIndex): MutationResult;
   planPropEdit(input: EditComponentPropInput, index: ComponentIndex): MutationResult;
+  planDuplicate(input: DuplicateComponentInput, index: ComponentIndex): RefactorResult;
+  planRename(input: RenameComponentInput, index: ComponentIndex): RefactorResult;
+  planDelete(input: DeleteComponentInput, index: ComponentIndex): RefactorResult;
   validateMutation(input: MutationValidationInput): MutationValidationResult;
 }
 ```
@@ -586,8 +906,11 @@ Inventory rules:
   index time, and diagnostics count. Surface `partial: true` with reasons when a
   cap is reached.
 
-`MutationPlan` contains project-relative files, expected SHA-256 hashes, sorted
-non-overlapping text edits, parser/dialect, expected graph delta, and warnings.
+For placement/prop edits, `MutationPlan` contains project-relative files,
+expected SHA-256 hashes, sorted non-overlapping text edits, parser/dialect,
+expected graph delta, and warnings. Phase 5 generalizes this into the explicit
+edit/create/move/delete operation union specified above; both paths use one
+validation and transaction boundary.
 ASTs locate and validate edit ranges; adapters generate only the smallest new
 snippet/import text. Never print an entire user file from a compiler AST.
 For every commit:
@@ -618,6 +941,11 @@ The lifecycle is:
 5. Swap to the new complete revision; never expose a half-updated graph.
 6. After a component mutation, wait for a revision whose hashes and expected
    graph delta match before declaring success.
+
+The project-scoped catalog must also be available while the component-aware
+Element Tree or a component command is active, even if the Components panel is
+closed. Share one worker/index session across these consumers; never build a
+second catalog per panel or bind every tree row through an independent request.
 
 Store only serializable DTOs in React state. Keep ASTs, compiler programs, and
 reverse dependency maps inside the worker. Index errors must not break Preview;
@@ -763,6 +1091,9 @@ Create these paths during the applicable phases:
 - `src/lib/components/client.ts`
 - `src/lib/components/profile.ts`
 - `src/lib/components/index-store.ts`
+- `src/lib/components/component-tree.ts`
+- `src/lib/components/focus.ts`
+- `src/lib/components/refactors.ts`
 - `src/lib/components/worker-client.ts`
 - `src/lib/components/adapters/types.ts`
 - `src/lib/components/adapters/react.ts`
@@ -774,6 +1105,8 @@ Create these paths during the applicable phases:
 - `src/lib/components/worker-client.test.ts`
 - `src/lib/components/index-store.test.ts`
 - `src/lib/components/mutation.test.ts`
+- `src/lib/components/component-tree.test.ts`
+- `src/lib/components/refactors.test.ts`
 - `src/lib/components/adapters/react.test.ts`
 - `src/lib/components/adapters/astro.test.ts`
 - `src/lib/components/adapters/vue.test.ts`
@@ -784,12 +1117,18 @@ Create these paths during the applicable phases:
 - `src/hooks/useComponentCatalog.ts`
 - `src/hooks/useComponentBinding.ts`
 - `src/hooks/useComponentBinding.test.ts`
+- `src/hooks/useComponentFocus.ts`
+- `src/hooks/useComponentFocus.test.ts`
 - `src/hooks/useComponentCommands.tsx`
 - `src/components/edit/ComponentsPanel.tsx`
 - `src/components/edit/ComponentsPanel.test.tsx`
 - `src/components/edit/ComponentDetails.tsx`
 - `src/components/edit/ComponentInstanceControls.tsx`
 - `src/components/edit/EditMainBanner.tsx`
+- `src/components/edit/ComponentActionsMenu.tsx`
+- `src/components/edit/DuplicateComponentModal.tsx`
+- `src/components/edit/RenameComponentModal.tsx`
+- `src/components/edit/DeleteComponentModal.tsx`
 - `src/styles/features/components.css`
 - `src-tauri/src/commands/components/mod.rs`
 - `src-tauri/src/commands/components/types.rs`
@@ -806,13 +1145,20 @@ Modify only as required:
 - `src-tauri/src/commands/mod.rs` and `src-tauri/src/lib.rs` for command modules
   and registration;
 - `src-tauri/src/proxy/select_script.html` and its existing behavior tests for
-  source-frame collection;
+  source-frame collection, bounded tree-owner hints, and semantic selection
+  presentation;
+- `src/hooks/useElementTree.ts`, `src/components/edit/ElementTreePanel.tsx`, and
+  `src/components/edit/ElementToolbar.tsx` for the validated component-aware
+  tree projection, double-click focus, and component selection toolbar;
 - `src/lib/edit.ts`, `src/hooks/useVisualEditor.ts`, and
   `src/components/edit/UsageScope.tsx` to migrate usage/binding;
+- the CSS Editor/Visual Editor mutation resolvers and Agent bridge context DTOs
+  only where required to enforce a `ComponentFocusSession` target;
 - `src/components/preview/Preview.tsx` to host the panel/banners and shared
   project-scoped state;
-- `src/styles/index.css` and token files only if an existing token cannot express
-  the design;
+- `src/styles/features/element-tree.css`,
+  `src/styles/features/element-structure.css`, Components styles,
+  `src/styles/index.css`, and token files for component focus/selection states;
 - `docs/analytics.md` and the existing analytics wrapper for registered events.
 
 Keep each source file within the repository LOC gates. Split types, adapters,
@@ -825,6 +1171,8 @@ UI, and tests instead of growing `edit.rs` or `Preview.tsx` further.
 | Install parser deps | `pnpm install` | exit 0 and lockfile updated deterministically |
 | Target React adapter | `pnpm test:run -- src/lib/components/adapters/react.test.ts` | named suite passes |
 | Target proxy behavior | `pnpm test:run -- src/components/edit/selectScript.test.ts` | named suite passes |
+| Target component tree/focus | `pnpm test:run -- src/lib/components/component-tree.test.ts src/hooks/useComponentFocus.test.ts src/components/edit/ElementTreePanel.test.tsx` | named suites pass |
+| Target lifecycle refactors | `pnpm test:run -- src/lib/components/refactors.test.ts src/components/edit/ComponentsPanel.test.tsx` | named suites pass |
 | Target Rust module | `pnpm rust:test -- commands::components` | component module tests pass |
 | Typecheck | `pnpm typecheck` | exit 0, no errors |
 | Full repo gates, only after asking | `pnpm check:all` | exit 0 |
@@ -850,6 +1198,17 @@ phase before asking for the final gates.
 
 ### Phase 0: Prove the parser runtime and write an ADR
 
+- [ ] **Phase 0 complete**
+  - [x] Add a lazy app-bundled parser Web Worker.
+  - [x] Load the TypeScript compiler in the worker without using project Node.
+  - [x] Build the worker successfully as a separate production bundle.
+  - [x] Add a versioned request/response protocol and worker cancellation.
+  - [ ] Load and prove the Astro parser/WASM path.
+  - [ ] Smoke-test the worker in Tauri dev and a packaged Tauri build.
+  - [ ] Record parser/runtime, bundle-size, startup, and licensing decisions in
+    `docs/internal/components.md`.
+  - [ ] Run the Phase 0 focused tests.
+
 Build a non-UI spike of the Web Worker protocol. Load the TypeScript and Astro
 parsers first, parse one fixture each, and build a production bundle. Verify the
 worker starts under Tauri dev and one packaged build on the executor's platform.
@@ -865,6 +1224,20 @@ Review package licenses and ensure no parser loads project plugins/config.
 and parses TSX/Astro without the project's Node executable.
 
 ### Phase 1: Add validated source inventory and immutable read-only indexing
+
+- [ ] **Phase 1 complete**
+  - [x] Add bounded, workspace-scoped Rust source inventory and batch reads.
+  - [x] Add normalized component/index/profile DTOs and UTF-8 range utilities.
+  - [x] Build immutable, revisioned React indexes in the worker.
+  - [x] Resolve common React imports, exports, re-exports, aliases, usages,
+    props, defaults, and children slots.
+  - [x] Add partial-index diagnostics and fail-closed unsupported states.
+  - [x] Bind revisions to the canonical active workspace and restrict reads to
+    the tracked snapshot.
+  - [ ] Add the Rust source watcher and incremental update lifecycle.
+  - [ ] Add the native Astro adapter.
+  - [ ] Add internal-package `needSources` resolution rounds.
+  - [ ] Run the Phase 1 focused frontend and Rust tests.
 
 Implement the Rust snapshot/watch commands, worker/store lifecycle, framework
 profile, normalized index types, and React/Astro adapters. No UI writes in this
@@ -882,6 +1255,23 @@ passes the definition/usage fixtures, then
 ignore, cap, and symlink-escape cases.
 
 ### Phase 2: Ship the read-only catalog and usage graph
+
+- [ ] **Phase 2 complete**
+  - [x] Add the Components panel, details, search, framework/folder grouping,
+    usages, empty/error/partial states, and explicit refresh.
+  - [x] Add the supplied Components icon to the shared icon system.
+  - [x] Add `components.open`, `components.search`,
+    `components.openSource`, and `components.showUsages` commands.
+  - [x] Use shared Buttons, Tabs, fields, dockable-panel shell, async hooks, and
+    token-only CSS.
+  - [x] Gate Vite availability on proven React project detection rather than
+    exposing the React adapter in Vue/Svelte Vite projects.
+  - [x] Add panel tests for catalog, loading, busy, required-prop, and
+    main-source behavior.
+  - [ ] Add product analytics for catalog interactions.
+  - [x] Add persistent pin/dock, floating position/size, and docked resize
+    behavior through `DockablePanel`.
+  - [ ] Run the Phase 2 focused tests.
 
 Implement the Components panel, details, search/groups, usage navigation, error
 states, empty states, and commands. Register at least:
@@ -904,47 +1294,130 @@ text, prop values, absolute paths, or component names.
 `pnpm test:run -- src/components/edit/ComponentsPanel.test.tsx && pnpm typecheck`
 exits 0 and covers loading, populated, partial/error, and read-only states.
 
-### Phase 3: Add proven runtime binding and Edit main for React/Astro
+### Phase 3: Make Components first-class in the Element Tree and Preview
+
+- [ ] **Phase 3 complete — immediate next product milestone**
+  - [x] Add `exact`, `sourceAnchored`, `ambiguous`, and `none` binding states.
+  - [x] Normalize common runtime source URLs and downgrade line-only hints
+    instead of claiming an exact instance.
+  - [ ] Add batched, source-validated component boundary projection over the
+    raw DOM Element Tree.
+  - [ ] Render virtual component rows with `ComponentsIcon` and opaque children.
+  - [ ] Add double-click/keyboard entry, nested focus breadcrumbs, and safe
+    `Escape`/navigation exit behavior.
+  - [ ] Add semantic green hover/selection/focus states in the iframe, Element
+    Tree, and component toolbar without changing normal blue element selection.
+  - [ ] Add `components.focus`, `components.focusParent`, and
+    `components.exitFocus` commands with live predicates.
+  - [ ] Run the Phase 3 focused tree, proxy, and accessibility tests.
+
+Implement this phase immediately after the read-only catalog. It is intentionally
+read/navigation-first: users should see and enter real Components in the Element
+Tree before later adapter expansion or extraction work. Do not wait for every
+definition mutation to be finished before shipping the validated tree projection
+and green component selection state.
+
+Do not hide DOM children until the parent has validated runtime hints against
+the current source index; an unvalidated boundary remains ordinary element
+rows. This phase may enter a read-only focus session, but it must keep CSS,
+Visual, and Agent writes disabled until Phase 4 proves their definition target.
+
+**Verify**:
+`pnpm test:run -- src/lib/components/component-tree.test.ts src/hooks/useComponentFocus.test.ts src/components/edit/ElementTreePanel.test.tsx src/components/edit/selectScript.test.ts`
+passes component/icon projection, single/multi-root and nested boundaries,
+double-click/keyboard focus, stale/ambiguous refusal, blue/green selection,
+forced-colors labels, and unchanged project DOM/layout cases.
+
+### Phase 4: Enable focused component editing in CSS, Visual, and Agent workflows
+
+- [ ] **Phase 4 complete — follows Phase 3 directly**
+  - [x] Disable instance writes unless an exact usage is explicitly selected.
+  - [x] Add persistent main-source context, usage-impact copy, and source
+    navigation.
+  - [ ] Emit the complete React Fiber owner-frame chain with source hashes.
+  - [ ] Integrate index-backed binding with all legacy Usage Scope call sites.
+  - [ ] Retarget CSS Editor and Visual Editor mutations to an exact focused
+    definition source range.
+  - [ ] Pass a structured, hash-bound component focus context to the Agent and
+    prevent fallback to guessed files/ranges.
+  - [ ] Preserve the green outer focus boundary while child-element selection
+    and editing use the normal blue element treatment.
+  - [ ] Add exact HMR rebind plus safe stale-hash, route, and ambiguity exits.
+  - [ ] Add Astro definition/source-anchored binding without pretending exact
+    rendered invocation identity.
+  - [ ] Run the Phase 4 focused binding/editor/Agent tests.
 
 Extend the selection protocol to emit candidate source frames, validate those
 frames against the index, and return binding confidence. Integrate the result
-with `useVisualEditor`, the existing Usage scope, and a new Edit-main banner.
+with `useVisualEditor`, the CSS Editor, existing Usage scope, Element Tree focus,
+and the Agent context DTO.
 
 Keep the old `find_component_usage` command during rollout behind a fallback or
 feature flag. Once index-backed output covers its supported fixtures, migrate
 all call sites and remove the heuristic plus its duplicate TS types/tests.
 
-Do not permit instance writes in this phase. Main editing may reuse existing
-structure/style engines only where their source resolver independently returns
-an exact target.
+Each editor must independently prove that its planned source range is inside
+the focused definition at the current revision. Agent focus is enabled only
+after the same DTO is enforced by local editor resolvers; the Agent is not a
+bypass around binding or mutation validation.
 
 **Verify**:
-`pnpm test:run -- src/components/edit/selectScript.test.ts src/hooks/useComponentBinding.test.ts`
-passes exact React owner-chain, source-anchored Astro, ambiguous invocation,
-invalid runtime-data, and no-framework cases.
+`pnpm test:run -- src/components/edit/selectScript.test.ts src/hooks/useComponentBinding.test.ts src/hooks/useComponentFocus.test.ts`
+passes exact React owner-chain, source-anchored Astro, focused CSS/Visual/Agent
+targets, nested focus, HMR rebind, ambiguous/stale refusal, and no-framework
+cases.
 
-### Phase 4: Add safe placement and static instance-prop editing
+### Phase 5: Complete safe mutations and definition lifecycle actions
 
-Implement adapter mutation planning and the Rust guard. Start with React and
-native Astro. First expose **Place** on a selected exact source anchor; add
-drag/drop only after mutation tests establish the same endpoint is deterministic.
+- [ ] **Phase 5 complete — finish before additional framework adapters**
+  - [x] Add React placement planning with import reuse/insertion and
+    collision/cycle/self-recursion refusal.
+  - [x] Add exact AST range validation, Unicode-safe byte offsets, minimal text
+    edits, and expected revision/content hashes.
+  - [x] Add guarded Rust multi-file staging, size bounds, rollback, and recovery
+    backups.
+  - [x] Add required-prop setup and string/number/boolean/literal-choice inputs.
+  - [x] Add dirty-only static instance-prop editing and dynamic-value reasons.
+  - [x] Enable Place only when edit mode has a selected source-backed target.
+  - [x] Add `components.placeSelected`, `components.editMain`, and
+    `components.exitMain` command IDs with capability predicates.
+  - [ ] Add before/after/inside placement selection and source-diff approval.
+  - [ ] Revalidate parser dialect and expected graph delta at the Rust boundary.
+  - [ ] Add adapter-backed Duplicate, Rename, and Delete menus, modals, commands,
+    previews, and capability diagnostics.
+  - [ ] Extend Rust transactions to guarded edit/create/move/delete operations
+    with complete rollback and recovery backups.
+  - [ ] Reindex after every lifecycle refactor and verify the expected component
+    ID and usage-graph delta before reporting success.
+  - [ ] Add native Astro mutation planning.
+  - [ ] Add OS-handle/no-follow protection for hostile external filesystem races.
+  - [ ] Run the Phase 5 focused mutation/refactor frontend and Rust tests.
 
-Implement string/number/boolean/literal-union prop controls. Require exact
-invocation binding or an explicitly selected usage row. Show a source diff and
-required-prop form before commit. Disable dynamic expressions with a reason.
+Finish the existing React placement and static-prop vertical slice first, then
+implement Duplicate, Rename, and Delete before starting Vue/Svelte/Shopify/Web
+Component adapters. Duplicate proves create-file transactions without changing
+references; Rename adds graph-wide reference edits and optional move; Delete is
+last because it is destructive.
 
-Register:
-
-- `components.placeSelected`
-- `components.editMain`
-- `components.exitMain`
+Implement string/number/boolean/literal-union prop controls only for exact
+invocations or explicitly selected usage rows. Every placement and lifecycle
+action presents its diff, carries an expected graph delta, and stays behind
+per-definition capabilities. Do not enable a refactor merely because its panel
+control exists.
 
 **Verify**:
-`pnpm test:run -- src/lib/components/mutation.test.ts && pnpm rust:test -- commands::components::mutation`
-passes import reuse/insertion, collision/cycle refusal, stale hash,
-syntax-error rollback, required/dynamic prop, and +1 graph-delta cases.
+`pnpm test:run -- src/lib/components/mutation.test.ts src/lib/components/refactors.test.ts src/components/edit/ComponentsPanel.test.tsx && pnpm rust:test -- commands::components::mutation`
+passes placement/prop cases, duplicate/rename/delete graph updates, exact diff
+previews, create/move/delete rollback, collisions, unresolved usages, stale
+hashes, syntax failures, destructive confirmation, and expected graph deltas.
 
-### Phase 5: Add Vue/Nuxt, Svelte/SvelteKit, Shopify, and Web Components
+### Phase 6: Add Vue/Nuxt, Svelte/SvelteKit, Shopify, and Web Components
+
+- [ ] **Phase 6 complete**
+  - [ ] Vue/Nuxt adapter.
+  - [ ] Svelte/SvelteKit adapter.
+  - [ ] Shopify adapter.
+  - [ ] Native Web Components/static HTML adapter.
 
 Deliver each adapter in its own pull request and keep capability flags off until
 its fixture corpus passes. Do not wait for exact visual instance binding to ship
@@ -966,7 +1439,14 @@ copy React-specific assumptions into a non-React adapter.
 `pnpm test:run -- src/lib/components/adapters/vue.test.ts src/components/edit/ComponentsPanel.test.tsx`;
 replace `vue` with `svelte`, `shopify`, or `web-component` for later PRs.
 
-### Phase 6: Add extraction, slots, and optional preview presets
+### Phase 7: Add extraction, slots, and optional preview presets
+
+- [ ] **Phase 7 complete**
+  - [ ] Create component from selection.
+  - [ ] Static default-slot editing.
+  - [ ] Named/scoped slot editing per capable adapter.
+  - [ ] Optional explicit preview presets.
+  - [ ] Proven-safe inline-simple-component transform, if approved.
 
 Only begin after placement and prop writes have production evidence.
 
@@ -987,7 +1467,12 @@ only if an adapter proves semantic preservation and has adversarial tests.
 before/after source, free-variable props, import preservation, replacement usage,
 stale-source rollback, and every refusal case.
 
-### Phase 7: Treat mobile as separate runtime integrations
+### Phase 8: Treat mobile as separate runtime integrations
+
+- [ ] **Phase 8 complete**
+  - [ ] React Native/Expo source-only adapter and fixtures.
+  - [ ] Separate Metro/devtools runtime-binding plan and bridge.
+  - [ ] Separate Flutter analyzer/Widget Inspector plan and bridge.
 
 React Native/Expo may reuse source indexing and source-only placement after its
 own fixtures pass. A visual bridge requires an opt-in Metro transform/devtools
@@ -1037,12 +1522,43 @@ Mutation cases:
 - Next client/server refusal, Astro island hydration refusal, Nuxt auto-import
   uncertainty, Svelte script-block conflict, Shopify invalid block/template.
 
+Definition-lifecycle cases:
+
+- duplicate a dedicated component, a component with imports/types/styles, and a
+  component whose module-private dependency closure is unsafe to copy;
+- duplicate name/path/case-insensitive collision, reserved framework name,
+  multi-component module, unresolved alias, and cross-workspace refusal;
+- rename named/default exports, aliased imports, re-exports, namespace usage,
+  JSX invocations, matching dedicated filenames, relative import paths, and a
+  filename case-only change;
+- rename collision, unresolved/dynamic reference, shared file, route-special
+  filename, public package export, stale revision, and partial-index refusal;
+- delete zero-usage declaration, safe dedicated file, and exact all-usage plan;
+- block delete with remaining, ambiguous, dynamic, external, portal-only, or
+  unresolved usages and verify no file is removed;
+- transactional create/move/delete staging, permission/newline preservation,
+  expected graph deltas, rollback after each possible operation failure, and
+  retained recovery backup when external writes make rollback unsafe.
+
 Runtime/UI cases:
 
 - component panel loading/empty/partial/error/populated states;
 - search/group/capability badges and keyboard accessibility;
 - exact/source-anchored/ambiguous/none binding;
+- component-aware Element Tree projection for single-root, fragment/multi-root,
+  nested, repeated, conditional, portal, and no-host components;
+- component rows always use `ComponentsIcon`; their children remain hidden until
+  double-click/Enter focus and nested focus unwinds one level at a time;
+- green component hover/selection/toolbar/tree state, normal blue child-element
+  selection inside a persistent green focus boundary, and forced-colors labels;
+- HMR exact rebind, stale source-hash exit, route-navigation exit, ambiguous
+  boundary refusal, and no wrappers/layout changes in project DOM;
 - Edit-main enter/exit/navigation/pending-edit behavior;
+- CSS Editor, Visual Editor, and Agent edits from focus target only the exact
+  definition and affect its indexed usages; invocation props remain disabled;
+- Duplicate/Rename/Delete menus, commands, keyboard access, busy/error states,
+  exact diff review, destructive usage-count confirmation, and post-refactor
+  selection/reindex behavior;
 - no prop controls for a non-exact invocation;
 - no invented route/default/thumbnail;
 - existing visual editor and static HTML behavior remain unchanged when no
@@ -1062,7 +1578,11 @@ Track only non-sensitive metrics:
 - profile/dialect detection and partial-index reason;
 - index duration, file count buckets, cache hit, worker crash/restart;
 - binding confidence distribution;
+- component boundary projection/focus entered/exited/refused with reason and
+  bounded count buckets;
 - placement/prop/main-edit attempted/succeeded/refused with reason category;
+- definition duplicate/rename/delete attempted/succeeded/refused with dialect,
+  capability, operation-count bucket, and reason category;
 - mutation stale-hash/parse/rollback failures.
 
 Never record absolute paths, source text, component/export names, prop names or
@@ -1085,18 +1605,30 @@ The whole plan is complete only when all of the following hold:
   fail-closed source mutations.
 - [ ] Edit-main mode is explicit and existing visual edits target a proven
   definition source.
+- [ ] Exact component instances appear as virtual `ComponentsIcon` rows in the
+  Element Tree, with opaque children until an accessible double-click/enter
+  focus transition.
+- [ ] Component hover/selection/focus is consistently green and labelled as a
+  component, while ordinary child-element selection remains blue.
+- [ ] CSS Editor, Visual Editor, and Agent focused edits are hash-bound to the
+  proven component definition and cannot fall back to an invocation or guessed
+  source target.
+- [ ] Duplicate, Rename, and Delete are adapter-planned source refactors with
+  reviewed diffs, exact graph deltas, transactional create/move/delete support,
+  and fail-closed ambiguity/destructive safeguards.
 - [ ] Vue/Nuxt, Svelte/SvelteKit, Shopify, and native Web Components have their
   adapter capabilities enabled only to the level proven by fixtures.
-- [ ] React Native/Flutter are not advertised as visually bound until separate
+- [x] React Native/Flutter are not advertised as visually bound until separate
   runtime bridges exist.
-- [ ] No feature path executes project code/config or depends on project Node.
-- [ ] No dynamic value, route, default, thumbnail, usage, or source target is
+- [x] No feature path executes project code/config or depends on project Node.
+- [x] No dynamic value, route, default, thumbnail, usage, or source target is
   inferred and presented as fact.
 - [ ] Parser, graph, mutation, runtime binding, and UI refusal cases are tested.
-- [ ] Every user-facing action is registered with `useCommands`; UI uses shared
+- [x] Every currently implemented user-facing action is registered with
+  `useCommands`; UI uses shared
   primitives and design tokens.
-- [ ] All Rust commands use `CommandError`, validation, tracing, bounded work,
-  and safe cleanup.
+- [x] All implemented Rust commands use `CommandError`, validation, tracing,
+  bounded work, and safe cleanup.
 - [ ] `pnpm check:all`, `pnpm test:run`, and `pnpm rust:test` pass after operator
   approval to run the long suites.
 - [ ] `docs/internal/components.md` documents support levels and limitations.
@@ -1114,9 +1646,18 @@ Stop and report rather than improvising if:
 - a framework parser cannot return trustworthy source ranges for the intended
   write;
 - runtime data cannot be validated against the indexed AST/source hash;
+- a component boundary would require inserting a wrapper/marker that changes
+  layout, hydration, accessibility, or framework semantics;
+- a multi-root/nested/runtime component cannot be projected into the Element
+  Tree without guessing its host ownership;
+- focused CSS/Visual/Agent editing cannot prove that the requested source range
+  lies inside the selected definition at the current revision;
 - an edit requires guessing a dynamic prop, route, hydration directive, provider,
   import alias, Shopify template, block permission, or client/server boundary;
 - a requested write spans more files than the mutation layer can roll back;
+- Duplicate/Rename/Delete encounters an unresolved import/export/usage,
+  shared-file dependency, external package boundary, or public API that prevents
+  a complete graph-aware refactor;
 - component support requires weakening `validate_project_path`, following a
   symlink outside the project root, or scanning vendor/build output;
 - the active framework version falls outside the adapter's tested syntax range;
@@ -1130,6 +1671,15 @@ Stop and report rather than improvising if:
   and update adapters before raising parser majors.
 - React/Vue/Svelte runtime internals are hints, not APIs. Keep binding validation
   source-based and expect confidence to degrade safely after framework updates.
+- Keep the raw DOM snapshot separate from the component-aware tree projection.
+  Changing framework owner hints must never make the injected bridge authoritative
+  or leak AST/index responsibilities into the iframe.
+- Treat `ComponentFocusSession` as a revision-bound capability, not durable UI
+  state. Every HMR/index change must revalidate it before any editor or Agent
+  write remains enabled.
+- Definition lifecycle operations are refactors, not filesystem conveniences.
+  Review graph completeness, case-insensitive paths, shared modules, and rollback
+  behavior more closely than the Duplicate/Rename/Delete menu presentation.
 - Component IDs are source identities, not persistent UUIDs. Any later metadata
   layer needs orphan detection and an explicit reassociation UI.
 - Import graph correctness is central. Review alias, re-export, cycle, and

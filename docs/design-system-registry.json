@@ -368,6 +368,21 @@
       "lifecycle": "canonical"
     },
     {
+      "name": "SearchField",
+      "file": "src/components/primitives/SearchField.tsx",
+      "exports": ["SearchFieldProps", "SearchField"],
+      "purpose": "Compact labelled search shell built from the canonical TextField for filterable panels and file browsers.",
+      "owner": "primitives/forms",
+      "props": ["className", "inputClassName", "native input attributes"],
+      "variants": ["default"],
+      "states": ["default", "focus", "placeholder", "disabled"],
+      "accessibility": "Keeps native input semantics, forwards the ref, and uses a label wrapper so the search icon is part of the hit area.",
+      "style": "src/styles/components/text-field.css",
+      "example": "docs/design-system.md#searchfield-searchfieldtsx",
+      "tests": ["src/components/primitives/SearchField.test.tsx"],
+      "lifecycle": "canonical"
+    },
+    {
       "name": "ToastList",
       "file": "src/components/primitives/ToastList.tsx",
       "exports": ["ToastList"],

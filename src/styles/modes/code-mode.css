@@ -36,36 +36,7 @@
 }
 
 .code-tab-search {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 8px;
-  padding: 0 8px;
-  height: 28px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  background: var(--surface-app);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.code-tab-search:focus-within {
-  border-color: var(--accent-active);
-}
-
-.code-tab-search-input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: none;
-  color: var(--text-primary);
-  font-size: var(--font-size-body-md);
-  font-family: inherit;
-  outline: none;
-}
-
-.code-tab-search-input::placeholder {
-  color: var(--text-muted);
+  margin: var(--spacing-sm);
 }
 
 .code-tab-sidebar-content {
