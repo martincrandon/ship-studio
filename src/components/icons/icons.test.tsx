@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RefObject } from 'react';
 import {
   CloudflareIcon,
+  ComponentsIcon,
   CopyIcon,
   FolderOpenIcon,
   ImageUploadIcon,
@@ -32,6 +33,15 @@ describe('shared icons', () => {
       'data-icon-source',
       'icons/import/variables.svg'
     );
+  });
+
+  it('registers the Components icon from the imported design-system asset', () => {
+    const { container } = render(<ComponentsIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/components.svg'
+    );
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
   });
 
   it('registers imported project-action icons with currentColor artwork', () => {

@@ -37,12 +37,12 @@ import { WorkspacePreviewPane } from './WorkspacePreviewPane';
 import { WorkspaceTerminalPane } from './WorkspaceTerminalPane';
 import { WorkspaceHeader, HOSTING_PLUGIN_IDS } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
-import { VariablesIcon } from '@/components/icons';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
-import { useCommands } from '../../commands/useCommands';
+import { useWorkspacePanelCommands } from '../../commands/useWorkspacePanelCommands';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
+import { useComponentsAvailability } from '../../hooks/useComponentsAvailability';
 import { PluginsDropdown } from '../plugins/PluginsDropdown';
 import type { AgentConfig } from '../../lib/agent';
 import type { Project } from '../../lib/project';
@@ -750,6 +750,42 @@ export const WorkspaceView = memo(function WorkspaceView({
       void handleStartDevServer();
     }
   }, [handleStartDevServer, setIsPreviewHidden, setWorkspaceTab, variablesPanelOpen]);
+  const nativeComponentsAvailable = useComponentsAvailability(currentProject.path, projectType);
+  const componentsPanelAvailable = isWebProject && nativeComponentsAvailable;
+  const [componentsPanelVisible, setComponentsPanelVisible] = useState(false);
+  const [componentsPanelPinned, setComponentsPanelPinned] = useState(
+    () => localStorage.getItem('componentsPanelPinned') === '1'
+  );
+  const [componentsEditMainId, setComponentsEditMainId] = useState<string | null>(null);
+  const componentsPanelOpen =
+    componentsPanelAvailable &&
+    workspaceTab === 'preview' &&
+    !isPreviewHidden &&
+    componentsPanelVisible;
+  useEffect(() => {
+    setComponentsPanelVisible(false);
+    setComponentsEditMainId(null);
+  }, [currentProject.path]);
+  const toggleComponentsPanel = useCallback(() => {
+    const shouldOpen = !componentsPanelOpen;
+    setComponentsPanelVisible(shouldOpen);
+    if (!shouldOpen) setComponentsEditMainId(null);
+    if (shouldOpen) {
+      setIsPreviewHidden(false);
+      setWorkspaceTab('preview');
+      void handleStartDevServer();
+    }
+  }, [componentsPanelOpen, handleStartDevServer, setIsPreviewHidden, setWorkspaceTab]);
+  const closeComponentsPanel = useCallback(() => {
+    setComponentsPanelVisible(false);
+    setComponentsEditMainId(null);
+  }, []);
+  const toggleComponentsPanelPinned = useCallback(() => {
+    setComponentsPanelPinned((pinned) => {
+      localStorage.setItem('componentsPanelPinned', pinned ? '0' : '1');
+      return !pinned;
+    });
+  }, []);
   const toggleAgentPanel = useCallback(() => {
     if (!isAgentPanelHidden) {
       setIsPreviewHidden(false);
@@ -757,65 +793,24 @@ export const WorkspaceView = memo(function WorkspaceView({
     setIsAgentPanelHidden(!isAgentPanelHidden);
   }, [isAgentPanelHidden, setIsPreviewHidden]);
 
-  useCommands(
-    () => [
-      {
-        id: 'workspace.toggleAgentPanel',
-        title: isAgentPanelHidden ? 'Show Agent panel' : 'Hide Agent panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['terminal', 'pane', 'sidebar'],
-        run: toggleAgentPanel,
-      },
-      {
-        id: 'workspace.toggleAgentPanelPin',
-        title: agentPanelPinned ? 'Float Agent panel' : 'Dock Agent panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['terminal', 'pane', 'pin', 'float', 'dock'],
-        run: toggleAgentPanelPinned,
-      },
-      {
-        id: 'workspace.toggleElementTreePin',
-        title: elementTreePinned ? 'Float Elements panel' : 'Dock Elements panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['elements', 'tree', 'navigator', 'pin', 'float', 'dock'],
-        run: toggleElementTreePinned,
-      },
-      {
-        id: 'workspace.toggleVariablesPanelPin',
-        title: variablesPanelPinned ? 'Float Variables panel' : 'Dock Variables panel',
-        icon: <VariablesIcon size={14} />,
-        category: 'action',
-        when: ({ kind }) => kind === 'project' && isWebProject,
-        keywords: ['variables', 'css', 'token', 'pin', 'float', 'dock'],
-        run: toggleVariablesPanelPinned,
-      },
-      {
-        id: 'css.variables',
-        title: variablesPanelOpen ? 'Hide Variables panel' : 'Show Variables panel',
-        icon: <VariablesIcon size={14} />,
-        category: 'action',
-        when: ({ kind }) => kind === 'project' && isWebProject,
-        keywords: ['css', 'variable', 'custom property', 'token', 'theme', '--'],
-        run: toggleVariablesPanel,
-      },
-    ],
-    [
-      isAgentPanelHidden,
-      toggleAgentPanel,
-      agentPanelPinned,
-      toggleAgentPanelPinned,
-      elementTreePinned,
-      toggleElementTreePinned,
-      variablesPanelPinned,
-      toggleVariablesPanelPinned,
-      isWebProject,
-      variablesPanelOpen,
-      toggleVariablesPanel,
-    ]
-  );
+  useWorkspacePanelCommands({
+    isAgentPanelHidden,
+    toggleAgentPanel,
+    agentPanelPinned,
+    toggleAgentPanelPinned,
+    elementTreePinned,
+    toggleElementTreePinned,
+    variablesPanelPinned,
+    toggleVariablesPanelPinned,
+    isWebProject,
+    variablesPanelOpen,
+    toggleVariablesPanel,
+    componentsPanelOpen,
+    componentsPanelAvailable,
+    toggleComponentsPanel,
+    componentsPanelPinned,
+    toggleComponentsPanelPinned,
+  });
 
   // Wrap setters with click tracking. We read previous state from the closure
   // (not a functional updater) to avoid double-firing under React StrictMode.
@@ -1037,6 +1032,9 @@ export const WorkspaceView = memo(function WorkspaceView({
     variablesPanelVisible: variablesPanelOpen,
     variablesPanelAvailable: isWebProject,
     onToggleVariablesPanel: toggleVariablesPanel,
+    componentsPanelVisible: componentsPanelOpen,
+    componentsPanelAvailable,
+    onToggleComponentsPanel: toggleComponentsPanel,
     modes: modesNode,
     headerExtras: (
       <PluginsDropdown
@@ -1328,6 +1326,12 @@ export const WorkspaceView = memo(function WorkspaceView({
                       variablesPanelPinned={variablesPanelPinned}
                       toggleVariablesPanelPinned={toggleVariablesPanelPinned}
                       closeVariablesPanel={() => setVariablesPanelVisible(false)}
+                      componentsPanelVisible={componentsPanelVisible}
+                      componentsPanelPinned={componentsPanelPinned}
+                      toggleComponentsPanelPinned={toggleComponentsPanelPinned}
+                      closeComponentsPanel={closeComponentsPanel}
+                      componentsEditMainId={componentsEditMainId}
+                      setComponentsEditMainId={setComponentsEditMainId}
                       pluginProject={pluginProject}
                       pluginActions={pluginActions}
                       pluginTheme={pluginTheme}

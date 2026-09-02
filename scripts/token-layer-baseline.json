@@ -574,14 +574,20 @@
     },
     {
       "path": "src/styles/features/css-cascade/chips.css",
-      "token": "--space-04",
+      "token": "--space-02",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/css-cascade/chips.css",
+      "token": "--space-04",
+      "count": 2,
+      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
+    },
+    {
+      "path": "src/styles/features/css-cascade/chips.css",
       "token": "--space-06",
-      "count": 1,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -635,24 +641,18 @@
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--space-02",
-      "count": 3,
+      "count": 4,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--space-04",
-      "count": 3,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--space-06",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/css-cascade/main.css",
-      "token": "--space-08",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
@@ -671,7 +671,7 @@
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--stroke-1",
-      "count": 2,
+      "count": 4,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -1877,7 +1877,7 @@
     {
       "path": "src/styles/features/workspace/sidebar.css",
       "token": "--stroke-1",
-      "count": 11,
+      "count": 9,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
