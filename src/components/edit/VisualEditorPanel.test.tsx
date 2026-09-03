@@ -4,6 +4,7 @@ import { VisualEditorPanel } from './VisualEditorPanel';
 import {
   BASE_BREAKPOINT,
   DEFAULT_BREAKPOINTS,
+  type ResetSpec,
   type Breakpoint,
   type UsageReport,
 } from '../../lib/edit';
@@ -36,7 +37,8 @@ function renderPanel(
   onApplyEnum = vi.fn(),
   onSetSide = vi.fn(),
   onReset = vi.fn(),
-  editTarget: import('../../hooks/useVisualEditor').EditTarget = { kind: 'element' }
+  editTarget: import('../../hooks/useVisualEditor').EditTarget = { kind: 'element' },
+  onSetPositionSide = vi.fn()
 ) {
   return render(
     <VisualEditorPanel
@@ -52,6 +54,7 @@ function renderPanel(
       onToggleAutoSave={onToggleAutoSave}
       onStepGap={vi.fn()}
       onSetSide={onSetSide}
+      onSetPositionSide={onSetPositionSide}
       onApplyEnum={onApplyEnum}
       onReset={onReset}
       multiTarget="all"
@@ -133,6 +136,81 @@ describe('VisualEditorPanel', () => {
     expect(positionSection).toHaveTextContent('Z-index');
     expect(layoutSection).not.toHaveTextContent('Position');
     expect(layoutSection).not.toHaveTextContent('Z-index');
+  });
+
+  it('renders the four-sided offset box for a positioned element', () => {
+    const selection: Selection = {
+      signature: { className: 'relative top-4 inset-x-2', tagName: 'div', ancestorClasses: [] },
+      resolution: {
+        status: 'resolved',
+        file: 'components/Hero.tsx',
+        line: 11,
+        column: 1,
+        class_name: 'relative top-4 inset-x-2',
+        confidence: 'unique',
+      },
+      instanceCount: 1,
+    };
+
+    renderPanel(selection, 'relative top-4 inset-x-2');
+
+    const box = screen.getByTestId('position-box');
+    expect(box.querySelectorAll('.ss-box__band')).toHaveLength(4);
+    expect(within(box).getByRole('button', { name: 'Top' })).toHaveTextContent('4');
+    expect(within(box).getByRole('button', { name: 'Bottom' })).toHaveTextContent('Auto');
+    expect(within(box).getByRole('button', { name: 'Left' })).toHaveTextContent('2');
+    expect(within(box).getByRole('button', { name: 'Right' })).toHaveTextContent('2');
+  });
+
+  it('keeps the offset box hidden while Position is Static', () => {
+    renderPanel(resolvedSelection, 'static p-3');
+    expect(screen.queryByTestId('position-box')).not.toBeInTheDocument();
+  });
+
+  it('commits a manually entered position offset from the popup', () => {
+    vi.stubGlobal('CSS', { supports: () => true });
+    const onSetPositionSide = vi.fn();
+    const selection: Selection = {
+      signature: { className: 'relative', tagName: 'div', ancestorClasses: [] },
+      resolution: {
+        status: 'resolved',
+        file: 'components/Hero.tsx',
+        line: 11,
+        column: 1,
+        class_name: 'relative',
+        confidence: 'unique',
+      },
+      instanceCount: 1,
+    };
+
+    renderPanel(
+      selection,
+      'relative',
+      BASE_BREAKPOINT,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { kind: 'element' },
+      onSetPositionSide
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Top' }));
+
+    const input = within(screen.getByRole('dialog', { name: 'Top' })).getByRole('textbox', {
+      name: 'Top',
+    });
+    expect(input).toHaveValue('auto');
+    fireEvent.change(input, { target: { value: '10rem' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSetPositionSide).toHaveBeenLastCalledWith('top', {
+      kind: 'arbitrary',
+      raw: '10rem',
+    });
+    vi.unstubAllGlobals();
   });
 
   it('shows read-only reason and no controls for a read-only element', () => {
@@ -345,6 +423,69 @@ describe('VisualEditorPanel', () => {
     expect(inherited).toHaveClass('ss-box__field--inherited');
     expect(modified).toHaveTextContent('6');
     expect(inherited).toHaveTextContent('3');
+  });
+
+  it('Alt-clicking a modified spacing value resets its box utility', () => {
+    const onReset = vi.fn<(spec: ResetSpec) => void>();
+    renderPanel(
+      resolvedSelection,
+      'p-3 md:pt-6',
+      MD,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      onReset
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Padding top' }), { altKey: true });
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    const spec = onReset.mock.calls[0][0];
+    expect(spec.match('pt-6')).toBe(true);
+    expect(spec.match('py-6')).toBe(true);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('Alt-clicking a modified position value resets its offset utility', () => {
+    const onReset = vi.fn<(spec: ResetSpec) => void>();
+    const selection: Selection = {
+      signature: { className: 'relative top-4 inset-x-2', tagName: 'div', ancestorClasses: [] },
+      resolution: {
+        status: 'resolved',
+        file: 'components/Hero.tsx',
+        line: 11,
+        column: 1,
+        class_name: 'relative top-4 inset-x-2',
+        confidence: 'unique',
+      },
+      instanceCount: 1,
+    };
+
+    renderPanel(
+      selection,
+      'relative top-4 inset-x-2',
+      BASE_BREAKPOINT,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      onReset
+    );
+    fireEvent.click(screen.getByTestId('position-box').querySelector('[aria-label="Top"]')!, {
+      altKey: true,
+    });
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+    const spec = onReset.mock.calls[0][0];
+    expect(spec.match('top-4')).toBe(true);
+    expect(spec.match('inset-y-4')).toBe(true);
+    expect(spec.match('inset-x-2')).toBe(false);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('opens a box-model value from its full grabbable panel', () => {

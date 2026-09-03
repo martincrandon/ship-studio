@@ -20,6 +20,7 @@
 @import './components/property-field.css';
 @import './components/empty-state.css';
 @import './components/dropdown.css';
+@import './components/context-menu.css';
 @import './components/spinner.css';
 @import './components/pixel-loader.css';
 @import './components/text-field.css';

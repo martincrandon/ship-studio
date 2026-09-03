@@ -15,8 +15,9 @@
 //! Only **static** string classNames are indexed; dynamic ones (`clsx(...)`,
 //! props, interpolated template literals) never match a source literal and are
 //! reported read-only. A class string that matches several identical source
-//! literals resolves to `Multi` — editable as a group (write all) or one at a
-//! time — so the resolver never guesses a single wrong edit target.
+//! literals is first narrowed by a verified React source hint when one is
+//! available; otherwise it resolves to `Multi` — editable as a group (write all)
+//! or one at a time — so the resolver never guesses a single wrong edit target.
 
 use crate::commands::projects::detect_project_type;
 use crate::errors::CommandError;
@@ -480,6 +481,162 @@ fn normalize_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Whether a browser source hint identifies this indexed project-relative file.
+///
+/// React's development stack normally reports a localhost URL (`/src/Card.tsx`),
+/// while source-map entries can be project-relative, absolute paths, or `file:`
+/// URLs. Only local/project-owned forms are accepted here. In particular, an
+/// arbitrary remote URL that merely ends with `Card.tsx` must not be allowed to
+/// pin an unrelated source file in this project.
+fn source_hint_matches_file(root: &Path, hint: &str, file: &str) -> bool {
+    let clean = hint.split('?').next().unwrap_or(hint);
+    if let Ok(parsed) =
+        url::Url::parse(clean).or_else(|_| url::Url::parse(&clean.replace(' ', "%20")))
+    {
+        match parsed.scheme() {
+            "file" => {
+                let Ok(path) = parsed.to_file_path() else {
+                    return false;
+                };
+                let Ok(canon_root) = root.canonicalize() else {
+                    return false;
+                };
+                let Ok(canon_file) = path.canonicalize() else {
+                    return false;
+                };
+                let Ok(expected) = root.join(file).canonicalize() else {
+                    return false;
+                };
+                return canon_file == expected && canon_file.starts_with(&canon_root);
+            }
+            "http" | "https" => {
+                let Some(host) = parsed.host_str() else {
+                    return false;
+                };
+                if !matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]") {
+                    return false;
+                }
+                let path = parsed.path().trim_start_matches('/').replace("%20", " ");
+                return path == file || path.ends_with(&format!("/{file}"));
+            }
+            // Webpack's development stack can use this virtual scheme. It has
+            // no filesystem authority, so only the exact indexed relative path
+            // is accepted (never an arbitrary suffix).
+            "webpack-internal" => {
+                let path = parsed.path().trim_start_matches('/').replace("%20", " ");
+                return path == file || path.strip_prefix("./") == Some(file);
+            }
+            _ => return false,
+        }
+    }
+
+    let normalized = clean.replace("%20", " ").replace('\\', "/");
+    if Path::new(&normalized).is_absolute() {
+        let Ok(canon_root) = root.canonicalize() else {
+            return false;
+        };
+        let Ok(canon_file) = Path::new(&normalized).canonicalize() else {
+            return false;
+        };
+        let Ok(expected) = root.join(file).canonicalize() else {
+            return false;
+        };
+        return canon_file.starts_with(&canon_root) && canon_file == expected;
+    }
+    normalized == file
+}
+
+/// Pin one of several identical class literals to the authored JSX/HTML span
+/// reported by React's development source hint. The class and tag are checked
+/// against the actual source span; the line is matched against the opening tag
+/// first (the usual React JSX location), with the literal line as a safe
+/// fallback for multiline attributes. A source column is used only to break a
+/// tie on one line, never to manufacture a match.
+fn disambiguate_by_source_hint(
+    root: &Path,
+    occurrences: &[Occurrence],
+    sig: &ElementSignature,
+) -> Option<Resolution> {
+    let (hint, source_line) = authored_source_hint(root, sig)?;
+    let exact: Vec<&Occurrence> = occurrences
+        .iter()
+        .filter(|o| {
+            o.class_name == sig.class_name
+                && o.tag == sig.tag_name.to_ascii_lowercase()
+                && source_hint_matches_file(root, &hint, &o.file)
+        })
+        .collect();
+    if exact.is_empty() {
+        return None;
+    }
+
+    let mut opening_line = Vec::new();
+    let mut literal_line = Vec::new();
+    for occurrence in exact {
+        let Ok(src) = std::fs::read_to_string(root.join(&occurrence.file)) else {
+            continue;
+        };
+        // Re-find the exact literal so a stale index entry cannot influence the
+        // source-hint decision, then derive the complete authored element span.
+        let Some(span) = find_attr_spans(&src, attrs_for_path(&occurrence.file))
+            .into_iter()
+            .find(|s| {
+                s.line == occurrence.line
+                    && s.column == occurrence.column
+                    && s.value == occurrence.class_name
+                    && s.tag == occurrence.tag
+            })
+        else {
+            continue;
+        };
+        let Some((start, _end)) = element_span(&src, span.value_start) else {
+            continue;
+        };
+        let open_line = line_col(&src, start).0;
+        let open_column = line_col(&src, start).1;
+        if open_line == source_line {
+            opening_line.push((occurrence.file.clone(), span.line, span.column, open_column));
+        }
+        if occurrence.line == source_line {
+            literal_line.push((occurrence.file.clone(), span.line, span.column, open_column));
+        }
+    }
+
+    // Prefer an exact source-column match at the opening tag. React columns are
+    // 1-based in the selection payload and may point at the JSX callsite.
+    let hinted_column = sig.source_column;
+    for candidates in [&opening_line, &literal_line] {
+        if let Some(hinted_column) = hinted_column {
+            let exact_column: Vec<_> = candidates
+                .iter()
+                .filter(|(_, _, literal_column, open_column)| {
+                    *open_column == hinted_column || *literal_column == hinted_column
+                })
+                .collect();
+            if let [(file, line, column, _)] = exact_column.as_slice() {
+                return Some(Resolution::Resolved {
+                    file: (*file).clone(),
+                    line: *line,
+                    column: *column,
+                    class_name: sig.class_name.clone(),
+                    confidence: "source".into(),
+                });
+            }
+        }
+        if candidates.len() == 1 {
+            let (file, line, column, _) = &candidates[0];
+            return Some(Resolution::Resolved {
+                file: file.clone(),
+                line: *line,
+                column: *column,
+                class_name: sig.class_name.clone(),
+                confidence: "source".into(),
+            });
+        }
+    }
+    None
+}
+
 /// When several byte-identical className literals match (a shared utility string
 /// on distinct elements), pin the one the user actually clicked using its text
 /// content. The clicked element's text is unique to its source location even when
@@ -537,6 +694,13 @@ pub fn resolve_classname_source(
 ) -> Result<Resolution, CommandError> {
     let root = validate_project_path(&project_path)?;
     let occurrences = index_occurrences_cached(&root);
+    // A React development fiber gives us the authored JSX callsite for the
+    // clicked runtime node. Verify that hint against the exact static class and
+    // tag span before falling back to class/tag/ancestor heuristics; this is the
+    // key distinction between two otherwise identical siblings.
+    if let Some(pinned) = disambiguate_by_source_hint(&root, occurrences.as_slice(), &signature) {
+        return Ok(pinned);
+    }
     let resolution = resolve(occurrences.as_slice(), &signature);
     // Last rung: a shared className resolved to Multi can often still be pinned to
     // the clicked element by its (unique) text content — so "edit this element"
@@ -3033,18 +3197,36 @@ pub(crate) struct LocatedInstance {
 /// Locate the element anchored by the className literal at `file:line` and
 /// derive its markup span — the shared tail of every element-markup path, so
 /// single- and multi-instance callers derive spans identically.
+#[cfg(test)]
 fn locate_instance(
     root: &Path,
     file: &str,
     line: usize,
     class_name: &str,
 ) -> Result<LocatedInstance, CommandError> {
+    locate_instance_at(root, file, line, class_name, None)
+}
+
+/// Locate a class literal with an optional exact source column. The column is
+/// required when a source hint selected between identical same-line siblings;
+/// without it, the first same-line literal would be selected again on write.
+fn locate_instance_at(
+    root: &Path,
+    file: &str,
+    line: usize,
+    class_name: &str,
+    column: Option<usize>,
+) -> Result<LocatedInstance, CommandError> {
     let abs = root.join(file);
     let src = std::fs::read_to_string(&abs)
         .map_err(|e| classify_fs_error("open this file to edit it", &abs, &e))?;
     let span = find_attr_spans(&src, attrs_for_path(file))
         .into_iter()
-        .find(|s| s.line == line && s.value == class_name)
+        .find(|s| {
+            s.line == line
+                && s.value == class_name
+                && column.map_or(true, |expected| s.column == expected)
+        })
         .ok_or_else(|| CommandError::Validation {
             field: "element".into(),
             reason: "source no longer matches — reselect the element".into(),
@@ -3122,9 +3304,30 @@ fn locate_instances_at(
         Resolution::Resolved {
             file,
             line,
+            column,
             class_name,
             ..
-        } => Ok((vec![locate_instance(root, &file, line, &class_name)?], None)),
+        } => {
+            if let Some(t) = target {
+                if t.file != file || t.line != line || t.column != column {
+                    return Err(CommandError::Validation {
+                        field: "location".into(),
+                        reason: "that source location no longer matches — reselect the element"
+                            .into(),
+                    });
+                }
+            }
+            Ok((
+                vec![locate_instance_at(
+                    root,
+                    &file,
+                    line,
+                    &class_name,
+                    Some(column),
+                )?],
+                None,
+            ))
+        }
         Resolution::Multi {
             locations,
             class_name,
@@ -3140,12 +3343,13 @@ fn locate_instances_at(
                             .into(),
                     });
                 }
-                let inst = locate_instance(root, &t.file, t.line, &class_name)?;
+                let inst =
+                    locate_instance_at(root, &t.file, t.line, &class_name, Some(t.column))?;
                 return Ok((vec![inst], Some(locations)));
             }
             let instances = locations
                 .iter()
-                .map(|l| locate_instance(root, &l.file, l.line, &class_name))
+                .map(|l| locate_instance_at(root, &l.file, l.line, &class_name, Some(l.column)))
                 .collect::<Result<Vec<_>, _>>()?;
             let first_html = &instances[0].src[instances[0].start..instances[0].end];
             if instances
@@ -3666,6 +3870,103 @@ mod tests {
         )
         .unwrap();
         assert!(source_exts(static_site.path()).contains(&"html"));
+    }
+
+    #[test]
+    fn source_hint_pins_one_of_identical_class_literals() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("Cards.tsx"),
+            "export const Cards = () => <>\n  <div className=\"card\">First</div>\n  <div className=\"card\">Second</div>\n</>;\n",
+        )
+        .unwrap();
+
+        let occurrences = index_occurrences(root);
+        let mut selected = sig("card", "div", &[]);
+        selected.source_file = Some("http://localhost:5173/Cards.tsx".into());
+        selected.source_line = Some(3);
+        // No column is needed when the verified source line contains one
+        // matching authored span; the source column is only a tie-breaker.
+        let pinned = disambiguate_by_source_hint(root, &occurrences, &selected).unwrap();
+        assert_eq!(
+            pinned,
+            Resolution::Resolved {
+                file: "Cards.tsx".into(),
+                line: 3,
+                column: 19,
+                class_name: "card".into(),
+                confidence: "source".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn source_column_pins_the_second_same_line_sibling_and_locates_it_again() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        let source = "export const Cards = () => (\n  <div className=\"card\">First</div><div className=\"card\">Second</div>\n);\n";
+        std::fs::write(root.join("Cards.tsx"), source).unwrap();
+
+        let spans = find_classname_spans(source);
+        assert_eq!(spans.len(), 2);
+        let second_open = element_span(source, spans[1].value_start).unwrap().0;
+        let second_open_column = line_col(source, second_open).1;
+
+        let occurrences = index_occurrences(root);
+        let mut selected = sig("card", "div", &[]);
+        selected.source_file = Some("http://localhost:5173/Cards.tsx".into());
+        selected.source_line = Some(2);
+        selected.source_column = Some(second_open_column);
+
+        let pinned = disambiguate_by_source_hint(root, &occurrences, &selected).unwrap();
+        let Resolution::Resolved {
+            file, line, column, ..
+        } = pinned
+        else {
+            panic!("expected source-pinned resolution");
+        };
+        assert_eq!(
+            (file.as_str(), line, column),
+            ("Cards.tsx", 2, spans[1].column)
+        );
+
+        // The resolved literal column must survive the second lookup used by
+        // structural operations; otherwise the first sibling would be edited.
+        let (instances, _) = locate_instances_at(
+            root,
+            Resolution::Resolved {
+                file,
+                line,
+                column,
+                class_name: "card".into(),
+                confidence: "source".into(),
+            },
+            None,
+            Some(&selected),
+        )
+        .unwrap();
+        assert_eq!(
+            &instances[0].src[instances[0].start..instances[0].end],
+            "<div className=\"card\">Second</div>"
+        );
+    }
+
+    #[test]
+    fn source_hint_rejects_non_local_remote_file_even_with_matching_suffix() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let root = dir.path();
+        std::fs::write(
+            root.join("Cards.tsx"),
+            "export const Cards = () => <div className=\"card\">First</div>;\n",
+        )
+        .unwrap();
+        let occurrences = index_occurrences(root);
+        let mut selected = sig("card", "div", &[]);
+        selected.source_file = Some("https://example.com/Cards.tsx".into());
+        selected.source_line = Some(1);
+
+        assert!(disambiguate_by_source_hint(root, &occurrences, &selected).is_none());
     }
 
     #[test]

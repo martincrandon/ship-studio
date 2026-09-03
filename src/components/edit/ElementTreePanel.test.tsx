@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ElementTreePanel } from './ElementTreePanel';
 
 describe('ElementTreePanel', () => {
@@ -114,5 +114,81 @@ describe('ElementTreePanel', () => {
       panel.querySelector('[data-tree-id="6"] [data-icon-name="ElementCodeBlockIcon"]')
     ).toBeInTheDocument();
     expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).not.toBeInTheDocument();
+  });
+
+  it('uses the native context menu for structural actions and copies the node selector', async () => {
+    const onSelect = vi.fn();
+    const selectAndRun = vi.fn((_id: number, action: () => void) => action());
+    const duplicate = vi.fn();
+    const remove = vi.fn();
+    const copy = vi.fn();
+    const cut = vi.fn();
+    const paste = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(
+      <ElementTreePanel
+        tree={{
+          id: 1,
+          tag: 'body',
+          cls: '',
+          text: '',
+          children: [{ id: 2, tag: 'div', cls: 'card featured', text: '', children: [] }],
+        }}
+        truncated={false}
+        selectedId={1}
+        onSelect={onSelect}
+        onHover={vi.fn()}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+        structure={{
+          selectAndRun,
+          insert: vi.fn(),
+          duplicate,
+          remove,
+          copy,
+          cut,
+          paste,
+          hasClipboard: true,
+          clipboardSourceNodeId: 99,
+        }}
+      />
+    );
+
+    const row = screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')!;
+    fireEvent.contextMenu(row, { clientX: 80, clientY: 100 });
+    expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(screen.getByText('⌘D')).toBeInTheDocument();
+    expect(screen.getByText('⌫')).toBeInTheDocument();
+    expect(screen.getByText('⌘X')).toBeInTheDocument();
+    expect(screen.getByText('⌘C')).toBeInTheDocument();
+    expect(screen.getByText('⌘V')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Duplicate ⌘D$/ }));
+    expect(selectAndRun).toHaveBeenCalledWith(2, duplicate);
+
+    fireEvent.contextMenu(row);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Cut/ }));
+    expect(selectAndRun).toHaveBeenCalledWith(2, cut);
+
+    fireEvent.contextMenu(row);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Copy ⌘C$/ }));
+    expect(selectAndRun).toHaveBeenCalledWith(2, copy);
+
+    fireEvent.contextMenu(row);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Paste ⌘V$/ }));
+    expect(selectAndRun).toHaveBeenCalledWith(2, paste);
+
+    fireEvent.contextMenu(row);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Copy ID' }));
+      await Promise.resolve();
+    });
+    expect(writeText).toHaveBeenCalledWith('div.card.featured');
+
+    fireEvent.contextMenu(row);
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Delete ⌫$/ }));
+    expect(selectAndRun).toHaveBeenCalledWith(2, remove);
   });
 });

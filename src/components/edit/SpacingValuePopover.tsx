@@ -37,17 +37,25 @@ interface Position {
 interface Props {
   anchor: HTMLElement;
   label: string;
-  cssProp: 'padding' | 'margin';
+  cssProp: string;
   side: Side;
   value: SpacingValue | null;
+  /** Empty display for properties whose CSS initial value is not 0 (e.g. offsets). */
+  emptyValue?: string;
   onSet: (value: SpacingValue) => void;
   onClose: () => void;
 }
 
 /** The value sent to ValueField. Scale values keep their compact numeric
  * display in the input and use px as the popup's explicit editing unit. */
-function fieldValue(value: SpacingValue | null): string {
-  return value?.kind === 'arbitrary' ? value.raw : `${spacingDisplay(value)}px`;
+function fieldValue(value: SpacingValue | null, emptyValue: string): string {
+  return value?.kind === 'arbitrary'
+    ? value.raw
+    : value?.kind === 'theme'
+      ? value.raw
+      : value
+        ? `${spacingDisplay(value)}px`
+        : emptyValue;
 }
 
 export function SpacingValuePopover({
@@ -56,13 +64,16 @@ export function SpacingValuePopover({
   cssProp,
   side,
   value,
+  emptyValue = '0px',
   onSet,
   onClose,
 }: Props) {
   const popoverRef = useRef<HTMLDivElement>(null);
-  const initialValue = fieldValue(value);
+  const initialValue = fieldValue(value, emptyValue);
   const latestValueRef = useRef(initialValue);
   const [position, setPosition] = useState<Position | null>(null);
+  const allowNegative =
+    cssProp === 'margin' || ['top', 'right', 'bottom', 'left'].includes(cssProp);
 
   useEffect(() => {
     latestValueRef.current = initialValue;
@@ -75,18 +86,18 @@ export function SpacingValuePopover({
       // and leave an unset side unset when the user simply dismisses the popup.
       if (normalized === initialValue) return true;
       if (value?.kind === 'scale' || value === null) {
-        const scale = /^(\d+)px$/i.exec(normalized);
-        if (scale) {
+        const scale = /^(-?\d+(?:\.\d+)?)px$/i.exec(normalized);
+        if (scale && (allowNegative || Number(scale[1]) >= 0)) {
           onSet({ kind: 'scale', n: Number(scale[1]) });
           return true;
         }
       }
-      const parsed = parseSpacingInput(normalized, cssProp);
+      const parsed = parseSpacingInput(normalized, cssProp, { allowNegative });
       if (parsed.kind === 'invalid') return false;
       onSet(parsed);
       return true;
     },
-    [cssProp, initialValue, onSet, value]
+    [allowNegative, cssProp, initialValue, onSet, value]
   );
 
   const dismiss = useCallback(() => {
@@ -224,7 +235,7 @@ export function SpacingValuePopover({
           event.preventDefault();
           const fine = value?.kind === 'arbitrary' ? 0.1 : 1;
           const step = event.shiftKey ? 10 : event.altKey ? fine : 1;
-          onSet(stepSpacingValue(value, event.key === 'ArrowUp' ? step : -step));
+          onSet(stepSpacingValue(value, event.key === 'ArrowUp' ? step : -step, allowNegative));
         }}
         onValueChange={(next) => {
           latestValueRef.current = next;

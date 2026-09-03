@@ -632,7 +632,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     enabled: activeEditMode,
     onToast,
   });
-  // Structural edits (insert / duplicate / delete) — shared by both styling
+  // Structural edits (insert / duplicate / delete / cut / copy / paste) — shared by both styling
   // editors the same way text editing is; drives the canvas toolbar and the
   // element tree's context menu.
   const structure = useElementStructure({
@@ -726,6 +726,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               title: 'Duplicate selected element',
               category: 'action' as const,
               when: 'project' as const,
+              shortcut: kbd('mod', 'D'),
               keywords: ['duplicate', 'copy', 'element', 'clone'],
               run: () => {
                 if (!structureSelection) {
@@ -740,6 +741,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               title: 'Delete selected element',
               category: 'action' as const,
               when: 'project' as const,
+              shortcut: kbd('⌫'),
               keywords: ['delete', 'remove', 'element'],
               run: () => {
                 if (!structureSelection) {
@@ -749,6 +751,55 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 void structure.remove();
               },
             },
+            {
+              id: 'edit.cutElement',
+              title: 'Cut selected element',
+              category: 'action' as const,
+              when: 'project' as const,
+              shortcut: kbd('mod', 'X'),
+              keywords: ['cut', 'move', 'element'],
+              run: () => {
+                if (!structureSelection) {
+                  onToast('Select an element on the canvas first', 'error');
+                  return;
+                }
+                void structure.cut();
+              },
+            },
+            {
+              id: 'edit.copyElement',
+              title: 'Copy selected element',
+              category: 'action' as const,
+              when: 'project' as const,
+              shortcut: kbd('mod', 'C'),
+              keywords: ['copy', 'element', 'children', 'subtree'],
+              run: () => {
+                if (!structureSelection) {
+                  onToast('Select an element on the canvas first', 'error');
+                  return;
+                }
+                void structure.copy();
+              },
+            },
+            ...(structure.hasClipboard
+              ? [
+                  {
+                    id: 'edit.pasteElement',
+                    title: 'Paste element inside selection',
+                    category: 'action' as const,
+                    when: 'project' as const,
+                    shortcut: kbd('mod', 'V'),
+                    keywords: ['paste', 'element', 'children', 'subtree'],
+                    run: () => {
+                      if (!structureSelection) {
+                        onToast('Select an element on the canvas first', 'error');
+                        return;
+                      }
+                      void structure.paste();
+                    },
+                  },
+                ]
+              : []),
           ]
         : [],
     [
@@ -756,6 +807,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       structureSelection,
       structure.duplicate,
       structure.remove,
+      structure.cut,
+      structure.copy,
+      structure.paste,
+      structure.hasClipboard,
       structureInsertOpen,
       onToast,
     ]
@@ -1760,6 +1815,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                       insert: (position, kind) => void structure.insert(position, kind),
                       duplicate: () => void structure.duplicate(),
                       remove: () => void structure.remove(),
+                      copy: () => void structure.copy(),
+                      cut: () => void structure.cut(),
+                      paste: () => void structure.paste(),
+                      hasClipboard: structure.hasClipboard,
+                      clipboardSourceNodeId: structure.clipboardSourceNodeId,
                     }
                   : undefined
               }
@@ -1799,6 +1859,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               projectPath={projectPath}
               currentClass={editor.currentClass}
               variables={cssVariables.variables}
+              tailwindVersion={editor.tailwindVersion}
+              utilityPrefix={editor.utilityPrefix ?? undefined}
+              spacingScale={editor.spacingScale ?? undefined}
               textResolution={textEditing.textResolution}
               imageResolution={editor.imageResolution}
               onReplaceImage={editor.replaceImage}
@@ -1816,6 +1879,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               onToggleAutoSave={editor.toggleAutoSave}
               onStepGap={(dir, step) => editor.stepSpacing('gap', dir, step)}
               onSetSide={editor.setBoxSide}
+              onSetPositionSide={editor.setPositionSide}
               onApplyEnum={editor.applyEnum}
               onReset={editor.reset}
               multiTarget={editor.multiTarget}

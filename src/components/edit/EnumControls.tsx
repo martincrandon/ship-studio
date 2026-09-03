@@ -140,7 +140,7 @@ export function EnumControlRow({
   onOpenInCode,
 }: { control: EnumControl } & Props) {
   const { value: active, definedAt } = readLayer(currentClass, layer, (s) =>
-    activeEnumToken(s, control)
+    activeEnumToken(s, control, layer.utilityPrefix)
   );
 
   // With nothing set locally, an attributed ancestor token preselects its option
@@ -263,7 +263,7 @@ export function EnumControlRow({
         label={control.label}
         definedAt={definedAt}
         active={layer.bp}
-        onReset={() => onReset(enumResetSpec(control))}
+        onReset={() => onReset(enumResetSpec(control, layer.utilityPrefix))}
         inherited={inherited}
         onAdopt={adopt}
         projectPath={projectPath}

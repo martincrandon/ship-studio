@@ -437,6 +437,7 @@ pub fn run() {
             commands::edit::project_uses_react,
             commands::edit_structure::insert_element,
             commands::edit_structure::duplicate_element,
+            commands::edit_structure::paste_element,
             commands::edit_structure::delete_element,
             commands::edit_css::resolve_css_rule,
             commands::edit_css::set_css_declaration,

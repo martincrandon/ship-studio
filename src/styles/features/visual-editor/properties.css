@@ -69,6 +69,10 @@
   justify-self: center;
   margin-top: var(--spacing-xs);
 }
+.ss-edit-panel__section--position .ss-box--position {
+  align-self: flex-end;
+  width: calc(100% - var(--editor-panel-label-w) - var(--spacing-xs));
+}
 
 /* Section rows use the Figma form proportions. Context rows intentionally keep
    their existing flex layout because they are outside the disclosure bodies. */
@@ -131,6 +135,14 @@
   background: var(--surface-panel);
   box-shadow: var(--button-shadow);
   user-select: none;
+}
+/* The position control is the padding ring on its own. Repoint the shared
+   edge-field geometry at the ring's dimensions so the root wraps the visible
+   surface instead of leaving a larger empty frame around it. */
+.ss-box--position {
+  --editor-panel-spacing-inner-x: var(--editor-panel-spacing-core-x);
+  --editor-panel-spacing-inner-y: var(--editor-panel-spacing-core-y);
+  height: calc(var(--editor-panel-spacing-core-h) + 2 * var(--editor-panel-spacing-core-y));
 }
 .ss-box__margin,
 .ss-box__padding {
@@ -275,7 +287,11 @@
 .ss-box__inner:has(> .ss-box__edge--t:hover) .ss-box__padding .ss-box__band--top,
 .ss-box__inner:has(> .ss-box__edge--r:hover) .ss-box__padding .ss-box__band--right,
 .ss-box__inner:has(> .ss-box__edge--b:hover) .ss-box__padding .ss-box__band--bottom,
-.ss-box__inner:has(> .ss-box__edge--l:hover) .ss-box__padding .ss-box__band--left {
+.ss-box__inner:has(> .ss-box__edge--l:hover) .ss-box__padding .ss-box__band--left,
+.ss-box--position:has(> .ss-box__edge--t:hover) .ss-box__padding .ss-box__band--top,
+.ss-box--position:has(> .ss-box__edge--r:hover) .ss-box__padding .ss-box__band--right,
+.ss-box--position:has(> .ss-box__edge--b:hover) .ss-box__padding .ss-box__band--bottom,
+.ss-box--position:has(> .ss-box__edge--l:hover) .ss-box__padding .ss-box__band--left {
   background: var(--ss-box-band-hover);
 }
 .ss-box__core {
@@ -613,6 +629,71 @@
    keyword or length. Shares the invalid flag with __num. */
 .ss-edit-panel__text {
   width: var(--editor-panel-field-w);
+}
+
+/* Radius can edit the border-radius shorthand as one value or as four corner
+   values. The mode button stays beside the active field group in both states. */
+.ss-radius-control {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  width: 100%;
+  min-width: 0;
+}
+.ss-radius-control__fields {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ss-radius-control__value {
+  width: 100%;
+  min-width: 0;
+}
+.ss-radius-control__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+.ss-radius-control__corner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+.ss-radius-control__marker {
+  flex: 0 0 var(--size-icon-sm);
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  box-sizing: border-box;
+  color: var(--text-muted);
+}
+.ss-radius-control__marker--top-left {
+  border-top: var(--border-width-default) solid currentColor;
+  border-left: var(--border-width-default) solid currentColor;
+  border-top-left-radius: var(--radius-lg);
+}
+.ss-radius-control__marker--top-right {
+  border-top: var(--border-width-default) solid currentColor;
+  border-right: var(--border-width-default) solid currentColor;
+  border-top-right-radius: var(--radius-lg);
+}
+.ss-radius-control__marker--bottom-right {
+  border-right: var(--border-width-default) solid currentColor;
+  border-bottom: var(--border-width-default) solid currentColor;
+  border-bottom-right-radius: var(--radius-lg);
+}
+.ss-radius-control__marker--bottom-left {
+  border-bottom: var(--border-width-default) solid currentColor;
+  border-left: var(--border-width-default) solid currentColor;
+  border-bottom-left-radius: var(--radius-lg);
+}
+.ss-radius-control__toggle {
+  flex: 0 0 var(--size-control-compact);
+  margin-top: calc((var(--size-control-medium) - var(--size-control-compact)) / 2);
+  color: var(--text-muted);
+}
+.ss-radius-control__toggle:hover:not(:disabled) {
+  color: var(--text-primary);
 }
 
 .ss-edit-panel__display-controls,

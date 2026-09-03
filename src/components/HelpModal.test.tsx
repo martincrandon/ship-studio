@@ -35,6 +35,13 @@ describe('HelpModal', () => {
     expect(shortcutsTab).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Open command palette')).toBeVisible();
     expect(screen.getByText('⌘K')).toHaveClass('workspace-sidebar-filter-shortcut');
+    expect(screen.getByText('Copy selected element')).toBeVisible();
+    expect(screen.getByText('⌘C')).toHaveClass('workspace-sidebar-filter-shortcut');
+    expect(screen.getByText('⌘X')).toHaveClass('workspace-sidebar-filter-shortcut');
+    expect(screen.getByText('⌘V')).toHaveClass('workspace-sidebar-filter-shortcut');
+    expect(screen.getByText('Duplicate selected element')).toBeVisible();
+    expect(screen.getByText('⌘D')).toHaveClass('workspace-sidebar-filter-shortcut');
+    expect(screen.getByText('⌫')).toHaveClass('workspace-sidebar-filter-shortcut');
     expect(screen.queryByText('/clear')).not.toBeVisible();
 
     fireEvent.click(commandsTab);

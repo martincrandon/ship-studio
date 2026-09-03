@@ -3,17 +3,39 @@
  *
  * Shows the rendered DOM as a collapsible tree; clicking a row selects the
  * element through the same path as clicking it on the canvas, so the visual
- * editor panel picks it up. Structural edits (insert / duplicate / delete)
+ * editor panel picks it up. Structural edits (insert / duplicate / delete /
+ * cut / copy / paste)
  * live in the row context menu; each action selects its row first
  * (`selectAndRun`) so it operates on the element the user aimed at.
  */
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { ChevronRightIcon, CloseIcon, ElementsIcon, PinIcon } from '@/components/icons';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  CopyIcon,
+  CutIcon,
+  ElementsIcon,
+  DuplicateIcon,
+  PinIcon,
+  PasteIcon,
+  PlusIcon,
+  TrashIcon,
+} from '@/components/icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
-import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
 import { getElementIcon } from './element-icons';
+import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from '../primitives/ContextMenu';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
@@ -26,6 +48,7 @@ import {
   type ElementKind,
   type InsertPosition,
 } from '../../lib/edit-structure';
+import { kbd } from '../../lib/shortcuts';
 
 /** The structural-edit actions the panel's context menu drives
  *  (from `useElementStructure`). */
@@ -34,6 +57,11 @@ export interface TreeStructureActions {
   insert: (position: InsertPosition, kind: ElementKind) => void;
   duplicate: () => void;
   remove: () => void;
+  copy: () => void;
+  cut: () => void;
+  paste: () => void;
+  hasClipboard: boolean;
+  clipboardSourceNodeId: number | null;
 }
 
 interface Props {
@@ -50,7 +78,7 @@ interface Props {
   /** Notified when the Visual/Code view toggles, so the parent can widen the
    *  panel for editing markup. */
   onViewChange?: (view: 'visual' | 'code') => void;
-  /** When provided, rows get an insert/duplicate/delete context menu. */
+  /** When provided, rows get the structural-edit context menu. */
   structure?: TreeStructureActions;
   /** Ref to the panel shell, used by the parent resize control. */
   panelRef?: RefObject<HTMLDivElement | null>;
@@ -95,6 +123,14 @@ function RowLabel({ node, showTagIcons }: { node: ElementTreeNode; showTagIcons:
   );
 }
 
+function selectorForNode(node: ElementTreeNode): string {
+  return `${node.tag}${node.cls
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((className) => `.${className}`)
+    .join('')}`;
+}
+
 export function ElementTreePanel({
   tree,
   truncated,
@@ -114,8 +150,10 @@ export function ElementTreePanel({
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
   const [showTagIcons, setShowTagIcons] = useState(false);
-  // Context menu + insert palette, both anchored to the right-clicked row.
-  const [ctxMenu, setCtxMenu] = useState<{
+  // The insert palette is anchored to the most recent context-menu gesture.
+  // The primitive owns menu state; this ref only bridges the menu item to the
+  // existing InsertMenu, which opens after the context menu closes.
+  const contextTargetRef = useRef<{
     nodeId: number;
     tag: string;
     x: number;
@@ -126,6 +164,14 @@ export function ElementTreePanel({
     tag: string;
     anchor: { left: number; top: number; bottom: number };
   } | null>(null);
+  const { showToast } = useOptionalToast();
+  const notifyCopy = useCallback(
+    () => showToast('Element id copied — paste it to your agent', 'success'),
+    [showToast]
+  );
+  const { copy: copyElementId, isCopied: elementIdCopied } = useCopyToClipboard({
+    onCopy: notifyCopy,
+  });
   const selectView = (next: 'visual' | 'code') => {
     setView(next);
     onViewChange?.(next);
@@ -194,41 +240,141 @@ export function ElementTreePanel({
     // Collapsed = explicitly collapsed, or deep and never explicitly expanded.
     // The `collapsed` set tracks explicit toggles both ways via presence.
     const isCollapsed = hasChildren && collapsedState(node.id, depth);
+    const clipboardSourceNodeId = structure?.clipboardSourceNodeId;
+    const pasteDisabled =
+      !structure?.hasClipboard ||
+      VOID_ELEMENTS.has(node.tag) ||
+      clipboardSourceNodeId === node.id ||
+      (clipboardSourceNodeId != null && ancestors?.get(node.id)?.includes(clipboardSourceNodeId));
     return (
       <div key={node.id} className="ss-tree-node">
-        <div
-          className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
-          style={{ paddingLeft: depth * 14 + 6 }}
-          data-tree-id={node.id}
-          onClick={() => onSelect(node.id)}
-          onContextMenu={
-            structure &&
-            ((e) => {
-              e.preventDefault();
-              onSelect(node.id); // select first, so the canvas shows the target
-              setCtxMenu({ nodeId: node.id, tag: node.tag, x: e.clientX, y: e.clientY });
-            })
-          }
-          onMouseEnter={() => onHover(node.id)}
-          onMouseLeave={() => onHover(null)}
-        >
-          {hasChildren ? (
-            <button
-              type="button"
-              className={`ss-tree-chevron${isCollapsed ? '' : ' open'}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggle(node.id);
+        {structure ? (
+          <ContextMenu>
+            <ContextMenuTrigger
+              asChild
+              onContextMenu={(e) => {
+                onSelect(node.id); // select first, so the canvas shows the target
+                contextTargetRef.current = {
+                  nodeId: node.id,
+                  tag: node.tag,
+                  x: e.clientX,
+                  y: e.clientY,
+                };
               }}
-              aria-label={isCollapsed ? 'Expand' : 'Collapse'}
             >
-              <ChevronRightIcon size={10} />
-            </button>
-          ) : (
-            <span className="ss-tree-chevron-spacer" />
-          )}
-          <RowLabel node={node} showTagIcons={showTagIcons} />
-        </div>
+              <div
+                className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
+                style={{ paddingLeft: depth * 14 + 6 }}
+                data-tree-id={node.id}
+                onClick={() => onSelect(node.id)}
+                onMouseEnter={() => onHover(node.id)}
+                onMouseLeave={() => onHover(null)}
+              >
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    className={`ss-tree-chevron${isCollapsed ? '' : ' open'}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggle(node.id);
+                    }}
+                    aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                  >
+                    <ChevronRightIcon size={10} />
+                  </button>
+                ) : (
+                  <span className="ss-tree-chevron-spacer" />
+                )}
+                <RowLabel node={node} showTagIcons={showTagIcons} />
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent aria-label={`Actions for ${node.tag}`}>
+              <ContextMenuItem
+                onSelect={() => {
+                  const target = contextTargetRef.current;
+                  if (!target || target.nodeId !== node.id) return;
+                  setInsertFor({
+                    nodeId: node.id,
+                    tag: node.tag,
+                    anchor: { left: target.x, top: target.y, bottom: target.y },
+                  });
+                }}
+              >
+                <PlusIcon size={12} />
+                <span>Insert element…</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onSelect={() => structure.selectAndRun(node.id, structure.duplicate)}
+              >
+                <DuplicateIcon size={12} />
+                <span>Duplicate</span>
+                <ContextMenuShortcut>{kbd('mod', 'D')}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={() => structure.selectAndRun(node.id, structure.remove)}
+              >
+                <TrashIcon size={12} />
+                <span>Delete</span>
+                <ContextMenuShortcut>{kbd('⌫')}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => structure.selectAndRun(node.id, structure.cut)}>
+                <CutIcon size={12} />
+                <span>Cut</span>
+                <ContextMenuShortcut>{kbd('mod', 'X')}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => structure.selectAndRun(node.id, structure.copy)}>
+                <CopyIcon size={12} />
+                <span>Copy</span>
+                <ContextMenuShortcut>{kbd('mod', 'C')}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={pasteDisabled}
+                onSelect={() => structure.selectAndRun(node.id, structure.paste)}
+              >
+                <PasteIcon size={12} />
+                <span>Paste</span>
+                <ContextMenuShortcut>{kbd('mod', 'V')}</ContextMenuShortcut>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onSelect={() => {
+                  void copyElementId(selectorForNode(node));
+                }}
+              >
+                {elementIdCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                <span>{elementIdCopied ? 'Copied' : 'Copy ID'}</span>
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+        ) : (
+          <div
+            className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
+            style={{ paddingLeft: depth * 14 + 6 }}
+            data-tree-id={node.id}
+            onClick={() => onSelect(node.id)}
+            onMouseEnter={() => onHover(node.id)}
+            onMouseLeave={() => onHover(null)}
+          >
+            {hasChildren ? (
+              <button
+                type="button"
+                className={`ss-tree-chevron${isCollapsed ? '' : ' open'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggle(node.id);
+                }}
+                aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+              >
+                <ChevronRightIcon size={10} />
+              </button>
+            ) : (
+              <span className="ss-tree-chevron-spacer" />
+            )}
+            <RowLabel node={node} showTagIcons={showTagIcons} />
+          </div>
+        )}
         {hasChildren && !isCollapsed && node.children.map((c) => renderNode(c, depth + 1))}
       </div>
     );
@@ -366,24 +512,6 @@ export function ElementTreePanel({
       </div>
       {structure && (
         <>
-          <ElementTreeContextMenu
-            pos={ctxMenu ? { x: ctxMenu.x, y: ctxMenu.y } : null}
-            onInsert={() => {
-              if (!ctxMenu) return;
-              setInsertFor({
-                nodeId: ctxMenu.nodeId,
-                tag: ctxMenu.tag,
-                anchor: { left: ctxMenu.x, top: ctxMenu.y, bottom: ctxMenu.y },
-              });
-            }}
-            onDuplicate={() => {
-              if (ctxMenu) structure.selectAndRun(ctxMenu.nodeId, structure.duplicate);
-            }}
-            onDelete={() => {
-              if (ctxMenu) structure.selectAndRun(ctxMenu.nodeId, structure.remove);
-            }}
-            onClose={() => setCtxMenu(null)}
-          />
           <InsertMenu
             anchor={insertFor?.anchor ?? null}
             insideDisabled={insertFor ? VOID_ELEMENTS.has(insertFor.tag) : false}

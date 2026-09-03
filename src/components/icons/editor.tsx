@@ -13,6 +13,7 @@ import TrashSvg from '../../assets/icons/trash.svg?react';
 import UpSvg from '../../assets/icons/up.svg?react';
 import DownSvg from '../../assets/icons/down.svg?react';
 import CopySvg from '../../assets/icons/copy.svg?react';
+import CutSvg from '../../assets/icons/cut.svg?react';
 import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
 import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
 import ReloadSvg from '../../assets/icons/reload.svg?react';
@@ -37,7 +38,7 @@ import ElementParagraphSvg from '../../assets/icons/paragraph.svg?react';
 import ElementSectionSvg from '../../assets/icons/element-section.svg?react';
 import NestRuleSvg from '../../assets/icons/old-icons/nest-rule.svg?react';
 import ScrubHorizontalSvg from '../../assets/icons/old-icons/scrub-horizontal.svg?react';
-import PasteSvg from '../../assets/icons/old-icons/paste.svg?react';
+import PasteSvg from '../../assets/icons/paste.svg?react';
 import { createIcon } from './icon-base';
 
 export const CodeIcon = createIcon(CodeBlockSvg, {
@@ -141,6 +142,14 @@ export const DownloadIcon = createIcon(DownSvg, {
 export const CopyIcon = createIcon(CopySvg, {
   name: 'CopyIcon',
   source: 'icons/copy.svg',
+  kind: 'ui',
+  defaultSize: 14,
+  compact: true,
+  strokeWidth: '1px',
+});
+export const CutIcon = createIcon(CutSvg, {
+  name: 'CutIcon',
+  source: 'icons/cut.svg',
   kind: 'ui',
   defaultSize: 14,
   compact: true,
@@ -316,7 +325,7 @@ export const ScrubHorizontalIcon = createIcon(ScrubHorizontalSvg, {
 });
 export const PasteIcon = createIcon(PasteSvg, {
   name: 'PasteIcon',
-  source: 'icons/old-icons/paste.svg',
+  source: 'icons/paste.svg',
   kind: 'ui',
   defaultSize: 14,
 });

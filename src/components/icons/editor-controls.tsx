@@ -29,6 +29,8 @@ import OverflowAutoSvg from '../../assets/icons/overflow-auto.svg?react';
 import WrapUpSvg from '../../assets/icons/wrap-up.svg?react';
 import UpSvg from '../../assets/icons/up.svg?react';
 import DownSvg from '../../assets/icons/down.svg?react';
+import LockedSvg from '../../assets/icons/locked.svg?react';
+import UnlockedSvg from '../../assets/icons/unlocked.svg?react';
 import { createIcon } from './icon-base';
 
 export const AlignLeftIcon = createIcon(AlignLeftSvg, {
@@ -244,6 +246,20 @@ export const ArrowUpIcon = createIcon(UpSvg, {
 export const ArrowDownIcon = createIcon(DownSvg, {
   name: 'ArrowDownIcon',
   source: 'icons/down.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const LockedIcon = createIcon(LockedSvg, {
+  name: 'LockedIcon',
+  source: 'icons/locked.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const UnlockedIcon = createIcon(UnlockedSvg, {
+  name: 'UnlockedIcon',
+  source: 'icons/unlocked.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

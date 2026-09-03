@@ -25,6 +25,19 @@
   --size-icon-md: 18px;
   --icon-size-full: 24px;
 
+  --context-menu-min-width: 176px;
+  --context-menu-max-width: 320px;
+  --context-menu-border-width: var(--stroke-1);
+  --context-menu-separator-height: var(--stroke-1);
+  --context-menu-item-height: var(--space-32);
+  --context-menu-animation-duration: var(--duration-standard);
+  --context-menu-animation-easing: var(--ease-standard);
+  --context-menu-destructive-hover-surface: color-mix(
+    in srgb,
+    var(--accent-error) 12%,
+    var(--surface-panel)
+  );
+
   --pixel-loader-size-sm: var(--size-icon-sm);
   --pixel-loader-size-md: var(--size-control-compact);
   --pixel-loader-size-lg: var(--size-control-standard);

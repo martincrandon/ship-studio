@@ -100,6 +100,12 @@ interface AppProps {
  * without crashing. The actual app body lives in `AppContents`.
  */
 function App({ initialProjectPath }: AppProps) {
+  useEffect(() => {
+    const suppressNativeContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener('contextmenu', suppressNativeContextMenu, true);
+    return () => document.removeEventListener('contextmenu', suppressNativeContextMenu, true);
+  }, []);
+
   return (
     <TooltipProvider>
       <ToastProvider>
