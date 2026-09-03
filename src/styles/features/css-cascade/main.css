@@ -391,6 +391,15 @@
   max-width: 100%;
   cursor: default;
 }
+.ss-cascade-selector-display--universal {
+  gap: var(--spacing-xs);
+}
+.ss-cascade-selector-display__label {
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-regular);
+}
 .ss-cascade-selector-display[role='button'] {
   cursor: text;
   outline: none;

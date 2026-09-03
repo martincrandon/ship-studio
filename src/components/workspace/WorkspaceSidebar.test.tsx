@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ModalProvider } from '../../contexts/ModalContext';
 import { PaletteContextProvider } from '../CommandPalette/paletteContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
@@ -135,5 +136,77 @@ describe('WorkspaceSidebar project activity indicator', () => {
       ).toBeInTheDocument();
       expect(container.querySelector('.sidebar-project-body .ss-pixel-loader')).toBeInTheDocument();
     });
+  });
+
+  it('opens the ghost workspace switcher and switches accounts from its upward menu', async () => {
+    const defaultWorkspace = {
+      id: 'default',
+      name: 'Default',
+      color: '#6b7280',
+      isDefault: true,
+      createdAt: 1,
+    };
+    const clientWorkspace = {
+      id: 'client',
+      name: 'Client',
+      color: '#3b82f6',
+      isDefault: false,
+      createdAt: 2,
+    };
+    const onGoHome = vi.fn();
+    const setActive = vi.fn();
+    mockInvokeResponse('list_accounts', [defaultWorkspace, clientWorkspace]);
+    mockInvokeResponse('set_active_account_id', (args: unknown) => {
+      setActive(args);
+    });
+
+    const user = userEvent.setup();
+    render(<WorkspaceSidebar {...sidebarProps()} onGoHome={onGoHome} onSwitchAccount={vi.fn()} />, {
+      wrapper: Providers,
+    });
+
+    const trigger = await screen.findByRole('button', {
+      name: 'Switch workspace, currently Default',
+    });
+    expect(trigger).toHaveClass('button--ghost');
+    expect(trigger).not.toHaveAttribute('title');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger.closest('.workspace-sidebar-footer-actions')).toHaveClass(
+      'has-workspace-switcher'
+    );
+
+    const openProjectButton = screen.getByRole('button', { name: 'Open project' });
+    expect(openProjectButton).toHaveClass('button--ghost');
+    expect(openProjectButton.closest('.workspace-sidebar-active-actions')).toBeInTheDocument();
+    expect(openProjectButton.closest('.workspace-sidebar-scroll')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Support' })).toHaveClass(
+      'button--ghost',
+      'button--icon-only'
+    );
+    expect(screen.getByRole('button', { name: 'App settings' })).toHaveClass(
+      'button--ghost',
+      'button--icon-only'
+    );
+
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.queryByRole('button', { name: 'Default, current workspace' })
+    ).not.toBeInTheDocument();
+    const manageButton = screen.getByRole('button', { name: 'Manage workspaces' });
+    const clientButton = screen.getByRole('button', { name: 'Switch to Client' });
+    expect(manageButton).toBeVisible();
+    expect(clientButton).toBeVisible();
+    expect(manageButton.querySelector('.button__icon')).toBeInTheDocument();
+    expect(clientButton.querySelector('.workspace-switcher-option-dot')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Switch to Client' }));
+
+    await waitFor(() => {
+      expect(setActive).toHaveBeenCalledWith({ id: 'client' });
+      expect(onGoHome).toHaveBeenCalledOnce();
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });

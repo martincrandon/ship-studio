@@ -34,6 +34,15 @@ describe('CascadeChip', () => {
     expect(screen.getByRole('button')).toHaveAttribute('data-tone', 'tag');
   });
 
+  it('labels the universal selector while keeping the CSS selector visible', () => {
+    render(<SelectorDisplay selector="*" />);
+
+    expect(screen.getByText('*')).toBeInTheDocument();
+    expect(screen.getByText('Universal')).toBeInTheDocument();
+    expect(screen.getByLabelText('* — Universal')).toBeInTheDocument();
+    expect(screen.getByText('*').closest('.ss-cascade-chip')).toHaveAttribute('data-tone', 'tag');
+  });
+
   it('uses the same media-tone contract in display and editing states', () => {
     render(<RuleContextChips mediaText="(max-width: 768px)" onRenameAtRule={vi.fn()} />);
     const displayChip = screen.getByRole('button', { name: '@media' });

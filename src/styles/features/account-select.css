@@ -180,6 +180,10 @@
   color: var(--text-muted);
 }
 
+.account-settings-loader {
+  margin: var(--spacing-md) 0;
+}
+
 .account-settings-hint code {
   background: var(--surface-control);
   border-radius: var(--radius-sm);
@@ -379,6 +383,17 @@
   min-width: 0;
 }
 
+.account-service-row .account-cred-status {
+  flex: 1 1 auto;
+}
+
+.account-service-row .account-cred-badge {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .account-cred-badge {
   font-size: var(--font-size-body-sm);
   padding: 2px 7px;
@@ -494,5 +509,14 @@
   .account-select-header {
     flex-wrap: wrap;
     gap: 12px;
+  }
+
+  .account-service-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .account-service-row .account-cred-status {
+    flex: 1 1 calc(100% - 200px - var(--spacing-sm));
   }
 }

@@ -190,8 +190,7 @@
   border-right: var(--stroke-1) solid var(--border-default);
 }
 
-.workspace-sidebar.is-hidden .workspace-sidebar-ws-switch,
-.workspace-sidebar.is-hidden .workspace-sidebar-footer-divider {
+.workspace-sidebar.is-hidden .workspace-sidebar-ws-switch {
   display: none;
 }
 
@@ -1187,7 +1186,56 @@
 
 .workspace-sidebar-footer-actions > * {
   position: relative;
+}
+
+/* Keep the switcher and trailing icon controls in fixed footer columns. The
+ * switcher stays in the first column while its open width animates across the
+ * rest of the row, so its normal height still pushes the updater upward. */
+.workspace-sidebar-footer-actions.has-workspace-switcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-switcher {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  justify-self: start;
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-switcher.is-open {
+  width: calc(100% + (var(--control-height-standard) * 2) + (var(--button-gap) * 2));
   z-index: var(--z-dropdown);
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support,
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-settings {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: var(--spacing-2xs);
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support {
+  grid-column: 2;
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-settings {
+  grid-column: 3;
+}
+
+/* The collapsed rail hides the workspace switcher and returns the remaining
+ * controls to its existing vertical icon stack. */
+.workspace-sidebar.is-hidden .workspace-sidebar-footer-actions.has-workspace-switcher {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The updater is a sibling above the action grid. Keep its existing layer so
+ * it remains visibly above the footer fade while the drawer grows below it. */
+.workspace-sidebar-footer > .update-indicator {
+  z-index: var(--z-workspace-header);
 }
 
 /* Keep the fade attached to the fixed action group so it stays at the bottom
@@ -1219,32 +1267,23 @@
   overflow-x: hidden;
 }
 
-/* Layout-only — colors/hover/cursor come from the Button primitive (ghost).
- * Full-bleed: fixed height; flush corners via the sidebar-wide
- * border-radius reset above. Font pinned to the sidebar's base size so the
- * footer matches the rows above it. */
+/* Keep the Active-list action inset so the Ghost hover surface has breathing
+ * room at the sidebar edges. The button itself owns its visual treatment. */
+.workspace-sidebar-active-actions {
+  width: 100%;
+  margin-top: var(--space-08);
+  padding: 0 var(--space-08);
+}
+
 .workspace-sidebar-add-project {
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
+  justify-content: center;
 }
 
 .workspace-sidebar-support,
 .workspace-sidebar-settings {
   flex: 0 0 var(--control-height-standard);
-}
-
-/* Workspace switcher — same full-bleed ghost button as "Open project",
- * stacked directly below it (separated by a hairline). Only rendered when
- * the user has 2+ workspaces; shows the active workspace's color + name. */
-.workspace-sidebar-footer-divider {
-  height: 1px;
-  background: var(--border-default);
-}
-
-.workspace-sidebar-ws-switch {
-  height: 44px;
-  font-size: var(--font-size-body-md);
-  gap: var(--spacing-sm);
 }
 
 /* Project picker styles removed — replaced by the command palette (⌘O). */

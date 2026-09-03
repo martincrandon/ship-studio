@@ -326,6 +326,33 @@
       "consumerCount": 4
     },
     {
+      "name": "--size-preview-breakpoints-min-width",
+      "definitionFile": "src/styles/global/tokens-components.css",
+      "layer": "components",
+      "owner": "global/component",
+      "status": "canonical",
+      "pluginStable": false,
+      "consumerCount": 1
+    },
+    {
+      "name": "--size-preview-breakpoint-menu",
+      "definitionFile": "src/styles/global/tokens-components.css",
+      "layer": "components",
+      "owner": "global/component",
+      "status": "canonical",
+      "pluginStable": false,
+      "consumerCount": 1
+    },
+    {
+      "name": "--size-preview-breakpoint-divider-height",
+      "definitionFile": "src/styles/global/tokens-components.css",
+      "layer": "components",
+      "owner": "global/component",
+      "status": "canonical",
+      "pluginStable": false,
+      "consumerCount": 1
+    },
+    {
       "name": "--size-sidebar-project-shortcut",
       "definitionFile": "src/styles/global/tokens-components.css",
       "layer": "components",

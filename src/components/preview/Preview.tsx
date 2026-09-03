@@ -109,6 +109,13 @@ const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
 
 const PREVIEW_BREAKPOINTS = Object.keys(BREAKPOINTS) as Breakpoint[];
 
+const PREVIEW_BREAKPOINT_OPTIONS = PREVIEW_BREAKPOINTS.map((bp) => ({
+  value: bp,
+  label: BREAKPOINTS[bp].label,
+  width: BREAKPOINTS[bp].width,
+  icon: <BreakpointIcon type={bp} />,
+}));
+
 /** Props for the Preview component */
 interface PreviewProps {
   /** Dev server port (default: 3000) */
@@ -1388,51 +1395,58 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         </button>
 
         <div className="preview-breakpoints" data-education-id="breakpoints">
-          <Tabs
-            value={resize.getActiveBreakpoint()}
-            mode="navigation"
-            onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
-            className="preview-breakpoint-tabs"
-          >
-            <TabsList aria-label="Preview viewport sizes">
-              {PREVIEW_BREAKPOINTS.map((bp) => (
-                <TabsTab
-                  key={bp}
-                  value={bp}
-                  className="preview-breakpoint-tab button--icon-only"
-                  size="default"
-                  aria-label={BREAKPOINTS[bp].label}
-                  title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
-                >
-                  <BreakpointIcon type={bp} />
-                </TabsTab>
-              ))}
-            </TabsList>
-          </Tabs>
+          <div className="preview-breakpoints__inner">
+            <Tabs
+              value={resize.getActiveBreakpoint()}
+              mode="navigation"
+              onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
+              className="preview-breakpoint-tabs"
+            >
+              <TabsList aria-label="Preview viewport sizes">
+                {PREVIEW_BREAKPOINTS.map((bp) => (
+                  <TabsTab
+                    key={bp}
+                    value={bp}
+                    className={`preview-breakpoint-tab preview-breakpoint-tab--${bp} button--icon-only`}
+                    size="default"
+                    aria-label={BREAKPOINTS[bp].label}
+                    title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
+                  >
+                    <BreakpointIcon type={bp} />
+                  </TabsTab>
+                ))}
+              </TabsList>
+            </Tabs>
 
-          {iframeSize &&
-            iframeSize.w > 0 &&
-            iframeSize.h > 0 &&
-            (() => {
-              // The wrapper reports its VISUAL box; when the frame is scaled to
-              // fit, the page actually lays out at the true (unscaled) size —
-              // that's the honest number to show (and to let the user set).
-              const w = Math.round(iframeSize.w / resize.previewScale);
-              const h = Math.round(iframeSize.h / resize.previewScale);
-              return (
-                <PreviewSizeControl
-                  width={w}
-                  height={h}
-                  hasCustomHeight={resize.customHeight !== null}
-                  scalePercent={
-                    resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
-                  }
-                  onApply={resize.previewAtSize}
-                  onFit={() => resize.handleBreakpointClick('full')}
-                  openSignal={sizePopoverSignal}
-                />
-              );
-            })()}
+            {iframeSize &&
+              iframeSize.w > 0 &&
+              iframeSize.h > 0 &&
+              (() => {
+                // The wrapper reports its VISUAL box; when the frame is scaled to
+                // fit, the page actually lays out at the true (unscaled) size —
+                // that's the honest number to show (and to let the user set).
+                const w = Math.round(iframeSize.w / resize.previewScale);
+                const h = Math.round(iframeSize.h / resize.previewScale);
+                return (
+                  <PreviewSizeControl
+                    width={w}
+                    height={h}
+                    hasCustomHeight={resize.customHeight !== null}
+                    scalePercent={
+                      resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
+                    }
+                    onApply={resize.previewAtSize}
+                    onFit={() => resize.handleBreakpointClick('full')}
+                    openSignal={sizePopoverSignal}
+                    activeBreakpoint={resize.getActiveBreakpoint()}
+                    breakpointOptions={PREVIEW_BREAKPOINT_OPTIONS}
+                    onBreakpointChange={(value) =>
+                      resize.handleBreakpointClick(value as Breakpoint)
+                    }
+                  />
+                );
+              })()}
+          </div>
         </div>
       </div>
       <div
