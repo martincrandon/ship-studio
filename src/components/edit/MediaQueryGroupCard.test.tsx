@@ -50,7 +50,7 @@ describe('MediaQueryGroupCard', () => {
     fireEvent.click(composer!);
     expect(screen.getByRole('combobox', { name: 'Continue media query' })).toHaveFocus();
     expect(screen.getByRole('option', { name: 'and' })).toBeInTheDocument();
-    expect(screen.getByRole('listbox')).toHaveStyle({ left: '20px', top: '104px', width: '320px' });
+    expect(screen.getByRole('listbox')).toHaveStyle({ left: '20px', top: '112px', width: '320px' });
 
     fireEvent.click(collapse);
     expect(screen.queryByTestId('selector-one')).not.toBeInTheDocument();

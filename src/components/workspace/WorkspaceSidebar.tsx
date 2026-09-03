@@ -978,7 +978,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               showWorkspaceSwitcher ? ' has-workspace-switcher' : ''
             }`}
           >
-            {showWorkspaceSwitcher && (
+            {onSwitchAccount && activeAccount && hasMultipleWorkspaces && (
               <div
                 ref={workspaceSwitcherRef}
                 className={`workspace-switcher${workspaceSwitcherOpen ? ' is-open' : ''}`}
