@@ -345,35 +345,6 @@ export function useElementSettings({
     [classes, writeClassAttr, onToast]
   );
 
-  const renameClass = useCallback(
-    async (oldName: string, newName: string) => {
-      const n = newName.trim().replace(/^\./, '');
-      if (!n || n === oldName) return;
-      if (/\s/.test(n)) {
-        onToast('A class name cannot contain spaces.', 'error');
-        return;
-      }
-      if (classes.includes(n)) {
-        onToast(`.${n} is already on this element.`, 'error');
-        return;
-      }
-      setBusy(true);
-      try {
-        const next = classes.map((c) => (c === oldName ? n : c));
-        if (await writeClassAttr(next.join(' '))) {
-          setClasses(next);
-          void trackEvent('visual_class_renamed', { mode: 'css-code' });
-        }
-      } catch (err) {
-        logger.error('[ElementSettings] rename class failed', { error: toastText(err) });
-        onToast(toastText(err), 'error');
-      } finally {
-        setBusy(false);
-      }
-    },
-    [classes, writeClassAttr, onToast]
-  );
-
   return {
     tag,
     classes,
