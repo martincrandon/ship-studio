@@ -10,6 +10,9 @@
   --size-titlebar-project-path: 30ch;
   --size-element-toolbar-selector: 140px;
   --size-preview-dimensions: 84px;
+  --size-preview-breakpoints-min-width: 69px;
+  --size-preview-breakpoint-menu: 240px;
+  --size-preview-breakpoint-divider-height: var(--stroke-1);
 
   --size-sidebar-project-shortcut: 24px;
   --size-sidebar-project: 214px;

@@ -10,6 +10,7 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
+import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
 import { GitHubIcon, VercelIcon } from '@/components/icons';
 import { useWorkspaceConnect, type ConnectServiceId } from '../../hooks/useWorkspaceConnect';
 import { useOptionalToast } from '../../contexts/ToastContext';
@@ -211,7 +212,7 @@ export function AccountSettingsModal({
             <div>
               <div className="account-section-title">Coding agents</div>
               {isLoadingCreds ? (
-                <Spinner size="sm" />
+                <PixelLoaderRings className="account-settings-loader" size="md" />
               ) : (
                 <div className="account-cred-list">
                   {(
@@ -242,7 +243,7 @@ export function AccountSettingsModal({
             <div>
               <div className="account-section-title">Services</div>
               {isLoadingCreds ? (
-                <Spinner size="sm" />
+                <PixelLoaderRings className="account-settings-loader" size="md" />
               ) : (
                 <div className="account-cred-list">
                   {(
@@ -263,7 +264,7 @@ export function AccountSettingsModal({
                   ).map((svc) => {
                     const connected = !!svc.identity;
                     return (
-                      <div key={svc.id} className="account-cred-row">
+                      <div key={svc.id} className="account-cred-row account-service-row">
                         <span className="account-cred-label">
                           {svc.icon} {svc.label}
                         </span>
@@ -313,7 +314,7 @@ export function AccountSettingsModal({
             <div>
               <div className="account-section-title">Credential Vault</div>
               {isLoadingCreds ? (
-                <Spinner size="sm" />
+                <PixelLoaderRings className="account-settings-loader" size="md" />
               ) : (
                 <div className="account-cred-list">
                   {credRows.map(([statusField, key]) => {
