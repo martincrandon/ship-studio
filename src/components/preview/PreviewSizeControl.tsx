@@ -179,7 +179,7 @@ export function PreviewSizeControl({
         <span className="preview-dimensions-label">
           {width} × {height}
         </span>
-      </button>
+      </Button>
       {open && (
         <div className="preview-size-popover" role="dialog" aria-labelledby="preview-size-title">
           <h2 id="preview-size-title" className="preview-size-title">
