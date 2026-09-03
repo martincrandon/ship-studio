@@ -308,6 +308,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   onSwitchAccount,
 }: Props) {
   const appSettingsModal = useModal('settings');
+  const { showToast } = useOptionalToast();
   const [sidebarWidth, setSidebarWidth] = useState(214);
   const { activeAccount, accounts } = useActiveAccount(currentProjectPath);
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
