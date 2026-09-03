@@ -17,6 +17,10 @@
 
 import { invoke } from '@tauri-apps/api/core';
 
+// Re-exported so telemetry-adjacent call sites (#772/#773/#775) can import it
+// alongside the reporting pipeline; the canonical definition lives in errors.ts.
+export { isResourcePressureError } from './errors';
+
 export interface ErrorReport {
   message: string;
   stack?: string;

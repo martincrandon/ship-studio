@@ -28,7 +28,7 @@ describe('InsertMenu', () => {
       'Heading 1': 'ElementHeading1Icon',
       'Heading 2': 'ElementHeading2Icon',
       'Heading 3': 'ElementHeading3Icon',
-      Paragraph: 'ElementParagraphIcon',
+      Paragraph: 'AlignLeftIcon',
       Link: 'ElementLinkIcon',
       Button: 'ElementButtonIcon',
       Image: 'ImageIcon',

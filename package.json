@@ -1,7 +1,7 @@
 {
   "name": "ship-studio",
   "private": true,
-  "version": "0.18.6",
+  "version": "1.0.0",
   "description": "Ship Studio — a desktop app for shipping web projects with AI coding agents.",
   "license": "MIT",
   "homepage": "https://github.com/ship-studio/ship-studio#readme",
@@ -48,7 +48,7 @@
     "rust:clippy": "cd src-tauri && cargo clippy -- -A clippy::uninlined_format_args",
     "rust:clippy:strict": "cd src-tauri && cargo clippy -- -D warnings",
     "rust:test": "cd src-tauri && cargo test",
-    "check:all": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm rust:fmt:check && pnpm rust:clippy && pnpm test:scripts && pnpm docs:check && pnpm check:ui-baseline",
+    "check:all": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm rust:fmt:check && pnpm rust:clippy && pnpm test:scripts && pnpm docs:check && pnpm check:patterns && pnpm check:loc && pnpm check:ui-baseline",
     "check:patterns": "bash scripts/check-patterns.sh",
     "check:loc": "bash scripts/check-loc-limits.sh",
     "check:ui-baseline": "bash scripts/check-ui-baseline.sh",

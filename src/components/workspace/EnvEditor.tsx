@@ -18,6 +18,7 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { useModal } from '../../contexts/ModalContext';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
+import type { ToastType } from '../../hooks/useToasts';
 import { IconButton } from '../primitives/IconButton';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import {
@@ -40,7 +41,7 @@ interface EnvEditorProps {
 export function EnvEditor({ projectPath }: EnvEditorProps) {
   const { isOpen, close: onClose } = useModal('envEditor');
   const { showToast } = useOptionalToast();
-  const onToast = (message: string, type?: 'success' | 'error') => showToast(message, type);
+  const onToast = (message: string, type?: ToastType) => showToast(message, type);
   const {
     envFiles,
     selectedFile,
@@ -49,6 +50,7 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
     isLoading,
     isSaving,
     error,
+    keyNotice,
     showNewFileInput,
     setShowNewFileInput,
     newFileName,
@@ -307,6 +309,7 @@ export function EnvEditor({ projectPath }: EnvEditorProps) {
                     </div>
                   )}
 
+                  {keyNotice && <div className="env-key-notice">{keyNotice}</div>}
                   {error && <div className="env-error">{error}</div>}
                 </>
               )}

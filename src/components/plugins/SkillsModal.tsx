@@ -64,6 +64,8 @@ export function SkillsModal({
   const [skills, setSkills] = useState<AgentSkill[]>([]);
   const [isLoadingSkills, setIsLoadingSkills] = useState(false);
   const [removingSkill, setRemovingSkill] = useState<string | null>(null);
+  /** Last removal failure, shown inline on the Installed tab (issue #720). */
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // Installed tab search
   const [installedSearchQuery, setInstalledSearchQuery] = useState('');
@@ -112,8 +114,9 @@ export function SkillsModal({
       const result = await listAgentSkills(projectPath, agentId);
       setSkills(result);
     } catch (err) {
+      // Same "[object Object]" trap as handleRemove (issue #720).
       logger.error('Failed to load skills', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setSkills([]);
     } finally {
@@ -167,7 +170,7 @@ export function SkillsModal({
       setSearchResults(results);
     } catch (err) {
       logger.error('Failed to search skills', {
-        error: err instanceof Error ? err.message : String(err),
+        error: formatCommandError(asCommandError(err)),
       });
       setSearchError(formatCommandError(asCommandError(err)));
     } finally {
@@ -201,6 +204,7 @@ export function SkillsModal({
   const handleRemove = async (skill: AgentSkill) => {
     const skillKey = `${skill.plugin}-${skill.name}`;
     setRemovingSkill(skillKey);
+    setRemoveError(null);
     try {
       // Use the plugin as the package identifier
       await removeSkill(skill.plugin, skill.scope as 'user' | 'project', projectPath, agentId);
@@ -212,9 +216,12 @@ export function SkillsModal({
       // Refresh installed skills
       await fetchSkills();
     } catch (err) {
-      logger.error('Failed to remove skill', {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      // A rejected Tauri command is a CommandError *object*, so String(err)
+      // logged "[object Object]" and the user saw nothing at all — the Remove
+      // button just stopped spinning (issue #720). Format it, and show it.
+      const msg = formatCommandError(asCommandError(err));
+      logger.error('Failed to remove skill', { error: msg });
+      setRemoveError(msg);
     } finally {
       setRemovingSkill(null);
     }
@@ -298,6 +305,8 @@ export function SkillsModal({
                       Loading skills...
                     </ExtensionState>
                   )}
+
+                  {removeError && <ExtensionState kind="error">{removeError}</ExtensionState>}
 
                   {!isLoadingSkills && filteredSkills.length === 0 && (
                     <ExtensionState kind="empty">

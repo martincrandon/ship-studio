@@ -6,6 +6,28 @@ The latest entry is rendered inside the in-app update dialog, so write user-
 facing language — what changed, in plain English — not commit subjects.
 -->
 
+## What's New in v1.0.0
+
+- Ship Studio 1.0 — out of beta. A ground-up visual redesign by Martin Crandon: new Geist typeface, deeper dark surfaces, machined controls, and a four-layer design-token system
+- New: edit CSS variables visually — click any design token in the visual editor, change it live, and delete safely with impact analysis
+- New: pick your Dock icon (brand, dark, or light) and an opt-in compact single-row toolbar
+- The workspace was rebuilt: cleaner titlebar with properly aligned window controls, decomposed panes, dockable panels, and a consistent 46px rhythm everywhere
+- Dozens of fit-and-finish fixes from launch QA: no more selectable UI chrome, no clipped calendars or double borders, sliders and dropdowns styled properly, resize handles layer correctly
+- Closing a project now truly closes it — background agent processes are stopped, not orphaned
+- Everything from v0.18.7's 118-issue sweep is included
+- Thanks to Martin Crandon for the redesign this release is built on
+
+## What's New in v0.18.7
+
+- **Visual editor breakthroughs** - Elements without a class can finally be inserted/duplicated/deleted, JSX arrow-function props no longer break element mapping, and class/style edits survive mid-edit file changes
+- **Windows terminal fixed** - Claude Code no longer fails to launch with "too many arguments"; agent CLIs spawn correctly whether real executables or npm shims
+- **Three crash fixes** - Full-disk startup, empty GitHub contribution calendar, and terminal GPU hiccups no longer crash the app
+- **Smarter imports** - pnpm/yarn workspace repos install with the right package manager instead of failing with npm errors
+- **Pages Router discovery** - Next.js projects with routes in `pages/` or `src/pages/` now show their pages instead of "No pages found"
+- **Sturdier git & publishing** - Existing origin remotes are reused, detached-HEAD publishes are refused clearly, stash/undo rides out index.lock contention
+- **Calmer errors everywhere** - ~50 error paths that auto-filed bug reports for routine environmental states (cloud-drive stalls, antivirus locks, offline networks, slow dev servers) now explain themselves quietly
+- **~118 auto-reported issues fixed since 0.18.6** - the largest sweep yet
+
 ## What's New in v0.18.6
 
 - **Two crash fixes** - No more panic on commit messages with accents/emoji/non-Latin text; closing a project can no longer crash via the dev-server logs terminal

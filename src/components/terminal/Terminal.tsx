@@ -46,27 +46,26 @@ import { listen } from '@tauri-apps/api/event';
 import { homeDir } from '@tauri-apps/api/path';
 import { getShellPath, getSystemEnv } from '../../lib/project';
 import { loadNerdFonts } from '../../lib/fonts';
-import { isWindows, resolveCliPath } from '../../lib/setup';
+import { isWindows, needsCmdExeWrapper, resolveCliPath, type ResolvedCli } from '../../lib/setup';
 import { isPasteChord, readClipboardText, stageClipboardImage } from '../../lib/clipboard';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import { isResourcePressureError } from '../../lib/errorReporting';
 import { isPointInRect, dropPointToLogical } from '../../lib/dropTarget';
 import { getTerminalGpuEnabled } from '../../lib/settings';
 import { attachedLibraryDirs } from '../../lib/attached-libraries';
 import { sanitizeTerminalTitle } from '../../lib/terminalTitle';
-import { decideStartupTimeoutAction } from './startupWatchdog';
+import {
+  decideStartupTimeoutAction,
+  RESPAWN_GRACE_MS,
+  STARTUP_TIMEOUT_MS,
+} from './startupWatchdog';
 import { createTerminalOptions } from './terminalTheme';
 import type { AgentConfig } from '../../lib/agent';
 import '@xterm/xterm/css/xterm.css';
 
 /** Agent status based on terminal title */
 export type AgentStatus = 'thinking' | 'waiting' | 'idle';
-
-/** Set once the user sends their first input to any agent terminal. */
-const FIRST_AGENT_INPUT_KEY = 'shipstudio.sentFirstAgentMessage';
-/** In-process broadcast so every mounted terminal (split panes / tabs) clears
- *  its first-run hint the moment the user types into ANY of them. */
-const FIRST_AGENT_INPUT_EVENT = 'shipstudio:first-agent-input';
 
 /** Props for the Terminal component */
 interface TerminalProps {
@@ -152,24 +151,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
   const restartRequestedRef = useRef(false);
   const [isReady, setIsReady] = useState(false);
   const [isFocused, setIsFocused] = useState(false); // Start unfocused to show overlay until user clicks
-
-  // First-run hint: show "this is your AI builder, type here" over the terminal
-  // until the user sends their first input, then never again (global flag, so it
-  // covers every agent terminal / tab / project, not just this one).
-  const [showFirstRunHint, setShowFirstRunHint] = useState(
-    () => localStorage.getItem(FIRST_AGENT_INPUT_KEY) !== '1'
-  );
-  const firstInputDoneRef = useRef(!showFirstRunHint);
-  // Clear this instance's hint when any sibling terminal reports first input.
-  useEffect(() => {
-    if (firstInputDoneRef.current) return;
-    const onFirstInput = () => {
-      firstInputDoneRef.current = true;
-      setShowFirstRunHint(false);
-    };
-    window.addEventListener(FIRST_AGENT_INPUT_EVENT, onFirstInput);
-    return () => window.removeEventListener(FIRST_AGENT_INPUT_EVENT, onFirstInput);
-  }, []);
 
   // Mirror `isActive` to a ref so non-effect closures (input handler,
   // resize observer) can read it without re-creating.
@@ -688,9 +669,12 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           }
         }
 
-        // On Windows, agent may be a .cmd script - must run through cmd.exe
-        let spawnCmd = isWin ? 'cmd.exe' : agent.binaryName;
-        const spawnArgs = isWin ? ['/C', agent.binaryName, ...agentArgs] : agentArgs;
+        // Placeholder — on Windows the real spawn shape (direct vs. wrapped
+        // in cmd.exe /C) is decided AFTER binary resolution below, because
+        // the decision depends on what the command resolves to (.cmd shim vs.
+        // real executable). See needsCmdExeWrapper in lib/setup.ts.
+        let spawnCmd = agent.binaryName;
+        let spawnArgs = agentArgs;
 
         // Resolve the bare binary name through the backend's thorough
         // discovery (every NVM version, ~/.<agent>/bin, npm prefix -g …) the
@@ -703,9 +687,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         // "binary" is an absolute path (/bin/zsh), which the backend rejects
         // with a validation error on every open (issue #303).
         const isBareName = !agent.binaryName.includes('/') && !agent.binaryName.includes('\\');
+        let resolved: ResolvedCli | null | undefined;
         if (isBareName) {
           try {
-            const resolved = await resolveCliPath(agent.binaryName);
+            resolved = await resolveCliPath(agent.binaryName);
             if (resolved) {
               const pathSep = isWin ? ';' : ':';
               if (!env.PATH.split(pathSep).includes(resolved.dir)) {
@@ -713,16 +698,41 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
               }
               if (!isWin) {
                 // Spawn the resolved absolute path — deterministic, no PATH
-                // shadowing. (Windows keeps the cmd.exe wrapper; the appended
-                // PATH dir makes the shim resolvable there.)
+                // shadowing. (The Windows equivalent happens in the
+                // spawn-shape block below, where wrapper-vs-direct is
+                // decided.)
                 spawnCmd = resolved.path;
               }
             }
           } catch (err) {
+            resolved = undefined;
             logger.warn('[Terminal] resolveCliPath failed — spawning bare name', {
               binary: agent.binaryName,
               error: String(err),
             });
+          }
+        }
+
+        if (isWin) {
+          // Windows spawn shape, same rule OnboardingTerminal already uses.
+          // Only .cmd/.bat shims need `cmd.exe /C` — they are batch scripts.
+          // Routing a REAL executable through cmd.exe adds a second parse
+          // layer (portable_pty composes one command line, then cmd re-parses
+          // it with its own quote rules) between us and the agent, which is
+          // what split a single `--session-id`/`--add-dir` value into several
+          // tokens and made Claude Code exit with "too many arguments"
+          // (issue #797). Unresolved names still wrap — needsCmdExeWrapper's
+          // conservative default — so nothing regresses when resolution
+          // fails open.
+          if (needsCmdExeWrapper(agent.binaryName, resolved?.path)) {
+            spawnCmd = 'cmd.exe';
+            spawnArgs = ['/C', agent.binaryName, ...agentArgs];
+          } else {
+            // Prefer the resolved absolute path (deterministic, no PATH
+            // shadowing); fall back to the bare name on the extended PATH
+            // when resolution failed open.
+            spawnCmd = resolved?.path ?? agent.binaryName;
+            spawnArgs = agentArgs;
           }
         }
 
@@ -945,12 +955,13 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         gateOpen = true;
         gate.open(attach.endOffset);
 
-        // Startup watchdog: if no output is received within 10s, the agent
-        // likely failed to launch (binary not found, permission error, or a
-        // wedged first spawn — issue #158). The manual fix users found is
-        // "create a new agent tab", i.e. a fresh PTY — so kill the silent
-        // session and respawn once with the same config. Only if the
-        // respawn is also silent do we surface the error text.
+        // Startup watchdog: if no output is received within the startup
+        // window, the agent likely failed to launch (binary not found,
+        // permission error, or a wedged first spawn — issue #158). The manual
+        // fix users found is "create a new agent tab", i.e. a fresh PTY — so
+        // kill the silent session and respawn once with the same config. Only
+        // if the respawn is also silent do we surface the error text. Policy
+        // and timings are shared with the onboarding terminal (startupWatchdog.ts).
         startupTimeout = setTimeout(() => {
           const action = decideStartupTimeoutAction({ receivedOutput, mounted, autoRespawnUsed });
           if (action === 'none') return;
@@ -987,7 +998,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
                 // otherwise it would look like the new process exiting.
                 respawnTimer = setTimeout(() => {
                   if (mounted) void setupPty(0);
-                }, 500);
+                }, RESPAWN_GRACE_MS);
               });
             return;
           }
@@ -1000,7 +1011,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
             `\r\n\x1b[31m${agent.displayName} did not produce any output after 10 seconds.\x1b[0m\r\n` +
               `\x1b[33mThe process may have failed to start. Check that "${agent.binaryName}" is installed and accessible.\x1b[0m\r\n`
           );
-        }, 10_000);
+        }, STARTUP_TIMEOUT_MS);
         startupTimer = startupTimeout;
 
         if (pendingExit !== null) {
@@ -1013,22 +1024,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           // a normal exit so the retry-on-resume-fail path can kick in.
           onExitRef.current?.(attach.exitCode ?? -1);
         }
-
-        // Dismiss the first-run hint on the user's first real keystroke — and
-        // broadcast so sibling terminals (split panes / tabs) clear theirs too.
-        // We gate on onKey (genuine keyboard input) rather than onData, because
-        // onData also fires for xterm's automatic replies to the program's
-        // terminal-capability queries (Device Attributes / cursor-position
-        // reports an agent's TUI sends on startup). Using onData would dismiss
-        // the hint a frame after it appears — before the user could read it.
-        const firstKeyDisposable = term.onKey(() => {
-          if (firstInputDoneRef.current) return;
-          firstInputDoneRef.current = true;
-          localStorage.setItem(FIRST_AGENT_INPUT_KEY, '1');
-          setShowFirstRunHint(false);
-          window.dispatchEvent(new Event(FIRST_AGENT_INPUT_EVENT));
-        });
-        ptyDisposablesRef.current.push(firstKeyDisposable);
 
         // Handle terminal input -> PTY. Resolves the session id lazily
         // from the ref so re-attach doesn't need a new listener.
@@ -1146,7 +1141,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           lower.includes('no viable candidates found in path') ||
           lower.includes('does not exist') ||
           lower.includes('not executable');
-        logger[binaryNotFound ? 'warn' : 'error']('[Terminal] Failed to spawn PTY', {
+        // The second Expected spawn shape: the machine is transiently out of
+        // process slots / file descriptors (issues #587, #772).
+        const expectedSpawnFailure = binaryNotFound || isResourcePressureError(err);
+        logger[expectedSpawnFailure ? 'warn' : 'error']('[Terminal] Failed to spawn PTY', {
           agent: agent.id,
           binary: agent.binaryName,
           error: spawnError,
@@ -1330,20 +1328,6 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           cursor: 'text',
         }}
       />
-      {/* First-run instruction so a non-developer knows this is a chat box, not
-          a scary console. pointer-events:none lets the click-to-focus below it
-          still work; it clears on the first keystroke. */}
-      {isReady && showFirstRunHint && (
-        <div className="terminal-firstrun-hint">
-          <div className="terminal-firstrun-hint-card" role="note">
-            <strong>This is your agent</strong>
-            <span>
-              Whether you use Claude Code, Codex, Opencode, or something else, your agent runs right
-              here. Tell it what you want to build in plain English, then press Enter.
-            </span>
-          </div>
-        </div>
-      )}
     </div>
   );
 });

@@ -26,6 +26,33 @@ interface ChangelogEntry {
 // Keep ~15 most recent versions for the sidebar
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.0.0', // v1.0.0
+    items: [
+      'Ship Studio 1.0 — out of beta. A ground-up visual redesign by Martin Crandon: the Geist typeface, deeper dark surfaces, machined controls with crisp 1px depth, and a four-layer design-token system underneath it all',
+      'Edit CSS variables visually: click any design token in the visual editor, change it with a live preview, and delete safely — Ship Studio shows every place the variable is used and inlines values so nothing breaks',
+      'Make it yours: choose a brand, dark, or light Dock icon, and try the opt-in compact toolbar that collapses the workspace header into a single row',
+      'A rebuilt workspace shell: aligned titlebar and window controls, dockable panels, an element tree, and one consistent row rhythm across the sidebar, rail, and toolbars',
+      'Dozens of fit-and-finish fixes from launch QA — UI text is no longer selectable like content, folders and calendars render pixel-perfect, sliders and dropdowns are fully styled, and resize handles layer and snap correctly',
+      'Closing a project now truly closes it: background agent processes are stopped instead of quietly living on',
+      "Includes everything from v0.18.7's 118-issue reliability sweep",
+    ],
+  },
+  {
+    version: '0.18.7', // v0.18.7
+    items: [
+      'Visual editor: elements without a class attribute can now be inserted, duplicated, and deleted; JSX props like onClick={() => …} no longer break element mapping (a long-standing cause of failed edits); and class/style edits now survive a file being reformatted mid-edit, just like text edits already did',
+      'Windows: the Claude Code terminal no longer fails instantly with "too many arguments" — agent CLIs are spawned correctly whether they\'re real executables or npm shims — and a stray npm package named "gh" shadowing GitHub\'s CLI is now detected and explained',
+      'Startup can no longer crash because the disk is full (logging degrades gracefully), the GitHub contribution calendar no longer crashes the dashboard when there is no activity data, and a GPU hiccup in the terminal falls back cleanly instead of throwing',
+      'Importing a repo that uses pnpm or yarn workspaces now installs with the right package manager instead of failing with npm workspace-protocol errors, and unresolvable repos get a plain explanation instead of a GraphQL dump',
+      'Next.js Pages Router projects (routes in pages/ or src/pages/) now show their pages in the page selector instead of "No pages found"',
+      'Branches and PRs: publishing to a repo that already has an origin remote works instead of failing with "Unable to add remote", publishing from a detached HEAD is refused with a clear message instead of pushing a branch literally named HEAD, and stash/undo operations now ride out git index.lock contention like commits already did',
+      'MCP servers: failures while removing or listing servers are now explained the same way adding them already was (enterprise gateways, broken agent configs, an upstream Claude CLI env-var bug), and an empty error now at least carries the exit code',
+      'Plugins: installs retry transient failures and no longer prompt invisibly for git credentials, the plugin library survives rate limiting, and a plugin refusal no longer shows up as "[object Object]"',
+      'A huge quiet-telemetry cleanup: ~50 error paths that auto-filed bug reports for routine environmental states (cloud-drive stalls, antivirus file locks, offline networks, permission blocks, slow dev servers) now explain themselves calmly instead',
+      '~118 auto-reported issues fixed since 0.18.6 — the largest sweep yet',
+    ],
+  },
+  {
     version: '0.18.6', // v0.18.6
     items: [
       'Two crash fixes: the app no longer panics when generating a commit message containing accents, emoji, or non-Latin characters, and closing a project no longer risks a crash from the dev-server logs terminal',

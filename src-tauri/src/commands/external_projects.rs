@@ -12,6 +12,36 @@ use tauri_plugin_dialog::DialogExt;
 
 // ============ Helper Functions ============
 
+/// Directories that look like projects to `is_valid_project` (they contain a
+/// package.json, a manifest, or a .git) but never are: dependency trees and
+/// build output. Excluded from the nested-project scan so a stray
+/// `node_modules` can't masquerade as hundreds of sibling projects (#826).
+const NON_PROJECT_DIRS: &[&str] = &[
+    "node_modules",
+    "dist",
+    "build",
+    "out",
+    "target",
+    "vendor",
+    "bower_components",
+];
+
+/// How many nested-project names the guidance message lists before summarizing.
+const MAX_LISTED_NESTED: usize = 5;
+
+/// Render a folder-name list for a user-facing message, capped so a
+/// pathological folder can't produce an unbounded string (#826).
+fn summarize_names(names: &[String]) -> String {
+    if names.len() <= MAX_LISTED_NESTED {
+        return names.join(", ");
+    }
+    format!(
+        "{}, and {} more",
+        names[..MAX_LISTED_NESTED].join(", "),
+        names.len() - MAX_LISTED_NESTED
+    )
+}
+
 /// Grant the asset protocol (`convertFileSrc`) read access to a directory at
 /// runtime. The static scope in tauri.conf.json deliberately only covers
 /// ~/ShipStudio; external projects live anywhere on disk, so we widen the scope
@@ -109,6 +139,42 @@ pub fn is_registered_external_path(canonical: &Path) -> Result<bool, String> {
     Ok(false)
 }
 
+/// True when `canonical` sits directly inside an allowed projects root, which
+/// is exactly what the dashboard's single-level scan lists. A deeper folder is
+/// *contained* by the root but invisible to that scan (issue #747).
+fn is_direct_child_of_projects_root(canonical: &Path) -> bool {
+    is_direct_child_of_any(canonical, &crate::utils::allowed_project_roots())
+}
+
+/// Testable core of [`is_direct_child_of_projects_root`].
+fn is_direct_child_of_any(canonical: &Path, roots: &[PathBuf]) -> bool {
+    match canonical.parent() {
+        Some(parent) => roots.iter().any(|root| parent == root),
+        None => false,
+    }
+}
+
+/// Whether the picked folder IS a projects root (configured or default).
+///
+/// A root is not a direct child of itself, so the #747 narrowing to direct
+/// children stopped covering it — leaving `~/ShipStudio` itself registerable as
+/// an "external project", which would scope destructive git ops to the whole
+/// workspace tree.
+fn is_projects_root(canonical: &Path) -> bool {
+    is_any_of_roots(canonical, &crate::utils::allowed_project_roots())
+}
+
+/// Testable core of [`is_projects_root`]. Roots come from config/home lookups
+/// and may not be canonical, so compare both forms.
+fn is_any_of_roots(canonical: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| {
+        canonical == root
+            || dunce::canonicalize(root)
+                .map(|c| c == canonical)
+                .unwrap_or(false)
+    })
+}
+
 // ============ Tauri Commands ============
 
 /// Opens a native folder picker and registers the selected folder as an external project.
@@ -158,6 +224,17 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
                     {
                         continue;
                     }
+                    // Dependency and build directories aren't nested projects.
+                    // Every package under node_modules has a package.json, so
+                    // without this the guidance listed ~900 npm package names
+                    // instead of the user's actual subfolders (issue #826).
+                    if entry
+                        .file_name()
+                        .to_str()
+                        .is_some_and(|n| NON_PROJECT_DIRS.contains(&n))
+                    {
+                        continue;
+                    }
                     if crate::commands::projects::is_valid_project(&sub) {
                         if let Some(name) = entry.file_name().to_str() {
                             nested_projects.push(name.to_string());
@@ -177,7 +254,7 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
         } else if nested_projects.len() > 1 {
             return Err(CommandError::expected(format!(
                 "This folder contains multiple projects inside it: {}. Please select the specific project folder you want to import.",
-                nested_projects.join(", ")
+                summarize_names(&nested_projects)
             )));
         }
 
@@ -192,10 +269,22 @@ pub async fn register_external_project(app: AppHandle) -> Result<Option<String>,
 
     // Reject folders that already live under a projects root (configured or
     // default) — those are listed automatically and aren't "external".
-    if crate::utils::allowed_project_roots()
-        .iter()
-        .any(|root| canonical.starts_with(root))
-    {
+    //
+    // Only *direct children* qualify: `list_projects`/`get_dashboard_projects`
+    // scan the projects root one level deep, so a folder nested deeper is never
+    // discovered. Refusing it with "it will appear automatically" left those
+    // projects permanently invisible, with no way to add them (issue #747) —
+    // they fall through to normal external registration instead, which does
+    // list them.
+    // The root folder itself is a container, never a project.
+    if is_projects_root(&canonical) {
+        return Err(CommandError::expected(
+            "That folder is your projects folder itself, not a project. Pick one of the project \
+             folders inside it instead.",
+        ));
+    }
+
+    if is_direct_child_of_projects_root(&canonical) {
         if crate::commands::projects::restore_removed_project(&canonical)? {
             return Ok(Some(canonical_str));
         }
@@ -421,8 +510,54 @@ pub async fn is_project_external(path: String) -> Result<bool, CommandError> {
 
 #[cfg(test)]
 mod tests {
-    use super::looks_like_project_root;
+    use super::{is_any_of_roots, is_direct_child_of_any, looks_like_project_root};
     use std::fs;
+    use std::path::{Path, PathBuf};
+
+    // Issue #747: the "already inside your projects folder, it will appear
+    // automatically" refusal must only cover folders the single-level dashboard
+    // scan actually lists — deeper ones need external registration to show up.
+    #[test]
+    fn only_direct_children_count_as_inside_a_projects_root() {
+        let roots = vec![PathBuf::from("/Users/me/ShipStudio")];
+        assert!(is_direct_child_of_any(
+            Path::new("/Users/me/ShipStudio/my-app"),
+            &roots
+        ));
+        assert!(!is_direct_child_of_any(
+            Path::new("/Users/me/ShipStudio/clients/my-app"),
+            &roots
+        ));
+        // The root itself and unrelated paths aren't direct children either.
+        assert!(!is_direct_child_of_any(
+            Path::new("/Users/me/ShipStudio"),
+            &roots
+        ));
+        assert!(!is_direct_child_of_any(
+            Path::new("/Users/me/other"),
+            &roots
+        ));
+        assert!(!is_direct_child_of_any(Path::new("/"), &roots));
+    }
+
+    // The #747 direct-child narrowing must not leave the projects root itself
+    // registerable — a separate guard covers it.
+    #[test]
+    fn the_projects_root_itself_is_still_refused() {
+        let roots = vec![PathBuf::from("/Users/me/ShipStudio")];
+        assert!(is_any_of_roots(Path::new("/Users/me/ShipStudio"), &roots));
+        // Children — direct or deeper — are not the root and stay registerable
+        // by this predicate.
+        assert!(!is_any_of_roots(
+            Path::new("/Users/me/ShipStudio/my-app"),
+            &roots
+        ));
+        assert!(!is_any_of_roots(
+            Path::new("/Users/me/ShipStudio/clients/my-app"),
+            &roots
+        ));
+        assert!(!is_any_of_roots(Path::new("/Users/me/other"), &roots));
+    }
 
     #[test]
     fn rejects_sensitive_non_project_dirs() {
@@ -451,5 +586,22 @@ mod tests {
         let missing = std::env::temp_dir().join("ss-audit-missing-xyz");
         let _ = fs::remove_dir_all(&missing);
         assert!(!looks_like_project_root(&missing));
+    }
+
+    // #826: an unbounded name list flooded the guidance message (and the
+    // truncated copy no longer matched the frontend's Expected-refusal phrase).
+    #[test]
+    fn summarize_names_caps_long_lists() {
+        let few: Vec<String> = ["api", "web"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(super::summarize_names(&few), "api, web");
+
+        let many: Vec<String> = (0..40).map(|i| format!("pkg{i}")).collect();
+        let summary = super::summarize_names(&many);
+        assert!(
+            summary.starts_with("pkg0, pkg1, pkg2, pkg3, pkg4,"),
+            "{summary}"
+        );
+        assert!(summary.ends_with("and 35 more"), "{summary}");
+        assert!(!summary.contains("pkg5,"), "{summary}");
     }
 }

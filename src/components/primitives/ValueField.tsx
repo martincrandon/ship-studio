@@ -73,6 +73,8 @@ interface SplitValue {
 }
 
 const NUMERIC_VALUE = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*([a-z%]*)$/i;
+/** A CSS/Tailwind fraction (`1/2`) — a complete value that takes no unit. */
+const FRACTION_VALUE = /^\d+\/\d+$/;
 const CSS_VARIABLE_VALUE = /^var\(\s*(--[\w-]+)\s*\)$/i;
 const VARIABLE_OPTION: ValueFieldOption = { value: 'var', label: 'VAR', kind: 'variable' };
 const EMPTY_VARIABLES: ValueFieldVariable[] = [];
@@ -82,6 +84,13 @@ const EMPTY_VARIABLES: ValueFieldVariable[] = [];
 const VARIABLE_SCROLL_HOLD_MS = 2000;
 const VARIABLE_SCROLL_SPEED_PX_PER_SECOND = 32;
 const VARIABLE_OVERFLOW_EPSILON_PX = 1;
+
+/** A finite numeric `min`/`max` prop, or null when absent/non-numeric. */
+function numericBound(bound: string | number | undefined): number | null {
+  if (bound === undefined || bound === '') return null;
+  const parsed = typeof bound === 'number' ? bound : Number(bound);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 /** Returns the resolved pixel length of a custom property from computed style. */
 function readPixelCustomProperty(element: Element, property: string): number {
@@ -260,8 +269,6 @@ export interface ValueFieldProps extends Omit<
   format?: string;
   /** Reformat the current color when a color representation is selected. */
   onFormatChange?: (format: string) => void;
-  /** Observe the complete in-progress value without committing it. */
-  onValueChange?: (value: string) => void;
   /** Optional control rendered flush with the field's leading edge. */
   leading?: ReactNode;
   /** Return false to reject the value and restore the last controlled value. */
@@ -281,12 +288,15 @@ export function ValueField({
   variables = EMPTY_VARIABLES,
   format,
   onFormatChange,
-  onValueChange,
   leading,
   onCommit,
   className,
   onKeyDown,
   placeholder,
+  // Consumed here rather than forwarded: the field is a text input (the browser
+  // would ignore them), but arrow-key stepping honours them as the value's range.
+  min,
+  max,
   'aria-label': ariaLabel,
   ...inputProps
 }: ValueFieldProps) {
@@ -304,6 +314,10 @@ export function ValueField({
     ...(availableVariables.length > 0 || variableValue ? [VARIABLE_OPTION] : []),
     ...keywords,
   ];
+  // A field whose only option is the empty "no unit" entry has nothing to
+  // pick: rendering its trigger just parks a stray "-" beside the number
+  // (the Opacity row read "100 -").
+  const hasSelectableOptions = options.some((option) => option.value !== '');
   const isFormatField = variant === 'color';
   const initial = splitValueFieldValue(value, options);
   const placeholderValue =
@@ -414,17 +428,16 @@ export function ValueField({
   const combinedValue = (nextText = text, nextUnit = unit) => {
     const trimmed = nextText.trim();
     if (nextUnit === 'var') return `var(${trimmed})`;
-    return isFormatField ? trimmed : `${trimmed}${nextUnit}`;
-  };
-
-  const notifyValueChange = (nextText: string, nextUnit: string) => {
-    onValueChange?.(nextText.trim() ? combinedValue(nextText, nextUnit) : '');
+    // A fraction is a complete value: appending the field's active unit would
+    // commit `1/2px`, which every consumer rejects (typing `1/2` into Width used
+    // to apply `w-1/2`).
+    if (isFormatField || FRACTION_VALUE.test(trimmed)) return trimmed;
+    return `${trimmed}${nextUnit}`;
   };
 
   const commit = (nextText = text, nextUnit = unit) => {
     if (!nextText.trim()) return true;
     const nextValue = combinedValue(nextText, nextUnit);
-    onValueChange?.(nextValue);
     if (onCommit(nextValue) === false) {
       const restored = splitValueFieldValue(value, options);
       setText(restored.text);
@@ -501,6 +514,15 @@ export function ValueField({
     inputRef.current?.select();
   };
 
+  const minValue = numericBound(min);
+  const maxValue = numericBound(max);
+  const clampToRange = (n: number) => {
+    let clamped = n;
+    if (minValue !== null) clamped = Math.max(minValue, clamped);
+    if (maxValue !== null) clamped = Math.min(maxValue, clamped);
+    return clamped;
+  };
+
   const stepNumericValue = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false;
     const match = /^([+-]?(?:\d+\.?\d*|\.\d+))$/.exec(text.trim());
@@ -508,7 +530,10 @@ export function ValueField({
     const baseStep = unit ? 0.1 : 1;
     const amount = event.shiftKey ? 10 : event.altKey ? baseStep : 1;
     const direction = event.key === 'ArrowUp' ? 1 : -1;
-    const next = String(Math.round((Number(match[1]) + direction * amount) * 100) / 100);
+    // Respect the field's own range: sizes and opacity have no meaning below 0,
+    // and stepping past the bound used to commit a value the consumer rejects.
+    const stepped = clampToRange(Math.round((Number(match[1]) + direction * amount) * 100) / 100);
+    const next = String(stepped);
     event.preventDefault();
     setText(next);
     commit(next, unit);
@@ -614,7 +639,6 @@ export function ValueField({
           if (isVariableInput) {
             setText(next);
             setUnit('var');
-            notifyValueChange(next, 'var');
             if (availableVariables.length > 0) {
               setVariableQuery(next);
               setActiveVariableIndex(0);
@@ -622,21 +646,23 @@ export function ValueField({
               setOpen(false);
             }
           } else {
-            let nextText = next;
-            let nextUnit = unit;
             if (unit === 'var') {
               setVariableOpen(false);
               setVariableQuery('');
             }
             if (!isFormatField && parsed.unit) {
-              nextText = parsed.text;
-              nextUnit = parsed.unit;
-            } else if (!isFormatField && /[a-z%)]$/i.test(next.trim())) {
-              nextUnit = '';
+              setText(parsed.text);
+              setUnit(parsed.unit);
+            } else {
+              setText(next);
+              // A keyword/function value (`auto`, `calc(…)`) or a fraction carries
+              // its own meaning — drop the unit so the picker mirrors the value.
+              if (
+                !isFormatField &&
+                (/[a-z%)]$/i.test(next.trim()) || FRACTION_VALUE.test(next.trim()))
+              )
+                setUnit('');
             }
-            setText(nextText);
-            setUnit(nextUnit);
-            notifyValueChange(nextText, nextUnit);
           }
           if (invalid) setInvalid(false);
         }}
@@ -705,62 +731,63 @@ export function ValueField({
             setText(restored.text);
             setUnit(restored.unit);
             setInvalid(false);
-            onValueChange?.(value);
             event.currentTarget.select();
           } else {
             stepNumericValue(event);
           }
         }}
       />
-      <button
-        ref={triggerRef}
-        type="button"
-        className="value-field__unit"
-        aria-label={`${ariaLabel ?? 'Value'} format`}
-        aria-haspopup="listbox"
-        aria-controls={listId}
-        aria-expanded={open}
-        onPointerDown={(event) => {
-          // Toggle on pointerdown so the opening gesture is complete before the
-          // outside-dismiss listener can be attached. Keep focus in the input;
-          // moving focus to this segment can make WebKit commit the value and
-          // refresh the editor before the menu opens.
-          event.preventDefault();
-          event.stopPropagation();
-          pointerToggleRef.current = true;
-          keyboardToggleRef.current = false;
-          setVariableOpen(false);
-          setOpen((current) => !current);
-        }}
-        onClick={(event) => {
-          event.stopPropagation();
-          // Pointerdown already toggles the menu. Ignore its later click even
-          // when the browser reports a zero click detail or dispatches it late.
-          if (pointerToggleRef.current) {
-            pointerToggleRef.current = false;
-            return;
-          }
-          // Enter/Space opens from onKeyDown; ignore that keyboard-generated
-          // click so keyboard activation does not toggle twice.
-          if (keyboardToggleRef.current) {
+      {hasSelectableOptions && (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="value-field__unit"
+          aria-label={`${ariaLabel ?? 'Value'} format`}
+          aria-haspopup="listbox"
+          aria-controls={listId}
+          aria-expanded={open}
+          onPointerDown={(event) => {
+            // Toggle on pointerdown so the opening gesture is complete before the
+            // outside-dismiss listener can be attached. Keep focus in the input;
+            // moving focus to this segment can make WebKit commit the value and
+            // refresh the editor before the menu opens.
+            event.preventDefault();
+            event.stopPropagation();
+            pointerToggleRef.current = true;
             keyboardToggleRef.current = false;
-            return;
-          }
-          setActiveIndex(selectedIndex);
-          setVariableOpen(false);
-          setOpen((current) => !current);
-        }}
-        onKeyDown={(event) => {
-          if (open || !['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) return;
-          event.preventDefault();
-          keyboardToggleRef.current = true;
-          setActiveIndex(selectedIndex);
-          setVariableOpen(false);
-          setOpen(true);
-        }}
-      >
-        {selectedLabel ?? '-'}
-      </button>
+            setVariableOpen(false);
+            setOpen((current) => !current);
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            // Pointerdown already toggles the menu. Ignore its later click even
+            // when the browser reports a zero click detail or dispatches it late.
+            if (pointerToggleRef.current) {
+              pointerToggleRef.current = false;
+              return;
+            }
+            // Enter/Space opens from onKeyDown; ignore that keyboard-generated
+            // click so keyboard activation does not toggle twice.
+            if (keyboardToggleRef.current) {
+              keyboardToggleRef.current = false;
+              return;
+            }
+            setActiveIndex(selectedIndex);
+            setVariableOpen(false);
+            setOpen((current) => !current);
+          }}
+          onKeyDown={(event) => {
+            if (open || !['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) return;
+            event.preventDefault();
+            keyboardToggleRef.current = true;
+            setActiveIndex(selectedIndex);
+            setVariableOpen(false);
+            setOpen(true);
+          }}
+        >
+          {selectedLabel ?? '-'}
+        </button>
+      )}
       {open &&
         menuRect &&
         createPortal(

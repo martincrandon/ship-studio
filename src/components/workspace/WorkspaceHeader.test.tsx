@@ -261,7 +261,7 @@ describe('WorkspaceHeader title bar', () => {
     const agent = screen.getByRole('button', { name: 'Agent' });
     const variables = screen.getByRole('button', { name: 'Variables' });
     const assets = screen.getByRole('button', { name: 'Assets' });
-    const buttons = Array.from(tools!.querySelectorAll('button'));
+    const buttons = Array.from(tools!.querySelectorAll<HTMLElement>('button'));
 
     expect(buttons[0]).toBe(agent);
     expect(buttons.indexOf(agent)).toBeLessThan(buttons.indexOf(variables));

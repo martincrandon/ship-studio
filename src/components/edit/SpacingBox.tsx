@@ -9,6 +9,7 @@
  */
 
 import {
+  useId,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -38,6 +39,7 @@ const SIDE_DRAG: Record<Side, { axis: 'x' | 'y'; sign: 1 | -1 }> = {
 const DRAG_SENSITIVITY = 5;
 
 interface FieldProps {
+  id: string;
   value: SpacingValue | null;
   onSet: (v: SpacingValue) => void;
   label: string;
@@ -73,11 +75,9 @@ function useSpacingDrag<T extends HTMLElement>(
 ) {
   const drag = useRef<{ x: number; y: number; base: ReturnType<typeof dragBaseOf> } | null>(null);
   const dragged = useRef(false);
-  const suppressClick = useRef(false);
 
   const onPointerDown = (e: ReactPointerEvent<T>) => {
     if (e.button !== 0) return;
-    suppressClick.current = false;
     e.preventDefault();
     drag.current = { x: e.clientX, y: e.clientY, base: dragBaseOf(value) };
     dragged.current = false;
@@ -97,32 +97,14 @@ function useSpacingDrag<T extends HTMLElement>(
   const onPointerUp = (e: ReactPointerEvent<T>) => {
     const wasClick = drag.current && !dragged.current;
     drag.current = null;
-    if (wasClick) {
-      // Pointerdown prevents the browser's default focus/click path so a click
-      // can be distinguished from a scrub. Ignore the synthetic click when an
-      // engine still dispatches one, while leaving keyboard clicks available.
-      suppressClick.current = true;
-      onClick(e.currentTarget);
-      window.setTimeout(() => {
-        suppressClick.current = false;
-      }, 0);
-    }
+    if (wasClick) onClick(e.currentTarget);
   };
 
   const onPointerCancel = () => {
     drag.current = null;
-    suppressClick.current = false;
   };
 
-  const handleClick = (e: ReactMouseEvent<T>) => {
-    if (suppressClick.current) {
-      suppressClick.current = false;
-      return;
-    }
-    onClick(e.currentTarget);
-  };
-
-  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onClick: handleClick };
+  return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel };
 }
 
 /**
@@ -130,56 +112,113 @@ function useSpacingDrag<T extends HTMLElement>(
  *  - drag along the bar's own axis (pulls outward to grow) — like a design tool,
  *  - scroll to scrub,
  *  - ArrowUp/Down to step (Shift ×10, Alt fine),
- *  - click to open the full value editor popup.
+ *  - click then type a value or unit (10rem, 50%); Enter/blur applies.
+ * Bad input (`40xyz`) marks the field invalid and isn't applied.
  */
-function SideField({
-  value,
-  label,
-  className,
-  dir,
-  state,
-  onSet,
-  open,
-  onOpen,
-}: FieldProps & { open: boolean; onOpen: (target: HTMLButtonElement) => void }) {
+function SideField({ id, value, onSet, cssProp, label, className, dir, state }: FieldProps) {
   const display = spacingDisplay(value);
+  const [text, setText] = useState(display);
+  const [lastDisplay, setLastDisplay] = useState(display);
+  const [invalid, setInvalid] = useState(false);
+  // Sync the field when the value changes externally (steppers, reselect) — but
+  // not while the user is mid-edit with unsaved invalid text.
+  if (display !== lastDisplay && !invalid) {
+    setLastDisplay(display);
+    setText(display);
+  }
 
-  const dragHandlers = useSpacingDrag<HTMLButtonElement>(value, onSet, dir, onOpen);
+  const dragHandlers = useSpacingDrag<HTMLInputElement>(value, onSet, dir, (target) =>
+    target.focus()
+  );
+
+  /** Parse + apply the typed text; on bad input, mark invalid (keep the text). */
+  const commit = () => {
+    const parsed = parseSpacingInput(text, cssProp);
+    if (parsed.kind === 'invalid') {
+      setInvalid(true);
+      return false;
+    }
+    setInvalid(false);
+    onSet(parsed);
+    return true;
+  };
+
+  /** One keyboard step: ArrowUp/Down = one drag tick, Shift ×10, Alt = fine
+   *  (÷10 on unit values; the Tailwind scale stays on whole steps). Steps the
+   *  typed text when it parses, else the live value — same commit path as drag. */
+  const onArrowStep = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    const parsed = parseSpacingInput(text, cssProp);
+    const cur = parsed.kind === 'invalid' ? value : parsed;
+    const base = dragBaseOf(cur);
+    if (!base) return; // non-numeric (calc(…)) — leave the caret alone
+    e.preventDefault();
+    const fine = cur?.kind === 'arbitrary' ? 0.1 : 1;
+    const step = e.shiftKey ? 10 : e.altKey ? fine : 1;
+    const dir = e.key === 'ArrowUp' ? 1 : -1;
+    onSet(base.build(Math.round((base.magnitude + dir * step) * 100) / 100));
+  };
 
   return (
-    <button
-      type="button"
+    <input
+      id={id}
       className={`ss-box__field ${className} ss-box__field--${state}${
-        open ? ' ss-box__field--open' : ''
+        invalid ? ' ss-box__field--invalid' : ''
       }`}
+      size={Math.max(text.length, 1)}
       aria-label={label}
-      aria-haspopup="dialog"
-      aria-expanded={open}
-      title={`${label} (drag or click to edit)`}
+      aria-invalid={invalid}
+      title={
+        invalid
+          ? 'Use a valid value or unit (e.g. 8, 10rem, 50%)'
+          : `${label} (drag, scroll, or type)`
+      }
+      inputMode="text"
+      autoCorrect="off"
+      autoCapitalize="off"
+      autoComplete="off"
+      spellCheck={false}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        if (invalid) setInvalid(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') onArrowStep(e);
+      }}
+      onBlur={() => {
+        // Apply if valid; otherwise drop the bad text back to the live value.
+        if (!commit()) {
+          setText(display);
+          setInvalid(false);
+        }
+      }}
       {...dragHandlers}
-    >
-      {display}
-    </button>
+    />
   );
 }
 
 interface BandProps {
+  id: string;
   type: BoxType;
   side: Side;
   value: SpacingValue | null;
   onSet: (v: SpacingValue) => void;
-  onOpen: (target: HTMLDivElement) => void;
 }
 
-function PanelBand({ type, side, value, onSet, onOpen }: BandProps) {
-  const dragHandlers = useSpacingDrag<HTMLDivElement>(value, onSet, SIDE_DRAG[side], onOpen);
+function PanelBand({ id, type, side, value, onSet }: BandProps) {
+  const dragHandlers = useSpacingDrag<HTMLLabelElement>(value, onSet, SIDE_DRAG[side], () =>
+    document.getElementById(id)?.focus()
+  );
 
   return (
-    <div
+    <label
       className={`ss-box__band ss-box__band--${side}`}
+      htmlFor={id}
       aria-hidden="true"
       data-box-type={type}
       data-box-side={side}
+      onClick={() => document.getElementById(id)?.focus()}
       {...dragHandlers}
     />
   );
@@ -208,7 +247,8 @@ function popoverLabel(type: BoxType, side: Side): string {
 }
 
 export function SpacingBox({ currentClass, layer, onSetSide }: Props) {
-  const [openField, setOpenField] = useState<OpenField | null>(null);
+  const idPrefix = useId();
+  const fieldId = (type: BoxType, side: Side) => `${idPrefix}-${type}-${side}`;
   const sideData = (type: BoxType, side: Side) =>
     readLayer(currentClass, layer, (s) => boxSide(s, type, side));
 
@@ -218,14 +258,13 @@ export function SpacingBox({ currentClass, layer, onSetSide }: Props) {
       definedAt === null ? 'default' : definedAt.name === layer.bp.name ? 'modified' : 'inherited';
     return (
       <SideField
+        id={fieldId(type, side)}
         value={value}
         onSet={(next) => onSetSide(type, side, next)}
         label={sideLabel(type, side)}
         className={`ss-box__edge--${edge}`}
         dir={SIDE_DRAG[side]}
         state={state}
-        open={openField?.type === type && openField.side === side}
-        onOpen={(anchor) => setOpenField({ type, side, anchor })}
       />
     );
   };
@@ -234,11 +273,11 @@ export function SpacingBox({ currentClass, layer, onSetSide }: Props) {
     const { value } = sideData(type, side);
     return (
       <PanelBand
+        id={fieldId(type, side)}
         type={type}
         side={side}
         value={value}
         onSet={(next) => onSetSide(type, side, next)}
-        onOpen={(anchor) => setOpenField({ type, side, anchor })}
       />
     );
   };

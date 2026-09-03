@@ -768,3 +768,12 @@
   color: var(--text-muted);
   font-size: var(--font-size-body-lg);
 }
+
+/* Fetch failed — distinct from "no results" so the user knows to retry (#754) */
+.tg-error {
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: 0 var(--spacing-lg);
+  text-align: center;
+  color: var(--text-secondary);
+}

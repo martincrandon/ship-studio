@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../primitives/Button';
-import { PixelLoader } from '../primitives/PixelLoader';
+import { Spinner } from '../primitives/Spinner';
 import { ChevronRightIcon } from '@/components/icons';
 import { stripAnsi } from '../../lib/ansi';
 import DevServerStoppedGraphic from '@/assets/graphics/dev-server-stopped.svg?react';

@@ -275,6 +275,16 @@
   color: var(--text-muted);
 }
 
+/* Neutral inline note, not a failure — e.g. a pasted KEY=value entry that was
+   split into the name and value fields. */
+.env-key-notice {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-control);
+  border-radius: var(--radius-control);
+}
+
 .env-error {
   color: var(--accent-error);
   font-size: var(--font-size-body-lg);

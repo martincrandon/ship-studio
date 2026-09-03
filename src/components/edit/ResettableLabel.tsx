@@ -54,9 +54,7 @@ export function ResettableLabel({
   // Dismiss any open popover on outside click / Escape / scroll.
   useDismissOnOutsidePointer(pop !== null, popRef, () => setPop(null), {
     isOutside: (t) =>
-      !popRef.current?.contains(t) &&
-      !cardRef.current?.contains(t) &&
-      !btnRef.current?.contains(t),
+      !popRef.current?.contains(t) && !cardRef.current?.contains(t) && !btnRef.current?.contains(t),
   });
   useEffect(() => {
     if (!pop) return;

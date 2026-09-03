@@ -25,6 +25,7 @@ import {
   asCommandError,
   formatCommandError,
   humanizeGitError,
+  isMissingUpstreamError,
   isRecognizedGitFailure,
 } from '../lib/errors';
 import { trackEvent, trackError } from '../lib/analytics';
@@ -265,7 +266,7 @@ export function useBranchManagement({
         void trackEvent('git_pulled', { result: 'merge_conflict', $screen_name: 'Workspace' });
         logger.warn('Pull produced merge conflicts', { message });
         setShowConflictResolution(true);
-      } else if (/no tracking information|no such ref was fetched/i.test(message)) {
+      } else if (isMissingUpstreamError(e)) {
         // Expected, by-design refusal (unpushed branch) — info toast + warn
         // log, NOT the error channels: error toasts and logger.error both
         // auto-file bug reports, and this isn't a bug (issue #600).
@@ -331,7 +332,23 @@ export function useBranchManagement({
             const detail = switchResult.error
               ? humanizeGitError(switchResult.error, { branch: headBranch })
               : '(git reported failure with no detail — check for uncommitted changes)';
-            showToast(`Couldn't switch to "${headBranch}": ${detail}`, 'error');
+            // Recognized states (the PR's head branch deleted on GitHub, a
+            // worktree collision, unsaved changes) are anticipated conditions
+            // the backend already classified Expected — an 'error' toast here
+            // re-reports them through toast telemetry (issue #843). Mirror the
+            // merge-failure branch below: info + warn for recognized causes.
+            const recognized =
+              !!switchResult.error &&
+              isRecognizedGitFailure(switchResult.error, { branch: headBranch });
+            if (recognized) {
+              logger.warn('Switch for conflict resolution refused for a recognized reason', {
+                message: switchResult.error,
+              });
+            }
+            showToast(
+              `Couldn't switch to "${headBranch}": ${detail}`,
+              recognized ? 'info' : 'error'
+            );
             return;
           }
 

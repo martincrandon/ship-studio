@@ -10,9 +10,6 @@
   --size-titlebar-project-path: 30ch;
   --size-element-toolbar-selector: 140px;
   --size-preview-dimensions: 84px;
-  --size-preview-breakpoints-min-width: 69px;
-  --size-preview-breakpoint-menu: 240px;
-  --size-preview-breakpoint-divider-height: var(--stroke-1);
 
   --size-sidebar-project-shortcut: 24px;
   --size-sidebar-project: 214px;
@@ -214,6 +211,18 @@
   --popover-source-control-width: var(--size-source-control-popover);
   --source-control-branch-max-width: var(--size-source-control-branch);
   --z-dropdown: 100;
+  /* Pane separators (split-pane, docked preview panels). Above a docked panel
+     surface (which sits at --z-dropdown) so the drag target stays reachable,
+     but below chrome — a separator that outranks a toolbar's own menus draws
+     its line straight through them. */
+  --z-pane-separator: 150;
+  /* Preview toolbar. Its own menus are absolutely positioned inside its
+     stacking context, so it has to outrank the pane separators that run the
+     full height of the container. It must stay BELOW the header tier: the
+     titlebar/header is a stacking context of its own, so a menu opened from
+     it can never rise above a later-painted sibling at the same level — at
+     --z-workspace-header the toolbar covered the top of the Push menu. */
+  --z-preview-toolbar: 160;
   /* Header popovers must paint above preview error/status overlays. */
   --z-workspace-header: 200;
   --z-preview-fullscreen: 900;

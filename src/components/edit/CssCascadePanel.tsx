@@ -8,7 +8,7 @@
  * editor panels.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { PinIcon } from '@/components/icons';
 import { CloseIcon, CheckIcon } from '@/components/icons';
 import { PlusIcon } from '@/components/icons';
@@ -17,7 +17,6 @@ import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
-import { TextButton } from '../primitives/TextButton';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
@@ -37,16 +36,6 @@ import type { useCssAnimations } from '../../hooks/useCssAnimations';
 
 /** The panel's top-level view: element style/settings, or project-global animation CSS. */
 type Scope = 'style' | 'settings' | 'animations';
-
-function mediaConditionKey(condition: string): string {
-  return condition.replace(/\s+/g, '').toLowerCase();
-}
-
-interface DraftMediaQuery {
-  id: number;
-  condition: string;
-  selectors: string[];
-}
 
 interface Props {
   selection: CascadeSelection | null;
@@ -364,7 +353,6 @@ export function CssCascadePanel({
                 <>
                   <AddSelectorBar
                     onAddSelector={onAddSelector}
-                    onAddMediaQuery={addDraftMediaQuery}
                     suggestions={addSelectorOptions}
                     existing={existingSelectors}
                   />
@@ -375,103 +363,72 @@ export function CssCascadePanel({
                     </div>
                   ) : (
                     <div className="ss-cascade-cards">
-                      {draftMediaQueries.map(({ id, condition, selectors }) => (
-                        <MediaQueryGroupCard
-                          key={`draft-media:${id}`}
-                          condition={condition}
-                          autoFocusQuery
-                          commitQueryOnAppend
-                          onRename={(next) => renameDraftMediaQuery(id, next)}
-                          onDelete={() => deleteDraftMediaQuery(id)}
-                          addSelector={
-                            <AddSelectorBar
-                              onAddSelector={(selector, atPrelude) => {
-                                if (isMediaQueryComplete(condition)) {
-                                  deleteDraftMediaQuery(id);
-                                  onAddSelector(selector, atPrelude);
-                                } else {
-                                  addDraftMediaSelector(id, selector);
-                                }
-                              }}
-                              suggestions={addSelectorOptions}
-                              existing={existingSelectors}
-                              fixedCondition={`@media ${condition}`}
-                            />
-                          }
-                        >
-                          {selectors.map((selector) => (
+                      {rows.map((row) => {
+                        const key = rowKey(row);
+                        // Stable across element switches (unlike `key`, which embeds the row index).
+                        const collapseKey = `${row.selector ?? ''}|${row.mediaText ?? ''}`;
+                        const collapsed = collapsedRules.has(collapseKey);
+                        const onToggleCollapse = () => toggleCollapsed(collapseKey);
+                        if (row.editable && bodies[key]) {
+                          return (
                             <CascadeRuleCard
-                              key={selector}
+                              key={key}
                               editable
-                              draft
-                              selector={selector}
-                              body={parseRuleBody('')}
-                              overridden={new Map()}
-                              onChange={() => undefined}
-                              onDelete={() => deleteDraftMediaSelector(id, selector)}
+                              selector={row.selector ?? ''}
+                              file={row.file}
+                              line={row.line}
+                              mediaText={row.mediaText}
+                              layer={row.layer}
+                              container={row.container}
+                              supports={row.supports}
+                              inactive={row.inactiveMedia}
+                              overridden={
+                                row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())
+                              }
+                              body={bodies[key]}
+                              draft={row.draft}
+                              unmatched={row.unmatched}
+                              autoOpenAdd={key === justCreatedKey}
+                              onChange={(b) => onChangeBody(key, b)}
+                              onDelete={() => onDeleteRule(key)}
+                              // A draft rule doesn't exist in source yet — no rename/wrap
+                              // until it's created (by adding the first property).
+                              onWrap={row.draft ? undefined : (at) => onWrapRule(key, at)}
+                              onRename={row.draft ? undefined : (s) => onRenameRule(key, s)}
+                              onRenameAtRule={row.draft ? undefined : (m) => onRenameAtRule(key, m)}
                               selectorSuggestions={selectorSuggestions}
                               variables={variables}
                               animations={animations}
-                              pendingReason="Complete the media query before editing properties."
+                              collapsed={collapsed}
+                              onToggleCollapse={onToggleCollapse}
                             />
-                          ))}
-                        </MediaQueryGroupCard>
-                      ))}
-                      {groupCascadeRows(rows).map((item) => {
-                        if (item.kind === 'rule') return renderRuleCard(item.row);
-
-                        const groupCollapseKey = `media:${item.key}`;
-                        const groupEditableRow = item.rows.find(
-                          (row) => row.editable && !row.draft && bodies[rowKey(row)]
-                        );
-                        const groupDeletableRows = item.rows.filter(
-                          (row) => row.editable && !row.draft && bodies[rowKey(row)]
-                        );
-                        const sourceFiles = [
-                          ...new Set(
-                            item.rows.flatMap((row) =>
-                              row.file ? [row.file] : (row.sourceFiles ?? [])
-                            )
-                          ),
-                        ];
+                          );
+                        }
                         return (
-                          <MediaQueryGroupCard
-                            key={item.key}
-                            condition={item.condition}
-                            file={sourceFiles.length === 1 ? sourceFiles[0] : undefined}
-                            sourceFiles={sourceFiles}
-                            inactive={item.rows.some((row) => row.inactiveMedia)}
-                            collapsed={collapsedRules.has(groupCollapseKey)}
-                            onToggleCollapse={() => toggleCollapsed(groupCollapseKey)}
-                            onRename={
-                              groupEditableRow
-                                ? (condition) => onRenameAtRule(rowKey(groupEditableRow), condition)
-                                : undefined
+                          <CascadeRuleCard
+                            key={key}
+                            editable={false}
+                            collapsed={collapsed}
+                            onToggleCollapse={onToggleCollapse}
+                            selector={row.selector ?? 'element.style'}
+                            file={row.file}
+                            line={row.line}
+                            sourceFiles={row.sourceFiles}
+                            mediaText={row.mediaText}
+                            layer={row.layer}
+                            container={row.container}
+                            supports={row.supports}
+                            inactive={row.inactiveMedia}
+                            overridden={
+                              row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())
                             }
-                            onDelete={
-                              groupDeletableRows.length === item.rows.length
-                                ? () => {
-                                    void (async () => {
-                                      for (const row of groupDeletableRows) {
-                                        await onDeleteRule(rowKey(row));
-                                      }
-                                    })();
-                                  }
-                                : undefined
-                            }
-                            addSelector={
-                              groupEditableRow ? (
-                                <AddSelectorBar
-                                  onAddSelector={onAddSelector}
-                                  suggestions={addSelectorOptions}
-                                  existing={existingSelectors}
-                                  fixedCondition={`@media ${item.condition}`}
-                                />
-                              ) : undefined
-                            }
-                          >
-                            {item.rows.map((row) => renderRuleCard(row, true))}
-                          </MediaQueryGroupCard>
+                            readonlyReason={row.readonlyReason}
+                            decls={row.declarations.map((d) => ({
+                              prop: d.prop,
+                              value: d.value,
+                              important: d.important,
+                            }))}
+                          />
                         );
                       })}
 
@@ -523,18 +480,21 @@ export function AddSelectorBar({
     setOpen(false);
   };
 
-  const beginMediaQuery = (value: string): boolean => {
-    const trimmed = value.trim();
-    const [keyword = '', ...conditionParts] = trimmed.split(/\s+/);
-    // Accept the useful partials too (`@m`, `@med`, …), while leaving other
-    // at-rules on the existing condition autocomplete path.
-    if (keyword.length < 2 || !'@media'.startsWith(keyword.toLowerCase())) return false;
-    onAddMediaQuery?.(keyword.toLowerCase() === '@media' ? conditionParts.join(' ') : '');
-    setText('');
-    setActive(0);
-    setOpen(false);
-    return true;
-  };
+  if (!open) {
+    return (
+      <div className="ss-cascade-action">
+        <Button
+          variant="default"
+          width="fill"
+          leftIcon={<PlusIcon size={11} />}
+          data-cascade-add-selector
+          onClick={() => setOpen(true)}
+        >
+          Add selector
+        </Button>
+      </div>
+    );
+  }
 
   const existingSet = new Set(existing);
   // Smart staged autofill: compose one rule prelude `[@condition] [selector]`. While you

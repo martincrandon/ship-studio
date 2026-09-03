@@ -38,9 +38,10 @@ const allowlist = [
     reason: 'anchored insertion menu; it is a future menu/listbox contract',
   },
   {
-    file: 'src/components/edit/SpacingValuePopover.tsx',
+    file: 'src/components/edit/InheritancePopover.tsx',
     label: 'role="dialog"',
-    reason: 'anchored spacing value editor; it is not a modal surface',
+    reason:
+      'anchored provenance popover inside the editor panel; it is not a modal surface and must not trap focus',
   },
   {
     file: 'src/components/preview/PreviewSizeControl.tsx',

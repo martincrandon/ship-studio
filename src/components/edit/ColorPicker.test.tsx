@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { mockInvokeResponse } from '../../test/setup';
 import { ColorPicker } from './ColorPicker';
 
 type EyeDropperWindow = Window & {
@@ -179,6 +178,32 @@ describe('ColorPicker', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.stringMatching(/^hsl\(/));
   });
 
+  it('keeps hue and saturation across HSB field edits that pass through black', () => {
+    const { onChange } = renderControlledPicker('#ff0000');
+    fireEvent.click(screen.getByRole('button', { name: 'HSB' }));
+    expect(screen.getByLabelText('H')).toHaveValue('0');
+    expect(screen.getByLabelText('S')).toHaveValue('100');
+
+    // Brightness 0 is black, which has no recoverable hue/saturation in RGB:
+    // the fields must keep showing the HSB the user is editing.
+    const brightness = screen.getByLabelText('B');
+    fireEvent.change(brightness, { target: { value: '0' } });
+    fireEvent.blur(brightness);
+    expect(onChange).toHaveBeenLastCalledWith('rgb(0, 0, 0)');
+    expect(screen.getByLabelText('H')).toHaveValue('0');
+    expect(screen.getByLabelText('S')).toHaveValue('100');
+
+    // Typing a hue while black, then raising brightness, gives that hue back.
+    const hueField = screen.getByLabelText('H');
+    fireEvent.change(hueField, { target: { value: '240' } });
+    fireEvent.blur(hueField);
+    expect(screen.getByLabelText('H')).toHaveValue('240');
+
+    fireEvent.change(screen.getByLabelText('B'), { target: { value: '100' } });
+    fireEvent.blur(screen.getByLabelText('B'));
+    expect(onChange).toHaveBeenLastCalledWith('rgb(0, 0, 255)');
+  });
+
   it('preserves alpha when the picker surface changes', () => {
     const { onChange } = renderPicker('rgba(255, 0, 0, 0.5)');
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Alpha' }), {
@@ -218,46 +243,11 @@ describe('ColorPicker', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^hsl\(/)));
   });
 
-  it('uses the native color sampler when the browser EyeDropper is unavailable', async () => {
-    mockInvokeResponse('get_color_sampler_support', { available: true, reason: null });
-    mockInvokeResponse('sample_screen_color', '#00ff00');
-    const { onChange } = renderPicker();
-    const button = screen.getByRole('button', { name: 'Eyedropper' });
-
-    await waitFor(() => expect(button).toBeEnabled());
-    fireEvent.click(button);
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^hsl\(/)));
-  });
-
-  it('does not open overlapping native color samplers on rapid clicks', async () => {
-    mockInvokeResponse('get_color_sampler_support', { available: true, reason: null });
-    let finishSampling: ((color: string) => void) | undefined;
-    const sample = vi.fn(
-      () =>
-        new Promise<string>((resolve) => {
-          finishSampling = resolve;
-        })
-    );
-    mockInvokeResponse('sample_screen_color', sample);
-    const { onChange } = renderPicker();
-    const button = screen.getByRole('button', { name: 'Eyedropper' });
-
-    await waitFor(() => expect(button).toBeEnabled());
-    fireEvent.click(button);
-    fireEvent.click(button);
-    expect(sample).toHaveBeenCalledOnce();
-
-    finishSampling?.('#00ff00');
-    await waitFor(() => expect(onChange).toHaveBeenCalledOnce());
-  });
-
-  it('disables the eyedropper with the native support reason when unsupported', async () => {
-    const reason = 'The native macOS screen color sampler requires macOS 10.15 or later.';
-    mockInvokeResponse('get_color_sampler_support', { available: false, reason });
+  it('disables the eyedropper with an explanatory tooltip when unsupported', () => {
     renderPicker();
     const button = screen.getByRole('button', { name: 'Eyedropper' });
-    await waitFor(() => expect(button).toBeDisabled());
-    expect(button).toHaveAttribute('title', reason);
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', 'Eyedropper unavailable on this platform.');
   });
 
   it('has no recent-variable footer', () => {

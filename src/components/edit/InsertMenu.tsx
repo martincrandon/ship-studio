@@ -18,6 +18,9 @@ interface Props {
   anchor: { left: number; top: number; bottom: number } | null;
   /** The anchor element can't contain children (void tag) — no "Inside". */
   insideDisabled: boolean;
+  /** The anchor IS the document (`<html>`/`<head>`/`<body>`) — nothing can sit
+   *  beside it, so only "Inside" is offered (issues #723/#740). */
+  outsideDisabled?: boolean;
   onInsert: (position: InsertPosition, kind: ElementKind) => void;
   onClose: () => void;
 }
@@ -31,7 +34,7 @@ const POSITIONS: { id: InsertPosition; label: string }[] = [
   { id: 'inside', label: 'Inside' },
 ];
 
-export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props) {
+export function InsertMenu({ anchor, insideDisabled, outsideDisabled, onInsert, onClose }: Props) {
   // Adding to a container means adding a child in the common case. This also
   // avoids offering an unsafe sibling-by-default when the selection is a React
   // component's sole JSX root. Void elements necessarily fall back to After.
@@ -42,8 +45,15 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
   const listId = useId();
   const optionId = (i: number) => `${listId}-opt-${i}`;
 
-  // A void anchor loses "Inside" — fall back to the default placement.
-  const effectivePosition = insideDisabled && position === 'inside' ? 'after' : position;
+  const disabledPosition = (id: InsertPosition) =>
+    id === 'inside' ? insideDisabled : !!outsideDisabled;
+  // A void anchor loses "Inside", a structural one loses Before/After — fall
+  // back to whichever placement is still available.
+  const effectivePosition = !disabledPosition(position)
+    ? position
+    : outsideDisabled
+      ? 'inside'
+      : 'after';
 
   // Fresh keyboard highlight each time the menu opens (render-time state
   // adjustment — the sanctioned "derive from prop change" pattern).
@@ -126,11 +136,13 @@ export function InsertMenu({ anchor, insideDisabled, onInsert, onClose }: Props)
               key={p.id}
               value={p.id}
               size="compact"
-              disabled={p.id === 'inside' && insideDisabled}
+              disabled={disabledPosition(p.id)}
               title={
                 p.id === 'inside' && insideDisabled
                   ? 'This element can’t contain children'
-                  : undefined
+                  : disabledPosition(p.id)
+                    ? 'Nothing can sit beside this element — it’s part of the page itself'
+                    : undefined
               }
             >
               {p.label}

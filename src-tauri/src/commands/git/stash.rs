@@ -34,16 +34,22 @@ pub async fn get_stash_info(
 pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let output = crate::utils::git_command_in(&validated_path)?
-        .args([
-            "stash",
-            "push",
-            "--include-untracked",
-            "-m",
-            "Ship Studio: set aside before creating a branch",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    // `stash push` writes the index just like add/commit/checkout, so it can
+    // lose the .git lock race against the background snapshot watcher or any
+    // agent CLI running git — retry on contention the same way
+    // git_stage_and_commit/discard_changes do (issues #377/#597/#820).
+    let output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(&validated_path)?
+            .args([
+                "stash",
+                "push",
+                "--include-untracked",
+                "-m",
+                "Ship Studio: set aside before creating a branch",
+            ])
+            .output()
+            .map_err(CommandError::from)
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -62,10 +68,14 @@ pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
 pub async fn apply_stash(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let pop_output = crate::utils::git_command_in(&validated_path)?
-        .args(["stash", "pop"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    // Same index.lock retry as stash_changes — popping rewrites the working
+    // tree and index (issue #820).
+    let pop_output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(&validated_path)?
+            .args(["stash", "pop"])
+            .output()
+            .map_err(CommandError::from)
+    })?;
 
     if pop_output.status.success() {
         // Clear stash info from metadata
@@ -89,10 +99,14 @@ pub async fn apply_stash(project_path: String) -> Result<bool, CommandError> {
 pub async fn drop_stash(project_path: String) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
 
-    let drop_output = crate::utils::git_command_in(&validated_path)?
-        .args(["stash", "drop"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    // `stash drop` rewrites refs/stash, which takes the same lock family
+    // (issue #820).
+    let drop_output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(&validated_path)?
+            .args(["stash", "drop"])
+            .output()
+            .map_err(CommandError::from)
+    })?;
 
     // Clear stash info from metadata regardless of drop success
     let mut metadata = load_project_metadata(&validated_path);
@@ -200,10 +214,15 @@ pub async fn restore_backup(
     let has_changes = git_has_any_changes(&validated_path)?;
     if has_changes {
         info!("Stashing current changes");
-        let stash_output = crate::utils::git_command_in(&validated_path)?
-            .args(["stash", "push", "-m", "Auto-stash before restore"])
-            .output()
-            .map_err(|e| e.to_string())?;
+        // Index-lock retry on every mutating step of the restore, same as the
+        // commit/discard paths — a snapshot-watcher collision here aborted the
+        // whole restore halfway (issue #820).
+        let stash_output = crate::utils::output_retrying_index_lock(|| {
+            crate::utils::git_command_in(&validated_path)?
+                .args(["stash", "push", "-m", "Auto-stash before restore"])
+                .output()
+                .map_err(CommandError::from)
+        })?;
 
         if !stash_output.status.success() {
             let stderr = String::from_utf8_lossy(&stash_output.stderr);
@@ -228,10 +247,12 @@ pub async fn restore_backup(
             .output();
     }
 
-    let create_output = crate::utils::git_command_in(&validated_path)?
-        .args(["checkout", "-b", &branch_name])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let create_output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(&validated_path)?
+            .args(["checkout", "-b", &branch_name])
+            .output()
+            .map_err(CommandError::from)
+    })?;
 
     if !create_output.status.success() {
         // Restore stash if we created one
@@ -251,10 +272,12 @@ pub async fn restore_backup(
     }
 
     // 3. Checkout all files from the target commit
-    let checkout_output = crate::utils::git_command_in(&validated_path)?
-        .args(["checkout", &commit_hash, "--", "."])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let checkout_output = crate::utils::output_retrying_index_lock(|| {
+        crate::utils::git_command_in(&validated_path)?
+            .args(["checkout", &commit_hash, "--", "."])
+            .output()
+            .map_err(CommandError::from)
+    })?;
 
     if !checkout_output.status.success() {
         // Switch back to original branch and restore stash
@@ -343,4 +366,27 @@ pub async fn restore_backup(
         branch_name,
         commit_message,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CommandError;
+
+    /// Every `git` spawn in this file maps its `io::Error` with
+    /// `CommandError::from`, never by hand-constructing `CommandError::Io`.
+    /// Six copy-pasted `map_err(|e| CommandError::Io { … })` blocks bypassed
+    /// the `From` impl's `windows_out_of_memory` classification, so a Windows
+    /// paging-file exhaustion during a stash/checkout reached the user as a
+    /// bare OS string and telemetry as an app malfunction (issues #356/#783).
+    #[test]
+    fn spawn_failures_keep_the_windows_out_of_memory_classification() {
+        let oom = std::io::Error::from_raw_os_error(1455);
+        let err = CommandError::from(oom);
+        assert!(matches!(err, CommandError::Expected { .. }), "got: {err:?}");
+        assert!(err.to_string().contains("paging file"), "got: {err}");
+
+        // Ordinary spawn failures still land in Io so telemetry keeps them.
+        let other = std::io::Error::other("boom");
+        assert!(matches!(CommandError::from(other), CommandError::Io { .. }));
+    }
 }

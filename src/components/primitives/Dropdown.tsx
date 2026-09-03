@@ -95,6 +95,7 @@ export function Dropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
+  const restoreFocusOnCloseRef = useRef(true);
   const typeaheadRef = useRef('');
   const typeaheadTimerRef = useRef<number | null>(null);
 
@@ -117,9 +118,150 @@ export function Dropdown({
     [isOpen, setOpen]
   );
 
+  // Dismissal by clicking elsewhere: the user has just put focus (or their
+  // attention) on whatever they clicked — a terminal, another panel — so the
+  // menu closes without dragging focus back to its trigger. Escape and menu
+  // selection still restore it.
+  const closeFromOutsidePointer = useCallback(() => {
+    restoreFocusOnCloseRef.current = false;
+    setOpen(false);
+  }, [setOpen]);
+
   // The portaled menu isn't a DOM descendant of the container; exclude it so
   // clicks inside the menu don't count as "outside".
-  useClickOutside(containerRef, close, isOpen, portal ? '.ss-dropdown__menu' : undefined);
+  useClickOutside(
+    containerRef,
+    closeFromOutsidePointer,
+    isOpen,
+    portal ? '.ss-dropdown__menu' : undefined
+  );
+
+  const focusMenuItem = useCallback((item: HTMLElement | null) => {
+    const items = getMenuItems(menuRef.current);
+    items.forEach((menuItem) => {
+      menuItem.tabIndex = menuItem === item ? 0 : -1;
+    });
+    item?.focus({ preventScroll: true });
+  }, []);
+
+  const focusEnabledMenuItemAt = useCallback(
+    (index: number) => {
+      const enabledItems = getMenuItems(menuRef.current).filter(isEnabledMenuItem);
+      if (enabledItems.length === 0) {
+        menuRef.current?.focus({ preventScroll: true });
+        return;
+      }
+      const normalizedIndex = (index + enabledItems.length) % enabledItems.length;
+      focusMenuItem(enabledItems[normalizedIndex]);
+    },
+    [focusMenuItem]
+  );
+
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      typeaheadRef.current = '';
+      if (typeaheadTimerRef.current !== null) {
+        window.clearTimeout(typeaheadTimerRef.current);
+        typeaheadTimerRef.current = null;
+      }
+      if (wasOpenRef.current) {
+        wasOpenRef.current = false;
+        if (restoreFocusOnCloseRef.current) triggerRef.current?.focus({ preventScroll: true });
+        restoreFocusOnCloseRef.current = true;
+      }
+      return;
+    }
+
+    wasOpenRef.current = true;
+    restoreFocusOnCloseRef.current = true;
+    focusEnabledMenuItemAt(0);
+  }, [focusEnabledMenuItemAt, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (typeaheadTimerRef.current !== null) {
+        window.clearTimeout(typeaheadTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const targetMenuItem = target.closest<HTMLElement>(MENU_ITEM_SELECTOR);
+    // Arbitrary menu content can contain inputs (for example, the custom
+    // folder path in Assets). Leave its editing keys untouched.
+    if (target !== event.currentTarget && !targetMenuItem) return;
+
+    const enabledItems = getMenuItems(menuRef.current).filter(isEnabledMenuItem);
+    const currentIndex = targetMenuItem ? enabledItems.indexOf(targetMenuItem) : -1;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusEnabledMenuItemAt(currentIndex < 0 ? 0 : currentIndex + 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusEnabledMenuItemAt(currentIndex < 0 ? enabledItems.length - 1 : currentIndex - 1);
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      focusEnabledMenuItemAt(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      focusEnabledMenuItemAt(enabledItems.length - 1);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (!targetMenuItem || !isEnabledMenuItem(targetMenuItem)) return;
+      event.preventDefault();
+      targetMenuItem.click();
+      return;
+    }
+
+    if (
+      event.key.length !== 1 ||
+      /\s/.test(event.key) ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const character = event.key.toLocaleLowerCase();
+    const nextBuffer = `${typeaheadRef.current}${character}`;
+    const repeatedCharacter = [...nextBuffer].every((entry) => entry === character);
+    const query = repeatedCharacter ? character : nextBuffer;
+    typeaheadRef.current = nextBuffer;
+    if (typeaheadTimerRef.current !== null) window.clearTimeout(typeaheadTimerRef.current);
+    typeaheadTimerRef.current = window.setTimeout(() => {
+      typeaheadRef.current = '';
+      typeaheadTimerRef.current = null;
+    }, TYPEAHEAD_TIMEOUT_MS);
+
+    const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+    const match = enabledItems
+      .map((_, index) => enabledItems[(startIndex + index) % enabledItems.length])
+      .find((item) => {
+        const label = item.textContent?.trim().toLocaleLowerCase() ?? '';
+        return label.startsWith(query);
+      });
+    const fallbackMatch =
+      match ??
+      (query !== character
+        ? enabledItems.find((item) =>
+            item.textContent?.trim().toLocaleLowerCase().startsWith(character)
+          )
+        : null);
+    if (fallbackMatch) focusMenuItem(fallbackMatch);
+  };
 
   const focusMenuItem = useCallback((item: HTMLElement | null) => {
     const items = getMenuItems(menuRef.current);
@@ -251,6 +393,8 @@ export function Dropdown({
 
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // Claim the key so an enclosing dialog doesn't also close on it.
+        e.preventDefault();
         close();
         triggerRef.current?.focus();
       }

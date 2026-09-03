@@ -32,6 +32,21 @@ export function asCommandError(value: unknown): CommandError {
   if (value instanceof Error) {
     return { type: 'Other', message: value.message };
   }
+  // Anything else that reaches here is a plain object with no `type` tag (a
+  // rejected non-CommandError payload, a DOM/plugin error bag, …). `String()`
+  // renders those as the literal "[object Object]", which defeats every call
+  // site that dutifully routes through this helper — the real cause becomes
+  // unrecoverable from telemetry (issue #790). Serialize instead, falling
+  // back to String() for values JSON can't represent (undefined, symbols,
+  // functions) or refuses to walk (circular refs, throwing getters).
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized === 'string') {
+      return { type: 'Other', message: serialized };
+    }
+  } catch {
+    // fall through to String()
+  }
   return { type: 'Other', message: String(value) };
 }
 
@@ -101,6 +116,39 @@ const BACKEND_HUMANIZED_GIT_PHRASES = [
   "couldn't start because the system is low on memory",
   // create_branch's vanished base ref (issue #692)
   'no longer exists on github',
+  // git_stage_and_commit's pre-commit hook refusal (issues #604/#766) — the
+  // project's own husky/lint-staged/test chain rejecting the commit is the
+  // project working as configured, not an app malfunction.
+  'pre-commit checks blocked the commit',
+  // create_branch's taken-name refusal (issue #791). Paired with the raw-git
+  // case in humanizeGitError below: because that case reconstructs this exact
+  // sentence, the inequality test alone can't see it.
+  'already exists. pick a different name',
+  // delete_branch's default-branch refusal (issue #792). GitHub's own
+  // pre-receive rejection wording never reaches the frontend, and the
+  // friendly replacement contains none of the network/auth/"rejected"
+  // substrings humanizeGitError keys on.
+  'default branch on github',
+  // pr_create_refusal's unrelated-histories case (issue #838)
+  'shares no history with',
+  // push_to_github's existing-origin refusals (issue #779) — the project is
+  // already wired to another repo, or gh created the repo but couldn't add
+  // the remote. Both are user-side git state, not a malfunction.
+  'already connected to a different github repository',
+  "was created on github, but this project couldn't be connected",
+  // gh_shadowed_binary_error: PATH resolved something that isn't the GitHub
+  // CLI (issue #737)
+  "isn't github's cli",
+  // publish_branch / get_current_branch's detached-HEAD guard (issues
+  // #317/#794) — a normal git state with a user-side fix.
+  'detached head',
+  // delete_branch's remote-delete timeout (issue #819's sibling): the other
+  // push/create timeouts already say "check your internet connection", but
+  // this one says "check your connection".
+  "didn't respond in time",
+  // close_pull_request's already-merged refusal (issue #798) — the PR list
+  // the Close button was clicked from went stale, an anticipated race.
+  "already merged, so there's nothing to close",
 ];
 
 /** True when a message is one the backend already humanized (see
@@ -237,6 +285,24 @@ export function humanizeGitError(value: unknown, ctx: GitErrorContext = {}): str
     return `There's already an open pull request for ${branch}.`;
   }
 
+  // Creating a branch under a name that's taken — "fatal: a branch named 'X'
+  // already exists" (issue #791). create_branch classifies its own hit
+  // Expected with this same wording (see BACKEND_HUMANIZED_GIT_PHRASES); this
+  // covers git's raw phrasing on any path that misses that classification.
+  if (m.includes('a branch named') && m.includes('already exists')) {
+    const taken = raw.match(/a branch named '([^']+)' already exists/i)?.[1];
+    return `A branch named ${taken ? `'${taken}'` : 'that'} already exists. Pick a different name, or switch to the existing branch.`;
+  }
+
+  // The branch name exists on several remotes and nowhere locally, so git's
+  // DWIM checkout refuses to guess: "fatal: 'X' matched multiple (2) remote
+  // tracking branches". switch_branch qualifies against origin when origin
+  // has it (issue #729), so this is the residual case — the branch is on
+  // other remotes but not origin.
+  if (m.includes('matched multiple') && m.includes('remote tracking branches')) {
+    return `${branch} exists on more than one remote and not on origin, so git can't tell which copy to check out. In a terminal, create a local branch from the remote you want (\`git checkout -b <name> <remote>/<name>\`), then switch to it here.`;
+  }
+
   // A checkout would clobber unsaved work.
   if (m.includes('overwritten by checkout') || m.includes('commit your changes or stash')) {
     return `You have unsaved changes that would be lost. Save or discard them first, then try again.`;
@@ -312,6 +378,23 @@ export function isRecognizedGitFailure(value: unknown, ctx: GitErrorContext = {}
 }
 
 /**
+ * True when a git failure means there is nothing on GitHub for this branch to
+ * pull. Two refusals say the same thing: "no tracking information" is the
+ * never-pushed branch (issue #600), and "no such ref was fetched" is a
+ * configured upstream whose remote ref is gone — deleted or renamed on GitHub
+ * (issue #809). Both are git's normal, by-design refusals rather than app
+ * malfunctions, so callers route them to an info toast + `logger.warn` instead
+ * of the error channels that auto-file a bug report.
+ *
+ * Shared by the Revert-to-GitHub flow (`BranchesTab`) and Pull latest
+ * (`useBranchManagement`) so the two can't drift apart.
+ */
+export function isMissingUpstreamError(value: unknown): boolean {
+  const message = formatCommandError(asCommandError(value));
+  return /no tracking information|no such ref was fetched/i.test(message);
+}
+
+/**
  * Phrases from `register_external_project`'s by-design refusals of a folder
  * pick (backend returns `CommandError::expected` for them, issue #416 — but
  * Expected serializes identically to Other across IPC, so the frontend
@@ -358,6 +441,26 @@ export function isProjectFolderGoneError(value: unknown): boolean {
   return (
     message.includes('no longer exists — it may have been moved') ||
     message.includes('Invalid path in validate_project_path')
+  );
+}
+
+/**
+ * True when a caught backend error is the spawn-time resource-pressure
+ * refusal — `spawn_resource_pressure_error` in
+ * `src-tauri/src/external_command.rs` ("Couldn't start `<cmd>` — your system
+ * is temporarily low on process resources or open files…"), raised when the
+ * OS can't fork/exec because the machine is out of PIDs or file descriptors.
+ *
+ * The backend classifies it `CommandError::expected`, but Expected serializes
+ * identically to Other across IPC, so callers re-check the wording. It's a
+ * transient machine state, not a bug: route it to warn logs / info toasts
+ * instead of the channels that auto-file bug reports.
+ */
+export function isResourcePressureError(value: unknown): boolean {
+  const message = formatCommandError(asCommandError(value)).toLowerCase();
+  return (
+    message.includes('temporarily low on process resources') ||
+    message.includes('close some apps or terminal tabs')
   );
 }
 
@@ -457,9 +560,12 @@ export function describeProcessError(
   // respond to your request in time…" from api.github.com/graphql during
   // `gh repo clone`). gh exits with the generic code 1, so only the wording
   // identifies it — a GitHub-side blip with a built-in retry suggestion, not
-  // an app bug (issue #620).
+  // an app bug (issue #620). HTTP 499 ("Client Closed Request", nginx's code
+  // for a request GitHub's edge abandoned before responding) is the same
+  // class of transient, GitHub-side blip despite not being a 5xx — it fell
+  // through the `5\d\d` regex and reached telemetry unclassified (issue #806).
   if (
-    /http 5\d\d/.test(lower) ||
+    /http (?:499|5\d\d)/.test(lower) ||
     lower.includes('respond to your request in time') ||
     lower.includes('gateway timeout') ||
     lower.includes('service unavailable') ||
@@ -484,6 +590,18 @@ export function describeProcessError(
       expected: true,
       message:
         "npm couldn't sign in to the package registry — your saved npm login or token is expired or incorrect. Open a terminal and run `npm login` (or refresh the token in your .npmrc if this project uses a private registry), then try again.",
+    };
+  }
+  // npm refusing a peer-dependency conflict declared by the project itself
+  // ("npm error code ERESOLVE" / "unable to resolve dependency tree"). npm
+  // exits with the generic code 1, so only the wording identifies it — a
+  // property of the target repo's own package.json, not an app bug, and the
+  // raw multi-line dump gave the user nothing to act on (issues #781/#788).
+  if (lower.includes('eresolve') || lower.includes('unable to resolve dependency tree')) {
+    return {
+      expected: true,
+      message:
+        "This project's dependencies have a version conflict npm won't resolve on its own (see the peer dependency mismatch in the output). Update the conflicting package to a version they agree on, or re-run the install with `--legacy-peer-deps` if that's safe for this project.",
     };
   }
   // Corrupted pnpm store: the content-addressable cache has dangling links,
@@ -511,6 +629,42 @@ export function describeProcessError(
       expected: true,
       message:
         'pnpm blocked dependency build scripts pending your approval. In a terminal, run `pnpm approve-builds` in the project folder, approve the listed packages, then retry the install.',
+    };
+  }
+  // Git exits 128 for many fatal, non-auth reasons, but the exit-code table
+  // below maps every 128 to "Git authentication failed" — actively wrong for
+  // the project-creation clone, whose templates are public repos fetched
+  // anonymously with no GitHub sign-in involved at all. The reported cases
+  // were a NAS / mapped network drive: git couldn't create or write the
+  // destination, or its dubious-ownership check tripped on a share reporting
+  // foreign owner metadata (issue #841). Named causes first, so the blanket
+  // mapping only ever sees what none of these explain.
+  if (lower.includes('detected dubious ownership')) {
+    return {
+      expected: true,
+      message:
+        "Git refused to use this folder because the operating system reports it as owned by a different user — common on NAS, network, and external drives. Open a terminal and run `git config --global --add safe.directory '<the project folder>'`, or move your projects folder to a local disk, then try again.",
+    };
+  }
+  if (
+    lower.includes('could not create work tree dir') ||
+    lower.includes('could not create leading directories') ||
+    lower.includes('unable to create directory') ||
+    lower.includes('unable to write new index file') ||
+    lower.includes('read-only file system') ||
+    lower.includes('input/output error')
+  ) {
+    return {
+      expected: true,
+      message:
+        "Git couldn't write to your projects folder. That usually means it's on a NAS, network, or external drive that dropped out or won't accept the write — this isn't a GitHub sign-in problem. Check the drive is connected and writable, or move your projects folder to a local disk, then try again.",
+    };
+  }
+  if (lower.includes('no space left on device')) {
+    return {
+      expected: true,
+      message:
+        'The drive your projects folder is on has run out of space. Free some up, then try again.',
     };
   }
   // The tool itself is missing: Windows' cmd.exe says "'bun' is not

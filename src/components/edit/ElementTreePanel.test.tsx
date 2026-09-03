@@ -70,9 +70,6 @@ describe('ElementTreePanel', () => {
           children: [
             { id: 2, tag: 'div', cls: 'card', text: '', children: [] },
             { id: 3, tag: 'main', cls: '', text: '', children: [] },
-            { id: 4, tag: 'header', cls: '', text: '', children: [] },
-            { id: 5, tag: 'nav', cls: '', text: '', children: [] },
-            { id: 6, tag: 'code', cls: '', text: '', children: [] },
           ],
         }}
         truncated={false}
@@ -98,21 +95,6 @@ describe('ElementTreePanel', () => {
       panel.querySelector('[data-tree-id="2"] [data-icon-name="ElementDivIcon"]')
     ).toBeInTheDocument();
     expect(panel.querySelector('[data-tree-id="2"] .ss-tree-tag')).not.toBeInTheDocument();
-    expect(
-      panel.querySelector('[data-tree-id="3"] [data-icon-name="ElementMainIcon"]')
-    ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="3"] .ss-tree-tag')).not.toBeInTheDocument();
-    expect(
-      panel.querySelector('[data-tree-id="4"] [data-icon-name="ElementHeadIcon"]')
-    ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="4"] .ss-tree-tag')).not.toBeInTheDocument();
-    expect(
-      panel.querySelector('[data-tree-id="5"] [data-icon-name="ElementNavIcon"]')
-    ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="5"] .ss-tree-tag')).not.toBeInTheDocument();
-    expect(
-      panel.querySelector('[data-tree-id="6"] [data-icon-name="ElementCodeBlockIcon"]')
-    ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="3"] .ss-tree-tag')).toHaveTextContent('main');
   });
 });

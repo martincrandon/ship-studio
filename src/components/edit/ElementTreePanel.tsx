@@ -20,7 +20,12 @@ import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import type { ElementTreeNode } from '../../hooks/useElementTree';
 import type { ElementSignature } from '../../lib/edit';
-import { VOID_ELEMENTS, type ElementKind, type InsertPosition } from '../../lib/edit-structure';
+import {
+  STRUCTURAL_ELEMENTS,
+  VOID_ELEMENTS,
+  type ElementKind,
+  type InsertPosition,
+} from '../../lib/edit-structure';
 
 /** The structural-edit actions the panel's context menu drives
  *  (from `useElementStructure`). */
@@ -382,6 +387,7 @@ export function ElementTreePanel({
           <InsertMenu
             anchor={insertFor?.anchor ?? null}
             insideDisabled={insertFor ? VOID_ELEMENTS.has(insertFor.tag) : false}
+            outsideDisabled={insertFor ? STRUCTURAL_ELEMENTS.has(insertFor.tag) : false}
             onInsert={(position, kind) => {
               if (!insertFor) return;
               structure.selectAndRun(insertFor.nodeId, () => structure.insert(position, kind));

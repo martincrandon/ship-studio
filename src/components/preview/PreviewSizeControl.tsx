@@ -6,10 +6,9 @@
  * = full available height).
  */
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontalIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
-import { IconButton } from '../primitives/IconButton';
 import { ValueField } from '../primitives/ValueField';
 import { trackEvent } from '../../lib/analytics';
 
@@ -171,66 +170,21 @@ export function PreviewSizeControl({
         variant="ghost"
         className="preview-dimensions preview-dimensions--label"
         title="Set an exact preview size"
-        aria-label={sizeButtonLabel}
+        aria-label={`Set preview size: ${width} × ${height}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={togglePopover}
       >
+        <MoreHorizontalIcon size={14} aria-hidden="true" />
         <span className="preview-dimensions-label">
           {width} × {height}
         </span>
-      </Button>
-      <IconButton
-        className="preview-dimensions preview-dimensions--compact"
-        variant="ghost"
-        icon={<MoreHorizontalIcon size={14} />}
-        title="Set preview size or choose a breakpoint"
-        aria-label="Set preview size or choose a breakpoint"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={togglePopover}
-      />
+      </button>
       {open && (
         <div className="preview-size-popover" role="dialog" aria-labelledby="preview-size-title">
           <h2 id="preview-size-title" className="preview-size-title">
             Preview size
           </h2>
-          {hasBreakpointOptions && (
-            <section
-              className="preview-size-breakpoints"
-              aria-labelledby="preview-breakpoints-title"
-            >
-              <h3 id="preview-breakpoints-title" className="preview-size-breakpoints-title">
-                Breakpoints
-              </h3>
-              <div
-                className="preview-size-breakpoint-list"
-                role="group"
-                aria-label="Preview breakpoint options"
-              >
-                {(breakpointOptions ?? []).map((option) => (
-                  <Button
-                    key={option.value}
-                    variant="ghost"
-                    size="compact"
-                    width="fill"
-                    className="preview-size-breakpoint-option"
-                    leftIcon={option.icon}
-                    aria-pressed={option.value === activeBreakpoint}
-                    title={`${option.label} (${option.width})`}
-                    onClick={() => {
-                      onBreakpointChange?.(option.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <span className="preview-size-breakpoint-option-label">{option.label}</span>
-                    <span className="preview-size-breakpoint-option-width">{option.width}</span>
-                  </Button>
-                ))}
-              </div>
-            </section>
-          )}
-          {hasBreakpointOptions && <div className="preview-size-divider" aria-hidden="true" />}
           <div className="preview-size-inputs">
             <ValueField
               className="preview-size-field"

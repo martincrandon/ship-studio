@@ -29,6 +29,7 @@ import { AgentActivityOverlay } from './AgentActivityOverlay';
 import { PreviewSizeControl } from './PreviewSizeControl';
 import { usePreviewCapture } from '../../hooks/usePreviewCapture';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { MenuButton } from '../primitives/MenuButton';
 import { ToggleButton } from '../primitives/ToggleButton';
 import {
@@ -88,7 +89,7 @@ import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
 import { DockablePanel } from '../primitives/DockablePanel';
-import { TREE_PANEL_MIN_WIDTH_PX } from './panelSizing';
+import { TREE_PANEL_MIN_WIDTH_PX, maxDockedPanelWidth } from './panelSizing';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
 import { kbd } from '../../lib/shortcuts';
@@ -108,13 +109,6 @@ const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
 };
 
 const PREVIEW_BREAKPOINTS = Object.keys(BREAKPOINTS) as Breakpoint[];
-
-const PREVIEW_BREAKPOINT_OPTIONS = PREVIEW_BREAKPOINTS.map((bp) => ({
-  value: bp,
-  label: BREAKPOINTS[bp].label,
-  width: BREAKPOINTS[bp].width,
-  icon: <BreakpointIcon type={bp} />,
-}));
 
 /** Props for the Preview component */
 interface PreviewProps {
@@ -249,6 +243,10 @@ const TREE_CODE_DEFAULT_WIDTH_PX = 420;
 const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
 const EDITOR_PANEL_MIN_WIDTH_PX = 220;
 const EDITOR_PANEL_MAX_WIDTH_PX = 560;
+/** Canvas column the pinned editor must always leave behind. The toolbar
+ *  shares that column, so a panel wide enough to starve it is what made the
+ *  toolbar controls overlap; matches the tree/variables panels' reserve. */
+const EDITOR_VIEWPORT_RESERVE_PX = TREE_VIEWPORT_RESERVE_PX;
 const EDITOR_PANEL_DEFAULT_WIDTH_PX = 300;
 const EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTHS_PX = [264, 360];
 const EDITOR_PANEL_DEFAULT_VERSION_KEY = 'cssPanelDockedWidthDefault';
@@ -851,9 +849,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }, [editorPanelWidth]);
 
   const computeMaxDockedPanelWidth = useCallback((containerWidth: number) => {
-    return Math.max(
+    return maxDockedPanelWidth(
+      containerWidth,
       TREE_PANEL_MIN_WIDTH_PX,
-      Math.min(TREE_PANEL_MAX_WIDTH_PX, containerWidth - TREE_VIEWPORT_RESERVE_PX)
+      TREE_PANEL_MAX_WIDTH_PX,
+      TREE_VIEWPORT_RESERVE_PX
     );
   }, []);
 
@@ -911,20 +911,61 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     [treePanelWidth, computeMaxDockedPanelWidth]
   );
 
-  const resizeEditorPanel = useCallback((clientX: number) => {
-    const container = editorPanelDockRef.current?.parentElement;
-    if (!container) return;
-    const next = container.getBoundingClientRect().right - clientX;
-    setEditorPanelWidth(
-      Math.max(EDITOR_PANEL_MIN_WIDTH_PX, Math.min(next, EDITOR_PANEL_MAX_WIDTH_PX))
+  /** Widest the pinned editor may get for a given container width, so the
+   *  canvas column (which also carries the preview toolbar) keeps a usable
+   *  width. Mirrors `computeMaxDockedPanelWidth` for the left-hand panels. */
+  const computeMaxEditorPanelWidth = useCallback((containerWidth: number) => {
+    return maxDockedPanelWidth(
+      containerWidth,
+      EDITOR_PANEL_MIN_WIDTH_PX,
+      EDITOR_PANEL_MAX_WIDTH_PX,
+      EDITOR_VIEWPORT_RESERVE_PX
     );
   }, []);
 
-  const resizeEditorPanelBy = useCallback((delta: number) => {
-    setEditorPanelWidth((current) =>
-      Math.max(EDITOR_PANEL_MIN_WIDTH_PX, Math.min(current + delta, EDITOR_PANEL_MAX_WIDTH_PX))
-    );
-  }, []);
+  const resizeEditorPanel = useCallback(
+    (clientX: number) => {
+      const container = editorPanelDockRef.current?.parentElement;
+      if (!container) return;
+      const next = container.getBoundingClientRect().right - clientX;
+      setEditorPanelWidth(
+        Math.max(
+          EDITOR_PANEL_MIN_WIDTH_PX,
+          Math.min(next, computeMaxEditorPanelWidth(container.clientWidth))
+        )
+      );
+    },
+    [computeMaxEditorPanelWidth]
+  );
+
+  const resizeEditorPanelBy = useCallback(
+    (delta: number) => {
+      const containerWidth = editorPanelDockRef.current?.parentElement?.clientWidth;
+      const max =
+        containerWidth === undefined
+          ? EDITOR_PANEL_MAX_WIDTH_PX
+          : computeMaxEditorPanelWidth(containerWidth);
+      setEditorPanelWidth((current) =>
+        Math.max(EDITOR_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max))
+      );
+    },
+    [computeMaxEditorPanelWidth]
+  );
+
+  // Shrink the pinned editor when the pane narrows (window resize, opening a
+  // split, docking another panel). Without this the panel keeps a width the
+  // canvas can no longer afford and the toolbar's controls collide.
+  useEffect(() => {
+    if (!editorPinned || !activeEditMode) return;
+    const container = editorPanelDockRef.current?.parentElement;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      const max = computeMaxEditorPanelWidth(container.clientWidth);
+      setEditorPanelWidth((prev) => (prev <= max ? prev : max));
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [editorPinned, activeEditMode, computeMaxEditorPanelWidth]);
 
   useEffect(() => {
     if (!showTree) return;
@@ -1291,8 +1332,14 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
         {/* Page Switcher */}
         <div className="page-switcher" data-education-id="page-switcher">
+          {/* Controlled rather than uncontrolled: selecting a page with Enter
+              from the search field has to close the menu, and the only handle
+              on an uncontrolled Dropdown's open state is DropdownItem's own
+              click. `showPageDropdown` was already being mirrored here — now
+              it's the source of truth, so Enter and Escape can act on it. */}
           <Dropdown
             menuClassName="page-dropdown"
+            open={conn.showPageDropdown}
             onOpenChange={(open) => {
               conn.setShowPageDropdown(open);
               if (!open) conn.setPageSearch('');
@@ -1319,9 +1366,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               onChange={(e) => conn.setPageSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && conn.filteredPages.length > 0) {
+                  e.preventDefault();
                   selectPageKeepingLocale(conn.filteredPages[0].route);
+                  conn.setShowPageDropdown(false);
+                  conn.setPageSearch('');
                 }
                 if (e.key === 'Escape') {
+                  e.preventDefault();
                   conn.setShowPageDropdown(false);
                   conn.setPageSearch('');
                 }
@@ -1395,58 +1446,51 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         </button>
 
         <div className="preview-breakpoints" data-education-id="breakpoints">
-          <div className="preview-breakpoints__inner">
-            <Tabs
-              value={resize.getActiveBreakpoint()}
-              mode="navigation"
-              onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
-              className="preview-breakpoint-tabs"
-            >
-              <TabsList aria-label="Preview viewport sizes">
-                {PREVIEW_BREAKPOINTS.map((bp) => (
-                  <TabsTab
-                    key={bp}
-                    value={bp}
-                    className={`preview-breakpoint-tab preview-breakpoint-tab--${bp} button--icon-only`}
-                    size="default"
-                    aria-label={BREAKPOINTS[bp].label}
-                    title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
-                  >
-                    <BreakpointIcon type={bp} />
-                  </TabsTab>
-                ))}
-              </TabsList>
-            </Tabs>
+          <Tabs
+            value={resize.getActiveBreakpoint()}
+            mode="navigation"
+            onValueChange={(value) => resize.handleBreakpointClick(value as Breakpoint)}
+            className="preview-breakpoint-tabs"
+          >
+            <TabsList aria-label="Preview viewport sizes">
+              {PREVIEW_BREAKPOINTS.map((bp) => (
+                <TabsTab
+                  key={bp}
+                  value={bp}
+                  className="preview-breakpoint-tab button--icon-only"
+                  size="default"
+                  aria-label={BREAKPOINTS[bp].label}
+                  title={`${BREAKPOINTS[bp].label} (${BREAKPOINTS[bp].width})`}
+                >
+                  <BreakpointIcon type={bp} />
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
 
-            {iframeSize &&
-              iframeSize.w > 0 &&
-              iframeSize.h > 0 &&
-              (() => {
-                // The wrapper reports its VISUAL box; when the frame is scaled to
-                // fit, the page actually lays out at the true (unscaled) size —
-                // that's the honest number to show (and to let the user set).
-                const w = Math.round(iframeSize.w / resize.previewScale);
-                const h = Math.round(iframeSize.h / resize.previewScale);
-                return (
-                  <PreviewSizeControl
-                    width={w}
-                    height={h}
-                    hasCustomHeight={resize.customHeight !== null}
-                    scalePercent={
-                      resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
-                    }
-                    onApply={resize.previewAtSize}
-                    onFit={() => resize.handleBreakpointClick('full')}
-                    openSignal={sizePopoverSignal}
-                    activeBreakpoint={resize.getActiveBreakpoint()}
-                    breakpointOptions={PREVIEW_BREAKPOINT_OPTIONS}
-                    onBreakpointChange={(value) =>
-                      resize.handleBreakpointClick(value as Breakpoint)
-                    }
-                  />
-                );
-              })()}
-          </div>
+          {iframeSize &&
+            iframeSize.w > 0 &&
+            iframeSize.h > 0 &&
+            (() => {
+              // The wrapper reports its VISUAL box; when the frame is scaled to
+              // fit, the page actually lays out at the true (unscaled) size —
+              // that's the honest number to show (and to let the user set).
+              const w = Math.round(iframeSize.w / resize.previewScale);
+              const h = Math.round(iframeSize.h / resize.previewScale);
+              return (
+                <PreviewSizeControl
+                  width={w}
+                  height={h}
+                  hasCustomHeight={resize.customHeight !== null}
+                  scalePercent={
+                    resize.previewScale < 1 ? Math.round(resize.previewScale * 100) : null
+                  }
+                  onApply={resize.previewAtSize}
+                  onFit={() => resize.handleBreakpointClick('full')}
+                  openSignal={sizePopoverSignal}
+                />
+              );
+            })()}
         </div>
       </div>
       <div
@@ -1467,6 +1511,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             resize.customWidth !== null && resize.customHeight !== null
               ? ' preview-frame-grid--floating'
               : ''
+          }${
+            // Dragged all the way out (the drag snaps `customWidth` to null):
+            // the handle collapses into the pane's own right edge instead of
+            // stacking another gutter and two borders beside it.
+            resize.customWidth === null ? ' preview-frame-grid--full-width' : ''
           }`}
           style={{
             // A width wider than the pane keeps its true size in the iframe
@@ -1824,15 +1873,16 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                   bodies={cssEditor.bodies}
                   overridden={cssEditor.overridden}
                   onChangeBody={cssEditor.setBody}
-                  onDeleteRule={(key) => cssEditor.deleteRule(key)}
+                  onDeleteRule={(key) => void cssEditor.deleteRule(key)}
                   onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
                   onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
                   onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
-                  onAddSelector={(sel, atPrelude) => void cssEditor.addSelector(sel, atPrelude)}
+                  onAddSelector={(sel) => void cssEditor.addSelector(sel)}
                   selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
                   existingSelectors={cssEditor.existingSelectors}
                   variables={cssEditor.variableSuggestions}
                   animations={cssEditor.animationSuggestions}
+                  justCreatedKey={cssEditor.justCreatedKey}
                   settings={elementSettings}
                   animationsState={cssAnimations}
                   onClose={cssEditor.toggleEditMode}
@@ -1945,7 +1995,16 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
     <div ref={ref} className="preview-logs-panel" aria-hidden={hidden}>
       <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next as InspectTab)}>
         <div className="preview-logs-header">
-          <TabsList className="preview-logs-tabs" aria-label="Preview diagnostics">
+          {/* The underline appearance is the primitive's own — the strip used
+              to be a segmented pill list with a hand-rolled underline layered
+              over it, which is why the active tab never matched its
+              neighbours. */}
+          <TabsList
+            className="preview-logs-tabs"
+            variant="stretch"
+            appearance="underline"
+            aria-label="Preview diagnostics"
+          >
             <TabsTab value="logs" className="preview-logs-tab">
               Server Logs
             </TabsTab>
@@ -1957,15 +2016,15 @@ const InspectPanel = forwardRef<HTMLDivElement, InspectPanelProps>(function Insp
             </TabsTab>
           </TabsList>
           {onClose && (
-            <button
-              type="button"
+            <IconButton
+              variant="ghost"
+              size="compact"
               className="preview-logs-close"
+              icon={<CloseIcon size={14} />}
               onClick={onClose}
               title="Hide panel"
               aria-label="Hide panel"
-            >
-              <CloseIcon size={14} />
-            </button>
+            />
           )}
         </div>
         {/* Both tab contents stay mounted and stack in the same grid cell.

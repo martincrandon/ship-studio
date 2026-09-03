@@ -49,11 +49,10 @@ import { Project, setTerminalState } from './lib/project';
 import { markSetupComplete, getDefaultAgentId as fetchDefaultAgentId } from './lib/setup';
 import { initDefaultAgent } from './lib/agent';
 import { sessionRegistry } from './lib/sessionRegistry';
-import { unregisterProjectSession } from './lib/projectSessions';
+import { useCloseProject } from './hooks/useCloseProject';
 import { MonorepoPickerModal } from './components/dashboard/MonorepoPickerModal';
 import { ThumbnailConsentModal } from './components/preview/ThumbnailConsentModal';
-import { ModalFrame } from './components/primitives/ModalFrame';
-import { Button } from './components/primitives/Button';
+import { QuitConfirmModal } from './components/QuitConfirmModal';
 import { Spinner } from './components/primitives/Spinner';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ModalProvider, useModal } from './contexts/ModalContext';
@@ -73,13 +72,8 @@ import { TooltipProvider } from './components/primitives/Tooltip';
 import { DevDesignSystemTools } from './components/design-system/DevDesignSystemTools';
 import { logger } from './lib/logger';
 import { asCommandError, formatCommandError } from './lib/errors';
-import { trackEvent, setActiveProject, trackPageview } from './lib/analytics';
-import {
-  COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT,
-  getCompactWorkspaceToolbarEnabled,
-  setCompactWorkspaceToolbarEnabled,
-} from './lib/settings';
-import { endProjectSession } from './lib/session';
+import { trackEvent, trackPageview } from './lib/analytics';
+import { useCompactWorkspaceToolbar } from './hooks/useCompactWorkspaceToolbar';
 import { installAppLifecycleTracking, quitAppWithTracking } from './lib/appLifecycle';
 import type { AppView } from './lib/types';
 import './styles/index.css';
@@ -133,29 +127,12 @@ function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
-  const [compactWorkspaceToolbarEnabled, setCompactWorkspaceToolbarState] = useState(false);
+  const [compactWorkspaceToolbarEnabled, updateCompactWorkspaceToolbar] =
+    useCompactWorkspaceToolbar();
   const toggleSidebar = useCallback(() => {
     void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
     setIsSidebarHidden(!isSidebarHidden);
   }, [isSidebarHidden]);
-  useEffect(() => {
-    let cancelled = false;
-    void getCompactWorkspaceToolbarEnabled().then((enabled) => {
-      if (!cancelled) setCompactWorkspaceToolbarState(enabled);
-    });
-    const handleChanged = (event: Event) => {
-      setCompactWorkspaceToolbarState((event as CustomEvent<boolean>).detail);
-    };
-    window.addEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, handleChanged);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT, handleChanged);
-    };
-  }, []);
-  const updateCompactWorkspaceToolbar = useCallback((enabled: boolean) => {
-    setCompactWorkspaceToolbarState(enabled);
-    void setCompactWorkspaceToolbarEnabled(enabled);
-  }, []);
   const isCompact = useIsCompact();
   const setPaletteContext = useSetPaletteContext();
   useEffect(() => {
@@ -567,52 +544,17 @@ function AppContents({ initialProjectPath }: AppProps) {
     showToast,
   });
 
-  // Close an active session from the sidebar: stop its dev server, tear
-  // down the registry entry + backend session, and route home if it was
-  // the current project. This is the only path (besides app quit) that
-  // reaps a hot project.
-  const handleCloseProject = useCallback(
-    (projectPath: string) => {
-      void (async () => {
-        logger.info('[CloseProject] Closing', { projectPath });
-        try {
-          await stopServer(projectPath);
-        } catch (err) {
-          logger.warn('[CloseProject] stopServer threw', {
-            error: formatCommandError(asCommandError(err)),
-          });
-        }
-        closeAllTerminalsForProject(projectPath);
-        try {
-          await unregisterProjectSession(projectPath);
-        } catch (err) {
-          logger.warn('[CloseProject] unregisterProjectSession failed', {
-            error: formatCommandError(asCommandError(err)),
-          });
-        }
-        sessionRegistry.destroy(projectPath);
-        if (currentProject?.path === projectPath) {
-          // Closing the current project ends its analytics session. Switching
-          // away to projects view also clears active project context so any
-          // home-screen events that follow aren't tagged with stale project_id.
-          const ended = endProjectSession();
-          if (ended) {
-            void trackEvent('project_session_ended', {
-              project_session_id: ended.session_id,
-              duration_seconds: ended.duration_seconds,
-              reason: 'project_closed',
-            });
-          }
-          setActiveProject(null);
-          setCurrentProject(null);
-          currentProjectPathRef.current = null;
-          setView('projects');
-          // The view-change effect above fires the Dashboard pageview.
-        }
-      })();
-    },
-    [stopServer, closeAllTerminalsForProject, currentProject, setView]
-  );
+  // Close an active session from the sidebar (dashboard, collapsed rail, or
+  // workspace). Ordering and the auto-open sentinel are load-bearing — see
+  // hooks/useCloseProject.
+  const handleCloseProject = useCloseProject({
+    currentProjectPath: currentProject?.path ?? null,
+    currentProjectPathRef,
+    stopServer,
+    closeAllTerminalsForProject,
+    setCurrentProject,
+    setView,
+  });
 
   // Switch to another project AND focus a specific tab within it. Writes the
   // desired active tab index to backend first so the restore flow on open
@@ -1089,29 +1031,10 @@ function AppContents({ initialProjectPath }: AppProps) {
   );
 
   const quitConfirmModal = showQuitConfirm && (
-    <ModalFrame
-      isOpen
-      onClose={() => setShowQuitConfirm(false)}
-      ariaLabel="Quit Ship Studio"
-      showCloseButton={false}
-      className="quit-confirm-modal"
-    >
-      <div
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') void quitAppWithTracking();
-        }}
-      >
-        <p>Are you sure you want to quit Ship Studio?</p>
-        <div className="quit-confirm-actions">
-          <Button variant="secondary" onClick={() => setShowQuitConfirm(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={() => void quitAppWithTracking()} autoFocus>
-            Quit
-          </Button>
-        </div>
-      </div>
-    </ModalFrame>
+    <QuitConfirmModal
+      onCancel={() => setShowQuitConfirm(false)}
+      onQuit={() => void quitAppWithTracking()}
+    />
   );
 
   if (view === 'loading') {

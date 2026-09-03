@@ -31,7 +31,6 @@ import {
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
-import { Spinner } from '../primitives/Spinner';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
 import { PixelLoaderRings } from './PixelLoaderRings';
 import { UpdateBanner } from '../UpdateBanner';
@@ -310,7 +309,6 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
 }: Props) {
   const appSettingsModal = useModal('settings');
   const [sidebarWidth, setSidebarWidth] = useState(214);
-  const { showToast } = useOptionalToast();
   const { activeAccount, accounts } = useActiveAccount(currentProjectPath);
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null);
@@ -673,6 +671,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
       }
     }
     return families;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- registryVersion/familiesVersion are change counters that force re-derivation from the mutable sessionRegistry; they aren't read in the body by design
   }, [registryVersion, familiesVersion]);
 
   // Edge case: current project isn't in pinned or active (e.g. the session
@@ -952,13 +951,16 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
           {(isSidebarHidden || activeOpen) &&
             (visibleActive.length === 0 && !filterLower
               ? !isSidebarHidden && (
-                  <div className="sidebar-group-empty">No active projects yet.</div>
+                  <div className="sidebar-group-empty">No active projects. Open one from Home.</div>
                 )
               : visibleActive.map((row) => renderProjectRow(row)))}
+        </div>
 
-          <div className="workspace-sidebar-active-actions">
+        <div className="workspace-sidebar-footer">
+          <UpdateBanner />
+          <div className="workspace-sidebar-footer-actions">
             <Button
-              variant="ghost"
+              variant="default"
               width="fill"
               className="workspace-sidebar-add-project"
               onClick={onOpenProjectPicker}
@@ -967,98 +969,8 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               <AddIcon size={16} />
               <span>Open project</span>
             </Button>
-          </div>
-        </div>
-
-        <div className="workspace-sidebar-footer">
-          <UpdateBanner />
-          <div
-            className={`workspace-sidebar-footer-actions${
-              showWorkspaceSwitcher ? ' has-workspace-switcher' : ''
-            }`}
-          >
-            {showWorkspaceSwitcher && (
-              <div
-                ref={workspaceSwitcherRef}
-                className={`workspace-switcher${workspaceSwitcherOpen ? ' is-open' : ''}`}
-              >
-                <Button
-                  variant="ghost"
-                  width="fill"
-                  className="workspace-sidebar-ws-switch"
-                  onClick={toggleWorkspaceSwitcher}
-                  aria-label={`Switch workspace, currently ${activeAccount.name}`}
-                  aria-expanded={workspaceSwitcherOpen}
-                  aria-controls="workspace-switcher-options"
-                >
-                  <span className="workspace-switcher-summary">
-                    <span
-                      className="workspace-switcher-dot"
-                      style={{ background: activeAccount.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="workspace-switcher-name">{activeAccount.name}</span>
-                  </span>
-                  <span
-                    className={`workspace-switcher-chevron${workspaceSwitcherOpen ? ' is-open' : ''}`}
-                    aria-hidden="true"
-                  >
-                    <ChevronIcon size={12} />
-                  </span>
-                </Button>
-
-                <div
-                  id="workspace-switcher-options"
-                  className="workspace-switcher-options"
-                  role="group"
-                  aria-label="Available workspaces"
-                  aria-hidden={!workspaceSwitcherOpen}
-                >
-                  <Button
-                    variant="ghost"
-                    width="fill"
-                    className="workspace-switcher-manage"
-                    onClick={() => {
-                      setWorkspaceSwitcherOpen(false);
-                      onSwitchAccount();
-                    }}
-                    tabIndex={workspaceSwitcherOpen ? 0 : -1}
-                    leftIcon={<NewWorkspaceIcon size={14} />}
-                  >
-                    Manage workspaces
-                  </Button>
-                  <div className="workspace-switcher-option-list">
-                    {otherWorkspaces.map((account) => {
-                      const isSwitching = account.id === switchingWorkspaceId;
-
-                      return (
-                        <Button
-                          key={account.id}
-                          variant="ghost"
-                          width="fill"
-                          className="workspace-switcher-option"
-                          onClick={() => void handleWorkspaceSelect(account)}
-                          disabled={switchingWorkspaceId !== null}
-                          tabIndex={workspaceSwitcherOpen ? 0 : -1}
-                          aria-label={`Switch to ${account.name}`}
-                        >
-                          <span className="workspace-switcher-option-dot" aria-hidden="true">
-                            <span
-                              className="workspace-switcher-dot"
-                              style={{ background: account.color }}
-                            />
-                          </span>
-                          <span className="workspace-switcher-option-name">{account.name}</span>
-                          {isSwitching && <Spinner size="sm" />}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
             <IconButton
-              variant="ghost"
+              variant="default"
               className="workspace-sidebar-support"
               icon={<SlackIcon size={12} />}
               onClick={() => void openUrl(SLACK_INVITE_URL)}
@@ -1067,7 +979,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               data-education-id="support-button"
             />
             <IconButton
-              variant="ghost"
+              variant="default"
               className="workspace-sidebar-settings"
               icon={<SettingsIcon size={12} />}
               onClick={appSettingsModal.open}
@@ -1075,6 +987,26 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               aria-label="App settings"
             />
           </div>
+          {onSwitchAccount && activeAccount && hasMultipleWorkspaces && (
+            <>
+              {/* Same button family as the footer row above it — the hairline
+                  divider it used to sit under only made sense while this was a
+                  borderless ghost row. */}
+              <Button
+                variant="default"
+                width="fill"
+                className="workspace-sidebar-ws-switch"
+                onClick={onSwitchAccount}
+                title={`Switch workspace (${activeAccount.name})`}
+              >
+                <span
+                  className="workspace-switch-account-dot"
+                  style={{ background: activeAccount.color }}
+                />
+                <span className="workspace-switch-account-name">{activeAccount.name}</span>
+              </Button>
+            </>
+          )}
         </div>
       </aside>
       <PanelResizeHandle

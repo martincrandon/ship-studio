@@ -18,7 +18,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { logger } from '../../lib/logger';
 import { trackEvent, trackError } from '../../lib/analytics';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { asCommandError, formatCommandError } from '../../lib/errors';
+import { asCommandError, formatCommandError, isRecognizedGitFailure } from '../../lib/errors';
 import { Button } from '../primitives/Button';
 import { MenuButton } from '../primitives/MenuButton';
 import { TextButton } from '../primitives/TextButton';
@@ -264,7 +264,16 @@ export function PublishBranchDropdown({
       // Expected (#617). Keep them out of the reporting channels: logger.error
       // and error toasts both auto-file bug reports (issue #643); mirror
       // handlePullLatest's warn/info treatment of the pull-side equivalents.
-      const expectedFailure = errorType === 'push_rejected' || errorType === 'merge_conflict';
+      //
+      // The three tag substrings above are not the only Expected failures this
+      // path sees: git_stage_and_commit's pre-commit-hook refusal (#604) — the
+      // project's own husky/lint chain rejecting the commit — carries none of
+      // them and so reported as a bug every time (issue #766). Ask the shared
+      // recognizer, which knows the backend's humanized wordings.
+      const expectedFailure =
+        errorType === 'push_rejected' ||
+        errorType === 'merge_conflict' ||
+        isRecognizedGitFailure(e, { branch: currentBranch });
       if (expectedFailure) {
         logger.warn('Publish refused (expected state)', {
           branch: currentBranch,

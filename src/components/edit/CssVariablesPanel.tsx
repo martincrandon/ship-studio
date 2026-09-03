@@ -430,6 +430,21 @@ function AddVariable({
     setOpen(false);
   };
 
+  if (!open) {
+    return (
+      <div className="ss-cascade-action">
+        <Button
+          variant="default"
+          width="fill"
+          leftIcon={<PlusIcon size={11} />}
+          onClick={() => setOpen(true)}
+        >
+          Add variable
+        </Button>
+      </div>
+    );
+  }
+
   const norm = name.trim().startsWith('--') ? name.trim() : `--${name.trim()}`;
   const dupe = name.trim().length > 0 && existing.has(norm);
 

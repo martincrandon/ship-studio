@@ -10,7 +10,6 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
-import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
 import { GitHubIcon, VercelIcon } from '@/components/icons';
 import { useWorkspaceConnect, type ConnectServiceId } from '../../hooks/useWorkspaceConnect';
 import { useOptionalToast } from '../../contexts/ToastContext';

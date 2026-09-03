@@ -528,23 +528,74 @@ where
 ///   (tried to allocate N bytes)`) — the host machine under memory pressure
 ///   at the moment git spawned; cross-platform, first seen on Windows
 ///   (issue #668).
+/// - Windows pagefile exhaustion reported by git's own runtime (`error
+///   launching git: The paging file is too small for this operation to
+///   complete.`) — the same `ERROR_COMMITMENT_LIMIT` condition
+///   `errors::windows_out_of_memory` covers for our own spawns, arriving as
+///   git stderr text instead of an `io::Error` (issue #835).
+/// - Git-for-Windows' MSYS2 runtime aborting with `BUG (fork bomb)` — a
+///   broken/duplicated git install, not something the app can fix (issue #813).
+/// - A corrupted local repository (truncated packfile / missing object) —
+///   the project's own `.git` needs repairing (issue #842).
+///
+/// Matching is case-insensitive: git's wording varies in capitalization
+/// across versions and platforms (e.g. xcode-select actually prints "No
+/// developer tools were found…", which the original case-sensitive check
+/// missed entirely — issues #724/#725).
 pub fn git_environment_gap(stderr: &str) -> Option<crate::errors::CommandError> {
-    if stderr.contains("You have not agreed to the Xcode license agreements") {
+    let lower = stderr.to_lowercase();
+    if lower.contains("you have not agreed to the xcode license agreements") {
         return Some(crate::errors::CommandError::expected(
             "Xcode's license hasn't been accepted yet, so git can't run. Open Terminal, run \
              `sudo xcodebuild -license accept`, then try again.",
         ));
     }
-    if stderr.contains("invalid active developer path")
-        || stderr.contains("no developer tools were found")
+    if lower.contains("invalid active developer path")
+        || lower.contains("no developer tools were found")
     {
         return Some(crate::errors::CommandError::expected(
             "The Xcode Command Line Tools (which provide git on macOS) are missing or broken. \
              Run `xcode-select --install` in Terminal, then try again.",
         ));
     }
-    if stderr.contains("Unable to read current working directory")
-        && stderr.contains("Operation not permitted")
+    // Git's own runtime failing to launch a helper process because Windows
+    // refused the memory commit — same condition (os error 1455) that
+    // `errors::windows_out_of_memory` classifies for our spawns, so reuse its
+    // remediation wording (issue #835). Must precede the generic out-of-memory
+    // check below so the pagefile guidance wins.
+    if lower.contains("paging file is too small") {
+        return Some(crate::errors::CommandError::expected(
+            "Windows ran out of virtual memory while git was working (the paging file is too \
+             small). Close some other apps or increase the paging file size (Settings → System → \
+             About → Advanced system settings → Performance → Virtual memory), then try again.",
+        ));
+    }
+    // Git for Windows' MSYS2 exec layer refusing to run after detecting a
+    // spawn loop. Almost always a second git install (e.g. Anaconda's)
+    // shadowing Git for Windows on PATH, or a corrupted MSYS2 runtime — no
+    // app-side fix exists (issue #813).
+    if lower.contains("bug (fork bomb)") || lower.contains("bug: forkbomb") {
+        return Some(crate::errors::CommandError::expected(
+            "Git's Windows runtime detected a spawn loop and refused to run — usually a second \
+             Git install (e.g. one bundled with Anaconda or another tool) shadowing Git for \
+             Windows on your PATH, or a damaged Git install. Remove the duplicate git.exe from \
+             your PATH or reinstall Git for Windows from git-scm.com, then try again.",
+        ));
+    }
+    // The project's own object store is damaged — an interrupted gc/fetch, a
+    // crashed process, or a failing disk. Repairable by the user, and no
+    // amount of app-side retrying helps (issue #842).
+    if lower.contains("too short to be a packfile")
+        || (lower.contains("missing object") && lower.contains("fatal:"))
+    {
+        return Some(crate::errors::CommandError::expected(
+            "This project's local git history looks damaged (a file inside its `.git` folder is \
+             corrupted), so git can't read it. Run `git fsck` in the project folder to inspect \
+             the damage, or re-clone the repository into a fresh folder and reopen it here.",
+        ));
+    }
+    if lower.contains("unable to read current working directory")
+        && lower.contains("operation not permitted")
     {
         return Some(crate::errors::CommandError::expected(
             "Ship Studio isn't allowed to read this project's folder — macOS blocked access. \
@@ -556,7 +607,6 @@ pub fn git_environment_gap(stderr: &str) -> Option<crate::errors::CommandError> 
     // to allocate N bytes)" — also "realloc failed" / "mmap failed" variants).
     // The machine is out of memory at the moment git runs, which no app-side
     // fix can address (issue #668).
-    let lower = stderr.to_lowercase();
     if lower.contains("out of memory")
         || lower.contains("malloc failed")
         || lower.contains("realloc failed")
@@ -588,6 +638,17 @@ pub fn git_environment_gap(stderr: &str) -> Option<crate::errors::CommandError> 
 ///   ERROR_WRITE_PROTECT os error 19): the volume itself refuses writes —
 ///   e.g. a project opened off a read-only disk image or locked SD card
 ///   (issue #625).
+/// - Unix `EACCES` (os error 13, "Permission denied"): ordinary filesystem
+///   ownership/mode, not TCC — often a folder owned by another user after a
+///   `sudo` install. Same treatment `opencode_config_save` already gave it in
+///   #471, shared here for every call site (issue #832).
+/// - `ETIMEDOUT` (Unix os error 60): the file lives on a cloud-sync provider
+///   (Google Drive / OneDrive / Dropbox / iCloud) whose daemon didn't
+///   materialize it in time — environment friction, not corruption (#758).
+/// - Windows `ERROR_USER_MAPPED_FILE` (os error 1224): another process holds a
+///   memory-mapped view of the file, so Windows refuses the truncating write.
+///   Typically a dev server/bundler, an editor, or antivirus holding the file
+///   open for a moment (issue #722).
 ///
 /// Anything else stays a labeled `Io` for diagnosability.
 pub fn classify_fs_error(
@@ -614,6 +675,34 @@ pub fn classify_fs_error(
         crate::errors::CommandError::expected(format!(
             "Ship Studio couldn't {action} ({}) — the disk or volume is read-only. Move \
              the project to a writable location, then try again.",
+            path.display()
+        ))
+    } else if cfg!(unix) && e.raw_os_error() == Some(13) {
+        // EACCES is ordinary ownership/permissions (often a folder left owned
+        // by root after a `sudo` install), not a malfunction — give the fix and
+        // skip telemetry, matching `opencode_config_save`'s #471 treatment.
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio isn't allowed to {action} ({}) — permission denied. The file or \
+             folder is likely owned by another user. In a terminal, run: \
+             sudo chown -R $(whoami) \"{}\" — then try again.",
+            path.display(),
+            path.display()
+        ))
+    } else if e.kind() == std::io::ErrorKind::TimedOut {
+        // A read/write that times out (macOS ETIMEDOUT, os error 60) means a
+        // cloud-sync provider's file-provider daemon didn't materialize the
+        // file in time. Environment friction, not corruption (issue #758).
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio timed out trying to {action} ({}). The folder looks like it's on a \
+             cloud drive (Google Drive, OneDrive, Dropbox, iCloud) that's still syncing — \
+             wait for sync to finish and try again, or keep the project on your local disk.",
+            path.display()
+        ))
+    } else if cfg!(windows) && e.raw_os_error() == Some(1224) {
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio couldn't {action} ({}) — another program currently has the file open \
+             (often a dev server, code editor, or antivirus). Close it or wait a moment, then \
+             try again.",
             path.display()
         ))
     } else {
@@ -986,13 +1075,35 @@ pub fn normalize_separators(path: &str) -> String {
 /// from ~20 canonicalize sites and is untraceable from telemetry (issue #284).
 /// Including the path is safe: error reports scrub home directories before
 /// anything leaves the machine.
+///
+/// A `NotFound` is retried a couple of times with a short backoff first: on
+/// SMB/NAS shares and mapped network drives a directory another process just
+/// created can transiently fail to resolve, which surfaced as a spurious
+/// "folder no longer exists" right after a successful clone (issue #841). The
+/// retries only run on the path that was already about to fail, so a folder
+/// that really is gone costs at most a few hundred extra milliseconds.
 pub fn canonicalize_tagged(
     path: impl AsRef<std::path::Path>,
     site: &str,
 ) -> Result<std::path::PathBuf, crate::errors::CommandError> {
     let path = path.as_ref();
-    dunce::canonicalize(path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
+    let mut result = dunce::canonicalize(path);
+    for delay_ms in [40, 120] {
+        match &result {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                result = dunce::canonicalize(path);
+            }
+            _ => break,
+        }
+    }
+    result.map_err(|e| {
+        if let Some(exhausted) = crate::errors::windows_out_of_memory(&e, None) {
+            // Windows resource exhaustion (os error 1450/1455) reaching a plain
+            // canonicalize is an environment condition, not an invalid path —
+            // don't dress it up as one, and keep it out of telemetry (#783).
+            exhausted
+        } else if e.kind() == std::io::ErrorKind::NotFound {
             // A folder disappearing out from under the app — deleted, renamed,
             // or moved in Finder/Explorer — is an environment change, not a
             // malfunction: say so plainly and keep it out of telemetry
@@ -1547,6 +1658,26 @@ mod tests {
                 }
             }
         }
+
+        // #841: the NotFound retry must not delay (or change) the success path,
+        // and must stay bounded on the failure path.
+        #[test]
+        fn existing_folder_resolves_without_retrying() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            let started = std::time::Instant::now();
+            let resolved = canonicalize_tagged(tmp.path(), "test_site").unwrap();
+            assert!(resolved.exists());
+            assert!(started.elapsed() < std::time::Duration::from_millis(40));
+        }
+
+        #[test]
+        fn missing_folder_retry_stays_bounded() {
+            let tmp = tempfile::TempDir::new().unwrap();
+            let gone = tmp.path().join("vanished-project");
+            let started = std::time::Instant::now();
+            let _ = canonicalize_tagged(&gone, "test_site").unwrap_err();
+            assert!(started.elapsed() < std::time::Duration::from_millis(800));
+        }
     }
 
     mod classify_fs_errors {
@@ -1609,6 +1740,46 @@ mod tests {
             assert!(msg.contains("project.json"), "got: {msg}");
         }
 
+        // The #832 shape: EACCES writing project.json (folder owned by another
+        // user, e.g. left root-owned by a sudo install).
+        #[test]
+        #[cfg(unix)]
+        fn unix_eacces_becomes_expected_with_chown_remediation() {
+            let e = std::io::Error::from_raw_os_error(13);
+            let err = classify_fs_error(
+                "write project metadata",
+                std::path::Path::new("/p/.shipstudio/project.json"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("permission denied"), "got: {msg}");
+            assert!(msg.contains("chown"), "got: {msg}");
+            assert!(!msg.contains("os error"), "got: {msg}");
+        }
+
+        // The #758 shape: ETIMEDOUT reading a project.json that Google Drive's
+        // file provider never materialized.
+        #[test]
+        fn cloud_drive_timeout_becomes_expected() {
+            let e = std::io::Error::new(std::io::ErrorKind::TimedOut, "Operation timed out");
+            let err = classify_fs_error(
+                "read project metadata",
+                std::path::Path::new("/Users/x/Library/CloudStorage/GoogleDrive/p/project.json"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("cloud drive"), "got: {msg}");
+            assert!(msg.contains("project.json"), "got: {msg}");
+        }
+
         // The #625 shape: EROFS on a project.json write (read-only volume).
         #[test]
         #[cfg(unix)]
@@ -1626,6 +1797,27 @@ mod tests {
             let msg = err.to_string();
             assert!(msg.contains("read-only"), "got: {msg}");
             assert!(msg.contains("project.json"), "got: {msg}");
+        }
+
+        // The #722 shape: ERROR_USER_MAPPED_FILE on a visual-editor source
+        // write ("...ett användarmappat avsnitt är öppnat. (os error 1224)") —
+        // matched by code so the localized OS text never reaches the user.
+        #[test]
+        #[cfg(windows)]
+        fn windows_user_mapped_file_becomes_expected() {
+            let e = std::io::Error::from_raw_os_error(1224);
+            let err = classify_fs_error(
+                "save your change to this file",
+                std::path::Path::new("C:\\p\\src\\Hero.tsx"),
+                &e,
+            );
+            assert!(
+                matches!(err, crate::errors::CommandError::Expected { .. }),
+                "got: {err:?}"
+            );
+            let msg = err.to_string();
+            assert!(msg.contains("another program"), "got: {msg}");
+            assert!(msg.contains("Hero.tsx"), "got: {msg}");
         }
 
         // Unix EPERM outside macOS (and any other permission error not
@@ -1886,6 +2078,75 @@ mod tests {
             assert!(git_environment_gap("fatal: Out of memory, realloc failed").is_some());
         }
 
+        /// Issues #724/#725: xcode-select actually capitalizes the sentence
+        /// ("No developer tools were found…"), which the original
+        /// case-sensitive check missed, so a missing-CLT machine reported the
+        /// raw fatal to telemetry instead of the install guidance.
+        #[test]
+        fn classifies_capitalized_missing_developer_tools_as_expected() {
+            let stderr = "xcode-select: note: No developer tools were found, requesting install. \
+                          Choose an option in the dialog to download the command line developer \
+                          tools.";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(err.to_string().contains("xcode-select --install"));
+            // The license and TCC signatures are equally case-tolerant.
+            assert!(
+                git_environment_gap("you have not agreed to the Xcode license agreements")
+                    .is_some()
+            );
+            assert!(git_environment_gap(
+                "fatal: unable to read current working directory: operation not permitted"
+            )
+            .is_some());
+        }
+
+        /// Issue #835: Windows pagefile exhaustion reported by git's own
+        /// runtime rather than as our spawn-time os error 1455.
+        #[test]
+        fn classifies_git_paging_file_failure_as_expected() {
+            let stderr =
+                "error launching git: The paging file is too small for this operation to complete.";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(
+                err.to_string().contains("paging file"),
+                "message must name the pagefile, got: {err}"
+            );
+        }
+
+        /// Issue #813: Git for Windows' MSYS2 runtime refusing to run after
+        /// detecting a spawn loop — a broken/duplicated git install.
+        #[test]
+        fn classifies_windows_fork_bomb_abort_as_expected() {
+            let stderr = r"BUG (fork bomb): C:\Program Files\Git\bin\git.exe";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(
+                err.to_string().contains("PATH"),
+                "message must point at the duplicate install, got: {err}"
+            );
+        }
+
+        /// Issue #842: a truncated packfile in the project's own `.git`
+        /// cascading into a missing-object fatal while listing branches.
+        #[test]
+        fn classifies_corrupted_repository_as_expected() {
+            let stderr = "error: file .git/objects/pack/pack-3301f5a2.pack is far too short to be \
+                          a packfile\nfatal: missing object a17457a0 for refs/remotes/origin/x";
+            let err = git_environment_gap(stderr).expect("must classify");
+            assert!(matches!(err, crate::errors::CommandError::Expected { .. }));
+            assert!(
+                err.to_string().contains("git fsck"),
+                "message must carry the repair step, got: {err}"
+            );
+            // The missing-object fatal on its own (no packfile line) counts too.
+            assert!(git_environment_gap(
+                "fatal: missing object 1234abcd for refs/remotes/origin/main"
+            )
+            .is_some());
+        }
+
         #[test]
         fn leaves_ordinary_git_failures_unclassified() {
             assert!(git_environment_gap("fatal: not a git repository").is_none());
@@ -1896,6 +2157,9 @@ mod tests {
                 "error: unable to unlink old 'a.txt': Operation not permitted"
             )
             .is_none());
+            // "missing object" without a fatal is a warning git recovers from
+            // (e.g. `fsck` output) — not the corrupted-repo abort (#842).
+            assert!(git_environment_gap("warning: missing object 1234abcd").is_none());
         }
     }
 
