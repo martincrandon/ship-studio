@@ -85,4 +85,49 @@ describe('component worker protocol', () => {
       error: 'The component worker request was cancelled.',
     });
   });
+
+  it('serializes overlapping builds before a bind observes the active catalog', async () => {
+    const first = handleComponentWorkerRequest({
+      id: 10,
+      protocol: COMPONENT_WORKER_PROTOCOL_VERSION,
+      type: 'build',
+      projectType: 'vite',
+      snapshot: snapshot([
+        file('src/Button.tsx', 'export function Button() { return <button>One</button>; }'),
+        file(
+          'src/Page.tsx',
+          "import { Button } from './Button'; export function Page() { return <Button />; }"
+        ),
+      ]),
+    });
+    const second = handleComponentWorkerRequest({
+      id: 11,
+      protocol: COMPONENT_WORKER_PROTOCOL_VERSION,
+      type: 'build',
+      projectType: 'vite',
+      snapshot: snapshot([
+        file('src/Card.tsx', 'export function Card() { return <article>Two</article>; }'),
+        file(
+          'src/Page.tsx',
+          "import { Card } from './Card'; export function Page() { return <Card />; }"
+        ),
+      ]),
+    });
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult).toMatchObject({ id: 10, ok: true });
+    expect(secondResult).toMatchObject({ id: 11, ok: true });
+
+    const binding = await handleComponentWorkerRequest({
+      id: 12,
+      protocol: COMPONENT_WORKER_PROTOCOL_VERSION,
+      type: 'bind',
+      input: { file: 'src/Page.tsx', line: 1, symbolHint: 'Card' },
+    });
+    expect(binding).toMatchObject({ id: 12, ok: true });
+    if (!binding.ok || binding.result === null || !('componentId' in binding.result)) {
+      throw new Error('Expected the worker bind request to return a component binding.');
+    }
+    expect(binding.result.componentId).toContain('Card.tsx');
+  });
 });

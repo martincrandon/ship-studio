@@ -3,6 +3,7 @@ import { sourceTextForRef } from '../ranges';
 import { planDuplicateComponent } from '../refactors';
 import { planDeleteComponent, planRenameComponent } from '../refactors';
 import { planStaticSlotEdit } from '../slots';
+import { populateSlotChildren } from '../slots';
 import { projectComponentTree } from '../component-tree';
 import { parseReactFile } from './react-parser';
 import { isReactSourcePath, normalizeProjectPath, resolveModulePath } from './react-helpers';
@@ -261,7 +262,12 @@ export class ReactComponentAdapter implements ComponentAdapter {
       }
     }
     for (const descriptor of descriptors) descriptorById.set(descriptor.id, descriptor);
-    return { components: descriptors, instances, importEdges, diagnostics };
+    return {
+      components: descriptors,
+      instances: populateSlotChildren(instances, descriptors),
+      importEdges,
+      diagnostics,
+    };
   }
 
   bindSelection(input: SelectionBindingInput, index: ComponentIndex): ComponentBinding {

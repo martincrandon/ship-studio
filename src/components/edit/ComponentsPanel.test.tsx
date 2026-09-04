@@ -473,6 +473,51 @@ describe('ComponentInstanceControls', () => {
     expect(screen.getByRole('textbox', { name: 'Set label' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: 'Set tone' })).toBeDisabled();
   });
+
+  it('uses an explicit reset action and keeps optional booleans three-state', () => {
+    const onEditProp = vi.fn();
+    const boolComponent: ComponentDescriptor = {
+      ...button,
+      props: [
+        ...button.props,
+        {
+          name: 'featured',
+          required: false,
+          typeText: 'boolean',
+          defaultValue: { kind: 'boolean', value: false },
+          choices: null,
+          control: 'boolean',
+          source: source('src/components/Button.tsx', 7),
+          diagnostics: [],
+        },
+      ],
+    };
+    const usage: ComponentInstance = {
+      ...buttonUsage,
+      props: {
+        ...buttonUsage.props,
+        featured: {
+          kind: 'static',
+          value: { kind: 'boolean', value: true },
+          source: source('src/pages/index.tsx', 12),
+        },
+      },
+    };
+    render(
+      <ComponentInstanceControls
+        instance={usage}
+        component={boolComponent}
+        onEditProp={onEditProp}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset tone' }));
+    expect(onEditProp).toHaveBeenCalledWith(usage, 'tone', null);
+    const featured = screen.getByRole('combobox', { name: 'Set featured' });
+    expect(featured).toHaveValue('true');
+    fireEvent.change(featured, { target: { value: '' } });
+    expect(onEditProp).toHaveBeenCalledWith(usage, 'featured', null);
+  });
 });
 
 describe('EditMainBanner', () => {

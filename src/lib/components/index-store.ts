@@ -14,6 +14,7 @@ import type {
 } from './adapters/types';
 import { normalizeProjectPath } from './adapters/react-helpers';
 import { isInternalPackageSpecifier, packageSourceCandidates } from './package-resolution';
+import { withComponentLibraries } from './libraries';
 import { sha256 } from './ranges';
 import type {
   ComponentCapabilities,
@@ -147,7 +148,7 @@ export class ComponentIndexStore {
       diagnostics
     );
 
-    const index: ComponentIndex = {
+    const baseIndex: ComponentIndex = {
       revision:
         snapshot.revision ||
         sha256(snapshot.files.map((file) => `${file.file}:${file.contentHash}`).join('\n')),
@@ -163,6 +164,7 @@ export class ComponentIndexStore {
       importEdges,
       diagnostics,
     };
+    const index = withComponentLibraries(baseIndex, snapshot);
     this.snapshot = snapshot;
     this.index = index;
     this.projectType = options.projectType ?? null;

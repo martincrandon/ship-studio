@@ -21,6 +21,7 @@ import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { ElementTreeContextMenu } from './ElementTreeContextMenu';
 import { InsertMenu } from './InsertMenu';
 import { getElementIcon } from './element-icons';
+import { Button } from '../primitives/Button';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
@@ -92,19 +93,25 @@ export interface ComponentFocusCrumb {
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
 const AUTO_EXPAND_DEPTH = 3;
 
-/** Map of node id → ancestor id chain, for auto-expanding to a selection. */
-function buildAncestors(root: ComponentAwareTreeNode): Map<number, number[]> {
-  const out = new Map<number, number[]>();
-  const walk = (node: ComponentAwareTreeNode, chain: number[]) => {
+/** Map of node id → rendered ancestor chain, for auto-expanding to a selection. */
+function buildAncestors(
+  root: ComponentAwareTreeNode
+): Map<number, { id: number; depth: number }[]> {
+  const out = new Map<number, { id: number; depth: number }[]>();
+  const walk = (
+    node: ComponentAwareTreeNode,
+    chain: { id: number; depth: number }[],
+    depth: number
+  ) => {
     if (node.kind === 'component') {
-      for (const child of node.children) walk(child, chain);
+      for (const child of node.children) walk(child, chain, depth + 1);
       return;
     }
     out.set(node.id, chain);
-    const next = [...chain, node.id];
-    for (const child of node.children) walk(child, next);
+    const next = [...chain, { id: node.id, depth }];
+    for (const child of node.children) walk(child, next, depth + 1);
   };
-  walk(root, []);
+  walk(root, [], 0);
   return out;
 }
 
@@ -128,6 +135,36 @@ function RowLabel({ node, showTagIcons }: { node: ElementTreeNode; showTagIcons:
 
 function isComponentNode(node: ComponentAwareTreeNode): node is ComponentTreeNode {
   return node.kind === 'component';
+}
+
+function containsComponentKey(node: ComponentAwareTreeNode, key: string): boolean {
+  if (isComponentNode(node) && node.key === key) return true;
+  return node.children.some((child) => containsComponentKey(child, key));
+}
+
+function ComponentFocusBar({
+  path,
+  onLeave,
+}: {
+  path: readonly ComponentFocusCrumb[];
+  onLeave: () => void;
+}) {
+  const focusedComponentName = path[path.length - 1]?.name ?? 'current';
+  const exitLabel = `Exit ${focusedComponentName} component`;
+
+  return (
+    <Button
+      variant="ghost"
+      size="compact"
+      className="ss-tree-panel__component-focus"
+      onClick={onLeave}
+      title={exitLabel}
+      aria-label={exitLabel}
+      leftIcon={<ArrowLeftIcon size={13} />}
+    >
+      <span className="ss-tree-panel__component-label">{exitLabel}</span>
+    </Button>
+  );
 }
 
 export function ElementTreePanel({
@@ -181,6 +218,11 @@ export function ElementTreePanel({
     () => new Set(componentFocusPath.map((crumb) => crumb.key)),
     [componentFocusPath]
   );
+  const requestedFocusKey = componentFocusPath[componentFocusPath.length - 1]?.key ?? null;
+  const focusedComponentKey =
+    requestedFocusKey && displayTree && containsComponentKey(displayTree, requestedFocusKey)
+      ? requestedFocusKey
+      : null;
   const leaveComponentFocus = () => {
     if (componentFocusPath.length > 1) onComponentFocusParent?.();
     else onComponentExitFocus?.();
@@ -202,7 +244,7 @@ export function ElementTreePanel({
     if (chain) {
       let changed = false;
       const next = new Set(collapsed);
-      chain.forEach((id, depth) => {
+      chain.forEach(({ id, depth }) => {
         const wantPresence = depth >= AUTO_EXPAND_DEPTH; // presence = expanded there
         if (wantPresence && !next.has(id)) {
           next.add(id);
@@ -242,17 +284,26 @@ export function ElementTreePanel({
   const collapsedState = (id: number, depth: number) =>
     depth < AUTO_EXPAND_DEPTH ? collapsed.has(id) : !collapsed.has(id);
 
-  const renderNode = (node: ComponentAwareTreeNode, depth: number) => {
+  const renderNode = (
+    node: ComponentAwareTreeNode,
+    depth: number,
+    withinFocusedComponent = false
+  ) => {
     if (isComponentNode(node)) {
       const isSelected = node.key === selectedComponentKey;
       const isFocused = focusKeys.has(node.key);
+      const isFocusRoot = node.key === focusedComponentKey;
+      const isDimmed = !!focusedComponentKey && !withinFocusedComponent && !isFocusRoot;
       const hasChildren = node.children.length > 0;
       const canFocus = node.confidence === 'exact' && !!onComponentFocus;
       const componentLabel = `Component ${node.name}`;
       return (
-        <div key={node.key} className="ss-tree-node ss-tree-node--component">
+        <div
+          key={node.key}
+          className={`ss-tree-node ss-tree-node--component${isFocusRoot ? ' ss-tree-node--component-focus-scope' : ''}`}
+        >
           <div
-            className={`ss-tree-row ss-tree-row--component${isSelected ? ' selected' : ''}${isFocused ? ' focused' : ''}`}
+            className={`ss-tree-row ss-tree-row--component${isSelected ? ' selected' : ''}${isFocused ? ' focused' : ''}${isDimmed ? ' ss-tree-row--dimmed' : ''}`}
             style={{ paddingLeft: depth * 14 + 6 }}
             data-tree-component-key={node.key}
             role="button"
@@ -292,7 +343,11 @@ export function ElementTreePanel({
             <span className="ss-tree-component-name">{node.name}</span>
             <span className="ss-tree-component-kind">Component</span>
           </div>
-          {hasChildren && isFocused && node.children.map((child) => renderNode(child, depth + 1))}
+          {hasChildren &&
+            isFocused &&
+            node.children.map((child) =>
+              renderNode(child, depth + 1, withinFocusedComponent || isFocusRoot)
+            )}
         </div>
       );
     }
@@ -300,13 +355,14 @@ export function ElementTreePanel({
     const hasChildren = node.children.length > 0;
     const isSelected = node.id === selectedId;
     const isAffected = !isSelected && affectedSet.has(node.id);
+    const isDimmed = !!focusedComponentKey && !withinFocusedComponent;
     // Collapsed = explicitly collapsed, or deep and never explicitly expanded.
     // The `collapsed` set tracks explicit toggles both ways via presence.
     const isCollapsed = hasChildren && collapsedState(node.id, depth);
     return (
       <div key={node.id} className="ss-tree-node">
         <div
-          className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
+          className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}${isDimmed ? ' ss-tree-row--dimmed' : ''}`}
           style={{ paddingLeft: depth * 14 + 6 }}
           data-tree-id={node.id}
           role="button"
@@ -348,7 +404,9 @@ export function ElementTreePanel({
           )}
           <RowLabel node={node} showTagIcons={showTagIcons} />
         </div>
-        {hasChildren && !isCollapsed && node.children.map((c) => renderNode(c, depth + 1))}
+        {hasChildren &&
+          !isCollapsed &&
+          node.children.map((c) => renderNode(c, depth + 1, withinFocusedComponent))}
       </div>
     );
   };
@@ -372,38 +430,6 @@ export function ElementTreePanel({
         <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
             <span className="ss-tree-panel__title">Elements</span>
-            {componentFocusPath.length > 0 && (
-              <div className="ss-tree-panel__component-focus" aria-label="Component focus path">
-                <IconButton
-                  variant="ghost"
-                  size="compact"
-                  onClick={leaveComponentFocus}
-                  title={
-                    componentFocusPath.length > 1
-                      ? 'Focus parent component'
-                      : 'Exit component focus'
-                  }
-                  aria-label={
-                    componentFocusPath.length > 1
-                      ? 'Focus parent component'
-                      : 'Exit component focus'
-                  }
-                  icon={<ArrowLeftIcon size={13} />}
-                />
-                <span className="ss-tree-panel__component-breadcrumb">
-                  {componentFocusPath.map((crumb, index) => (
-                    <span key={crumb.key}>
-                      {index > 0 && <span aria-hidden="true"> / </span>}
-                      <span
-                        aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}
-                      >
-                        {crumb.name}
-                      </span>
-                    </span>
-                  ))}
-                </span>
-              </div>
-            )}
             <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
               <TabsTab value="visual">Visual</TabsTab>
               <TabsTab value="code">Code</TabsTab>
@@ -434,6 +460,9 @@ export function ElementTreePanel({
           <TabsPanel value={visibleView} className="ss-tree-panel__active-view">
             {visibleView === 'visual' ? (
               <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
+                {componentFocusPath.length > 0 && (
+                  <ComponentFocusBar path={componentFocusPath} onLeave={leaveComponentFocus} />
+                )}
                 {displayTree ? (
                   renderNode(displayTree, 0)
                 ) : (
@@ -468,38 +497,6 @@ export function ElementTreePanel({
         <>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
             <span className="ss-tree-panel__title">Elements</span>
-            {componentFocusPath.length > 0 && (
-              <div className="ss-tree-panel__component-focus" aria-label="Component focus path">
-                <IconButton
-                  variant="ghost"
-                  size="compact"
-                  onClick={leaveComponentFocus}
-                  title={
-                    componentFocusPath.length > 1
-                      ? 'Focus parent component'
-                      : 'Exit component focus'
-                  }
-                  aria-label={
-                    componentFocusPath.length > 1
-                      ? 'Focus parent component'
-                      : 'Exit component focus'
-                  }
-                  icon={<ArrowLeftIcon size={13} />}
-                />
-                <span className="ss-tree-panel__component-breadcrumb">
-                  {componentFocusPath.map((crumb, index) => (
-                    <span key={crumb.key}>
-                      {index > 0 && <span aria-hidden="true"> / </span>}
-                      <span
-                        aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}
-                      >
-                        {crumb.name}
-                      </span>
-                    </span>
-                  ))}
-                </span>
-              </div>
-            )}
             <Tooltip content="Turn on edit mode to select and edit elements.">
               <span className="ss-tree-panel__view-only">View only</span>
             </Tooltip>
@@ -527,6 +524,9 @@ export function ElementTreePanel({
             )}
           </div>
           <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
+            {componentFocusPath.length > 0 && (
+              <ComponentFocusBar path={componentFocusPath} onLeave={leaveComponentFocus} />
+            )}
             {displayTree ? (
               renderNode(displayTree, 0)
             ) : (

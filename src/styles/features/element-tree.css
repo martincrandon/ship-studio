@@ -52,6 +52,47 @@
   white-space: nowrap;
 }
 
+/* Component focus belongs to the tree it scopes. Keep it as a distinct context
+   surface so the panel header can stay dedicated to panel-level controls. */
+.ss-tree-panel__component-focus {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 var(--spacing-sm);
+  padding: var(--spacing-2xs);
+  border: var(--stroke-1) solid
+    color-mix(in srgb, var(--accent-component) 30%, var(--border-subtle));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-component) 10%, var(--surface-recessed));
+  box-shadow: var(--shadow-sm);
+  color: var(--accent-component);
+}
+
+.ss-tree-panel__component-focus.button {
+  justify-content: flex-start;
+  height: auto;
+  color: var(--accent-component);
+  text-align: left;
+}
+
+.ss-tree-panel__component-focus.button--ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-component) 18%, var(--surface-recessed));
+  border-color: color-mix(in srgb, var(--accent-component) 55%, var(--border-subtle));
+  color: var(--accent-component);
+}
+
+.ss-tree-panel__component-label {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Compact the segmented control just enough for the title and both choices to
    coexist at the panel's narrowest supported width. The shared Tabs primitive
    still supplies the active indicator and all keyboard behavior. */
@@ -108,8 +149,14 @@
   flex-direction: column;
   gap: 0;
   width: 100%;
+  box-sizing: border-box;
   min-width: 0;
   margin-inline: 0 auto;
+}
+
+.ss-tree-node--component-focus-scope {
+  border: var(--stroke-1) solid var(--accent-component);
+  border-radius: var(--radius-sm);
 }
 
 /* Code (Edit-HTML) view. The body is just the positioning context; the tab
@@ -221,6 +268,10 @@
 .ss-tree-row.selected {
   background: var(--property-field-selected);
   color: var(--property-text);
+}
+
+.ss-tree-row--dimmed {
+  opacity: var(--tree-focus-dim-opacity);
 }
 
 .ss-tree-row--component {

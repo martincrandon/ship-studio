@@ -49,6 +49,36 @@ describe('Tooltip', () => {
     expect(trigger).not.toHaveAttribute('title');
   });
 
+  it('updates promoted content when a native title changes', async () => {
+    const { rerender } = render(
+      <TooltipProvider>
+        <button title="First tooltip">Hover me</button>
+      </TooltipProvider>
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Hover me' });
+    expect(trigger).toHaveAttribute('data-tooltip-content', 'First tooltip');
+
+    rerender(
+      <TooltipProvider>
+        <button title="Second tooltip">Hover me</button>
+      </TooltipProvider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(trigger).toHaveAttribute('data-tooltip-content', 'Second tooltip');
+    expect(trigger).not.toHaveAttribute('title');
+
+    fireEvent.pointerOver(trigger);
+    void act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Second tooltip');
+  });
+
   it('supports explicit content without changing the trigger element', () => {
     render(
       <TooltipProvider>

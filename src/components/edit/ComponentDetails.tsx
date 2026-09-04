@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   CheckIcon,
   CodeIcon,
+  ComponentsIcon,
   DuplicateIcon,
   EditFieldIcon,
   ErrorIcon,
@@ -36,6 +37,7 @@ interface ComponentDetailsProps {
     position?: ComponentInsertionAnchor['position']
   ) => void;
   onOpenSource: (source: SourceRef) => void;
+  onOpenCanvas?: () => void;
   onDuplicate?: (input: {
     componentId: ComponentDescriptor['id'];
     newName: string;
@@ -474,6 +476,7 @@ export function ComponentDetails({
   placementAvailable = true,
   onPlace,
   onOpenSource,
+  onOpenCanvas,
   onDuplicate,
   onRename,
   onDelete,
@@ -531,6 +534,18 @@ export function ComponentDetails({
           >
             Place
           </Button>
+          {onOpenCanvas && (
+            <Button
+              variant="secondary"
+              size="compact"
+              className="ss-components-open-canvas"
+              leftIcon={<ComponentsIcon size={14} />}
+              onClick={onOpenCanvas}
+              title="Open explicit component frames in the Component Canvas"
+            >
+              Open canvas
+            </Button>
+          )}
           {onDuplicate && (
             <Button
               variant="secondary"

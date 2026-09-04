@@ -14,6 +14,7 @@ import {
   astroCompilerDiagnostics,
   parseAstroDocument,
 } from '../astro-parser';
+import { populateSlotChildren } from '../slots';
 import { literalChoices, staticValueFromExpression, staticValueToJsx } from './static-values';
 import type {
   AdapterGraph,
@@ -274,7 +275,12 @@ export class AstroComponentAdapter implements ComponentAdapter {
       }
     }
 
-    return { components: descriptors, instances, importEdges, diagnostics };
+    return {
+      components: descriptors,
+      instances: populateSlotChildren(instances, descriptors),
+      importEdges,
+      diagnostics,
+    };
   }
 
   bindSelection(input: SelectionBindingInput, index: ComponentIndex): ComponentBinding {
@@ -1304,6 +1310,9 @@ function planAstroPropEdit(
   input: EditComponentPropInputWithContext,
   index: ComponentIndex
 ): MutationResult {
+  const operation = input.operation ?? 'set';
+  if (operation === 'set' && !input.value)
+    return astroRefuse('unsupported', 'A static prop value is required for a set operation.');
   const snapshot = input.snapshot;
   if (!snapshot)
     return astroRefuse('missing-source', 'A source snapshot is required for Astro prop editing.');
@@ -1322,6 +1331,11 @@ function planAstroPropEdit(
   const prop = descriptor.props.find((item) => item.name === input.propName);
   if (!prop)
     return astroRefuse('unknown-prop', `The Astro component does not declare "${input.propName}".`);
+  if (operation === 'remove' && prop.required)
+    return astroRefuse(
+      'required-prop',
+      `The required Astro prop "${input.propName}" cannot be reset on a component instance.`
+    );
   const file = snapshot.files.find(
     (candidate) =>
       normalizeProjectPath(candidate.file) === normalizeProjectPath(instance.invocation.file)
@@ -1343,31 +1357,50 @@ function planAstroPropEdit(
       'dynamic-expression',
       `The existing "${input.propName}" Astro value is dynamic.`
     );
+  if (operation === 'remove' && !existing)
+    return astroRefuse(
+      'no-op',
+      `The "${input.propName}" Astro prop is already using its default value.`
+    );
   if (
+    operation === 'set' &&
     existing &&
     current !== null &&
     current !== undefined &&
-    staticValuesEqual(current, input.value)
+    staticValuesEqual(current, input.value!)
   )
     return astroRefuse('no-op', `The "${input.propName}" prop is already set to that value.`);
-  const edit = existing
-    ? {
-        start: utf16OffsetToUtf8ByteOffset(file.content, existing.start),
-        end: utf16OffsetToUtf8ByteOffset(file.content, existing.end),
-        text: astroAttributeText(input.propName, input.value, existing.quote ?? '"'),
-      }
-    : {
-        start: utf16OffsetToUtf8ByteOffset(
-          file.content,
-          opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1)
-        ),
-        end: utf16OffsetToUtf8ByteOffset(
-          file.content,
-          opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1)
-        ),
-        text: `${file.content[opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1) - 1]?.trim() ? ' ' : ''}${astroAttributeText(input.propName, input.value)}`,
-      };
+  const edit =
+    operation === 'remove'
+      ? removeAstroAttribute(file, existing!)
+      : existing
+        ? {
+            start: utf16OffsetToUtf8ByteOffset(file.content, existing.start),
+            end: utf16OffsetToUtf8ByteOffset(file.content, existing.end),
+            text: astroAttributeText(input.propName, input.value!, existing.quote ?? '"'),
+          }
+        : {
+            start: utf16OffsetToUtf8ByteOffset(
+              file.content,
+              opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1)
+            ),
+            end: utf16OffsetToUtf8ByteOffset(
+              file.content,
+              opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1)
+            ),
+            text: `${file.content[opening.end - (file.content[opening.end - 2] === '/' ? 2 : 1) - 1]?.trim() ? ' ' : ''}${astroAttributeText(input.propName, input.value!)}`,
+          };
   return plannedAstroMutation(file, [edit], descriptor, 0, snapshot.revision);
+}
+
+function removeAstroAttribute(file: SourceFileSnapshot, attribute: AstroAttributeRange) {
+  let start = attribute.start;
+  if (start > 0 && /[ \t]/.test(file.content[start - 1] ?? '')) start -= 1;
+  return {
+    start: utf16OffsetToUtf8ByteOffset(file.content, start),
+    end: utf16OffsetToUtf8ByteOffset(file.content, attribute.end),
+    text: '',
+  };
 }
 
 interface AstroAttributeRange {

@@ -133,7 +133,27 @@ describe('ElementTreePanel', () => {
       hostNodeIds: [2],
       definition: sourceRef('src/Card.tsx'),
       invocation: sourceRef('src/Page.tsx'),
-      children: [{ kind: 'element', id: 2, tag: 'section', cls: 'card', text: '', children: [] }],
+      children: [
+        {
+          kind: 'element',
+          id: 2,
+          tag: 'nav',
+          cls: 'card-nav',
+          text: '',
+          children: [
+            {
+              kind: 'element',
+              id: 4,
+              tag: 'div',
+              cls: 'card-links',
+              text: '',
+              children: [
+                { kind: 'element', id: 5, tag: 'a', cls: 'card-link', text: 'Open', children: [] },
+              ],
+            },
+          ],
+        },
+      ],
     };
     const componentTree: ComponentAwareTreeNode = {
       kind: 'element',
@@ -141,7 +161,10 @@ describe('ElementTreePanel', () => {
       tag: 'body',
       cls: '',
       text: '',
-      children: [component],
+      children: [
+        { kind: 'element', id: 3, tag: 'aside', cls: 'outside', text: '', children: [] },
+        component,
+      ],
     };
     const onComponentSelect = vi.fn();
     const onComponentFocus = vi.fn();
@@ -201,12 +224,64 @@ describe('ElementTreePanel', () => {
     expect(
       screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
     ).toBeInTheDocument();
+    const divRow = screen.getByRole('button', { name: 'Element div .card-links' });
+    const expandDiv = divRow.querySelector('button[aria-label="Expand"]');
+    expect(expandDiv).not.toBeNull();
+    fireEvent.click(expandDiv!);
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="5"]')
+    ).toBeInTheDocument();
+    rerender(
+      <ElementTreePanel
+        tree={componentTree}
+        componentTree={componentTree}
+        truncated={false}
+        selectedId={5}
+        selectedComponentKey={component.key}
+        componentFocusPath={[{ key: component.key, name: component.name }]}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        onComponentSelect={onComponentSelect}
+        onComponentFocus={onComponentFocus}
+        onComponentExitFocus={onComponentExitFocus}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="5"]')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('.ss-tree-panel__component-label')
+    ).toHaveTextContent('Exit Card component');
+    const focusBar = screen
+      .getByTestId('element-tree-panel')
+      .querySelector('.ss-tree-panel__component-focus');
+    expect(focusBar?.closest('.ss-tree-panel__body')).toBeInTheDocument();
+    expect(focusBar?.closest('.ss-tree-panel__header')).toBeNull();
+    const focusButton = screen.getByRole('button', { name: 'Exit Card component' });
+    expect(focusButton).toBe(focusBar);
+    fireEvent.click(focusButton);
+    expect(onComponentExitFocus).toHaveBeenCalledTimes(1);
     expect(
       screen
         .getByTestId('element-tree-panel')
-        .querySelector('.ss-tree-panel__component-breadcrumb [aria-current="page"]')
-    ).toHaveTextContent('Card');
+        .querySelector(`[data-tree-component-key="${component.key}"]`)
+        ?.closest('.ss-tree-node--component')
+    ).toHaveClass('ss-tree-node--component-focus-scope');
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="3"]')
+    ).toHaveClass('ss-tree-row--dimmed');
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
+    ).not.toHaveClass('ss-tree-row--dimmed');
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="4"]')
+    ).not.toHaveClass('ss-tree-row--dimmed');
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="5"]')
+    ).not.toHaveClass('ss-tree-row--dimmed');
     fireEvent.keyDown(screen.getByTestId('element-tree-panel'), { key: 'Escape' });
-    expect(onComponentExitFocus).toHaveBeenCalledTimes(1);
+    expect(onComponentExitFocus).toHaveBeenCalledTimes(2);
   });
 });

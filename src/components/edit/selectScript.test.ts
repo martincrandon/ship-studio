@@ -758,7 +758,7 @@ it('announces a component-focus candidate on preview double-click', async () => 
 
 it('selects a validated host set as a semantic component boundary', async () => {
   document.body.innerHTML =
-    '<main><section class="card"><div class="card-body">Card</div></section></main>';
+    '<main><section class="card"><div class="card-body">Card</div></section><aside style="opacity: .8"><span>Outside</span></aside></main>';
   send({ type: 'ss:activate' });
   const treeMessage = nextMessage<{
     tree: { k: Array<{ i: number; k: Array<{ i: number }> }> };
@@ -801,6 +801,9 @@ it('selects a validated host set as a semantic component boundary', async () => 
     hostNodeIds: [hostId],
     color: 'rgb(10, 20, 30)',
   });
+  expect(document.querySelector('aside')).toHaveStyle({ opacity: '0.5' });
+  expect(document.querySelector('.card')).not.toHaveStyle({ opacity: '0.5' });
+  expect(document.querySelector('.card-body')).not.toHaveStyle({ opacity: '0.5' });
   document.querySelector('.card-body')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   const scopeOverlay = document.querySelector<HTMLElement>('[data-ss-component-scope]');
   expect(scopeOverlay).toBeDefined();
@@ -812,6 +815,8 @@ it('selects a validated host set as a semantic component boundary', async () => 
         overlay.style.borderColor === 'rgba(0, 125, 240, 0.95)'
     )
   ).toBe(true);
+  send({ type: 'ss:componentFocusExit', color: 'rgb(10, 20, 30)' });
+  expect(document.querySelector('aside')).toHaveStyle({ opacity: '0.8' });
   send({ type: 'ss:deactivate' });
 });
 

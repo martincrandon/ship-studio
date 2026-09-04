@@ -11,6 +11,9 @@ import {
 import { createPortal } from 'react-dom';
 
 const TOOLTIP_ID = 'ss-tooltip';
+const TOOLTIP_SOURCE_ATTRIBUTE = 'data-tooltip-source';
+const TITLE_TOOLTIP_SOURCE = 'title';
+const EXPLICIT_TOOLTIP_SOURCE = 'explicit';
 const TOOLTIP_OFFSET = 8;
 const TOOLTIP_MARGIN = 8;
 const TOOLTIP_DEFAULT_DELAY_MS = 1000;
@@ -38,6 +41,7 @@ interface TooltipProps {
 export function Tooltip({ content, delayMs, children }: TooltipProps) {
   return cloneElement(children as ReactElement<Record<string, unknown>>, {
     'data-tooltip-content': content,
+    [TOOLTIP_SOURCE_ATTRIBUTE]: EXPLICIT_TOOLTIP_SOURCE,
     'data-tooltip-delay': delayMs,
     'aria-describedby': TOOLTIP_ID,
     title: undefined,
@@ -71,6 +75,20 @@ function readTooltipContent(anchor: Element): string | null {
   const explicit = anchor.getAttribute('data-tooltip-content');
   const title = anchor.getAttribute('title');
   if (explicit) {
+    if (anchor.getAttribute(TOOLTIP_SOURCE_ATTRIBUTE) === TITLE_TOOLTIP_SOURCE) {
+      if (title) {
+        // React can update a title after the provider has promoted it. Keep
+        // the shared tooltip content in sync with that new native title.
+        anchor.setAttribute('data-tooltip-content', title);
+        anchor.removeAttribute('title');
+        return title;
+      }
+
+      // The provider removes the promoted title after copying it, so a
+      // missing native title is the normal steady state here.
+      return explicit;
+    }
+
     // React can restore a title attribute during a rerender after the custom
     // tooltip has already claimed this anchor. Always remove it, even when
     // the shared content attribute is already present.
@@ -83,6 +101,7 @@ function readTooltipContent(anchor: Element): string | null {
   // title-based affordance. Removing the attribute prevents the OS tooltip from
   // competing with the app tooltip on the same hover.
   anchor.setAttribute('data-tooltip-content', title);
+  anchor.setAttribute(TOOLTIP_SOURCE_ATTRIBUTE, TITLE_TOOLTIP_SOURCE);
   anchor.setAttribute('aria-describedby', TOOLTIP_ID);
   anchor.removeAttribute('title');
   return title;

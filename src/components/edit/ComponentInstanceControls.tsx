@@ -4,6 +4,7 @@ import type {
   BindingConfidence,
   ComponentDescriptor,
   ComponentInstance,
+  ComponentSlotChild,
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
@@ -19,13 +20,14 @@ export interface ComponentInstanceControlsProps {
   onEditProp?: (
     instance: ComponentInstance,
     propName: string,
-    value: StaticValue
+    value: StaticValue | null
   ) => void | Promise<void>;
   onEditSlot?: (
     instance: ComponentInstance,
     slotName: string,
     replacementSource: string
   ) => void | Promise<void>;
+  onSelectSlotChild?: (child: ComponentSlotChild) => void;
   onInline?: (instance: ComponentInstance) => void | Promise<void>;
   onOpenSource?: (source: SourceRef) => void;
 }
@@ -197,7 +199,7 @@ function InstancePropRow({
   onEditProp?: (
     instance: ComponentInstance,
     propName: string,
-    value: StaticValue
+    value: StaticValue | null
   ) => void | Promise<void>;
   onOpenSource?: (source: SourceRef) => void;
 }) {
@@ -222,33 +224,59 @@ function InstancePropRow({
   };
 
   const commitChoice = (next: StaticValue | null) => {
-    if (!editable || !onEditProp || next === null) return;
+    if (!editable || !onEditProp) return;
     void onEditProp(instance, name, next);
+  };
+
+  const reset = () => {
+    if (!editable || !onEditProp || descriptor?.required || kind === 'unset') return;
+    dirtyRef.current = false;
+    void onEditProp(instance, name, null);
   };
 
   const input =
     editable && descriptor ? (
       control === 'boolean' ? (
-        <label className="ss-components-instance__boolean">
-          <input
-            type="checkbox"
+        descriptor.required ? (
+          <label className="ss-components-instance__boolean">
+            <input
+              type="checkbox"
+              aria-label={`Set ${name}`}
+              checked={booleanValue(value)}
+              onChange={(event) =>
+                commitChoice({ kind: 'boolean', value: event.currentTarget.checked })
+              }
+              disabled={disabled || busy}
+            />
+            <span>{booleanValue(value) ? 'true' : 'false'}</span>
+          </label>
+        ) : (
+          <select
+            className="ss-components-instance__select"
             aria-label={`Set ${name}`}
-            checked={booleanValue(value)}
-            onChange={(event) =>
-              commitChoice({ kind: 'boolean', value: event.currentTarget.checked })
-            }
+            value={kind === 'unset' ? '' : booleanValue(value) ? 'true' : 'false'}
+            onChange={(event) => {
+              const selected = event.currentTarget.value;
+              commitChoice(
+                selected === '' ? null : { kind: 'boolean', value: selected === 'true' }
+              );
+            }}
             disabled={disabled || busy}
-          />
-          <span>{booleanValue(value) ? 'true' : 'false'}</span>
-        </label>
+          >
+            <option value="">Default</option>
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        )
       ) : control === 'select' && descriptor.choices ? (
         <select
           className="ss-components-instance__select"
           aria-label={`Set ${name}`}
           value={sourceValue === undefined || sourceValue === null ? '' : encodeChoice(sourceValue)}
-          onChange={(event) =>
-            commitChoice(decodeChoice(event.currentTarget.value, descriptor.choices ?? []))
-          }
+          onChange={(event) => {
+            const selected = event.currentTarget.value;
+            commitChoice(selected === '' ? null : decodeChoice(selected, descriptor.choices ?? []));
+          }}
           disabled={disabled || busy}
         >
           <option value="">Unset</option>
@@ -313,6 +341,19 @@ function InstancePropRow({
             Open source
           </Button>
         )}
+        {editable && kind !== 'unset' && !descriptor?.required && (
+          <Button
+            variant="ghost"
+            size="compact"
+            className="ss-components-instance__reset-button"
+            onClick={reset}
+            disabled={disabled || busy}
+            aria-label={`Reset ${name}`}
+            title={`Reset ${name} to its component default`}
+          >
+            Reset
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -324,6 +365,7 @@ function InstanceSlotRow({
   disabled,
   busy,
   onEditSlot,
+  onSelectSlotChild,
 }: {
   instance: ComponentInstance;
   slot: ComponentInstance['slots'][number];
@@ -334,6 +376,7 @@ function InstanceSlotRow({
     slotName: string,
     replacementSource: string
   ) => void | Promise<void>;
+  onSelectSlotChild?: (child: ComponentSlotChild) => void;
 }) {
   const source = instance.slotSources?.[slot.name];
   const editable = Boolean(onEditSlot && source && source.text !== undefined) && !disabled;
@@ -357,21 +400,43 @@ function InstanceSlotRow({
     <div className="ss-components-instance__slot">
       <div className="ss-components-instance__slot-header">
         <span>{slot.name}</span>
-        {source && <span className="ss-components-instance__state">Static source</span>}
+        {source && <span className="ss-components-instance__state">Static drop zone</span>}
       </div>
+      {slot.children && slot.children.length > 0 && (
+        <div
+          className="ss-components-instance__slot-children"
+          aria-label={`${slot.name} slot children`}
+        >
+          {slot.children.map((child) => (
+            <Button
+              key={child.instanceId}
+              variant="ghost"
+              size="compact"
+              onClick={() => onSelectSlotChild?.(child)}
+              disabled={!onSelectSlotChild}
+              title={`Focus ${child.name} in the ${slot.name} slot`}
+            >
+              {child.name}
+            </Button>
+          ))}
+        </div>
+      )}
       {editable ? (
-        <textarea
-          className="ss-components-instance__slot-input"
-          aria-label={`Edit ${slot.name} slot source`}
-          value={draft}
-          rows={3}
-          onChange={(event) => {
-            dirtyRef.current = true;
-            setDraft(event.currentTarget.value);
-          }}
-          onBlur={commit}
-          disabled={busy}
-        />
+        <>
+          <span className="ss-components-instance__state">Advanced source fallback</span>
+          <textarea
+            className="ss-components-instance__slot-input"
+            aria-label={`Edit ${slot.name} slot source`}
+            value={draft}
+            rows={3}
+            onChange={(event) => {
+              dirtyRef.current = true;
+              setDraft(event.currentTarget.value);
+            }}
+            onBlur={commit}
+            disabled={busy}
+          />
+        </>
       ) : (
         <code className="ss-components-instance__slot-value">
           {source?.text ?? (slot.value === null ? 'Empty' : formatValue(slot.value))}
@@ -405,6 +470,7 @@ export function ComponentInstanceControls({
   busy = false,
   onEditProp,
   onEditSlot,
+  onSelectSlotChild,
   onInline,
   onOpenSource,
 }: ComponentInstanceControlsProps) {
@@ -513,6 +579,7 @@ export function ComponentInstanceControls({
               disabled={disabled}
               busy={busy}
               onEditSlot={onEditSlot}
+              onSelectSlotChild={onSelectSlotChild}
             />
           ))}
         </div>

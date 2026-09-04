@@ -25,6 +25,7 @@ import type {
   SelectionBindingInput,
 } from './types';
 import { planStaticSlotEdit as planSlot } from './slots';
+import { planStructuredSlotEdit as planStructuredSlot } from './slots';
 import { planExtractComponent as planExtract } from './extraction';
 import {
   planInsertComponent as planReactInsert,
@@ -35,6 +36,21 @@ import { planDeleteComponent as planReactDelete } from './refactors';
 import { planRenameComponent as planReactRename } from './refactors';
 
 export { previewComponentMutation, REACT_COMPONENT_PLAN_PARSER_TOKEN } from './mutation';
+export { planStructuredSlotEdit, populateSlotChildren } from './slots';
+export {
+  discoverComponentLibraries,
+  libraryForComponent,
+  planLibraryFork,
+  withComponentLibraries,
+} from './libraries';
+export type {
+  ComponentIndexWithLibraries,
+  ComponentLibraryMetadata,
+  ComponentLibraryOwnership,
+  LibraryForkInput,
+  LibraryForkRefusalCode,
+  LibraryForkResult,
+} from './libraries';
 
 export { usageReportForResolution } from './usage';
 
@@ -142,6 +158,17 @@ export function planStaticSlotEdit(
     return adapter.planSlotEdit({ ...input, snapshot: snapshot ?? input.snapshot }, index);
   }
   return planSlot({ ...input, snapshot: snapshot ?? input.snapshot }, index, snapshot);
+}
+
+/** Plan a structured insert/remove/reorder in a source-proven slot. */
+export function planComponentSlotComposition(
+  input: EditComponentSlotInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): MutationResult {
+  return input.operation && input.operation !== 'replace'
+    ? planStructuredSlot(input, index, snapshot)
+    : planStaticSlotEdit(input, index, snapshot);
 }
 
 /** Plan a two-round, explicitly approved React extraction. */

@@ -105,4 +105,37 @@ describe('ElementToolbar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Focus component' }));
     expect(onComponentFocus).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the component action segment while component focus is active', () => {
+    const componentSelection: SelectedComponent = {
+      key: 'card:instance-1',
+      componentId: 'react:src/Card.tsx#Card',
+      instanceId: 'react:src/Page.tsx:12',
+      name: 'Card',
+      hostNodeIds: [2],
+      confidence: 'exact',
+      rect: { top: 80, left: 40, width: 120, height: 24 },
+    };
+    const onComponentFocus = vi.fn();
+
+    render(
+      <ElementToolbar
+        selection={null}
+        componentSelection={componentSelection}
+        componentFocusActive
+        bounds={{ w: 800, h: 600 }}
+        busy={false}
+        hidden={false}
+        onInsert={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+        onComponentFocus={onComponentFocus}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: 'Component actions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Exit component focus' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Exit component focus' }));
+    expect(onComponentFocus).toHaveBeenCalledTimes(1);
+  });
 });

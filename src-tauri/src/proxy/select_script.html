@@ -1,6 +1,6 @@
 <script>(function(){
 if(window.__ssSelectInit)return;window.__ssSelectInit=true;
-var active=false,hoverBox=null,selBoxes=[],selectedSet=[],selPrimary=null,componentSelection=null,componentScope=null,componentScopeBoxes=[],componentColor='',lastHoverNodeId=null;
+var active=false,hoverBox=null,selBoxes=[],selectedSet=[],selPrimary=null,componentSelection=null,componentScope=null,componentScopeBoxes=[],componentDimmed=[],componentColor='',lastHoverNodeId=null;
 
 /* Box colors: the element the user actually clicked (selPrimary) gets the blue
    "you're editing this" outline; its same-source siblings — which a source edit will
@@ -60,7 +60,18 @@ function ensureSel(n){for(var i=0;i<n;i++){if(!selBoxes[i]||!selBoxes[i].isConne
 
 function hideComponentScope(){for(var i=0;i<componentScopeBoxes.length;i++)place(componentScopeBoxes[i],null);}
 function placeComponentScope(){if(!componentScope){hideComponentScope();return;}var roots=componentScope.roots||[],cc=componentScope.color||componentColor||SEL_PRIMARY_COLOR;for(var i=0;i<roots.length;i++){if(!componentScopeBoxes[i]||!componentScopeBoxes[i].isConnected){componentScopeBoxes[i]=mk(cc);componentScopeBoxes[i].setAttribute('data-ss-component-scope','1');}componentScopeBoxes[i].style.borderColor=cc;componentScopeBoxes[i].style.borderStyle='solid';componentScopeBoxes[i].style.opacity='.68';place(componentScopeBoxes[i],roots[i]);}for(var j=roots.length;j<componentScopeBoxes.length;j++)place(componentScopeBoxes[j],null);}
-function clearComponentScope(){componentScope=null;hideComponentScope();}
+function restoreComponentDimming(){for(var i=0;i<componentDimmed.length;i++){var item=componentDimmed[i],el=item.el;if(!el||!el.style)continue;if(item.value)el.style.setProperty('opacity',item.value,item.priority);else el.style.removeProperty('opacity');}componentDimmed=[];}
+function isComponentRootOrDescendant(el,roots){for(var i=0;i<roots.length;i++){var root=roots[i];if(root===el||root.contains(el))return true;}return false;}
+function containsComponentRoot(el,roots){for(var i=0;i<roots.length;i++){if(el.contains(roots[i]))return true;}return false;}
+function dimOutsideComponent(){restoreComponentDimming();if(!componentScope)return;var roots=componentScope.roots||[];
+  function walk(el){if(!el||el===document.body||ssInternalNode(el)||el.getAttribute('data-ss-overlay'))return;
+    if(isComponentRootOrDescendant(el,roots))return;
+    if(containsComponentRoot(el,roots)){for(var i=0;i<el.children.length;i++)walk(el.children[i]);return;}
+    componentDimmed.push({el:el,value:el.style.getPropertyValue('opacity'),priority:el.style.getPropertyPriority('opacity')});el.style.setProperty('opacity','.5','important');
+  }
+  for(var i=0;i<document.body.children.length;i++)walk(document.body.children[i]);
+}
+function clearComponentScope(){componentScope=null;restoreComponentDimming();hideComponentScope();}
 
 function editable(el){while(el&&el!==document.body){if(el.nodeType===1){var c=el.getAttribute&&el.getAttribute('class');if(c&&c.trim())return el;}el=el.parentElement;}return null;}
 
@@ -738,7 +749,7 @@ function showComponent(d,notify){
   var ids=Array.isArray(d.hostNodeIds)?d.hostNodeIds:[],all=[];
   for(var i=0;i<ids.length;i++){var el=treeById[ids[i]];if(el&&el.isConnected&&!ssInternalNode(el)&&all.indexOf(el)===-1)all.push(el);}
   var roots=componentRoots(all);if(!roots.length)return false;
-  if(d.focused){hideComponentScope();componentScope={roots:roots,color:typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor};}else{clearComponentScope();}restoreSel();selectedSet=roots;selPrimary=roots[0];componentColor=typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor;componentSelection={key:typeof d.key==='string'?d.key:'',componentId:typeof d.componentId==='string'?d.componentId:null,instanceId:typeof d.instanceId==='string'?d.instanceId:null,name:typeof d.name==='string'?d.name.slice(0,SS_OWNER_STRING_CAP):'Component',hostNodeIds:ids,focused:!!d.focused,color:componentColor};curMark=null;pendingMark=null;origClasses=[];placeSet();place(hoverBox,null);if(notify){window.parent.postMessage({type:'ss:select',selectionKind:'component',nodeId:treeIdFor(selPrimary),rect:componentRect(selPrimary),component:{key:componentSelection.key,componentId:componentSelection.componentId,instanceId:componentSelection.instanceId,name:componentSelection.name,confidence:'exact',hostNodeIds:ids}},'*');}return true;
+  if(d.focused){hideComponentScope();componentScope={roots:roots,color:typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor};dimOutsideComponent();}else{clearComponentScope();}restoreSel();selectedSet=roots;selPrimary=roots[0];componentColor=typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor;componentSelection={key:typeof d.key==='string'?d.key:'',componentId:typeof d.componentId==='string'?d.componentId:null,instanceId:typeof d.instanceId==='string'?d.instanceId:null,name:typeof d.name==='string'?d.name.slice(0,SS_OWNER_STRING_CAP):'Component',hostNodeIds:ids,focused:!!d.focused,color:componentColor};curMark=null;pendingMark=null;origClasses=[];placeSet();place(hoverBox,null);if(notify){window.parent.postMessage({type:'ss:select',selectionKind:'component',nodeId:treeIdFor(selPrimary),rect:componentRect(selPrimary),component:{key:componentSelection.key,componentId:componentSelection.componentId,instanceId:componentSelection.instanceId,name:componentSelection.name,confidence:'exact',hostNodeIds:ids}},'*');}return true;
 }
 
 /* Is `el` a plausible stand-in for the signature? Shared by the structural fast
