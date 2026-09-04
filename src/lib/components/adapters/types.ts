@@ -14,11 +14,16 @@ import type {
   ComponentDiagnostic,
   ComponentTreeProjection,
   ComponentTreeProjectionInput,
+  DeleteComponentInput,
+  DuplicateComponentInput,
+  RenameComponentInput,
   InsertComponentInput,
   EditComponentPropInput,
+  EditComponentSlotInput,
   MutationResult,
   MutationValidationInput,
   MutationValidationResult,
+  RefactorResult,
   SelectionBindingInput,
   SourceFileSnapshot,
   SourceRef,
@@ -44,12 +49,16 @@ export interface ParseContext {
 export interface ResolveContext {
   workspaceRoot: string;
   files: readonly ParsedComponentFile[];
+  /** All source/manifest DTOs in the current request, including needSources. */
+  sourceFiles?: readonly SourceFileSnapshot[];
 }
 
 export interface GraphContext {
   workspaceRoot: string;
   files: readonly ParsedComponentFile[];
   revision: string;
+  /** All source/manifest DTOs in the current request, including needSources. */
+  sourceFiles?: readonly SourceFileSnapshot[];
 }
 
 export interface RawImportEdge {
@@ -84,6 +93,8 @@ export interface RawJsxUsage {
   invocation: SourceRef;
   attributes: RawJsxAttribute[];
   childrenSource: SourceRef | null;
+  /** Exact named-slot bodies discovered in markup invocation syntax. */
+  slotSources?: Record<string, SourceRef>;
   containingLocalName: string | null;
   node: ts.JsxElement | ts.JsxSelfClosingElement;
 }
@@ -128,8 +139,26 @@ export interface EditComponentPropInputWithContext extends EditComponentPropInpu
   snapshot?: ComponentSourceSnapshot;
 }
 
+export interface EditComponentSlotInputWithContext extends EditComponentSlotInput {
+  snapshot?: ComponentSourceSnapshot;
+}
+
+export interface DuplicateComponentInputWithContext extends DuplicateComponentInput {
+  snapshot?: ComponentSourceSnapshot;
+}
+
+export interface RenameComponentInputWithContext extends RenameComponentInput {
+  snapshot?: ComponentSourceSnapshot;
+}
+
+export interface DeleteComponentInputWithContext extends DeleteComponentInput {
+  snapshot?: ComponentSourceSnapshot;
+}
+
 export interface ComponentAdapter {
   readonly dialect: ComponentDialect;
+  /** Capability profile used even when a snapshot has no concrete definition. */
+  readonly capabilities?: ComponentCapabilities;
   detect(context: DetectionContext): DialectDetection;
   accepts(path: string): boolean;
   parseFile(file: SourceFileSnapshot, context: ParseContext): ParsedComponentFile;
@@ -144,7 +173,20 @@ export interface ComponentAdapter {
   projectTree?(input: ComponentTreeProjectionInput, index: ComponentIndex): ComponentTreeProjection;
   planInsert(input: InsertComponentInputWithContext, index: ComponentIndex): MutationResult;
   planPropEdit(input: EditComponentPropInputWithContext, index: ComponentIndex): MutationResult;
+  /** Optional static slot edit seam; only adapters with exact slot ranges opt in. */
+  planSlotEdit?(input: EditComponentSlotInputWithContext, index: ComponentIndex): MutationResult;
+  /** Optional until a dialect can prove a definition-level duplicate transaction. */
+  planDuplicate?(input: DuplicateComponentInputWithContext, index: ComponentIndex): RefactorResult;
+  /** Optional until a dialect can prove graph-wide definition references. */
+  planRename?(input: RenameComponentInputWithContext, index: ComponentIndex): RefactorResult;
+  /** Optional until a dialect can prove every destructive definition reference. */
+  planDelete?(input: DeleteComponentInputWithContext, index: ComponentIndex): RefactorResult;
   validateMutation(input: MutationValidationInput): MutationValidationResult;
+  /**
+   * Optional async validation seam for browser/WASM compilers. Adapters with
+   * synchronous parser runtimes can rely on `validateMutation` alone.
+   */
+  validateMutationAsync?(input: MutationValidationInput): Promise<MutationValidationResult>;
 }
 
 export interface ReactParseResult {

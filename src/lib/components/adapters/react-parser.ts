@@ -27,6 +27,7 @@ import type {
 } from './types';
 import type {
   ComponentPropDescriptor,
+  ComponentRenderRoot,
   ComponentSlotDescriptor,
   SourceFileSnapshot,
   StaticValue,
@@ -305,7 +306,9 @@ function createDefinition(
   const definitionName = candidate.localName;
   const propsContractKnown = hasKnownPropsContract(candidate, sourceFile);
   const placeable = !isNonPlaceableComponent(file.file, definitionName) && propsContractKnown;
-  const capabilities = componentCapabilities(placeable);
+  const namedExport =
+    placeable && candidate.exportName !== null && candidate.exportName === candidate.localName;
+  const capabilities = componentCapabilities(placeable, namedExport, namedExport);
   const props = extractProps(candidate, sourceFile, file);
   const slots: ComponentSlotDescriptor[] = [];
   const children = props.find((prop) => prop.name === 'children');
@@ -318,6 +321,7 @@ function createDefinition(
     });
   }
   const definition = sourceRefForNode(file, sourceFile, candidate.declaration);
+  const renderRoot = renderRootForCandidate(candidate, sourceFile, file);
   const descriptor = {
     id: componentId(file.file, candidate.exportName ?? definitionName),
     dialect: 'react' as const,
@@ -327,6 +331,8 @@ function createDefinition(
     exportName: candidate.exportName,
     description: jsDocDescription(candidate.declaration, sourceFile),
     definition,
+    isClientModule: hasUseClientDirective(sourceFile),
+    ...(renderRoot ? { renderRoot } : {}),
     props,
     slots,
     variantProps: props.filter((prop) => prop.choices !== null).map((prop) => prop.name),
@@ -354,6 +360,146 @@ function createDefinition(
     capabilities,
     isDefault: candidate.isDefault,
   };
+}
+
+/**
+ * Return the one direct intrinsic host root that a component always returns.
+ * This is deliberately conservative: conditional roots, fragments with more
+ * than one host child, custom-component roots, and unmarked elements cannot
+ * safely identify a Server Component in the rendered DOM.
+ */
+function renderRootForCandidate(
+  candidate: Candidate,
+  sourceFile: ts.SourceFile,
+  file: SourceFileSnapshot
+): ComponentRenderRoot | null {
+  const expression = renderExpressionForCandidate(candidate, sourceFile);
+  const opening = expression ? rootOpeningForExpression(expression) : null;
+  if (!opening || !ts.isIdentifier(opening.tagName) || !isIntrinsicTag(opening.tagName)) {
+    return null;
+  }
+
+  const className = staticJsxAttributeText(opening, 'className', file, sourceFile);
+  const id = staticJsxAttributeText(opening, 'id', file, sourceFile);
+  const classTokens = className
+    ? [
+        ...new Set(
+          className
+            .split(/\s+/)
+            .map((token) => token.trim())
+            .filter(Boolean)
+        ),
+      ].sort()
+    : [];
+  if (!id && classTokens.length === 0) return null;
+
+  return {
+    tag: opening.tagName.text.toLowerCase(),
+    classTokens,
+    id,
+    source: sourceRefForNode(file, sourceFile, opening),
+  };
+}
+
+function renderExpressionForCandidate(
+  candidate: Candidate,
+  sourceFile: ts.SourceFile
+): ts.Expression | null {
+  const functionLike = getFunctionLike(candidate);
+  if (functionLike?.body) {
+    if (!ts.isBlock(functionLike.body)) return unwrapRenderExpression(functionLike.body);
+    return singleReturnedExpression(functionLike.body);
+  }
+
+  if (ts.isClassDeclaration(candidate.declaration) || ts.isClassExpression(candidate.declaration)) {
+    const render = candidate.declaration.members.find(
+      (member): member is ts.MethodDeclaration =>
+        ts.isMethodDeclaration(member) && member.name.getText(sourceFile) === 'render'
+    );
+    if (render?.body) return singleReturnedExpression(render.body);
+  }
+  return null;
+}
+
+function singleReturnedExpression(body: ts.Block): ts.Expression | null {
+  const returns: ts.Expression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isReturnStatement(node)) {
+      if (node.expression) returns.push(node.expression);
+      return;
+    }
+    if (
+      node !== body &&
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isClassDeclaration(node) ||
+        ts.isClassExpression(node) ||
+        ts.isMethodDeclaration(node))
+    ) {
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(body);
+  return returns.length === 1 ? returns[0] : null;
+}
+
+function rootOpeningForExpression(expression: ts.Expression): ts.JsxOpeningLikeElement | null {
+  const node = unwrapRenderExpression(expression);
+  if (ts.isJsxElement(node)) return node.openingElement;
+  if (ts.isJsxSelfClosingElement(node)) return node;
+  if (!ts.isJsxFragment(node)) return null;
+
+  const children = node.children.filter((child) => {
+    if (ts.isJsxText(child)) return child.getText().trim().length > 0;
+    if (ts.isJsxExpression(child)) return !!child.expression;
+    return true;
+  });
+  if (children.length !== 1) return null;
+  const child = children[0];
+  if (ts.isJsxElement(child)) return child.openingElement;
+  if (ts.isJsxSelfClosingElement(child)) return child;
+  return null;
+}
+
+function unwrapRenderExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function staticJsxAttributeText(
+  opening: ts.JsxOpeningLikeElement,
+  name: string,
+  file: SourceFileSnapshot,
+  sourceFile: ts.SourceFile
+): string | null {
+  const attribute = opening.attributes.properties.find(
+    (property): property is ts.JsxAttribute =>
+      ts.isJsxAttribute(property) && property.name.getText(sourceFile) === name
+  );
+  if (!attribute) return null;
+  const value = staticValueFromJsxAttribute(attribute, file, sourceFile)?.value;
+  return value?.kind === 'string' ? value.value : null;
+}
+
+function hasUseClientDirective(sourceFile: ts.SourceFile): boolean {
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isStringLiteral(statement.expression)) {
+      break;
+    }
+    if (statement.expression.text === 'use client') return true;
+  }
+  return false;
 }
 
 function componentId(file: string, exportName: string): string {

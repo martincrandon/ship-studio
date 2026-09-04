@@ -28,6 +28,7 @@ vi.mock('../lib/logger', () => ({
 }));
 
 import { useTextEditing } from './useTextEditing';
+import type { ComponentFocusContext } from '../lib/components/focus';
 import { resolveTextSource, applyTextEdit } from '../lib/edit';
 import { logger } from '../lib/logger';
 
@@ -39,11 +40,11 @@ function fakeIframeRef() {
   } as unknown as React.RefObject<HTMLIFrameElement | null>;
 }
 
-function setup(enabled = true) {
+function setup(enabled = true, componentFocusRef?: React.RefObject<ComponentFocusContext | null>) {
   const iframeRef = fakeIframeRef();
   const onToast = vi.fn();
   const hook = renderHook(() =>
-    useTextEditing({ iframeRef, projectPath: '/proj', enabled, onToast })
+    useTextEditing({ iframeRef, projectPath: '/proj', enabled, onToast, componentFocusRef })
   );
   return { ...hook, iframeRef, onToast };
 }
@@ -65,6 +66,35 @@ async function dispatch(data: unknown, source: MessageEventSource) {
 }
 
 const SIG = { className: 'lead', tagName: 'p', ancestorClasses: [] };
+
+const FOCUS_CONTEXT: ComponentFocusContext = {
+  indexRevision: 'revision-1',
+  routeKey: null,
+  componentId: 'astro:src/components/Card.astro#Card',
+  instanceId: 'astro:src/pages/index.astro#Card:1',
+  name: 'Card',
+  definition: {
+    file: 'src/pages/index.astro',
+    start: 0,
+    end: 100,
+    line: 1,
+    column: 1,
+    contentHash: 'text-hash',
+  },
+  invocation: {
+    file: 'src/pages/home.astro',
+    start: 0,
+    end: 10,
+    line: 1,
+    column: 1,
+    contentHash: 'page-hash',
+  },
+  ancestry: [],
+  capabilities: { editMain: true, focusedVisualEditing: true },
+  usageCount: 1,
+  affectsAllUsages: true,
+  selectedChild: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -114,6 +144,52 @@ describe('useTextEditing', () => {
     );
     expect(resolveTextSource).not.toHaveBeenCalled();
     expect(posts(iframeRef)).toContainEqual({ type: 'ss:textInfo', editable: false });
+  });
+
+  it('passes the exact text range and file hash for a focused child edit', async () => {
+    (resolveTextSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'src/pages/index.astro',
+      line: 7,
+      column: 3,
+      text: 'Old copy',
+      source_start: 40,
+      source_end: 48,
+      source_hash: 'text-hash',
+    });
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    const { iframeRef, onToast } = setup(true, componentFocusRef);
+    const src = iframeRef.current!.contentWindow!;
+
+    await dispatch({ type: 'ss:select', signature: SIG, leafText: true }, src);
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textInfo', editable: true });
+
+    await dispatch({ type: 'ss:textCommit', text: 'Focused copy' }, src);
+    expect(applyTextEdit).toHaveBeenCalledWith(
+      '/proj',
+      'src/pages/index.astro',
+      7,
+      3,
+      'Old copy',
+      'Focused copy',
+      { expectedHash: 'text-hash', expectedStart: 40, expectedEnd: 48 }
+    );
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:commit' });
+    expect(onToast).toHaveBeenCalledWith('Saved to source', 'success');
+  });
+
+  it('disables a focused text edit when the resolver cannot prove its range', async () => {
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    const { iframeRef, onToast } = setup(true, componentFocusRef);
+    const src = iframeRef.current!.contentWindow!;
+
+    await dispatch({ type: 'ss:select', signature: SIG, leafText: true }, src);
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textInfo', editable: false });
+
+    await dispatch({ type: 'ss:textCommit', text: 'Unsafe copy' }, src);
+    expect(applyTextEdit).not.toHaveBeenCalled();
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textRevert' });
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining('source range'), 'error');
   });
 
   it('reverts the preview when the source write fails', async () => {

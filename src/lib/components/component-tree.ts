@@ -34,11 +34,6 @@ interface IndexedBoundary extends ComponentBoundary {
   primaryRootId: number;
 }
 
-interface BoundaryCandidate extends ComponentBoundaryHint {
-  /** The hint's source may be supplied by its nested binding convenience shape. */
-  binding?: ComponentBoundaryHint['binding'];
-}
-
 const EMPTY_ROOT_DIAGNOSTIC: ComponentDiagnostic = {
   code: 'component-tree-empty',
   severity: 'info',
@@ -124,7 +119,10 @@ export function validateComponentBoundary(
 
   const expectedDefinition = indexedComponent.definition;
   const expectedInvocation = indexedInstance.invocation;
-  const hintedDefinition = hint.definition ?? exactBindingSource(binding, expectedDefinition);
+  // An exact selection binding's `source` is the selected invocation, not the
+  // component definition. Keep the two source identities separate so the
+  // convenience `binding` shape cannot make a valid instance look stale.
+  const hintedDefinition = hint.definition;
   const hintedInvocation = hint.invocation ?? exactBindingSource(binding, expectedInvocation);
   if (hintedDefinition && !sameSourceRef(hintedDefinition, expectedDefinition)) {
     return refusedBoundary(
@@ -194,9 +192,7 @@ export function validateComponentBoundary(
  * session expands its current boundary and every exact ancestor, allowing a
  * nested component to remain visible as an opaque row until it is focused.
  */
-export function projectComponentTree(
-  input: ComponentTreeProjectionInput
-): ComponentTreeProjection {
+export function projectComponentTree(input: ComponentTreeProjectionInput): ComponentTreeProjection {
   const diagnostics: ComponentDiagnostic[] = [];
   const normalizedRoot = input.tree ? normalizeNode(input.tree) : null;
   if (!normalizedRoot) {
@@ -210,14 +206,12 @@ export function projectComponentTree(
   const indexedBoundaries: IndexedBoundary[] = [];
   const blockedHostIds = new Set<number>();
 
-  // A non-exact claim sharing a host with an exact claim makes the complete
-  // host association ambiguous. Keep the DOM visible instead of allowing the
-  // stronger-looking hint to win by order.
+  // An ambiguous claim sharing a host with an exact claim makes the complete
+  // host association unsafe. A source-anchored definition frame is expected
+  // in a React owner chain next to an exact invocation frame, so it must not
+  // veto the stronger, independently validated claim.
   for (const hint of hints) {
-    if (
-      hint.confidence !== 'exact' ||
-      (hint.binding?.confidence !== undefined && hint.binding.confidence !== 'exact')
-    ) {
+    if (hint.confidence === 'ambiguous' || hint.binding?.confidence === 'ambiguous') {
       for (const hostNodeId of uniqueNodeIds(hint.hostNodeIds)) blockedHostIds.add(hostNodeId);
     }
   }
@@ -249,8 +243,11 @@ export function projectComponentTree(
     }
     const rootNodeIds = boundary.hostNodeIds.filter((nodeId) => {
       const location = locations.get(nodeId);
-      return !!location && !boundary.hostNodeIds.some(
-        (otherNodeId) => otherNodeId !== nodeId && isDescendant(otherNodeId, nodeId, locations)
+      return (
+        !!location &&
+        !boundary.hostNodeIds.some(
+          (otherNodeId) => otherNodeId !== nodeId && isDescendant(nodeId, otherNodeId, locations)
+        )
       );
     });
     if (rootNodeIds.length !== boundary.hostNodeIds.length) {
@@ -293,10 +290,11 @@ export function projectComponentTree(
 
   const boundaries = indexedBoundaries.filter((boundary) => !blockedBoundaryKeys.has(boundary.key));
   const activeFocus = resolveProjectionFocus(input.focus, input.index, boundaries, diagnostics);
-  const focusIds = new Set(activeFocus ? [
-    activeFocus.instanceId,
-    ...activeFocus.ancestry.map((level) => level.instanceId),
-  ] : []);
+  const focusIds = new Set(
+    activeFocus
+      ? [activeFocus.instanceId, ...activeFocus.ancestry.map((level) => level.instanceId)]
+      : []
+  );
   const visibleBoundaries = new Map<string, IndexedBoundary>();
   for (const boundary of boundaries) visibleBoundaries.set(boundary.instanceId, boundary);
   const boundaryByPrimaryRoot = new Map<number, IndexedBoundary>();
@@ -333,7 +331,9 @@ export function projectComponentTree(
     const expanded = focusIds.has(boundary.instanceId);
     const children = expanded
       ? renderChildren(
-          boundary.rootNodeIds.flatMap((rootNodeId) => locations.get(rootNodeId)?.node.children ?? [])
+          boundary.rootNodeIds.flatMap(
+            (rootNodeId) => locations.get(rootNodeId)?.node.children ?? []
+          )
         )
       : [];
     return {
@@ -492,8 +492,9 @@ function exactBindingValue<T extends 'componentId' | 'instanceId'>(
   key: T
 ): T extends 'componentId' ? string | null : string | null {
   if (!binding || !('confidence' in binding) || binding.confidence !== 'exact') return null;
-  return (key === 'componentId' ? binding.componentId : binding.instanceId ?? null) as T extends
-    'componentId' ? string | null : string | null;
+  return (
+    key === 'componentId' ? binding.componentId : (binding.instanceId ?? null)
+  ) as T extends 'componentId' ? string | null : string | null;
 }
 
 function exactBindingSource(

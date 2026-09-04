@@ -68,8 +68,20 @@ import { VisualEditorPanel } from '../edit/VisualEditorPanel';
 import { ElementTreePanel } from '../edit/ElementTreePanel';
 import { VariablesPanel } from '../edit/VariablesPanel';
 import { ComponentsPanel } from '../edit/ComponentsPanel';
-import { useElementTree } from '../../hooks/useElementTree';
+import { ComponentMutationReviewModal } from '../edit/ComponentMutationReviewModal';
+import { ComponentRefactorReviewModal } from '../edit/ComponentRefactorReviewModal';
+import {
+  ComponentExtractionReviewModal,
+  type ComponentExtractionApproval,
+} from '../edit/ComponentExtractionReviewModal';
+import {
+  useElementTree,
+  type ComponentAwareTreeNode,
+  type ComponentTreeNode,
+} from '../../hooks/useElementTree';
 import { useComponentCatalog } from '../../hooks/useComponentCatalog';
+import { useComponentFocus } from '../../hooks/useComponentFocus';
+import { useComponentBinding } from '../../hooks/useComponentBinding';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
 import {
   CompactIcon,
@@ -87,6 +99,7 @@ import {
   ResetIcon,
   TabletIcon,
   TerminalIcon,
+  TrashIcon,
   UndoIcon,
 } from '@/components/icons';
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
@@ -106,12 +119,20 @@ import { Tooltip } from '../primitives/Tooltip';
 import { resolveElementHtml } from '../../lib/edit-html';
 import type {
   ComponentBinding,
+  ComponentExtractionProposal,
+  ComponentFocusSession,
   ComponentId,
+  ComponentInsertionAnchor,
   ComponentInstance,
+  ComponentIndex,
+  ExtractComponentInput,
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
 import { normalizeRuntimeSourcePath } from '../../lib/components/adapters/react-helpers';
+import { sourceRefFromResolution, type ComponentFocusContext } from '../../lib/components/focus';
+import { usageReportForResolution } from '../../lib/components/usage';
+import type { Resolution } from '../../lib/edit';
 
 const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
   if (type === 'full') return <FullBreakpointIcon />;
@@ -297,6 +318,50 @@ const EDITOR_PANEL_DEFAULT_WIDTH_PX = 300;
 const EDITOR_PANEL_PREVIOUS_DEFAULT_WIDTHS_PX = [264, 360];
 const EDITOR_PANEL_DEFAULT_VERSION_KEY = 'cssPanelDockedWidthDefault';
 
+function findComponentTreeNode(
+  node: ComponentAwareTreeNode | null,
+  key: string | null
+): ComponentTreeNode | null {
+  if (!node || !key) return null;
+  if (node.kind === 'component') return node.key === key ? node : null;
+  for (const child of node.children) {
+    const found = findComponentTreeNode(child, key);
+    if (found) return found;
+  }
+  return null;
+}
+
+function componentTreeContains(node: ComponentAwareTreeNode, key: string): boolean {
+  if (node.kind === 'component' && node.key === key) return true;
+  return node.children.some((child) => componentTreeContains(child, key));
+}
+
+function sameHostIds(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
+}
+
+type ComponentExtractionRequest = Omit<
+  ExtractComponentInput,
+  'kind' | 'snapshot' | 'approvedPropNames'
+>;
+
+function extractionNameForTag(tagName: string) {
+  const words = tagName
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+  return `Extracted${name || 'Component'}`;
+}
+
+function siblingExtractionPath(file: string, componentName: string) {
+  const dot = file.lastIndexOf('.');
+  const extension = dot >= 0 ? file.slice(dot) : '.tsx';
+  const slash = file.lastIndexOf('/');
+  return `${slash >= 0 ? `${file.slice(0, slash)}/` : ''}${componentName}${extension}`;
+}
+
 export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   {
     port = 3000,
@@ -405,6 +470,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onUserResize: () => setPinnedBreakpoint(null),
   });
 
+  // The bridge listener is long-lived, so focused component state is read through
+  // this ref and can change without rebinding the Agent MCP connection.
+  const componentFocusContextRef = useRef<ComponentFocusContext | null>(null);
+  const componentIndexRef = useRef<ComponentIndex | null>(null);
+  const getIndexedUsage = useCallback(
+    (resolution: Resolution) => usageReportForResolution(componentIndexRef.current, resolution),
+    []
+  );
+
   // Agent preview bridge: an MCP server the workspace agent uses to read the
   // preview's console/network/DOM, click/type/scroll in it, navigate it,
   // resize its viewport, and take screenshots. (Below `resize` because the
@@ -422,6 +496,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         ? resize.previewAtWidth(value)
         : resize.handleBreakpointClick(value),
     getViewportWidth: () => resize.customWidth,
+    getComponentFocusContext: () => componentFocusContextRef.current,
   });
 
   // Fullscreen: the container goes position:fixed over the window below the
@@ -617,6 +692,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     activeBreakpoint,
     breakpoints,
     onToast,
+    componentFocusRef: componentFocusContextRef,
+    getIndexedUsage,
   });
 
   // Code-first CSS editor — a SEPARATE feature for vanilla-CSS projects (Astro or
@@ -634,6 +711,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     enabled: cssEditorEnabled,
     cssModulesHint: projectType === 'nextjs',
     onToast,
+    componentFocusRef: componentFocusContextRef,
   });
   // Settings tab (element tag/classes/attributes) — shares the cascade selection.
   const elementSettings = useElementSettings({
@@ -678,6 +756,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     projectPath,
     enabled: activeEditMode,
     onToast,
+    componentFocusRef: componentFocusContextRef,
   });
   // Structural edits (insert / duplicate / delete / cut / copy / paste) — shared by both styling
   // editors the same way text editing is; drives the canvas toolbar and the
@@ -687,6 +766,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     projectPath,
     enabled: activeEditMode,
     onToast,
+    componentFocusRef: componentFocusContextRef,
   });
 
   const {
@@ -694,20 +774,73 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     loading: componentsLoading,
     error: componentsError,
     mutationBusy: componentMutationBusy,
+    pendingMutation: pendingComponentMutation,
+    pendingRefactor: pendingComponentRefactor,
+    pendingExtraction: pendingComponentExtraction,
+    confirmMutation: confirmComponentMutation,
+    cancelMutation: cancelComponentMutation,
+    duplicate: duplicateCatalogComponent,
+    rename: renameCatalogComponent,
+    deleteComponent: deleteCatalogComponent,
+    confirmRefactor: confirmCatalogRefactor,
+    cancelRefactor: cancelCatalogRefactor,
     refresh: refreshComponents,
     place: placeCatalogComponent,
     editProp: editCatalogProp,
+    editSlot: editCatalogSlot,
+    extract: extractCatalogComponent,
+    inline: inlineCatalogComponent,
+    confirmExtraction: confirmCatalogExtraction,
+    cancelExtraction: cancelCatalogExtraction,
     bindSelection: bindCatalogSelection,
   } = useComponentCatalog({
     projectPath,
     projectType,
-    enabled: componentsPanelVisible,
+    // The Element Tree and component commands share the same project-scoped
+    // index. Keep the catalog alive when its panel is closed so tree boundaries
+    // never require a second scan or a panel-only selection path.
+    enabled: componentsPanelVisible || elementTreeVisible || activeEditMode,
   });
+  const componentTreeRef = useRef<ComponentAwareTreeNode | null>(null);
+  const isWithinFocusedBoundary = useCallback(
+    (node: ComponentTreeNode, focused: ComponentFocusSession) => {
+      const parent = findComponentTreeNode(componentTreeRef.current, focused.instanceId);
+      return !!parent && parent.children.some((child) => componentTreeContains(child, node.key));
+    },
+    []
+  );
+  const componentFocus = useComponentFocus({
+    index: componentIndex ?? null,
+    routeKey: conn.currentPage,
+    enabled: componentsPanelVisible || elementTreeVisible || activeEditMode,
+    isWithinFocusedBoundary,
+  });
+  const {
+    session: componentFocusSession,
+    path: componentFocusPath,
+    enter: enterComponentFocusSession,
+    focusParent: focusParentComponentSession,
+    rebind: rebindComponentFocusSession,
+    exit: exitComponentFocusSession,
+  } = componentFocus;
+  componentIndexRef.current = componentIndex ?? null;
+  const focusedChildSource =
+    sourceRefFromResolution(editor.selection?.resolution) ?? cssEditor.focusedSource ?? null;
+  const componentFocusContext = useComponentBinding({
+    index: componentIndex ?? null,
+    session: componentFocusSession,
+    routeKey: conn.currentPage,
+    selectedChild: focusedChildSource,
+  });
+  componentFocusContextRef.current = componentFocusContext;
+
   const [catalogSelectedId, setCatalogSelectedId] = useState<ComponentId | null>(null);
   const [manualInstanceId, setManualInstanceId] = useState<string | null>(null);
   const [canvasComponentBinding, setCanvasComponentBinding] = useState<ComponentBinding | null>(
     null
   );
+  const [componentExtractionProposal, setComponentExtractionProposal] =
+    useState<ComponentExtractionProposal | null>(null);
 
   // Catalog detail is an in-panel navigation state. Do not carry it into the
   // next open, otherwise the panel reopens at its expanded detail width before
@@ -749,6 +882,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     }
     return canvasComponentBinding ?? undefined;
   }, [canvasComponentBinding, manuallySelectedInstance]);
+  const selectedInstance =
+    componentBinding && 'instanceId' in componentBinding && componentBinding.instanceId
+      ? (componentIndex?.instances.find(
+          (instance) => instance.id === componentBinding.instanceId
+        ) ?? null)
+      : null;
 
   const rawVisualSourceFile = structure.selection?.signature.sourceFile;
   const visualSourceFile = rawVisualSourceFile
@@ -808,10 +947,17 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   );
 
   const placeComponent = useCallback(
-    async (componentId: ComponentId, props?: Record<string, StaticValue>) => {
+    async (
+      componentId: ComponentId,
+      props?: Record<string, StaticValue>,
+      position: ComponentInsertionAnchor['position'] = 'after'
+    ) => {
       const selection = structure.selection;
       if (!activeEditMode || !selection) {
-        onToast('Turn on edit mode and select the element to place this component after.', 'info');
+        onToast(
+          'Turn on edit mode and select a source-backed element to place this component.',
+          'info'
+        );
         return;
       }
       try {
@@ -823,12 +969,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             file: anchor.file,
             line: anchor.line,
             html: anchor.html,
-            position: 'after',
+            position,
           },
         });
         if (outcome.status === 'applied') {
-          onToast('Component placed after the selected element.', 'success');
-        } else {
+          onToast('Component placement applied.', 'success');
+        } else if (outcome.status !== 'preview') {
           onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
         }
       } catch (error) {
@@ -839,17 +985,193 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     [activeEditMode, onToast, placeCatalogComponent, projectPath, structure.selection]
   );
 
+  const confirmComponentPlacement = useCallback(async () => {
+    const outcome = await confirmComponentMutation();
+    if (outcome.status === 'applied') {
+      onToast('Component placement applied.', 'success');
+    } else if (outcome.status !== 'preview') {
+      onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+    }
+  }, [confirmComponentMutation, onToast]);
+
+  const duplicateComponent = useCallback(
+    async (input: { componentId: ComponentId; newName: string; destinationFile: string }) => {
+      const outcome = await duplicateCatalogComponent(input);
+      if (outcome.status === 'applied') {
+        onToast('Component duplicate created.', 'success');
+      } else if (outcome.status !== 'preview') {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [duplicateCatalogComponent, onToast]
+  );
+
+  const renameComponent = useCallback(
+    async (input: { componentId: ComponentId; newName: string }) => {
+      const outcome = await renameCatalogComponent(input);
+      if (outcome.status === 'applied') {
+        onToast('Component rename applied.', 'success');
+      } else if (outcome.status !== 'preview') {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [onToast, renameCatalogComponent]
+  );
+
+  const deleteComponent = useCallback(
+    async (input: { componentId: ComponentId; removeAllUsages: true }) => {
+      const outcome = await deleteCatalogComponent(input);
+      if (outcome.status === 'applied') {
+        onToast('Component deletion applied.', 'success');
+      } else if (outcome.status !== 'preview') {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [deleteCatalogComponent, onToast]
+  );
+
+  const confirmComponentRefactor = useCallback(async () => {
+    const operation = pendingComponentRefactor?.operation;
+    const outcome = await confirmCatalogRefactor();
+    if (outcome.status === 'applied') {
+      onToast(
+        operation === 'rename'
+          ? 'Component rename applied.'
+          : operation === 'delete'
+            ? 'Component deletion applied.'
+            : 'Component duplicate created.',
+        'success'
+      );
+    } else if (outcome.status !== 'preview') {
+      onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+    }
+  }, [confirmCatalogRefactor, onToast, pendingComponentRefactor]);
+
   const editComponentProp = useCallback(
     async (instance: ComponentInstance, propName: string, value: StaticValue) => {
       const outcome = await editCatalogProp(instance, propName, value);
       if (outcome.status === 'applied') {
         onToast(`Updated ${propName} on this component instance.`, 'success');
-      } else {
+      } else if (outcome.status !== 'preview') {
         onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
       }
     },
     [editCatalogProp, onToast]
   );
+
+  const handleExtractionOutcome = useCallback(
+    (outcome: Awaited<ReturnType<typeof extractCatalogComponent>>) => {
+      if (outcome.status === 'needs-approval' || outcome.status === 'preview') {
+        if (outcome.status === 'needs-approval') {
+          setComponentExtractionProposal(outcome.proposal);
+        }
+        return;
+      }
+      if (outcome.status !== 'applied') {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [onToast]
+  );
+
+  const startComponentExtraction = useCallback(async () => {
+    const selection = structure.selection;
+    if (!activeEditMode || !selection) {
+      onToast('Turn on edit mode and select one source-backed element to extract.', 'info');
+      return;
+    }
+    if (!componentIndex?.profile.capabilities.react?.extract) {
+      onToast('Component extraction is currently available for React source only.', 'info');
+      return;
+    }
+    try {
+      const anchor = await resolveElementHtml(projectPath, selection.signature);
+      if (
+        anchor.sourceStart === undefined ||
+        anchor.sourceEnd === undefined ||
+        !anchor.sourceHash
+      ) {
+        onToast(
+          'This selection has no exact source range. Choose a source-backed JSX element and try again.',
+          'info'
+        );
+        return;
+      }
+      const componentName = extractionNameForTag(selection.signature.tagName);
+      const source: SourceRef = {
+        file: anchor.file,
+        start: anchor.sourceStart,
+        end: anchor.sourceEnd,
+        line: anchor.sourceLine ?? anchor.line,
+        column: anchor.sourceColumn ?? 1,
+        contentHash: anchor.sourceHash,
+      };
+      const request: ComponentExtractionRequest = {
+        source,
+        componentName,
+        destinationFile: siblingExtractionPath(anchor.file, componentName),
+      };
+      const outcome = await extractCatalogComponent(request);
+      handleExtractionOutcome(outcome);
+    } catch (error) {
+      const detail = formatCommandError(asCommandError(error));
+      onToast(`Could not resolve the extraction target: ${detail}`, 'error');
+    }
+  }, [
+    activeEditMode,
+    componentIndex?.profile.capabilities.react?.extract,
+    extractCatalogComponent,
+    handleExtractionOutcome,
+    onToast,
+    projectPath,
+    structure.selection,
+  ]);
+
+  const approveComponentExtraction = useCallback(
+    async (approval: ComponentExtractionApproval) => {
+      const proposal = componentExtractionProposal;
+      if (!proposal) return;
+      const outcome = await extractCatalogComponent({
+        source: proposal.source,
+        componentName: approval.componentName,
+        destinationFile: approval.destinationFile,
+        approvedPropNames: approval.approvedPropNames,
+      });
+      if (outcome.status === 'preview') {
+        setComponentExtractionProposal(null);
+      } else if (outcome.status === 'needs-approval') {
+        setComponentExtractionProposal(outcome.proposal);
+      } else if ('message' in outcome) {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [componentExtractionProposal, extractCatalogComponent, onToast]
+  );
+
+  const confirmComponentExtraction = useCallback(async () => {
+    const outcome = await confirmCatalogExtraction();
+    if (outcome.status === 'applied') {
+      onToast('Component extraction applied.', 'success');
+    } else if ('message' in outcome) {
+      onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+    }
+  }, [confirmCatalogExtraction, onToast]);
+
+  const cancelComponentExtraction = useCallback(() => {
+    cancelCatalogExtraction();
+    setComponentExtractionProposal(null);
+  }, [cancelCatalogExtraction]);
+
+  const inlineSelectedComponent = useCallback(async () => {
+    if (!selectedInstance) {
+      onToast('Select one exact component usage before inlining it.', 'info');
+      return;
+    }
+    const outcome = await inlineCatalogComponent(selectedInstance);
+    if ('message' in outcome) {
+      onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+    }
+  }, [inlineCatalogComponent, onToast, selectedInstance]);
 
   const selectComponentUsage = useCallback((instance: ComponentInstance) => {
     setCatalogSelectedId(instance.componentId);
@@ -864,8 +1186,34 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       if (!component) return;
       onComponentsEditMainChange(componentId);
       openComponentSource(component.definition);
+
+      // Edit main keeps the live page context, but it must enter the same
+      // revision-bound definition scope as component focus before visual
+      // writes can occur. If the selected usage has an exact projected
+      // boundary, seed that session now; otherwise source navigation remains
+      // available while the visual editor stays fail-closed.
+      const node = selectedInstance
+        ? findComponentTreeNode(componentTreeRef.current, selectedInstance.id)
+        : null;
+      if (node && node.componentId === componentId && node.confidence === 'exact') {
+        const transition = enterComponentFocusSession(node);
+        if (transition.status === 'refused') {
+          onToast(
+            transition.diagnostics[0]?.message ??
+              'The selected usage cannot be proven for visual main editing yet.',
+            'info'
+          );
+        }
+      }
     },
-    [componentIndex, onComponentsEditMainChange, openComponentSource]
+    [
+      componentIndex,
+      enterComponentFocusSession,
+      onComponentsEditMainChange,
+      onToast,
+      openComponentSource,
+      selectedInstance,
+    ]
   );
   const selectedCatalogComponent = componentIndex?.components.find(
     (component) => component.id === selectedComponentId
@@ -886,9 +1234,39 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       keywords: ['component', 'catalog', 'find', 'filter'],
       run: () => document.querySelector<HTMLInputElement>('.ss-components-search input')?.focus(),
     };
-    if (!selectedCatalogComponent) return [searchCommand];
+    const extractionCommand =
+      componentIndex?.profile.capabilities.react?.extract && activeEditMode && structure.selection
+        ? [
+            {
+              id: 'components.extract',
+              title: 'Create component from selected element',
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'extract', 'create', 'selection', 'reuse'],
+              run: () => void startComponentExtraction(),
+            },
+          ]
+        : [];
+    if (!selectedCatalogComponent) return [searchCommand, ...extractionCommand];
     return [
       searchCommand,
+      ...extractionCommand,
+      ...(selectedInstance &&
+      selectedCatalogComponent.capabilities.extract &&
+      selectedCatalogComponent.dialect === 'react'
+        ? [
+            {
+              id: 'components.inlineSimple',
+              title: `Inline simple ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'inline', 'unlink', 'simple'],
+              run: () => void inlineSelectedComponent(),
+            },
+          ]
+        : []),
       {
         id: 'components.openSource',
         title: `Open source for ${selectedCatalogComponent.name}`,
@@ -932,6 +1310,50 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             },
           ]
         : []),
+      ...(selectedCatalogComponent.capabilities.duplicateDefinition
+        ? [
+            {
+              id: 'components.duplicateDefinition',
+              title: `Duplicate ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'duplicate', 'copy', 'definition'],
+              run: () =>
+                document
+                  .querySelector<HTMLButtonElement>('.ss-components-duplicate-action')
+                  ?.click(),
+            },
+          ]
+        : []),
+      ...(selectedCatalogComponent.capabilities.renameDefinition
+        ? [
+            {
+              id: 'components.renameDefinition',
+              title: `Rename ${selectedCatalogComponent.name}`,
+              icon: <ComponentsIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'rename', 'refactor', 'definition'],
+              run: () =>
+                document.querySelector<HTMLButtonElement>('.ss-components-rename-action')?.click(),
+            },
+          ]
+        : []),
+      ...(selectedCatalogComponent.capabilities.deleteDefinition
+        ? [
+            {
+              id: 'components.deleteDefinition',
+              title: `Delete ${selectedCatalogComponent.name}`,
+              icon: <TrashIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['component', 'delete', 'remove', 'definition', 'usages'],
+              run: () =>
+                document.querySelector<HTMLButtonElement>('.ss-components-delete-action')?.click(),
+            },
+          ]
+        : []),
       ...(!editingSelectedMain && selectedCatalogComponent.capabilities.editMain
         ? [
             {
@@ -954,20 +1376,34 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               category: 'action' as const,
               when: 'project' as const,
               keywords: ['component', 'definition', 'main', 'exit'],
-              run: () => onComponentsEditMainChange(null),
+              run: () => {
+                onComponentsEditMainChange(null);
+                if (componentFocusSession) exitComponentFocusSession();
+              },
             },
           ]
         : []),
     ];
   }, [
     componentsPanelVisible,
+    componentIndex?.profile.capabilities.react?.extract,
+    activeEditMode,
+    duplicateComponent,
     editingSelectedMain,
     enterEditMain,
     onComponentsEditMainChange,
+    componentFocusSession,
+    exitComponentFocusSession,
     openComponentSource,
     placeComponent,
     selectedCatalogComponent,
     selectedComponentNeedsSetup,
+    selectedInstance,
+    deleteComponent,
+    renameComponent,
+    startComponentExtraction,
+    structure.selection,
+    inlineSelectedComponent,
   ]);
   // Imperative opener for the toolbar's insert palette (Cmd+K "Insert element…").
   const openInsertMenuRef = useRef<(() => void) | null>(null);
@@ -1171,8 +1607,12 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
   // Element tree (navigator) — available throughout Preview mode. Structural
   // actions remain exclusive to edit mode; outside it the panel is a read-only
-  // view of the rendered page.
+  // view of the rendered page. Keep the bridge alive for component selection
+  // and focus while the tree itself is closed, since the canvas can still be
+  // the source of those interactions.
   const showTree = elementTreeVisible;
+  const elementTreeEnabled =
+    (showTree || componentsPanelVisible || activeEditMode) && conn.serverReady;
   const variablesPanelDocked = variablesPanelVisible && variablesPanelPinned;
   const componentsPanelDocked = componentsPanelVisible && componentsPanelPinned;
   // The Elements panel's Code (markup-edit) view needs a wider column than the
@@ -1231,8 +1671,197 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // injected script even when the Elements panel is already open.
   const elementTree = useElementTree({
     iframeRef,
-    enabled: showTree && conn.serverReady,
+    enabled: elementTreeEnabled,
+    componentIndex,
+    projectPath,
+    componentFocus: componentFocusSession,
   });
+  const {
+    componentTree: projectedComponentTree,
+    componentBoundaries: projectedComponentBoundaries,
+    selectComponent: selectTreeComponentNode,
+    requestComponentFocus: requestTreeComponentFocus,
+    clearComponentFocus: clearTreeComponentFocus,
+  } = elementTree;
+  componentTreeRef.current = projectedComponentTree;
+
+  // Rebind a live focus session to the same exact instance after HMR. A changed
+  // host set is safe to repaint; a missing/ambiguous boundary is not safe to
+  // approximate, so leave focus and suspend all focused writes.
+  useEffect(() => {
+    const session = componentFocusSession;
+    if (!session) return;
+    const boundary = projectedComponentBoundaries.find(
+      (candidate) =>
+        candidate.componentId === session.componentId && candidate.instanceId === session.instanceId
+    );
+    if (!boundary || session.routeKey !== conn.currentPage) {
+      exitComponentFocusSession();
+      clearTreeComponentFocus();
+      onToast?.(
+        'Component focus ended because the rendered boundary changed. Refresh and re-enter focus.',
+        'error'
+      );
+      return;
+    }
+    if (
+      boundary.indexRevision !== session.indexRevision ||
+      !sameHostIds(boundary.hostNodeIds, session.hostNodeIds)
+    ) {
+      const transition = rebindComponentFocusSession(
+        { kind: 'component', ...boundary, children: [] },
+        projectedComponentBoundaries
+      );
+      if (transition.status === 'refused') {
+        exitComponentFocusSession();
+        clearTreeComponentFocus();
+        onToast?.(
+          transition.diagnostics[0]?.message ??
+            'Component focus ended because its source identity changed. Refresh and re-enter focus.',
+          'error'
+        );
+        return;
+      }
+      requestTreeComponentFocus(boundary);
+    }
+  }, [
+    clearTreeComponentFocus,
+    componentFocusSession,
+    conn.currentPage,
+    exitComponentFocusSession,
+    onToast,
+    projectedComponentBoundaries,
+    rebindComponentFocusSession,
+    requestTreeComponentFocus,
+  ]);
+
+  const selectedTreeComponent = findComponentTreeNode(
+    projectedComponentTree,
+    elementTree.selectedComponent?.key ?? null
+  );
+  const selectTreeComponent = useCallback(
+    (node: ComponentTreeNode) => {
+      setCatalogSelectedId(node.componentId);
+      setManualInstanceId(node.instanceId);
+      selectTreeComponentNode(node);
+    },
+    [selectTreeComponentNode]
+  );
+  const enterTreeComponentFocus = useCallback(
+    (node: ComponentTreeNode) => {
+      const transition = enterComponentFocusSession(node);
+      if (transition.status === 'refused') {
+        onToast(
+          transition.diagnostics[0]?.message ?? 'This component cannot be focused safely.',
+          'info'
+        );
+        return;
+      }
+      onComponentsEditMainChange(node.componentId);
+      requestTreeComponentFocus(node);
+    },
+    [enterComponentFocusSession, onComponentsEditMainChange, onToast, requestTreeComponentFocus]
+  );
+  const componentFocusCandidate = elementTree.componentFocusCandidate;
+  const clearComponentFocusCandidate = elementTree.clearComponentFocusCandidate;
+  useEffect(() => {
+    if (!componentFocusCandidate) return;
+    enterTreeComponentFocus(componentFocusCandidate);
+    clearComponentFocusCandidate();
+  }, [clearComponentFocusCandidate, componentFocusCandidate, enterTreeComponentFocus]);
+  const focusParentComponent = useCallback(() => {
+    const transition = focusParentComponentSession();
+    if (transition.status === 'refused') return;
+    if (!transition.session) {
+      onComponentsEditMainChange(null);
+      clearTreeComponentFocus();
+      return;
+    }
+    onComponentsEditMainChange(transition.session.componentId);
+    requestTreeComponentFocus({
+      key: transition.session.instanceId,
+      componentId: transition.session.componentId,
+      instanceId: transition.session.instanceId,
+      name: transition.session.name,
+      confidence: 'exact',
+      hostNodeIds: transition.session.hostNodeIds,
+    });
+  }, [
+    clearTreeComponentFocus,
+    focusParentComponentSession,
+    onComponentsEditMainChange,
+    requestTreeComponentFocus,
+  ]);
+  const exitComponentFocus = useCallback(() => {
+    const focusedComponentId = componentFocusSession?.componentId;
+    const transition = exitComponentFocusSession();
+    if (transition.status !== 'refused') {
+      clearTreeComponentFocus();
+      if (focusedComponentId === componentsEditMainId) onComponentsEditMainChange(null);
+    }
+  }, [
+    clearTreeComponentFocus,
+    componentFocusSession,
+    componentsEditMainId,
+    exitComponentFocusSession,
+    onComponentsEditMainChange,
+  ]);
+
+  useCommands(() => {
+    if (!showTree && !componentsPanelVisible) return [];
+    const commands = [] as {
+      id: string;
+      title: string;
+      icon: React.ReactNode;
+      category: 'action';
+      when: 'project';
+      keywords: string[];
+      run: () => void;
+    }[];
+    if (selectedTreeComponent && !componentFocusSession) {
+      commands.push({
+        id: 'components.focus',
+        title: `Focus ${selectedTreeComponent.name}`,
+        icon: <ComponentsIcon size={14} />,
+        category: 'action',
+        when: 'project',
+        keywords: ['component', 'focus', 'children', 'scope'],
+        run: () => enterTreeComponentFocus(selectedTreeComponent),
+      });
+    }
+    if (componentFocusSession && componentFocusPath.length > 1) {
+      commands.push({
+        id: 'components.focusParent',
+        title: 'Focus parent component',
+        icon: <ComponentsIcon size={14} />,
+        category: 'action',
+        when: 'project',
+        keywords: ['component', 'focus', 'parent', 'back'],
+        run: focusParentComponent,
+      });
+    }
+    if (componentFocusSession) {
+      commands.push({
+        id: 'components.exitFocus',
+        title: 'Exit component focus',
+        icon: <ComponentsIcon size={14} />,
+        category: 'action',
+        when: 'project',
+        keywords: ['component', 'focus', 'exit', 'back'],
+        run: exitComponentFocus,
+      });
+    }
+    return commands;
+  }, [
+    componentFocusPath.length,
+    componentFocusSession,
+    componentsPanelVisible,
+    enterTreeComponentFocus,
+    exitComponentFocus,
+    focusParentComponent,
+    selectedTreeComponent,
+    showTree,
+  ]);
 
   useEffect(() => {
     if (treePanelWidth !== null) {
@@ -1301,7 +1930,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
     componentsPanelDetailsBaseWidthRef.current = baseWidth;
     componentsPanelWidthManuallyChangedRef.current = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- synchronously grow the dock before the detail column paints
     setComponentsPanelWidth(expandedWidth);
   }, [
     componentsPanelDocked,
@@ -1415,7 +2043,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     },
     [componentsPanelWidth, computeMaxDockedPanelWidth]
   );
-
 
   const resizeEditorPanel = useCallback(
     (clientX: number) => {
@@ -2107,13 +2734,21 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             {/* Structural-edit toolbar, tracking the canvas selection box */}
             {activeEditMode && (
               <ElementToolbar
-                selection={structure.selection}
+                selection={elementTree.selectionKind === 'component' ? null : structure.selection}
+                componentSelection={
+                  elementTree.selectionKind === 'component' ? elementTree.selectedComponent : null
+                }
                 bounds={iframeSize}
                 busy={structure.busy}
                 hidden={structure.textEditing}
                 onInsert={(position, kind) => void structure.insert(position, kind)}
                 onDuplicate={() => void structure.duplicate()}
                 onDelete={() => void structure.remove()}
+                onComponentFocus={
+                  selectedTreeComponent && !componentFocusSession
+                    ? () => enterTreeComponentFocus(selectedTreeComponent)
+                    : undefined
+                }
                 openMenuRef={openInsertMenuRef}
               />
             )}
@@ -2264,12 +2899,20 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           >
             <ElementTreePanel
               tree={elementTree.tree}
+              componentTree={elementTree.componentTree}
               truncated={elementTree.truncated}
               selectedId={elementTree.selectedId}
               hoveredId={elementTree.hoveredId}
               affectedIds={elementTree.affectedIds}
+              selectedComponentKey={elementTree.selectedComponent?.key ?? null}
+              componentFocusPath={componentFocusPath}
               onSelect={elementTree.selectNode}
               onHover={elementTree.hoverNode}
+              onComponentSelect={selectTreeComponent}
+              onComponentHover={elementTree.hoverComponent}
+              onComponentFocus={enterTreeComponentFocus}
+              onComponentFocusParent={focusParentComponent}
+              onComponentExitFocus={exitComponentFocus}
               projectPath={projectPath}
               selectedSignature={
                 (editorMode === 'css'
@@ -2538,21 +3181,35 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             onSelect={(componentId) => {
               setCatalogSelectedId(componentId);
               setManualInstanceId(null);
-              if (componentId === null) onComponentsEditMainChange(null);
+              if (componentId === null) {
+                exitComponentFocus();
+                onComponentsEditMainChange(null);
+              }
             }}
-            onPlace={(componentId, props) => void placeComponent(componentId, props)}
+            onPlace={(componentId, props, position) =>
+              void placeComponent(componentId, props, position)
+            }
             placementAvailable={activeEditMode && structure.selection !== null}
             onOpenSource={openComponentSource}
+            onDuplicate={duplicateComponent}
+            onRename={renameComponent}
+            onDelete={deleteComponent}
             onRefresh={() => void refreshComponents()}
             onSelectUsage={selectComponentUsage}
             onEditProp={editComponentProp}
+            onEditSlot={(instance, slotName, replacementSource) => {
+              void editCatalogSlot(instance, slotName, replacementSource);
+            }}
+            onInline={() => {
+              void inlineSelectedComponent();
+            }}
             instancePropsBusy={componentMutationBusy}
             binding={componentBinding}
             editMain={{
               active: componentsEditMainId === selectedComponentId,
               componentId: componentsEditMainId,
               onEnter: enterEditMain,
-              onExit: () => onComponentsEditMainChange(null),
+              onExit: exitComponentFocus,
             }}
             pinned={componentsPanelDocked}
             onTogglePin={onToggleComponentsPanelPin}
@@ -2570,6 +3227,32 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           onResize={resizeComponentsPanel}
           onResizeBy={resizeComponentsPanelBy}
           onDragChange={setIsComponentsResizing}
+        />
+      )}
+      {pendingComponentMutation && (
+        <ComponentMutationReviewModal
+          preview={pendingComponentMutation}
+          busy={componentMutationBusy}
+          onCancel={cancelComponentMutation}
+          onConfirm={() => void confirmComponentPlacement()}
+        />
+      )}
+      {pendingComponentRefactor && (
+        <ComponentRefactorReviewModal
+          preview={pendingComponentRefactor}
+          busy={componentMutationBusy}
+          onCancel={cancelCatalogRefactor}
+          onConfirm={() => void confirmComponentRefactor()}
+        />
+      )}
+      {(componentExtractionProposal || pendingComponentExtraction) && (
+        <ComponentExtractionReviewModal
+          proposal={componentExtractionProposal}
+          preview={pendingComponentExtraction}
+          busy={componentMutationBusy}
+          onCancel={cancelComponentExtraction}
+          onApprove={approveComponentExtraction}
+          onConfirm={() => void confirmComponentExtraction()}
         />
       )}
     </div>

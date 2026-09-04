@@ -468,6 +468,8 @@ pub fn run() {
             commands::components::get_component_source_snapshot,
             commands::components::read_component_source_batch,
             commands::components::apply_component_mutation,
+            commands::components::start_component_source_watch,
+            commands::components::stop_component_source_watch,
             commands::edit_structure::insert_element,
             commands::edit_structure::duplicate_element,
             commands::edit_structure::paste_element,
@@ -834,6 +836,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|_app, event| {
             if let tauri::RunEvent::Exit = event {
+                commands::components::stop_all_component_source_watches();
                 // The quit path calls exit(0) after preventDefault() on the
                 // close request, so WindowEvent::Destroyed cleanup never runs.
                 // This is the only hook that fires for every shutdown — dev

@@ -111,7 +111,11 @@ export function isNonPlaceableComponent(file: string, name: string): boolean {
   return isRouteSpecialFile(file) || /(?:Provider|Context|Boundary)$/.test(name);
 }
 
-export function componentCapabilities(placeable: boolean): ComponentCapabilities {
+export function componentCapabilities(
+  placeable: boolean,
+  renameable = placeable,
+  deletable = renameable
+): ComponentCapabilities {
   return {
     catalog: true,
     usageGraph: true,
@@ -119,14 +123,14 @@ export function componentCapabilities(placeable: boolean): ComponentCapabilities
     instanceBinding: true,
     place: placeable,
     editStaticProps: placeable,
-    editSlots: false,
+    editSlots: placeable,
     editMain: true,
     componentTreeBoundary: true,
-    focusedVisualEditing: false,
-    duplicateDefinition: false,
-    renameDefinition: false,
-    deleteDefinition: false,
-    extract: false,
+    focusedVisualEditing: true,
+    duplicateDefinition: placeable,
+    renameDefinition: renameable,
+    deleteDefinition: deletable,
+    extract: placeable,
     isolatedPreview: false,
   };
 }

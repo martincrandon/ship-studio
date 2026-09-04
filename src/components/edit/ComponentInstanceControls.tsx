@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { CodeIcon, InfoIcon } from '@/components/icons';
+import { useEffect, useRef, useState } from 'react';
+import { CodeIcon, ComponentsIcon, InfoIcon } from '@/components/icons';
 import type {
   BindingConfidence,
   ComponentDescriptor,
@@ -21,6 +21,12 @@ export interface ComponentInstanceControlsProps {
     propName: string,
     value: StaticValue
   ) => void | Promise<void>;
+  onEditSlot?: (
+    instance: ComponentInstance,
+    slotName: string,
+    replacementSource: string
+  ) => void | Promise<void>;
+  onInline?: (instance: ComponentInstance) => void | Promise<void>;
   onOpenSource?: (source: SourceRef) => void;
 }
 
@@ -312,6 +318,70 @@ function InstancePropRow({
   );
 }
 
+function InstanceSlotRow({
+  instance,
+  slot,
+  disabled,
+  busy,
+  onEditSlot,
+}: {
+  instance: ComponentInstance;
+  slot: ComponentInstance['slots'][number];
+  disabled: boolean;
+  busy: boolean;
+  onEditSlot?: (
+    instance: ComponentInstance,
+    slotName: string,
+    replacementSource: string
+  ) => void | Promise<void>;
+}) {
+  const source = instance.slotSources?.[slot.name];
+  const editable = Boolean(onEditSlot && source && source.text !== undefined) && !disabled;
+  const [draft, setDraft] = useState(source?.text ?? '');
+  const dirtyRef = useRef(false);
+
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    // Synchronize an untouched slot draft with the latest indexed source.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft(source?.text ?? '');
+  }, [source?.text]);
+
+  const commit = () => {
+    if (!editable || !onEditSlot || !dirtyRef.current) return;
+    dirtyRef.current = false;
+    void onEditSlot(instance, slot.name, draft);
+  };
+
+  return (
+    <div className="ss-components-instance__slot">
+      <div className="ss-components-instance__slot-header">
+        <span>{slot.name}</span>
+        {source && <span className="ss-components-instance__state">Static source</span>}
+      </div>
+      {editable ? (
+        <textarea
+          className="ss-components-instance__slot-input"
+          aria-label={`Edit ${slot.name} slot source`}
+          value={draft}
+          rows={3}
+          onChange={(event) => {
+            dirtyRef.current = true;
+            setDraft(event.currentTarget.value);
+          }}
+          onBlur={commit}
+          disabled={busy}
+        />
+      ) : (
+        <code className="ss-components-instance__slot-value">
+          {source?.text ?? (slot.value === null ? 'Empty' : formatValue(slot.value))}
+        </code>
+      )}
+      {!source && <span className="ss-components-instance__state">Source range unavailable</span>}
+    </div>
+  );
+}
+
 function bindingMessage(confidence: BindingConfidence, disabled: boolean) {
   if (disabled) return 'Instance controls are unavailable while editing the main definition.';
   if (confidence === 'sourceAnchored') {
@@ -334,6 +404,8 @@ export function ComponentInstanceControls({
   disabled = false,
   busy = false,
   onEditProp,
+  onEditSlot,
+  onInline,
   onOpenSource,
 }: ComponentInstanceControlsProps) {
   if (!instance) {
@@ -381,6 +453,19 @@ export function ComponentInstanceControls({
             Open source
           </Button>
         )}
+        {onInline && (
+          <Button
+            variant="ghost"
+            size="compact"
+            className="ss-components-instance__inline-button"
+            leftIcon={<ComponentsIcon size={13} />}
+            onClick={() => void onInline(instance)}
+            disabled={disabled || busy}
+            title="Replace this proven simple component usage with its static JSX root"
+          >
+            Inline simple
+          </Button>
+        )}
       </div>
 
       {message && (
@@ -421,11 +506,14 @@ export function ComponentInstanceControls({
         <div className="ss-components-instance__slots">
           <h4 className="ss-components-subsection-title">Slots</h4>
           {instance.slots.map((slot, index) => (
-            <div key={`${index}-${slot.name}`} className="ss-components-instance__slot">
-              <span>
-                {slot.name}: {slot.value === null ? 'Empty' : formatValue(slot.value)}
-              </span>
-            </div>
+            <InstanceSlotRow
+              key={`${index}-${slot.name}`}
+              instance={instance}
+              slot={slot}
+              disabled={disabled}
+              busy={busy}
+              onEditSlot={onEditSlot}
+            />
           ))}
         </div>
       )}

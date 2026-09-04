@@ -19,15 +19,30 @@
 //! same spirit as the rest of the edit engine: everything outside the touched
 //! span is preserved byte-for-byte.
 
+use crate::commands::components::content_hash;
 use crate::commands::edit::{
-    attrs_for_path, class_token_in_index, find_attr_spans, invalidate_index_cache, locate_element,
-    open_tag_end, ElementSignature,
+    attrs_for_path, class_token_in_index, element_span, find_attr_spans, invalidate_index_cache,
+    locate_element, open_tag_end, ElementSignature,
 };
 use crate::commands::edit_css::css_class_exists;
 use crate::errors::CommandError;
 use crate::utils::{classify_fs_error, validate_project_path};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// Exact source markup selected inside a proven component definition. The
+/// class-based resolver remains the default for ordinary page editing; focused
+/// component editing supplies this range so a repeated class cannot fall back
+/// to an invocation or a guessed source file.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExactSourceTarget {
+    pub file: String,
+    pub start: usize,
+    pub end: usize,
+    pub expected_hash: String,
+    pub expected_html: String,
+}
 
 /// Where the new element lands relative to the selected anchor element.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
@@ -180,6 +195,102 @@ fn line_of(src: &str, offset: usize) -> usize {
         .filter(|&&b| b == b'\n')
         .count()
         + 1
+}
+
+/// Read and validate a byte-exact element span supplied by the focused
+/// component editor. This is deliberately stricter than the normal class
+/// resolver: the path must remain relative to the project, the complete file
+/// hash must match, and the parser-lite span must equal the requested range.
+fn locate_exact_element(
+    project_path: &str,
+    target: ExactSourceTarget,
+) -> Result<(String, std::path::PathBuf, String, usize, usize, usize), CommandError> {
+    if target.file.is_empty()
+        || target.file.contains('\0')
+        || target.file.contains('\\')
+        || Path::new(&target.file).is_absolute()
+        || target
+            .file
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(validation(
+            "sourceTarget.file",
+            "the focused source target must be a normalized project-relative path",
+        ));
+    }
+    if target.start >= target.end
+        || target.expected_hash.is_empty()
+        || target.expected_html.is_empty()
+    {
+        return Err(validation(
+            "sourceTarget",
+            "the focused source target must include a non-empty range, hash, and markup",
+        ));
+    }
+    let root = validate_project_path(project_path)?;
+    let abs = root.join(&target.file);
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| classify_fs_error("inspect the project root", &root, &error))?;
+    let canonical_file = abs
+        .canonicalize()
+        .map_err(|error| classify_fs_error("open this focused source file", &abs, &error))?;
+    if !canonical_file.starts_with(&canonical_root) {
+        return Err(validation(
+            "sourceTarget.file",
+            "the focused source target is outside the project",
+        ));
+    }
+    if std::fs::symlink_metadata(&abs)
+        .map_err(|error| classify_fs_error("inspect this focused source file", &abs, &error))?
+        .file_type()
+        .is_symlink()
+    {
+        return Err(validation(
+            "sourceTarget.file",
+            "the focused source target is a symlink",
+        ));
+    }
+    let src = std::fs::read_to_string(&abs)
+        .map_err(|error| classify_fs_error("open this focused source file", &abs, &error))?;
+    if content_hash(src.as_bytes()) != target.expected_hash {
+        return Err(validation(
+            "sourceTarget.expectedHash",
+            "the focused source file changed; refresh and reselect the child",
+        ));
+    }
+    if target.end > src.len()
+        || !src.is_char_boundary(target.start)
+        || !src.is_char_boundary(target.end)
+        || src.as_bytes().get(target.start) != Some(&b'<')
+        || src[target.start..target.end] != target.expected_html
+    {
+        return Err(validation(
+            "sourceTarget",
+            "the focused source range no longer matches the selected element",
+        ));
+    }
+    let (start, end) = element_span(&src, target.start).ok_or_else(|| {
+        validation(
+            "sourceTarget",
+            "the focused source range is not a complete element",
+        )
+    })?;
+    if start != target.start || end != target.end {
+        return Err(validation(
+            "sourceTarget",
+            "the focused source range does not cover exactly the selected element",
+        ));
+    }
+    Ok((
+        target.file,
+        abs,
+        src.clone(),
+        line_of(&src, start),
+        start,
+        end,
+    ))
 }
 
 // ───────────────────────────── splice core ──────────────────────────────────
@@ -428,6 +539,7 @@ pub fn insert_element(
     signature: ElementSignature,
     position: InsertPosition,
     element_kind: String,
+    source_target: Option<ExactSourceTarget>,
 ) -> Result<InsertedElement, CommandError> {
     let kind = element_kind.as_str();
     if !ELEMENT_KINDS.contains(&kind) {
@@ -436,7 +548,10 @@ pub fn insert_element(
             format!("unknown element kind '{kind}'"),
         ));
     }
-    let (file, abs, src, _line, start, end) = locate_element(&project_path, signature)?;
+    let (file, abs, src, _line, start, end) = match source_target {
+        Some(target) => locate_exact_element(&project_path, target)?,
+        None => locate_element(&project_path, signature)?,
+    };
     let anchor_tag = span_tag(&src, start);
     if position != InsertPosition::Inside && STRUCTURAL_TAGS.contains(&anchor_tag.as_str()) {
         return Err(validation(
@@ -477,9 +592,13 @@ pub fn insert_element(
 pub fn duplicate_element(
     project_path: String,
     signature: ElementSignature,
+    source_target: Option<ExactSourceTarget>,
 ) -> Result<InsertedElement, CommandError> {
     let sig_class = signature.class_name.clone();
-    let (file, abs, src, _line, start, end) = locate_element(&project_path, signature)?;
+    let (file, abs, src, _line, start, end) = match source_target {
+        Some(target) => locate_exact_element(&project_path, target)?,
+        None => locate_element(&project_path, signature)?,
+    };
     let tag = span_tag(&src, start);
     if STRUCTURAL_TAGS.contains(&tag.as_str()) {
         return Err(validation(
@@ -591,8 +710,12 @@ pub fn delete_element(
     project_path: String,
     signature: ElementSignature,
     old_html: String,
+    source_target: Option<ExactSourceTarget>,
 ) -> Result<(), CommandError> {
-    let (_file, abs, src, _line, start, end) = locate_element(&project_path, signature)?;
+    let (_file, abs, src, _line, start, end) = match source_target {
+        Some(target) => locate_exact_element(&project_path, target)?,
+        None => locate_element(&project_path, signature)?,
+    };
     if src[start..end] != old_html {
         return Err(validation(
             "old_html",

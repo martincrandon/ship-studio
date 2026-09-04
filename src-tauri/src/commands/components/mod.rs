@@ -4,13 +4,17 @@
 //! handlers provide only bounded source reads and the final hash/path/edit
 //! guard before source writes.
 
+mod graph_guard;
 mod inventory;
 mod mutation;
 mod types;
+mod watch;
 
+pub(crate) use types::content_hash;
 pub use types::{
-    ComponentFileMutation, ComponentMutationPlan, ComponentMutationResult,
-    ComponentSourceDiagnostic, ComponentSourceSnapshot, ComponentTextEdit, SourceFileSnapshot,
+    ComponentFileMutation, ComponentFileOperation, ComponentGraphDelta, ComponentMutationPlan,
+    ComponentMutationResult, ComponentSourceDiagnostic, ComponentSourceSnapshot, ComponentTextEdit,
+    SourceFileSnapshot,
 };
 
 /// Return a bounded source snapshot for the active resolved workspace.
@@ -50,4 +54,40 @@ pub async fn apply_component_mutation(
     tokio::task::spawn_blocking(move || mutation::apply_for_project(&project_path, plan))
         .await
         .map_err(|error| format!("Component mutation task failed: {error}"))?
+}
+
+/// Start the per-window debounced source watcher.
+#[tauri::command]
+#[tracing::instrument(
+    name = "start_component_source_watch",
+    skip(app),
+    fields(project = %project_path, window = %window_label)
+)]
+pub async fn start_component_source_watch(
+    app: tauri::AppHandle,
+    window_label: String,
+    project_path: String,
+) -> Result<(), crate::errors::CommandError> {
+    watch::start_component_source_watch(app, window_label, project_path).await
+}
+
+/// Stop the per-window debounced source watcher.
+#[tauri::command]
+#[tracing::instrument(
+    name = "stop_component_source_watch",
+    fields(project = %project_path, window = %window_label)
+)]
+pub async fn stop_component_source_watch(
+    window_label: String,
+    project_path: String,
+) -> Result<(), crate::errors::CommandError> {
+    watch::stop_component_source_watch(window_label, project_path).await
+}
+
+pub(crate) fn stop_component_source_watch_for_window(window_label: &str) {
+    watch::stop_for_window(window_label);
+}
+
+pub(crate) fn stop_all_component_source_watches() {
+    watch::stop_all();
 }

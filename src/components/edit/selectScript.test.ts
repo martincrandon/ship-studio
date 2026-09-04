@@ -25,6 +25,8 @@ function nextSelect(): Promise<{
   count: number;
   leafText?: boolean;
   affectedNodeIds?: number[];
+  ownerHints?: Array<Record<string, unknown>>;
+  rect?: Record<string, number>;
 }> {
   return new Promise((res) => {
     const handler = (e: MessageEvent) => {
@@ -36,6 +38,8 @@ function nextSelect(): Promise<{
             count: number;
             leafText?: boolean;
             affectedNodeIds?: number[];
+            ownerHints?: Array<Record<string, unknown>>;
+            rect?: Record<string, number>;
           }
         );
       }
@@ -53,6 +57,14 @@ function nextMessage<T>(type: string): Promise<T> {
     };
     window.addEventListener('message', handler);
   });
+}
+
+function nextComponentSelect(): Promise<{
+  selectionKind: 'component';
+  rect: Record<string, number>;
+  component: Record<string, unknown>;
+}> {
+  return nextMessage('ss:select');
 }
 
 beforeAll(() => {
@@ -756,6 +768,129 @@ it('omits hidden comment-only Next streaming wrappers from the element tree', as
   expect(tree.k).toHaveLength(1);
   expect(tree.k[0].t).toBe('main');
   expect(tree.k[0].k).toHaveLength(1);
+  send({ type: 'ss:deactivate' });
+});
+
+it('emits bounded React owner-chain hints in the element tree', async () => {
+  document.body.innerHTML = '<main><button class="cta">Buy</button></main>';
+  const button = document.querySelector('button')!;
+  Object.defineProperty(button, '__reactFiber$owners', {
+    configurable: true,
+    value: {
+      elementType: 'button',
+      _debugSource: {
+        fileName: 'http://localhost:5173/src/Card.tsx',
+        lineNumber: 12,
+        columnNumber: 4,
+      },
+      _debugOwner: {
+        elementType: { name: 'Card' },
+        key: 'card-1',
+        _debugSource: {
+          fileName: 'http://localhost:5173/src/Page.tsx',
+          lineNumber: 30,
+          columnNumber: 9,
+        },
+      },
+    },
+  });
+  send({ type: 'ss:activate' });
+  const treeMessage = nextMessage<{
+    tree: { k: Array<{ k: Array<{ o?: Array<Record<string, unknown>> }> }> };
+  }>('ss:tree');
+  send({ type: 'ss:requestTree' });
+  const { tree } = await treeMessage;
+  const hints = tree.k[0]?.k[0]?.o;
+  expect(hints).toMatchObject([
+    {
+      renderer: 'react',
+      file: 'http://localhost:5173/src/Card.tsx',
+      line: 12,
+      symbolHint: 'button',
+    },
+    {
+      renderer: 'react',
+      file: 'http://localhost:5173/src/Page.tsx',
+      line: 30,
+      symbolHint: 'Card',
+      runtimeKey: 'card-1',
+    },
+  ]);
+  const clicked = nextSelect();
+  button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const clickMessage = await clicked;
+  expect(hints).toBeDefined();
+  expect(clickMessage.ownerHints).toMatchObject(hints!);
+  expect(clickMessage.rect).toMatchObject({ top: 0, left: 0, width: 0, height: 0 });
+  send({ type: 'ss:deactivate' });
+});
+
+it('announces a component-focus candidate on preview double-click', async () => {
+  document.body.innerHTML = '<section class="card"><p>Card text</p></section>';
+  send({ type: 'ss:activate' });
+  const candidate = nextMessage<{ focusCandidateNodeId: number }>('ss:componentFocusCandidate');
+  document.querySelector('.card')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  const message = await candidate;
+  expect(message.focusCandidateNodeId).toBeTypeOf('number');
+  send({ type: 'ss:deactivate' });
+});
+
+it('selects a validated host set as a semantic component boundary', async () => {
+  document.body.innerHTML =
+    '<main><section class="card"><div class="card-body">Card</div></section></main>';
+  send({ type: 'ss:activate' });
+  const treeMessage = nextMessage<{
+    tree: { k: Array<{ i: number; k: Array<{ i: number }> }> };
+  }>('ss:tree');
+  send({ type: 'ss:requestTree' });
+  const { tree } = await treeMessage;
+  const hostId = tree.k[0]?.k[0]?.i;
+  expect(hostId).toBeTypeOf('number');
+
+  const selected = nextComponentSelect();
+  send({
+    type: 'ss:selectComponent',
+    key: 'component-instance',
+    componentId: 'react:src/Card.tsx#Card',
+    instanceId: 'react:src/Page.tsx:30',
+    name: 'Card',
+    confidence: 'exact',
+    hostNodeIds: [hostId],
+    color: 'rgb(10, 20, 30)',
+  });
+  const message = await selected;
+  expect(message.selectionKind).toBe('component');
+  expect(message.component).toMatchObject({
+    key: 'component-instance',
+    name: 'Card',
+    confidence: 'exact',
+    hostNodeIds: [hostId],
+  });
+  expect(message.rect).toMatchObject({ top: 0, left: 0 });
+  const componentOverlay = [...document.querySelectorAll<HTMLElement>('[data-ss-overlay]')].find(
+    (overlay) => overlay.style.borderColor === 'rgb(10, 20, 30)'
+  );
+  expect(componentOverlay).toBeDefined();
+  send({
+    type: 'ss:componentFocusRequest',
+    key: 'component-instance',
+    componentId: 'react:src/Card.tsx#Card',
+    instanceId: 'react:src/Page.tsx:30',
+    name: 'Card',
+    hostNodeIds: [hostId],
+    color: 'rgb(10, 20, 30)',
+  });
+  document.querySelector('.card-body')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const scopeOverlay = document.querySelector<HTMLElement>('[data-ss-component-scope]');
+  expect(scopeOverlay).toBeDefined();
+  expect(scopeOverlay).toHaveStyle({ display: 'block', borderColor: 'rgb(10, 20, 30)' });
+  expect(
+    [...document.querySelectorAll<HTMLElement>('[data-ss-overlay]')].some(
+      (overlay) =>
+        !overlay.hasAttribute('data-ss-component-scope') &&
+        overlay.style.borderColor === 'rgba(0, 125, 240, 0.95)'
+    )
+  ).toBe(true);
   send({ type: 'ss:deactivate' });
 });
 

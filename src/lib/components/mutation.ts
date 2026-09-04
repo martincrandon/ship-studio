@@ -18,6 +18,7 @@ import type {
   ComponentIndex,
   ComponentInstance,
   ComponentMutationPlan,
+  ComponentMutationPreview,
   ComponentSourceSnapshot,
   ComponentTextEdit,
   EditComponentPropInput,
@@ -30,6 +31,9 @@ import type {
 } from './types';
 
 const REACT_SCRIPT_KINDS = new Set(['.tsx', '.jsx', '.ts', '.js', '.mts', '.cts', '.mjs', '.cjs']);
+export const REACT_COMPONENT_PLAN_PARSER_TOKEN = 'react-component-plan-v1';
+export const REACT_NATIVE_COMPONENT_PLAN_PARSER_TOKEN = 'react-native-component-plan-v1';
+export type ReactMutationDialect = 'react' | 'react-native';
 
 export function planInsertComponent(
   input: InsertComponentInput,
@@ -203,9 +207,26 @@ export function planStaticPropEdit(
   return plannedMutation(file, [edit], descriptor, 0, snapshot.revision);
 }
 
-export function validateReactMutation(input: MutationValidationInput): MutationValidationResult {
-  const diagnostics: ComponentDiagnostic[] = [];
-  for (const mutation of input.plan.files) {
+export function validateReactMutation(
+  input: MutationValidationInput,
+  dialect: ReactMutationDialect = 'react'
+): MutationValidationResult {
+  const diagnostics: ComponentDiagnostic[] = validateMutationProtocol(input.plan, dialect);
+  const operations = input.plan.operations ?? [];
+  if (operations.length > 0 && input.plan.files.length > 0) {
+    diagnostics.push({
+      code: 'mutation-mixed-operations',
+      severity: 'error',
+      message: 'A lifecycle component plan cannot mix operations with legacy file edits.',
+    });
+  }
+  const edits = [
+    ...input.plan.files.map((mutation) => ({ kind: 'edit' as const, mutation })),
+    ...operations.flatMap((operation) =>
+      operation.kind === 'edit' ? [{ kind: 'edit' as const, mutation: operation }] : []
+    ),
+  ];
+  for (const { mutation } of edits) {
     const file = findSnapshotFile(input.snapshot, mutation.file);
     if (!file) {
       diagnostics.push({
@@ -261,9 +282,329 @@ export function validateReactMutation(input: MutationValidationInput): MutationV
       });
     }
   }
+  for (const operation of operations) {
+    if (operation.kind === 'edit') continue;
+    if (operation.kind === 'create') {
+      const existing = findSnapshotFile(input.snapshot, operation.file);
+      if (existing) {
+        diagnostics.push({
+          code: 'mutation-create-collision',
+          severity: 'error',
+          message: `The extraction destination ${operation.file} already exists.`,
+          file: operation.file,
+        });
+        continue;
+      }
+      if (!operation.expectedAbsent) {
+        diagnostics.push({
+          code: 'mutation-create-guard',
+          severity: 'error',
+          message: 'A new component file must explicitly require an absent destination.',
+          file: operation.file,
+        });
+      }
+      if (
+        operation.expectedResultHash !== undefined &&
+        sha256(operation.contents) !== operation.expectedResultHash
+      ) {
+        diagnostics.push({
+          code: 'mutation-result-hash',
+          severity: 'error',
+          message: 'The extracted component file hash does not match the planned contents.',
+          file: operation.file,
+        });
+      }
+      const parsed = createSourceFile({
+        file: operation.file,
+        content: operation.contents,
+        contentHash: sha256(operation.contents),
+      });
+      const parseDiagnostics =
+        (parsed as ts.SourceFile & { parseDiagnostics?: readonly ts.Diagnostic[] })
+          .parseDiagnostics ?? [];
+      if (parseDiagnostics.length > 0) {
+        diagnostics.push({
+          code: 'mutation-syntax-error',
+          severity: 'error',
+          message: 'The extracted component file contains a syntax error.',
+          file: operation.file,
+        });
+      }
+      continue;
+    }
+    diagnostics.push({
+      code: 'mutation-unsupported-operation',
+      severity: 'error',
+      message: `The React mutation validator does not validate ${operation.kind} operations.`,
+    });
+  }
   return diagnostics.length > 0
     ? { status: 'invalid', diagnostics }
     : { status: 'valid', diagnostics: [] };
+}
+
+function validateMutationProtocol(
+  plan: ComponentMutationPlan,
+  dialect: ReactMutationDialect = 'react'
+): ComponentDiagnostic[] {
+  const hasProtocolMetadata =
+    plan.dialect !== undefined ||
+    plan.parserToken !== undefined ||
+    plan.expectedGraphDelta !== undefined;
+  const diagnostics: ComponentDiagnostic[] = [];
+  if (plan.operations?.length && plan.files.length > 0) {
+    diagnostics.push({
+      code: 'mutation-mixed-operations',
+      severity: 'error',
+      message: 'Lifecycle operations cannot be mixed with legacy edit files.',
+    });
+  }
+  if (!hasProtocolMetadata) return diagnostics;
+  if (plan.dialect !== dialect) {
+    diagnostics.push({
+      code: 'mutation-dialect',
+      severity: 'error',
+      message: `The mutation plan was not produced by the ${dialect === 'react-native' ? 'React Native' : 'React'} adapter.`,
+    });
+  }
+  const expectedParserToken =
+    dialect === 'react-native'
+      ? REACT_NATIVE_COMPONENT_PLAN_PARSER_TOKEN
+      : REACT_COMPONENT_PLAN_PARSER_TOKEN;
+  if (plan.parserToken !== expectedParserToken) {
+    diagnostics.push({
+      code: 'mutation-parser-token',
+      severity: 'error',
+      message: `The mutation plan uses an unsupported ${dialect === 'react-native' ? 'React Native' : 'React'} parser revision.`,
+    });
+  }
+  const delta = plan.expectedGraphDelta;
+  if (!delta) {
+    diagnostics.push({
+      code: 'mutation-graph-delta',
+      severity: 'error',
+      message: 'Parser-backed component plans must include an expected graph delta.',
+    });
+    return diagnostics;
+  }
+  if (
+    !Number.isSafeInteger(delta.usagesBefore) ||
+    !Number.isSafeInteger(delta.usagesAfter) ||
+    delta.usagesBefore < 0 ||
+    delta.usagesAfter < 0 ||
+    delta.delta !== delta.usagesAfter - delta.usagesBefore
+  ) {
+    diagnostics.push({
+      code: 'mutation-graph-delta',
+      severity: 'error',
+      message: 'The expected graph delta does not match its before/after usage counts.',
+    });
+  }
+  if (
+    !plan.operations?.length &&
+    (delta.createdComponentId || delta.removedComponentId || delta.createdUsages !== undefined)
+  ) {
+    diagnostics.push({
+      code: 'mutation-unsupported-operation',
+      severity: 'error',
+      message: 'Definition lifecycle graph metadata requires the lifecycle mutation path.',
+    });
+  }
+  return diagnostics;
+}
+
+/**
+ * Build the local review representation for a validated mutation plan. The
+ * complete source stays in memory; the returned diff is intentionally compact
+ * so a placement with an import and an invocation does not render an entire
+ * source file in the approval dialog.
+ */
+export function previewComponentMutation(
+  plan: ComponentMutationPlan,
+  snapshot: ComponentSourceSnapshot
+): ComponentMutationPreview | null {
+  const files = [] as ComponentMutationPreview['files'];
+  for (const mutation of plan.files) {
+    const file = findSnapshotFile(snapshot, mutation.file);
+    if (!file || file.contentHash !== mutation.expectedHash) return null;
+    const after = applyTextEdits(file.content, mutation.edits);
+    if (after === null || sha256(after) !== mutation.expectedResultHash) return null;
+    const diff = mutationDiff(file.content, after, mutation.edits);
+    files.push({
+      file: mutation.file,
+      beforeHash: mutation.expectedHash,
+      afterHash: mutation.expectedResultHash,
+      diff: diff.text,
+      additions: diff.additions,
+      deletions: diff.deletions,
+    });
+  }
+  return { plan, files };
+}
+
+interface MutationDiff {
+  text: string;
+  additions: number;
+  deletions: number;
+}
+
+interface PreviewLineRange {
+  beforeStart: number;
+  beforeEnd: number;
+  afterStart: number;
+  afterEnd: number;
+}
+
+const PREVIEW_CONTEXT_LINES = 2;
+
+function mutationDiff(
+  before: string,
+  after: string,
+  edits: readonly ComponentTextEdit[]
+): MutationDiff {
+  const beforeLines = previewLines(before);
+  const afterLines = previewLines(after);
+  const beforeStarts = lineStarts(before);
+  const afterStarts = lineStarts(after);
+  let shift = 0;
+  const ranges: PreviewLineRange[] = [];
+
+  for (const edit of [...edits].sort((left, right) => left.start - right.start)) {
+    const beforeStart = utf8ByteOffsetToUtf16Offset(before, edit.start);
+    const beforeEnd = utf8ByteOffsetToUtf16Offset(before, edit.end);
+    if (beforeStart === null || beforeEnd === null) continue;
+    const afterStart = beforeStart + shift;
+    const afterEnd = afterStart + edit.text.length;
+    ranges.push({
+      beforeStart: Math.max(0, lineIndexAt(beforeStarts, beforeStart) - PREVIEW_CONTEXT_LINES),
+      beforeEnd: Math.min(
+        beforeLines.length,
+        lineIndexAt(beforeStarts, Math.max(beforeStart, beforeEnd - 1)) + PREVIEW_CONTEXT_LINES + 1
+      ),
+      afterStart: Math.max(0, lineIndexAt(afterStarts, afterStart) - PREVIEW_CONTEXT_LINES),
+      afterEnd: Math.min(
+        afterLines.length,
+        lineIndexAt(afterStarts, Math.max(afterStart, afterEnd - 1)) + PREVIEW_CONTEXT_LINES + 1
+      ),
+    });
+    shift += edit.text.length - (beforeEnd - beforeStart);
+  }
+
+  if (ranges.length === 0) return simpleMutationDiff(beforeLines, afterLines);
+
+  const merged = ranges
+    .sort((left, right) => left.beforeStart - right.beforeStart)
+    .reduce((result, range) => {
+      const previous = result[result.length - 1];
+      if (
+        previous &&
+        range.beforeStart <= previous.beforeEnd &&
+        range.afterStart <= previous.afterEnd
+      ) {
+        previous.beforeEnd = Math.max(previous.beforeEnd, range.beforeEnd);
+        previous.afterEnd = Math.max(previous.afterEnd, range.afterEnd);
+      } else {
+        result.push({ ...range });
+      }
+      return result;
+    }, [] as PreviewLineRange[]);
+
+  const lines: string[] = [];
+  let additions = 0;
+  let deletions = 0;
+  for (const range of merged) {
+    const beforeChunk = beforeLines.slice(range.beforeStart, range.beforeEnd);
+    const afterChunk = afterLines.slice(range.afterStart, range.afterEnd);
+    const prefix = commonLinePrefix(beforeChunk, afterChunk);
+    const suffix = commonLineSuffix(beforeChunk, afterChunk, prefix);
+    lines.push(
+      `@@ -${range.beforeStart + 1},${beforeChunk.length} +${range.afterStart + 1},${afterChunk.length} @@`
+    );
+    for (const line of beforeChunk.slice(0, prefix)) lines.push(` ${line}`);
+    for (const line of beforeChunk.slice(prefix, beforeChunk.length - suffix)) {
+      lines.push(`-${line}`);
+      deletions += 1;
+    }
+    for (const line of afterChunk.slice(prefix, afterChunk.length - suffix)) {
+      lines.push(`+${line}`);
+      additions += 1;
+    }
+    for (const line of beforeChunk.slice(beforeChunk.length - suffix)) lines.push(` ${line}`);
+  }
+  return { text: lines.join('\n'), additions, deletions };
+}
+
+function simpleMutationDiff(beforeLines: string[], afterLines: string[]): MutationDiff {
+  let prefix = 0;
+  while (
+    prefix < beforeLines.length &&
+    prefix < afterLines.length &&
+    beforeLines[prefix] === afterLines[prefix]
+  ) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < beforeLines.length - prefix &&
+    suffix < afterLines.length - prefix &&
+    beforeLines[beforeLines.length - suffix - 1] === afterLines[afterLines.length - suffix - 1]
+  ) {
+    suffix += 1;
+  }
+  const beforeChunk = beforeLines.slice(prefix, beforeLines.length - suffix);
+  const afterChunk = afterLines.slice(prefix, afterLines.length - suffix);
+  const lines = [`@@ -${prefix + 1},${beforeChunk.length} +${prefix + 1},${afterChunk.length} @@`];
+  for (const line of beforeChunk) lines.push(`-${line}`);
+  for (const line of afterChunk) lines.push(`+${line}`);
+  return {
+    text: lines.join('\n'),
+    additions: afterChunk.length,
+    deletions: beforeChunk.length,
+  };
+}
+
+function previewLines(content: string): string[] {
+  return content.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line));
+}
+
+function lineStarts(content: string): number[] {
+  const starts = [0];
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === '\n') starts.push(index + 1);
+  }
+  return starts;
+}
+
+function lineIndexAt(starts: number[], offset: number): number {
+  let low = 0;
+  let high = starts.length - 1;
+  const target = Math.max(0, offset);
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (starts[middle] <= target) low = middle + 1;
+    else high = middle - 1;
+  }
+  return Math.max(0, high);
+}
+
+function commonLinePrefix(before: string[], after: string[]): number {
+  let count = 0;
+  while (count < before.length && count < after.length && before[count] === after[count]) {
+    count += 1;
+  }
+  return count;
+}
+
+function commonLineSuffix(before: string[], after: string[], prefix: number): number {
+  let count = 0;
+  while (
+    count < before.length - prefix &&
+    count < after.length - prefix &&
+    before[before.length - count - 1] === after[after.length - count - 1]
+  ) {
+    count += 1;
+  }
+  return count;
 }
 
 interface RangeMatch {
@@ -782,6 +1123,7 @@ function plannedMutation(
   const plan: ComponentMutationPlan = {
     files: [mutation],
     dialect: 'react',
+    parserToken: REACT_COMPONENT_PLAN_PARSER_TOKEN,
     expectedRevision: revision,
     expectedGraphDelta: {
       componentId: descriptor.id,

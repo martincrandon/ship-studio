@@ -16,6 +16,7 @@ import {
   type BridgeToolContext,
 } from './agentBridge';
 import { logger } from './logger';
+import type { ComponentFocusContext } from './components/focus';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -31,6 +32,42 @@ const makeCtx = (overrides: Partial<BridgeToolContext> = {}): BridgeToolContext 
   getViewportWidth: () => null,
   ...overrides,
 });
+
+const FOCUS_CONTEXT: ComponentFocusContext = {
+  indexRevision: 'revision-1',
+  routeKey: '/',
+  componentId: 'react:src/Card.tsx#Card',
+  instanceId: 'react:src/Page.tsx#Card:1',
+  name: 'Card',
+  definition: {
+    file: 'src/Card.tsx',
+    start: 10,
+    end: 120,
+    line: 1,
+    column: 1,
+    contentHash: 'card-hash',
+  },
+  invocation: {
+    file: 'src/Page.tsx',
+    start: 40,
+    end: 48,
+    line: 4,
+    column: 10,
+    contentHash: 'page-hash',
+  },
+  ancestry: [],
+  capabilities: { editMain: true, focusedVisualEditing: true },
+  usageCount: 3,
+  affectsAllUsages: true,
+  selectedChild: {
+    file: 'src/Card.tsx',
+    start: 45,
+    end: 52,
+    line: 2,
+    column: 20,
+    contentHash: 'card-hash',
+  },
+};
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -105,6 +142,18 @@ describe('executeBridgeTool', () => {
     expect(report).toContain('running');
     expect(report).toContain('/about');
     expect(report).toContain('Console:');
+  });
+
+  it('includes the revision-bound focused component context for the Agent', async () => {
+    const result = await executeBridgeTool(
+      { requestId: 201, tool: 'preview_status' },
+      makeCtx({ getComponentFocusContext: () => FOCUS_CONTEXT })
+    );
+    const report = (result.content[0] as { text: string }).text;
+    expect(report).toContain('Component focus: active.');
+    expect(report).toContain('source hash card-hash');
+    expect(report).toContain('Definition edits affect all 3 indexed usage(s).');
+    expect(report).toContain('never infer an invocation or guessed file/range');
   });
 
   it('preview_status tells the agent when the dev server is down', async () => {

@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { DuplicateIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { ComponentsIcon, DuplicateIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { Spinner } from '../primitives/Spinner';
 import { InsertMenu } from './InsertMenu';
 import { getElementIcon } from './element-icons';
@@ -21,9 +21,11 @@ import {
   type InsertPosition,
 } from '../../lib/edit-structure';
 import type { StructureSelection } from '../../hooks/useElementStructure';
+import type { SelectedComponent } from '../../hooks/useElementTree';
 
 interface Props {
   selection: StructureSelection | null;
+  componentSelection?: SelectedComponent | null;
   /** The iframe wrapper's size — the coordinate space of the selection rect. */
   bounds: { w: number; h: number } | null;
   busy: boolean;
@@ -32,6 +34,7 @@ interface Props {
   onInsert: (position: InsertPosition, kind: ElementKind) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onComponentFocus?: () => void;
   /** Imperative opener for the Cmd+K "Insert element…" command. */
   openMenuRef?: React.MutableRefObject<(() => void) | null>;
 }
@@ -42,12 +45,14 @@ const GAP = 3;
 
 export function ElementToolbar({
   selection,
+  componentSelection = null,
   bounds,
   busy,
   hidden,
   onInsert,
   onDuplicate,
   onDelete,
+  onComponentFocus,
   openMenuRef,
 }: Props) {
   const [menuAnchor, setMenuAnchor] = useState<{
@@ -72,15 +77,19 @@ export function ElementToolbar({
 
   // A new selection moves the toolbar out from under an open palette — close it
   // (render-time state adjustment, the sanctioned "derive from prop change" pattern).
-  const sigKey = selection ? `${selection.signature.tagName}|${selection.signature.className}` : '';
+  const sigKey = selection
+    ? `${selection.signature.tagName}|${selection.signature.className}`
+    : componentSelection
+      ? `component|${componentSelection.key}`
+      : '';
   const [lastSigKey, setLastSigKey] = useState(sigKey);
   if (sigKey !== lastSigKey) {
     setLastSigKey(sigKey);
     setMenuAnchor(null);
   }
 
-  const rect = selection?.rect;
-  if (!selection || !rect || hidden) return null;
+  const rect = selection?.rect ?? componentSelection?.rect;
+  if ((!selection && !componentSelection) || !rect || hidden) return null;
 
   // Above the selection box; below it when there's no headroom. Clamped to the
   // wrapper so it never escapes the preview area.
@@ -93,14 +102,52 @@ export function ElementToolbar({
   );
   const left = Math.max(4, Math.min(rect.left, maxLeft));
 
-  const insideDisabled = VOID_ELEMENTS.has(selection.signature.tagName);
+  if (componentSelection) {
+    return (
+      <div
+        className="ss-el-toolbar ss-el-toolbar--component"
+        style={{ top, left }}
+        data-testid="element-toolbar"
+      >
+        <div
+          className="ss-el-toolbar__selection ss-el-toolbar__selection--component"
+          role="group"
+          aria-label={`Selected component: ${componentSelection.name ?? 'Component'}`}
+        >
+          <ComponentsIcon size={14} className="ss-el-toolbar__component-icon" />
+          <span className="ss-el-toolbar__component-name">
+            {componentSelection.name ?? 'Component'}
+          </span>
+        </div>
+        {onComponentFocus && (
+          <div
+            className="ss-el-toolbar__actions ss-el-toolbar__actions--component"
+            role="group"
+            aria-label="Component actions"
+          >
+            <button
+              type="button"
+              className="ss-el-toolbar__btn"
+              aria-label="Focus component"
+              title="Focus component"
+              onClick={onComponentFocus}
+            >
+              <ComponentsIcon size={12} className="ss-el-toolbar__control-icon" />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const insideDisabled = VOID_ELEMENTS.has(selection!.signature.tagName);
   // <html>/<head>/<body> ARE the page — the backend refuses to duplicate,
   // delete, or insert beside them, so don't offer it (issues #723/#740).
-  const structural = STRUCTURAL_ELEMENTS.has(selection.signature.tagName);
-  const structuralTitle = `<${selection.signature.tagName}> is part of the page itself`;
-  const tagName = selection.signature.tagName.toLowerCase();
+  const structural = STRUCTURAL_ELEMENTS.has(selection!.signature.tagName);
+  const structuralTitle = `<${selection!.signature.tagName}> is part of the page itself`;
+  const tagName = selection!.signature.tagName.toLowerCase();
   const elementIcon = getElementIcon(tagName);
-  const firstClass = selection.signature.className.split(/\s+/).find(Boolean);
+  const firstClass = selection!.signature.className.split(/\s+/).find(Boolean);
   const selector = firstClass ? `.${firstClass}` : null;
   const selectionLabel = selector ? `${tagName} ${selector}` : tagName;
 

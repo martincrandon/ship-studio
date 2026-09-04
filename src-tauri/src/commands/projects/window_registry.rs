@@ -114,6 +114,7 @@ pub async fn register_project_for_window(
 #[tauri::command]
 #[tracing::instrument]
 pub async fn unregister_project_from_window(window_label: String) -> Result<(), CommandError> {
+    crate::commands::components::stop_component_source_watch_for_window(&window_label);
     crate::state::unregister_window_by_label(&window_label);
     tracing::info!(
         "Unregistered project from window {} (user went back to projects)",

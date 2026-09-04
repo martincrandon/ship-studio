@@ -133,10 +133,10 @@
   flex: 0 0 auto;
   align-self: flex-start;
   /* Keep the chip centered on the first text line, not the whole wrapped value. */
-  margin-block-start: var(--space-02);
+  margin-block-start: var(--spacing-2xs);
   width: var(--size-icon-button);
   height: var(--size-icon-button);
-  border: var(--stroke-1) solid var(--border-default);
+  border: var(--border-width-default) solid var(--border-default);
   border-radius: var(--radius-sm);
 }
 
@@ -150,8 +150,8 @@
   cursor: pointer;
 }
 .ss-var-row__swatch--button:focus-visible {
-  outline: var(--stroke-1) solid var(--accent-active);
-  outline-offset: var(--space-02);
+  outline: var(--border-width-default) solid var(--accent-active);
+  outline-offset: var(--spacing-2xs);
 }
 
 .ss-var-row__type-icon {
@@ -162,7 +162,7 @@
   align-self: flex-start;
   width: 16px;
   height: 16px;
-  border: var(--stroke-1) solid var(--border-default);
+  border: var(--border-width-default) solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-control);
   color: var(--text-muted);
