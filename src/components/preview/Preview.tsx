@@ -1048,10 +1048,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }, [confirmCatalogRefactor, onToast, pendingComponentRefactor]);
 
   const editComponentProp = useCallback(
-    async (instance: ComponentInstance, propName: string, value: StaticValue) => {
+    async (instance: ComponentInstance, propName: string, value: StaticValue | null) => {
       const outcome = await editCatalogProp(instance, propName, value);
       if (outcome.status === 'applied') {
-        onToast(`Updated ${propName} on this component instance.`, 'success');
+        onToast(
+          value === null
+            ? `Reset ${propName} to its component default.`
+            : `Updated ${propName} on this component instance.`,
+          'success'
+        );
       } else if (outcome.status !== 'preview') {
         onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
       }
@@ -1275,6 +1280,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         when: 'project' as const,
         keywords: ['component', 'definition', 'code', 'source'],
         run: () => openComponentSource(selectedCatalogComponent.definition),
+      },
+      {
+        id: 'components.openCanvas',
+        title: `Open canvas for ${selectedCatalogComponent.name}`,
+        icon: <ComponentsIcon size={14} />,
+        category: 'navigation' as const,
+        when: 'project' as const,
+        keywords: ['component', 'canvas', 'variants', 'preset', 'qa', 'frames'],
+        run: () => document.querySelector<HTMLButtonElement>('.ss-components-open-canvas')?.click(),
       },
       ...(selectedCatalogComponent.usageCount > 0
         ? [
@@ -2745,10 +2759,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 onDuplicate={() => void structure.duplicate()}
                 onDelete={() => void structure.remove()}
                 onComponentFocus={
-                  selectedTreeComponent && !componentFocusSession
-                    ? () => enterTreeComponentFocus(selectedTreeComponent)
+                  selectedTreeComponent
+                    ? componentFocusSession
+                      ? exitComponentFocus
+                      : () => enterTreeComponentFocus(selectedTreeComponent)
                     : undefined
                 }
+                componentFocusActive={!!componentFocusSession}
                 openMenuRef={openInsertMenuRef}
               />
             )}
@@ -3191,6 +3208,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             }
             placementAvailable={activeEditMode && structure.selection !== null}
             onOpenSource={openComponentSource}
+            onSendCanvasToAgent={onSendToClaude}
             onDuplicate={duplicateComponent}
             onRename={renameComponent}
             onDelete={deleteComponent}

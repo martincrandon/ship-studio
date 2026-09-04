@@ -103,6 +103,15 @@ export interface ComponentSlotValue {
   value: ComponentPropExpression | null;
   /** Exact authored slot text when the adapter can expose it losslessly. */
   sourceText?: string;
+  /** Direct, statically indexed component children in this slot. */
+  children?: ComponentSlotChild[];
+}
+
+export interface ComponentSlotChild {
+  instanceId: ComponentInstanceId;
+  componentId: ComponentId;
+  name: string;
+  invocation: SourceRef;
 }
 
 /**
@@ -684,7 +693,10 @@ export interface EditComponentPropInput {
   kind: 'prop';
   instanceId: ComponentInstanceId;
   propName: string;
-  value: StaticValue;
+  /** Defaults to `set` for backwards-compatible callers that predate reset. */
+  operation?: 'set' | 'remove';
+  /** Required for `set`; omitted for `remove`. */
+  value?: StaticValue;
   snapshot?: ComponentSourceSnapshot;
 }
 
@@ -693,8 +705,18 @@ export interface EditComponentSlotInput {
   instanceId: ComponentInstanceId;
   /** React uses `children`; markup adapters use `default` plus explicit names. */
   slotName: string;
+  /** Defaults to `replace`; structured composition uses the other operations. */
+  operation?: 'replace' | 'insert' | 'remove' | 'reorder';
   /** Replacement source for the slot body. It must be static JSX/markup. */
-  replacementSource: string;
+  replacementSource?: string;
+  /** Existing indexed definition to place into a static slot. */
+  componentId?: ComponentId;
+  /** Existing indexed child to remove or move. */
+  childInstanceId?: ComponentInstanceId;
+  /** Existing indexed child before which an inserted/moved child is placed. */
+  beforeChildInstanceId?: ComponentInstanceId;
+  /** Explicit placement values for a structured slot insertion. */
+  props?: Record<string, StaticValue>;
   snapshot?: ComponentSourceSnapshot;
 }
 

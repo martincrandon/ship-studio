@@ -296,6 +296,7 @@
   --preview-toolbar-h: var(--panel-header-h);
   --tree-panel-w: 240px;
   --tree-code-w: 420px;
+  --tree-focus-dim-opacity: 0.5;
   --hint-card-max-w: 720px;
   --z-modal-overlay: 1000;
   --z-modal: 1001;

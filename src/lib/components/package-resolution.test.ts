@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { sha256 } from './ranges';
-import { packageSourceCandidates, resolvePackageModulePath } from './package-resolution';
+import {
+  packageExportSourceFiles,
+  packageManifests,
+  packageSourceCandidates,
+  resolvePackageModulePath,
+} from './package-resolution';
 import type { SourceFileSnapshot } from './types';
 
 function file(fileName: string, content: string): SourceFileSnapshot {
@@ -42,5 +47,25 @@ describe('internal package resolution', () => {
       file: null,
       diagnostics: [],
     });
+  });
+
+  it('returns only present literal export targets for library discovery', () => {
+    const manifest = file(
+      'packages/ui/package.json',
+      JSON.stringify({
+        name: '@acme/ui',
+        exports: {
+          '.': { import: './src/index.ts', types: './src/index.d.ts' },
+          './button': './src/Button.tsx',
+          './*': './src/*.tsx',
+        },
+      })
+    );
+    const entry = file('packages/ui/src/index.ts', 'export { Button } from "./Button";');
+    const button = file('packages/ui/src/Button.tsx', 'export function Button() {}');
+
+    expect(
+      packageExportSourceFiles(packageManifests([manifest])[0], [manifest, entry, button])
+    ).toEqual(['packages/ui/src/index.ts', 'packages/ui/src/Button.tsx']);
   });
 });

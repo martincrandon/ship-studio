@@ -19,6 +19,23 @@ export interface PackageModuleResolution {
 }
 
 /**
+ * Resolve all statically declared package entry points that are present in a
+ * source snapshot. Wildcard exports and executable alias/config rules are
+ * deliberately omitted: a library catalog must never turn a package manifest
+ * into an unbounded filesystem probe.
+ */
+export function packageExportSourceFiles(
+  manifest: PackageManifestRecord,
+  files: readonly SourceFileSnapshot[]
+): string[] {
+  const targets = explicitPackageExportTargets(manifest.manifest);
+  const fileSet = new Set(files.map((file) => normalizeProjectPath(file.file)));
+  return unique(targets.flatMap((target) => sourceCandidates(manifest.root, target))).filter(
+    (candidate) => fileSet.has(candidate)
+  );
+}
+
+/**
  * Read package metadata as data only. This deliberately ignores package
  * scripts and config files: the component index must never execute project
  * code to resolve an import.
@@ -147,6 +164,30 @@ function entryTargets(manifest: Record<string, unknown>, subpath: string): strin
     const value = manifest[field];
     return typeof value === 'string' ? [value] : [];
   });
+}
+
+function explicitPackageExportTargets(manifest: Record<string, unknown>): string[] {
+  if (manifest.exports !== undefined) {
+    return unique(exportTargets(manifest.exports));
+  }
+  return ENTRY_FIELDS.flatMap((field) => {
+    const value = manifest[field];
+    return typeof value === 'string' ? [value] : [];
+  });
+}
+
+/** Extract only literal export targets. Wildcard subpaths remain unresolved. */
+function exportTargets(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(exportTargets);
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((key) => key.startsWith('.'))) {
+    return Object.entries(record)
+      .filter(([key]) => !key.includes('*'))
+      .flatMap(([, target]) => exportTargets(target));
+  }
+  return CONDITION_ORDER.flatMap((condition) => exportTargets(record[condition]));
 }
 
 function exportTargetFor(value: unknown, requestedKey: string): string | null {

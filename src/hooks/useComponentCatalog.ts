@@ -110,6 +110,20 @@ function sourceChangesBetween(
 
 const MAX_SOURCE_RESOLUTION_ROUNDS = 3;
 
+/** Start a watcher while preserving cleanup that wins during async startup. */
+export async function startComponentWatcherWithCleanup(input: {
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  isDisposed: () => boolean;
+}): Promise<boolean> {
+  await input.start();
+  if (input.isDisposed()) {
+    await input.stop();
+    return false;
+  }
+  return true;
+}
+
 function mergeSupplementalSources(
   snapshot: ComponentSourceSnapshot,
   supplemental: ReadonlyMap<string, SourceFileSnapshot>
@@ -226,6 +240,7 @@ export function useComponentCatalog({
         previousSnapshot && changes.length > 0
           ? await getWorker().update(workingSnapshot, changes, projectType ?? null)
           : await buildIndex(workingSnapshot, projectType ?? null);
+      if (sequence !== refreshSequenceRef.current) return null;
       const requestedInRevision = new Set<string>();
       let resolutionRounds = 0;
       for (
@@ -255,6 +270,7 @@ export function useComponentCatalog({
         try {
           loaded = await readComponentSourceBatch(projectPath, requested, snapshot.revision);
         } catch (error) {
+          if (sequence !== refreshSequenceRef.current) return null;
           nextIndex = indexWithNeedSourcesDiagnostic(
             nextIndex,
             'component-need-sources-read-failed',
@@ -264,6 +280,7 @@ export function useComponentCatalog({
           );
           break;
         }
+        if (sequence !== refreshSequenceRef.current) return null;
         if (loaded.some((source) => !requestedInRevision.has(source.file))) {
           nextIndex = indexWithNeedSourcesDiagnostic(
             nextIndex,
@@ -285,6 +302,7 @@ export function useComponentCatalog({
           break;
         }
         nextIndex = await getWorker().update(workingSnapshot, changes, projectType ?? null);
+        if (sequence !== refreshSequenceRef.current) return null;
       }
       if (nextIndex?.needSources?.length) {
         nextIndex = indexWithNeedSourcesDiagnostic(
@@ -293,8 +311,12 @@ export function useComponentCatalog({
           `The component index could not complete its bounded internal source resolution rounds (${MAX_SOURCE_RESOLUTION_ROUNDS}).`
         );
       }
-      snapshotRef.current = workingSnapshot;
       if (!nextIndex || sequence !== refreshSequenceRef.current) return null;
+      // Do not publish host refs until every bounded source-resolution round
+      // and the final supersession check have completed.  An older refresh
+      // may have finished its worker request after a newer refresh started;
+      // in that case it must not replace either the snapshot or index refs.
+      snapshotRef.current = workingSnapshot;
       indexRef.current = nextIndex;
       return nextIndex;
     },
@@ -348,8 +370,11 @@ export function useComponentCatalog({
           unlisten = null;
           return;
         }
-        await startComponentSourceWatch(windowLabel, projectPath);
-        started = true;
+        started = await startComponentWatcherWithCleanup({
+          start: () => startComponentSourceWatch(windowLabel, projectPath),
+          stop: () => stopComponentSourceWatch(windowLabel, projectPath),
+          isDisposed: () => disposed,
+        });
       } catch (error) {
         if (!disposed) {
           logger.warn(
@@ -681,7 +706,7 @@ export function useComponentCatalog({
     async (
       instance: ComponentInstance,
       propName: string,
-      value: StaticValue
+      value: StaticValue | null
     ): Promise<ComponentMutationOutcome> => {
       if (!indexRef.current || !snapshotRef.current) {
         return {
@@ -709,7 +734,9 @@ export function useComponentCatalog({
           kind: 'prop',
           instanceId: instance.id,
           propName,
-          value,
+          ...(value === null
+            ? { operation: 'remove' as const }
+            : { operation: 'set' as const, value }),
         });
         return await applyPlannedMutation(result);
       } catch (error) {

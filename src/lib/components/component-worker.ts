@@ -37,6 +37,12 @@ let fullComponentApiPromise: Promise<typeof import('./index')> | null = null;
 const inFlightRequestIds = new Set<number>();
 const cancelledRequestIds = new Set<number>();
 const MAX_CANCELLED_REQUEST_IDS = 256;
+// The worker endpoint can receive several messages before an async parse
+// yields.  Build/update requests mutate the module-level catalog state, so
+// every non-cancellation request is run through this queue.  Serializing the
+// whole protocol (including bind/plan requests) also means those requests can
+// never observe a catalog half-way between two published generations.
+let requestQueue: Promise<void> = Promise.resolve();
 
 function workerSuccess(
   id: number,
@@ -133,19 +139,35 @@ export async function handleComponentWorkerRequest(
     return workerSuccess(request.id, null);
   }
 
+  const response = requestQueue.then(() => processComponentWorkerRequest(request));
+  requestQueue = response.then(
+    () => undefined,
+    () => undefined
+  );
+  return response;
+}
+
+async function processComponentWorkerRequest(
+  request: Exclude<ComponentWorkerRequest, { type: 'cancel' }>
+): Promise<ComponentWorkerResponse> {
   inFlightRequestIds.add(request.id);
   try {
     assertNotCancelled(request.id);
     if (request.type === 'build') {
       const preparedSnapshot = await prepareWorkerSnapshot(request.snapshot);
       assertNotCancelled(request.id);
+      const usesAstroAdapter = snapshotHasAstro(preparedSnapshot);
+      const options = await indexStoreOptions(request.projectType, usesAstroAdapter);
+      assertNotCancelled(request.id);
+      const nextStore = new ComponentIndexStore();
+      const nextIndex = nextStore.build(preparedSnapshot, options);
+      assertNotCancelled(request.id);
+      // Publish the complete generation together. No host-visible ref is
+      // replaced while an asynchronous parser/options load is pending.
       activeSnapshot = preparedSnapshot;
-      indexStore = new ComponentIndexStore();
-      activeUsesAstroAdapter = snapshotHasAstro(preparedSnapshot);
-      activeIndex = indexStore.build(
-        activeSnapshot,
-        await indexStoreOptions(request.projectType, activeUsesAstroAdapter)
-      );
+      indexStore = nextStore;
+      activeUsesAstroAdapter = usesAstroAdapter;
+      activeIndex = nextIndex;
       return workerSuccess(request.id, activeIndex);
     }
 
@@ -183,14 +205,18 @@ export async function handleComponentWorkerRequest(
       }
       const preparedSnapshot = await prepareWorkerSnapshot(request.snapshot);
       assertNotCancelled(request.id);
-      activeSnapshot = preparedSnapshot;
-      indexStore ??= new ComponentIndexStore();
       const usesAstroAdapter = snapshotHasAstro(preparedSnapshot);
       const options = await indexStoreOptions(request.projectType, usesAstroAdapter);
-      activeIndex =
+      assertNotCancelled(request.id);
+      const nextStore = indexStore ?? new ComponentIndexStore();
+      const nextIndex =
         usesAstroAdapter === activeUsesAstroAdapter
-          ? indexStore.update(activeSnapshot, request.changes, options)
-          : indexStore.build(activeSnapshot, options);
+          ? nextStore.update(preparedSnapshot, request.changes, options)
+          : nextStore.build(preparedSnapshot, options);
+      assertNotCancelled(request.id);
+      activeSnapshot = preparedSnapshot;
+      indexStore = nextStore;
+      activeIndex = nextIndex;
       activeUsesAstroAdapter = usesAstroAdapter;
       return workerSuccess(request.id, activeIndex);
     }

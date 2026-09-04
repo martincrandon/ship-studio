@@ -23,6 +23,8 @@ import type {
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
+import type { ComponentCanvasFrame as CanvasFrame } from '../../lib/components/canvas';
+import type { ComponentA11yResult } from '../../lib/components/qa';
 import { trackEvent } from '../../lib/analytics';
 import { Button } from '../primitives/Button';
 import { EmptyState } from '../primitives/EmptyState';
@@ -32,6 +34,7 @@ import { SearchField } from '../primitives/SearchField';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import { ComponentDetails } from './ComponentDetails';
+import { ComponentCanvas } from './ComponentCanvas';
 import { ComponentInstanceControls } from './ComponentInstanceControls';
 import { EditMainBanner, type EditMainState } from './EditMainBanner';
 import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
@@ -49,6 +52,13 @@ export interface ComponentsPanelProps {
   ) => void;
   placementAvailable?: boolean;
   onOpenSource: (source: SourceRef) => void;
+  /** Opens the source-backed, explicit Component Canvas. */
+  onOpenCanvas?: () => void;
+  /** Optional host integrations; absent means the corresponding QA action is disabled. */
+  onCaptureCanvasFrame?: (frame: CanvasFrame) => Promise<string | null>;
+  onRunCanvasAccessibility?: (frame: CanvasFrame) => Promise<ComponentA11yResult | null>;
+  onSendCanvasToAgent?: (prompt: string) => void;
+  onCanvasToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   onDuplicate?: (input: Omit<DuplicateComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onRename?: (input: Omit<RenameComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onDelete?: (input: { componentId: ComponentId; removeAllUsages: true }) => void | Promise<void>;
@@ -57,7 +67,7 @@ export interface ComponentsPanelProps {
   onEditProp?: (
     instance: ComponentInstance,
     propName: string,
-    value: StaticValue
+    value: StaticValue | null
   ) => void | Promise<void>;
   onEditSlot?: (
     instance: ComponentInstance,
@@ -417,6 +427,11 @@ export function ComponentsPanel({
   onPlace,
   placementAvailable = true,
   onOpenSource,
+  onOpenCanvas,
+  onCaptureCanvasFrame,
+  onRunCanvasAccessibility,
+  onSendCanvasToAgent,
+  onCanvasToast,
   onDuplicate,
   onRename,
   onDelete,
@@ -437,6 +452,7 @@ export function ComponentsPanel({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [catalogWidth, setCatalogWidth] = useState(readCatalogWidth);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const catalogRef = useRef<HTMLDivElement | null>(null);
   const panelOpenedRef = useRef(false);
@@ -465,6 +481,10 @@ export function ComponentsPanel({
       ? ((index?.instances ?? []).find((instance) => instance.id === selectedBinding.instanceId) ??
         null)
       : null;
+  const openCanvas = useCallback(() => {
+    setCanvasOpen(true);
+    onOpenCanvas?.();
+  }, [onOpenCanvas]);
   const partialDiagnostics = index?.diagnostics ?? [];
   const indexIsPartial = index?.partial ?? false;
   const editMainForSelected = selected ? editMain : undefined;
@@ -763,6 +783,7 @@ export function ComponentsPanel({
                     onRename={onRename}
                     onDelete={onDelete}
                     onSelectUsage={handleSelectUsage}
+                    onOpenCanvas={openCanvas}
                   />
                   {selectedBinding?.confidence === 'exact' && (
                     <ComponentInstanceControls
@@ -773,6 +794,12 @@ export function ComponentsPanel({
                       busy={instancePropsBusy}
                       onEditProp={selected.capabilities.editStaticProps ? onEditProp : undefined}
                       onEditSlot={selected.capabilities.editSlots ? onEditSlot : undefined}
+                      onSelectSlotChild={(child) => {
+                        const childInstance = index.instances.find(
+                          (instance) => instance.id === child.instanceId
+                        );
+                        if (childInstance) handleSelectUsage(childInstance);
+                      }}
                       onInline={
                         selected.capabilities.extract && selected.dialect === 'react'
                           ? onInline
@@ -787,6 +814,22 @@ export function ComponentsPanel({
           </div>
         )}
       </div>
+      {selected && index && (
+        <ComponentCanvas
+          component={selected}
+          index={index}
+          isOpen={canvasOpen}
+          onClose={() => setCanvasOpen(false)}
+          initialInstance={selectedInstance}
+          usages={usages}
+          onOpenSource={onOpenSource}
+          onSelectUsage={onSelectUsage}
+          onCaptureFrame={onCaptureCanvasFrame}
+          onRunAccessibility={onRunCanvasAccessibility}
+          onSendToAgent={onSendCanvasToAgent}
+          onToast={onCanvasToast}
+        />
+      )}
     </div>
   );
 }

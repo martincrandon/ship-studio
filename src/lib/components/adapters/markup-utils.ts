@@ -3,6 +3,7 @@ import { applyTextEdits, sha256, sourceRefFromUtf16Range, sourceTextForRef } fro
 import { staticValueFromExpression, staticValueToJsx } from './static-values';
 import { basenameWithoutExtension, normalizeProjectPath } from './react-helpers';
 import { planStaticSlotEdit } from '../slots';
+import { populateSlotChildren } from '../slots';
 import type {
   AdapterGraph,
   ComponentAdapter,
@@ -623,7 +624,12 @@ export function buildMarkupUsageGraph(
       target.usageCount += 1;
     }
   }
-  return { components: descriptors, instances, importEdges, diagnostics };
+  return {
+    components: descriptors,
+    instances: populateSlotChildren(instances, descriptors),
+    importEdges,
+    diagnostics,
+  };
 }
 
 function sourceHashForCandidate(index: ComponentIndex, file: string): string | null {
@@ -769,6 +775,9 @@ function planGenericPropEdit(
   index: ComponentIndex,
   config: MarkupAdapterConfig
 ): MutationResult {
+  const operation = input.operation ?? 'set';
+  if (operation === 'set' && !input.value)
+    return mutationRefusal('unsupported', 'A static prop value is required for a set operation.');
   const instance = index.instances.find((candidate) => candidate.id === input.instanceId);
   const component = index.components.find((candidate) => candidate.id === instance?.componentId);
   const snapshot = snapshotFile(input.snapshot, instance?.invocation.file ?? '');
@@ -788,14 +797,78 @@ function planGenericPropEdit(
       'unknown-prop',
       `The component does not declare a prop named "${input.propName}".`
     );
+  if (operation === 'remove' && prop.required)
+    return mutationRefusal(
+      'required-prop',
+      `The required ${config.dialect} prop "${input.propName}" cannot be reset on an instance.`
+    );
   const expression = instance.props[input.propName];
+  if (operation === 'remove' && (!expression || expression.kind === 'unset'))
+    return mutationRefusal(
+      'no-op',
+      `The "${input.propName}" prop is already using its default value.`
+    );
   if (expression?.kind === 'dynamic')
     return mutationRefusal(
       'dynamic-expression',
       `The ${input.propName} value is dynamic and cannot be edited safely.`
     );
+  const invocationStart = byteOffsetToUtf16(snapshot.content, instance.invocation.start);
+  const invocationEnd = byteOffsetToUtf16(snapshot.content, instance.invocation.end);
+  const opening =
+    invocationStart !== null && invocationEnd !== null
+      ? scanOpeningTags(snapshot, { start: invocationStart, end: invocationEnd }, () => true).find(
+          (candidate) => candidate.start === invocationStart
+        )
+      : undefined;
+  const openingText =
+    opening && invocationStart !== null && invocationEnd !== null
+      ? snapshot.content.slice(opening.start, opening.end)
+      : '';
+  if (openingText && /\.\.\.|\{\s*\.\.\.|\bv-bind\s*=|\bspread\b/i.test(openingText))
+    return mutationRefusal(
+      'dynamic-expression',
+      `The ${config.dialect} invocation uses a spread or dynamic attribute binding.`
+    );
   const edits: ComponentTextEdit[] = [];
-  if (expression?.kind === 'static') {
+  if (operation === 'remove') {
+    const attribute = opening?.attributes.find(
+      (candidate) => candidate.name.replace(/^(?::|@|v-bind:|bind:)/i, '') === input.propName
+    );
+    if (attribute) {
+      edits.push(removeMarkupAttribute(snapshot, attribute.source.start, attribute.source.end));
+    } else if (expression?.kind === 'static') {
+      // Shopify render/include calls are not HTML tags, so their parser keeps
+      // only the value range. Recover the exact `name: value` pair from the
+      // invocation text before allowing a reset.
+      const valueStart = byteOffsetToUtf16(snapshot.content, expression.source.start);
+      const valueEnd = byteOffsetToUtf16(snapshot.content, expression.source.end);
+      const invocationText =
+        valueStart !== null && valueEnd !== null
+          ? snapshot.content.slice(invocationStart ?? valueStart, invocationEnd ?? valueEnd)
+          : '';
+      const relativeValue =
+        valueStart !== null && invocationStart !== null ? valueStart - invocationStart : -1;
+      const prefix = relativeValue >= 0 ? invocationText.slice(0, relativeValue) : '';
+      const nameMatch = new RegExp(`(?:^|[,\\s])${escapeRegExp(input.propName)}\\s*:\\s*$`).exec(
+        prefix
+      );
+      if (!nameMatch || valueStart === null || valueEnd === null)
+        return mutationRefusal(
+          'unsupported',
+          `The ${config.dialect} prop does not have an exact removable source range.`
+        );
+      const start = valueStart - (prefix.length - nameMatch.index);
+      edits.push(
+        removeMarkupAttribute(snapshot, utf16ToByte(snapshot.content, start), expression.source.end)
+      );
+    } else {
+      return mutationRefusal(
+        'unsupported',
+        `The ${config.dialect} prop does not have an exact removable source range.`
+      );
+    }
+  } else if (expression?.kind === 'static') {
     const start = expression.source.start;
     const end = expression.source.end;
     const sourceStart = Math.max(0, start);
@@ -803,7 +876,7 @@ function planGenericPropEdit(
     edits.push({
       start: sourceStart,
       end: sourceEnd,
-      text: config.formatPropValue(snapshot, input.propName, input.value),
+      text: config.formatPropValue(snapshot, input.propName, input.value!),
     });
   } else {
     const openEnd = snapshot.content.indexOf(
@@ -819,13 +892,27 @@ function planGenericPropEdit(
     edits.push({
       start: utf16ToByte(snapshot.content, insertAt),
       end: utf16ToByte(snapshot.content, insertAt),
-      text: ` ${config.renderAttribute(input.propName, input.value)}`,
+      text: ` ${config.renderAttribute(input.propName, input.value!)}`,
     });
   }
   const mutation = fileMutation(snapshot, edits);
   if (!mutation)
     return mutationRefusal('invalid-range', 'The component prop source range is no longer valid.');
   return { status: 'planned', plan: { files: [mutation], expectedRevision: index.revision } };
+}
+
+function removeMarkupAttribute(file: SourceFileSnapshot, startByte: number, endByte: number) {
+  let start = byteOffsetToUtf16(file.content, startByte);
+  const end = byteOffsetToUtf16(file.content, endByte);
+  if (start === null || end === null) {
+    return { start: startByte, end: endByte, text: '' };
+  }
+  if (start > 0 && /[ \t]/.test(file.content[start - 1] ?? '')) start -= 1;
+  return {
+    start: utf16ToByte(file.content, start),
+    end: utf16ToByte(file.content, end),
+    text: '',
+  };
 }
 
 function byteOffsetToUtf16(content: string, byteOffset: number): number {

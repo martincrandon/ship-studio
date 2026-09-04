@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildComponentIndex, planStaticSlotEdit } from './index';
+import { buildComponentIndex, planStaticPropEdit, planStaticSlotEdit } from './index';
 import { applyTextEdits, sha256 } from './ranges';
 import type { ComponentSourceSnapshot, SourceFileSnapshot } from './types';
 
@@ -19,6 +19,84 @@ function snapshot(contents: Record<string, string>): ComponentSourceSnapshot {
 }
 
 describe('static component slot editing', () => {
+  it('removes an optional React prop and refuses required-prop resets', () => {
+    const source = snapshot({
+      'components/Card.tsx':
+        'export function Card({ title, required }: { title?: string; required: string }) { return <section />; }\n',
+      'app/page.tsx':
+        'import { Card } from "../components/Card"; export function Page() { return <Card title="Custom" required="yes" />; }',
+    });
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const instance = index.instances.find((item) => item.componentId.endsWith('#Card'))!;
+    const reset = planStaticPropEdit(
+      { kind: 'prop', operation: 'remove', instanceId: instance.id, propName: 'title' },
+      index,
+      source
+    );
+    expect(reset.status).toBe('planned');
+    if (reset.status === 'planned') {
+      const page = source.files.find((file) => file.file === 'app/page.tsx')!;
+      expect(applyTextEdits(page.content, reset.plan.files[0].edits)).toContain(
+        '<Card required="yes" />'
+      );
+    }
+    expect(
+      planStaticPropEdit(
+        { kind: 'prop', operation: 'remove', instanceId: instance.id, propName: 'required' },
+        index,
+        source
+      )
+    ).toMatchObject({ status: 'refused', code: 'required-prop' });
+  });
+
+  it('projects direct slot children and plans reviewed insert/remove structure changes', () => {
+    const source = snapshot({
+      'components/Card.tsx':
+        'export function Card({ children }: { children?: React.ReactNode }) { return <section>{children}</section>; }\n',
+      'components/Badge.tsx': 'export function Badge() { return <strong>Badge</strong>; }\n',
+      'app/page.tsx':
+        'import { Card } from "../components/Card"; import { Badge } from "../components/Badge"; export function Page() { return <Card><Badge /></Card>; }',
+    });
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const card = index.components.find((item) => item.name === 'Card')!;
+    const cardInstance = index.instances.find((item) => item.componentId === card.id)!;
+    const slot = cardInstance.slots.find((item) => item.name === 'children')!;
+    expect(slot.children).toEqual([
+      expect.objectContaining({ name: 'Badge', componentId: 'react:components/Badge.tsx#Badge' }),
+    ]);
+    const badgeInstance = index.instances.find((item) => item.componentId.endsWith('#Badge'))!;
+
+    const removed = planStaticSlotEdit(
+      {
+        kind: 'slot',
+        operation: 'remove',
+        instanceId: cardInstance.id,
+        slotName: 'children',
+        childInstanceId: badgeInstance.id,
+      },
+      index,
+      source
+    );
+    expect(removed.status).toBe('planned');
+    if (removed.status === 'planned') {
+      const page = source.files.find((file) => file.file === 'app/page.tsx')!;
+      expect(applyTextEdits(page.content, removed.plan.files[0].edits)).not.toContain('<Badge');
+    }
+
+    const inserted = planStaticSlotEdit(
+      {
+        kind: 'slot',
+        operation: 'insert',
+        instanceId: cardInstance.id,
+        slotName: 'children',
+        componentId: badgeInstance.componentId,
+      },
+      index,
+      source
+    );
+    expect(inserted).toMatchObject({ status: 'planned' });
+  });
+
   it('edits an exact React default slot while preserving surrounding source', () => {
     const source = snapshot({
       'components/Card.tsx': 'export function Card() { return <section />; }\n',

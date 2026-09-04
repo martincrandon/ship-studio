@@ -135,6 +135,10 @@ export function planStaticPropEdit(
   index: ComponentIndex,
   suppliedSnapshot?: ComponentSourceSnapshot
 ): MutationResult {
+  const operation = input.operation ?? 'set';
+  if (operation === 'set' && !input.value) {
+    return refuse('unsupported', 'A static prop value is required for a set operation.');
+  }
   const snapshot = suppliedSnapshot ?? input.snapshot;
   if (!snapshot)
     return refuse('missing-source', 'A source snapshot is required to edit a component prop.');
@@ -166,6 +170,12 @@ export function planStaticPropEdit(
   if (!file || file.contentHash !== instance.invocation.contentHash) {
     return refuse('stale-source', 'The source changed after this component index was built.');
   }
+  if (operation === 'remove' && prop.required) {
+    return refuse(
+      'required-prop',
+      `The required prop "${input.propName}" cannot be reset on a component instance.`
+    );
+  }
   const sourceFile = createSourceFile(file);
   const node = findInvocationNode(sourceFile, file, instance);
   if (!node)
@@ -193,9 +203,15 @@ export function planStaticPropEdit(
       `The existing "${input.propName}" value is dynamic and cannot be replaced safely.`
     );
   }
-  const edit = attribute
-    ? editExistingAttribute(file, sourceFile, attribute, input.propName, input.value)
-    : insertAttribute(file, sourceFile, opening, input.propName, input.value);
+  if (operation === 'remove' && !attribute) {
+    return refuse('no-op', `The "${input.propName}" prop is already using its default value.`);
+  }
+  const edit =
+    operation === 'remove'
+      ? removeAttribute(file, sourceFile, attribute!)
+      : attribute
+        ? editExistingAttribute(file, sourceFile, attribute, input.propName, input.value!)
+        : insertAttribute(file, sourceFile, opening, input.propName, input.value!);
   if (!edit)
     return refuse(
       'unsupported',
@@ -1057,6 +1073,23 @@ function editExistingAttribute(
     };
   }
   return null;
+}
+
+function removeAttribute(
+  file: SourceFileSnapshot,
+  sourceFile: ts.SourceFile,
+  attribute: ts.JsxAttribute
+): ComponentTextEdit {
+  let start = attribute.getStart(sourceFile);
+  const end = attribute.end;
+  // Consume the separator before a same-line attribute so reset does not
+  // leave a dangling double-space. Keep newlines intact for readable JSX.
+  if (start > 0 && /[ \t]/.test(file.content[start - 1] ?? '')) start -= 1;
+  return {
+    start: utf16OffsetToUtf8ByteOffset(file.content, start),
+    end: utf16OffsetToUtf8ByteOffset(file.content, end),
+    text: '',
+  };
 }
 
 function insertAttribute(

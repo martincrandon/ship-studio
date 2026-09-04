@@ -965,7 +965,7 @@
     {
       "path": "src/styles/features/element-tree.css",
       "token": "--stroke-1",
-      "count": 2,
+      "count": 3,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {

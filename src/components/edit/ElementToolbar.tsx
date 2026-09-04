@@ -35,6 +35,7 @@ interface Props {
   onDuplicate: () => void;
   onDelete: () => void;
   onComponentFocus?: () => void;
+  componentFocusActive?: boolean;
   /** Imperative opener for the Cmd+K "Insert element…" command. */
   openMenuRef?: React.MutableRefObject<(() => void) | null>;
 }
@@ -53,6 +54,7 @@ export function ElementToolbar({
   onDuplicate,
   onDelete,
   onComponentFocus,
+  componentFocusActive = false,
   openMenuRef,
 }: Props) {
   const [menuAnchor, setMenuAnchor] = useState<{
@@ -128,8 +130,8 @@ export function ElementToolbar({
             <button
               type="button"
               className="ss-el-toolbar__btn"
-              aria-label="Focus component"
-              title="Focus component"
+              aria-label={componentFocusActive ? 'Exit component focus' : 'Focus component'}
+              title={componentFocusActive ? 'Exit component focus' : 'Focus component'}
               onClick={onComponentFocus}
             >
               <ComponentsIcon size={12} className="ss-el-toolbar__control-icon" />

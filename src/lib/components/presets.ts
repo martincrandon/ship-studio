@@ -14,6 +14,16 @@ export interface ComponentPreviewPreset {
   props: Record<string, StaticValue>;
   /** Explicit static slot source only; no runtime expressions or route data. */
   slots: Record<string, string>;
+  /** Optional presentation metadata added by the Component Canvas. */
+  sourceRevision?: string;
+  presentation?: {
+    widthMode: 'fit' | 'full' | 'fixed';
+    width: number | null;
+    height: 240 | 360 | 480 | 640 | 800;
+    background: 'surface' | 'white' | 'black' | 'checkerboard';
+    breakpoint: string | null;
+    locale: string | null;
+  };
 }
 
 export interface ComponentPreviewPresetStore {
@@ -77,6 +87,20 @@ function parsePreset(value: unknown): ComponentPreviewPreset | null {
   }
   if (!Object.values(value.props).every(isStaticValue)) return null;
   if (!Object.values(value.slots).every((slot) => typeof slot === 'string')) return null;
+  const presentation = value.presentation;
+  if (
+    presentation !== undefined &&
+    (!isRecord(presentation) ||
+      !['fit', 'full', 'fixed'].includes(String(presentation.widthMode)) ||
+      (presentation.width !== null &&
+        (typeof presentation.width !== 'number' || !Number.isFinite(presentation.width))) ||
+      ![240, 360, 480, 640, 800].includes(Number(presentation.height)) ||
+      !['surface', 'white', 'black', 'checkerboard'].includes(String(presentation.background)) ||
+      (presentation.breakpoint !== null && typeof presentation.breakpoint !== 'string') ||
+      (presentation.locale !== null && typeof presentation.locale !== 'string'))
+  ) {
+    return null;
+  }
   return {
     id: value.id,
     version: COMPONENT_PRESET_VERSION,
@@ -85,6 +109,17 @@ function parsePreset(value: unknown): ComponentPreviewPreset | null {
     name: value.name,
     props: value.props as Record<string, StaticValue>,
     slots: value.slots as Record<string, string>,
+    sourceRevision: typeof value.sourceRevision === 'string' ? value.sourceRevision : undefined,
+    presentation: presentation
+      ? {
+          widthMode: presentation.widthMode as 'fit' | 'full' | 'fixed',
+          width: presentation.width as number | null,
+          height: presentation.height as 240 | 360 | 480 | 640 | 800,
+          background: presentation.background as 'surface' | 'white' | 'black' | 'checkerboard',
+          breakpoint: presentation.breakpoint as string | null,
+          locale: presentation.locale as string | null,
+        }
+      : undefined,
   };
 }
 
