@@ -1,6 +1,6 @@
 <script>(function(){
 if(window.__ssSelectInit)return;window.__ssSelectInit=true;
-var active=false,hoverBox=null,selBoxes=[],selectedSet=[],selPrimary=null;
+var active=false,hoverBox=null,selBoxes=[],selectedSet=[],selPrimary=null,componentSelection=null,componentScope=null,componentScopeBoxes=[],componentColor='',lastHoverNodeId=null;
 
 /* Box colors: the element the user actually clicked (selPrimary) gets the blue
    "you're editing this" outline; its same-source siblings — which a source edit will
@@ -54,15 +54,19 @@ var SS_TEXT_CAP=2000;
 
 function mk(c){var d=document.createElement('div');d.style.cssText='position:fixed;pointer-events:none;z-index:2147483646;border:1.5px solid '+c+';box-sizing:border-box;border-radius:0px';d.setAttribute('data-ss-overlay','1');document.body.appendChild(d);return d;}
 
-function ensureHover(){if(!hoverBox||!hoverBox.isConnected)hoverBox=mk('#007DF0');}
+function ensureHover(){if(!hoverBox||!hoverBox.isConnected)hoverBox=mk(SEL_PRIMARY_COLOR);}
 
 function ensureSel(n){for(var i=0;i<n;i++){if(!selBoxes[i]||!selBoxes[i].isConnected)selBoxes[i]=mk(SEL_SIBLING_COLOR);}}
+
+function hideComponentScope(){for(var i=0;i<componentScopeBoxes.length;i++)place(componentScopeBoxes[i],null);}
+function placeComponentScope(){if(!componentScope){hideComponentScope();return;}var roots=componentScope.roots||[],cc=componentScope.color||componentColor||SEL_PRIMARY_COLOR;for(var i=0;i<roots.length;i++){if(!componentScopeBoxes[i]||!componentScopeBoxes[i].isConnected){componentScopeBoxes[i]=mk(cc);componentScopeBoxes[i].setAttribute('data-ss-component-scope','1');}componentScopeBoxes[i].style.borderColor=cc;componentScopeBoxes[i].style.borderStyle='solid';componentScopeBoxes[i].style.opacity='.68';place(componentScopeBoxes[i],roots[i]);}for(var j=roots.length;j<componentScopeBoxes.length;j++)place(componentScopeBoxes[j],null);}
+function clearComponentScope(){componentScope=null;hideComponentScope();}
 
 function editable(el){while(el&&el!==document.body){if(el.nodeType===1){var c=el.getAttribute&&el.getAttribute('class');if(c&&c.trim())return el;}el=el.parentElement;}return null;}
 
 function place(box,el){if(!box)return;if(!el){box.style.display='none';return;}var r=el.getBoundingClientRect();box.style.display='block';box.style.top=r.top+'px';box.style.left=r.left+'px';box.style.width=r.width+'px';box.style.height=r.height+'px';}
 
-function placeSet(){ensureSel(selectedSet.length);for(var i=0;i<selBoxes.length;i++){var el=selectedSet[i]||null;place(selBoxes[i],el);if(el){var primary=el===selPrimary;selBoxes[i].style.borderColor=(primary?SEL_PRIMARY_COLOR:SEL_SIBLING_COLOR);selBoxes[i].style.borderStyle=(primary?'solid':'dashed');}}}
+function placeSet(){ensureSel(selectedSet.length);for(var i=0;i<selBoxes.length;i++){var el=selectedSet[i]||null;place(selBoxes[i],el);if(el){var primary=el===selPrimary;if(componentSelection){var cc=componentSelection.color||componentColor||SEL_PRIMARY_COLOR;selBoxes[i].style.borderColor=cc;selBoxes[i].style.borderStyle=(primary?'solid':'dashed');selBoxes[i].style.opacity=componentSelection.focused?'0.68':'1';}else{selBoxes[i].style.borderColor=(primary?SEL_PRIMARY_COLOR:SEL_SIBLING_COLOR);selBoxes[i].style.borderStyle=(primary?'solid':'dashed');selBoxes[i].style.opacity='1';}}}if(!componentSelection||!componentSelection.focused)placeComponentScope();}
 
 /* All elements whose class attribute is identical to the clicked element's — these
    render from the same source literal (e.g. a .map), so a source edit changes all. */
@@ -289,6 +293,63 @@ function ssSource(el){
   return clientChunk;
 }
 
+/* React's private Fiber shape is intentionally treated as a best-effort source
+   hint. Walking `_debugOwner` gives the host enough context to distinguish a
+   component invocation from a host element rendered inside that component;
+   every frame is still validated against Ship Studio's source index before it
+   can become a component boundary. */
+var SS_OWNER_CAP=8,SS_OWNER_STRING_CAP=240;
+
+function ssFiberName(fiber){
+  if(!fiber)return null;
+  var t=fiber.elementType||fiber.type||null;
+  if(typeof t==='function'&&t.name)return String(t.name).slice(0,SS_OWNER_STRING_CAP);
+  if(t&&typeof t==='object'){
+    if(t.name)return String(t.name).slice(0,SS_OWNER_STRING_CAP);
+    if(t.displayName)return String(t.displayName).slice(0,SS_OWNER_STRING_CAP);
+    if(t.render&&t.render.name)return String(t.render.name).slice(0,SS_OWNER_STRING_CAP);
+  }
+  if(typeof t==='string')return t.slice(0,SS_OWNER_STRING_CAP);
+  return fiber._debugOwner&&fiber._debugOwner.elementType&&fiber._debugOwner.elementType.name
+    ? String(fiber._debugOwner.elementType.name).slice(0,SS_OWNER_STRING_CAP)
+    : null;
+}
+
+function ssStackFrame(stack){
+  if(!stack)return null;
+  var lines=String(stack).split('\n');
+  for(var j=0;j<lines.length;j++){
+    var s=lines[j];if(/node_modules|react-dom|react_stack_bottom_frame|fakeJSXCallSite/.test(s))continue;
+    var tm=/about:\/\/React\/Server\/(file:\/\/\/[^\s()?]+?\.js)\?[^\s():]*:(\d+):(\d+)/i.exec(s);
+    if(tm)return{file:tm[1],line:Number(tm[2]),column:Number(tm[3])};
+    var cm=/(https?:\/\/[^/\s()]+\/_next\/static\/chunks\/[^\s()?]+?\.js)(?:\?[^\s():]*)?:(\d+):(\d+)/i.exec(s);
+    if(cm)return{file:cm[1],line:Number(cm[2]),column:Number(cm[3])};
+    var m=/((?:https?:\/\/|file:\/\/\/|webpack-internal:\/\/\/|\/)[^\s()]+?\.(?:tsx|jsx|astro|vue|svelte|html))(?:\?[^\s():]*)?:(\d+):(\d+)/i.exec(s);
+    if(m)return{file:m[1],line:Number(m[2]),column:Number(m[3])};
+  }
+  return null;
+}
+
+function ssFiberFor(el){
+  if(!el)return null;var ks=Object.getOwnPropertyNames(el);
+  for(var i=0;i<ks.length;i++)if(ks[i].indexOf('__reactFiber$')===0)return el[ks[i]];
+  return null;
+}
+
+function ssOwnerFrames(el){
+  var fiber=ssFiberFor(el),out=[],seen=[];
+  for(var depth=0;fiber&&depth<SS_OWNER_CAP;depth++){
+    if(seen.indexOf(fiber)!==-1)break;seen.push(fiber);
+    var source=fiber._debugSource,frame=null;
+    if(source&&source.fileName&&Number(source.lineNumber)>0){
+      frame={file:String(source.fileName).slice(0,SS_OWNER_STRING_CAP),line:Number(source.lineNumber),column:Number(source.columnNumber)>0?Number(source.columnNumber):1};
+    }else{frame=ssStackFrame(fiber._debugStack&&fiber._debugStack.stack);}
+    if(frame){frame.renderer='react';frame.symbolHint=ssFiberName(fiber);frame.runtimeKey=fiber.key==null?null:String(fiber.key).slice(0,SS_OWNER_STRING_CAP);out.push(frame);}
+    fiber=fiber._debugOwner;
+  }
+  return out;
+}
+
 /* ── Ancestor-style inheritance (typography + text color) ──
    For each CSS-inherited property the panel edits, report when the element's
    effective value comes from an ANCESTOR's own styles. Method: walk up while
@@ -410,7 +471,7 @@ function rebuildSheet(){var css='';for(var k in pvDecls)css+=buildCss(k);ensureS
 
 /* Discard the current selection's UNCOMMITTED preview (revert class, drop its decls +
    marker). A committed selection is kept as-is — only the live pointer is released. */
-function restoreSel(){if(curMark!==null&&pendingMark===curMark){delete pvDecls[curMark];rebuildSheet();for(var i=0;i<selectedSet.length;i++){var el=selectedSet[i];if(!el)continue;if(origClasses[i]!=null)el.setAttribute('class',origClasses[i]);el.removeAttribute('data-ss-sel');}}curMark=null;pendingMark=null;selectedSet=[];selPrimary=null;origClasses=[];}
+function restoreSel(){if(curMark!==null&&pendingMark===curMark){delete pvDecls[curMark];rebuildSheet();for(var i=0;i<selectedSet.length;i++){var el=selectedSet[i];if(!el)continue;if(origClasses[i]!=null)el.setAttribute('class',origClasses[i]);el.removeAttribute('data-ss-sel');}}curMark=null;pendingMark=null;selectedSet=[];selPrimary=null;origClasses=[];componentSelection=null;}
 
 function snapshotOrig(){origClasses=[];for(var i=0;i<selectedSet.length;i++)origClasses.push(selectedSet[i]?selectedSet[i].getAttribute('class'):null);}
 
@@ -660,11 +721,25 @@ function updateFmtBar(){
   bar.style.top=top+'px';bar.style.left=left+'px';
 }
 
-function onDbl(e){if(!active||txtEditing)return;var el=textTarget(e.target);if(!el||!txtEditable)return;e.preventDefault();e.stopPropagation();startText(el,e.clientX,e.clientY);}
+function onDbl(e){if(!active||txtEditing)return;var candidate=pickTarget(e.target);if(candidate)window.parent.postMessage({type:'ss:componentFocusCandidate',focusCandidateNodeId:treeIdFor(candidate)},'*');var el=textTarget(e.target);if(!el||!txtEditable)return;e.preventDefault();e.stopPropagation();startText(el,e.clientX,e.clientY);}
 
-function onMove(e){if(!active||txtEditing)return;ensureHover();var t=pickTarget(e.target);if(t&&selectedSet.indexOf(t)!==-1)t=null;place(hoverBox,t);}
+function onMove(e){if(!active||txtEditing)return;ensureHover();hoverBox.style.borderColor=SEL_PRIMARY_COLOR;hoverBox.style.borderStyle='solid';var t=pickTarget(e.target);if(t&&selectedSet.indexOf(t)!==-1)t=null;var hoverId=t?treeIdFor(t):null;if(hoverId!==lastHoverNodeId){lastHoverNodeId=hoverId;window.parent.postMessage({type:'ss:hoverCandidate',hoverCandidateNodeId:hoverId},'*');}place(hoverBox,t);}
 
-function selectEl(el){restoreSel();selectedSet=matching(el);selPrimary=el;curMark=String(++pvId);for(var i=0;i<selectedSet.length;i++)selectedSet[i].setAttribute('data-ss-sel',curMark);snapshotOrig();placeSet();place(hoverBox,null);txtEditable=true;var primaryNodeId=treeIdFor(el),affectedNodeIds=[];for(var ai=0;ai<selectedSet.length;ai++){var affectedId=treeIdFor(selectedSet[ai]);if(affectedId!==primaryNodeId)affectedNodeIds.push(affectedId);}window.parent.postMessage({type:'ss:select',signature:sig(el),count:selectedSet.length,leafText:isEditableText(el),nodeId:primaryNodeId,affectedNodeIds:affectedNodeIds},'*');if(cascadeMode){try{window.parent.postMessage({type:'ss:cascade',rules:cascade(el),nodeId:primaryNodeId},'*');}catch(e){}}}
+function selectEl(el){restoreSel();selectedSet=matching(el);selPrimary=el;curMark=String(++pvId);for(var i=0;i<selectedSet.length;i++)selectedSet[i].setAttribute('data-ss-sel',curMark);snapshotOrig();placeSet();place(hoverBox,null);txtEditable=true;var primaryNodeId=treeIdFor(el),affectedNodeIds=[];for(var ai=0;ai<selectedSet.length;ai++){var affectedId=treeIdFor(selectedSet[ai]);if(affectedId!==primaryNodeId)affectedNodeIds.push(affectedId);}window.parent.postMessage({type:'ss:select',signature:sig(el),count:selectedSet.length,leafText:isEditableText(el),nodeId:primaryNodeId,affectedNodeIds:affectedNodeIds,ownerHints:ssOwnerFrames(el),rect:componentRect(el)},'*');if(cascadeMode){try{window.parent.postMessage({type:'ss:cascade',rules:cascade(el),nodeId:primaryNodeId},'*');}catch(e){}}}
+
+function componentRoots(elements){
+  var all=[];for(var i=0;i<elements.length;i++)if(elements[i]&&elements[i].isConnected)all.push(elements[i]);
+  return all.filter(function(el){var p=el.parentElement;while(p&&p!==document.body){if(all.indexOf(p)!==-1)return false;p=p.parentElement;}return true;});
+}
+
+function componentRect(el){if(!el)return{top:0,left:0,width:0,height:0};var r=el.getBoundingClientRect();return{top:r.top,left:r.left,width:r.width,height:r.height};}
+
+function showComponent(d,notify){
+  var ids=Array.isArray(d.hostNodeIds)?d.hostNodeIds:[],all=[];
+  for(var i=0;i<ids.length;i++){var el=treeById[ids[i]];if(el&&el.isConnected&&!ssInternalNode(el)&&all.indexOf(el)===-1)all.push(el);}
+  var roots=componentRoots(all);if(!roots.length)return false;
+  if(d.focused){hideComponentScope();componentScope={roots:roots,color:typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor};}else{clearComponentScope();}restoreSel();selectedSet=roots;selPrimary=roots[0];componentColor=typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor;componentSelection={key:typeof d.key==='string'?d.key:'',componentId:typeof d.componentId==='string'?d.componentId:null,instanceId:typeof d.instanceId==='string'?d.instanceId:null,name:typeof d.name==='string'?d.name.slice(0,SS_OWNER_STRING_CAP):'Component',hostNodeIds:ids,focused:!!d.focused,color:componentColor};curMark=null;pendingMark=null;origClasses=[];placeSet();place(hoverBox,null);if(notify){window.parent.postMessage({type:'ss:select',selectionKind:'component',nodeId:treeIdFor(selPrimary),rect:componentRect(selPrimary),component:{key:componentSelection.key,componentId:componentSelection.componentId,instanceId:componentSelection.instanceId,name:componentSelection.name,confidence:'exact',hostNodeIds:ids}},'*');}return true;
+}
 
 /* Is `el` a plausible stand-in for the signature? Shared by the structural fast
    path and the fuzzy scan: never an editor overlay / internal node, and it must
@@ -732,7 +807,7 @@ function treeSkip(el){if(el.nodeType!==1)return true;var t=el.tagName;if(t==='SC
 
 function treeOwnText(el){var s='';for(var i=0;i<el.childNodes.length;i++){var c=el.childNodes[i];if(c.nodeType===3)s+=c.nodeValue;}return s.replace(/\s+/g,' ').trim().slice(0,48);}
 
-function treeBuild(el,depth,budget){var kids=[];if(depth<TREE_MAX_DEPTH){for(var i=0;i<el.children.length;i++){var c=el.children[i];if(treeSkip(c))continue;if(budget.n>=TREE_MAX_NODES)break;budget.n++;kids.push(treeBuild(c,depth+1,budget));}}return{i:treeIdFor(el),t:(el.tagName||'').toLowerCase(),c:(el.getAttribute('class')||'').trim().slice(0,120),x:treeOwnText(el),k:kids};}
+function treeBuild(el,depth,budget){var kids=[];if(depth<TREE_MAX_DEPTH){for(var i=0;i<el.children.length;i++){var c=el.children[i];if(treeSkip(c))continue;if(budget.n>=TREE_MAX_NODES)break;budget.n++;kids.push(treeBuild(c,depth+1,budget));}}var n={i:treeIdFor(el),t:(el.tagName||'').toLowerCase(),c:(el.getAttribute('class')||'').trim().slice(0,120),x:treeOwnText(el),k:kids},owners=ssOwnerFrames(el),fiber=ssFiberFor(el),idAttr=el.getAttribute('id');if(idAttr)n.a=String(idAttr).slice(0,SS_OWNER_STRING_CAP);if(owners.length)n.o=owners;if(fiber&&fiber.key!=null)n.r=String(fiber.key).slice(0,SS_OWNER_STRING_CAP);return n;}
 
 function treeSend(){treeById={};var budget={n:0};var root=treeBuild(document.body,0,budget);window.parent.postMessage({type:'ss:tree',tree:root,truncated:budget.n>=TREE_MAX_NODES},'*');}
 
@@ -759,7 +834,7 @@ window.addEventListener('message',function(e){
 if(e.source&&e.source!==window.parent&&e.source!==window)return;
 var d=e.data||{};
 if(d.type==='ss:activate'){active=true;cascadeMode=!!d.cascade;ensureHover();var de=document.documentElement;de.style.cursor='crosshair';de.style.userSelect='none';de.style.webkitUserSelect='none';}
-else if(d.type==='ss:deactivate'){endText(false);finalizePending();hideFmtBar();active=false;cascadeMode=false;clearRulePreview(null);restoreSel();for(var ck in pvDecls){if(String(ck).indexOf('cls:')===0)delete pvDecls[ck];}rebuildSheet();place(hoverBox,null);for(var i=0;i<selBoxes.length;i++)place(selBoxes[i],null);var de=document.documentElement;de.style.cursor='';de.style.userSelect='';de.style.webkitUserSelect='';}
+else if(d.type==='ss:deactivate'){endText(false);finalizePending();hideFmtBar();active=false;cascadeMode=false;clearRulePreview(null);restoreSel();clearComponentScope();for(var ck in pvDecls){if(String(ck).indexOf('cls:')===0)delete pvDecls[ck];}rebuildSheet();place(hoverBox,null);for(var i=0;i<selBoxes.length;i++)place(selBoxes[i],null);var de=document.documentElement;de.style.cursor='';de.style.userSelect='';de.style.webkitUserSelect='';}
 
 /* Parent's verdict on whether the current selection's text is editable in source. If
    the user already started editing optimistically (verdict hadn't arrived yet) and it
@@ -819,6 +894,10 @@ else if(d.type==='ss:requestTree'){treeOn=true;treeEnsureObserver();treeSend();}
 else if(d.type==='ss:treeOff'){treeOn=false;}
 else if(d.type==='ss:selectNode'){var tn=treeById[d.id];if(tn&&tn.isConnected&&!ssInternalNode(tn)&&active&&!txtEditing){try{tn.scrollIntoView({block:'nearest'});}catch(err){}selectEl(tn);}}
 else if(d.type==='ss:hoverNode'){if(!active)return;var th=d.id!=null?treeById[d.id]:null;ensureHover();place(hoverBox,th&&th.isConnected?th:null);}
+else if(d.type==='ss:selectComponent'){if(active&&!txtEditing)showComponent(d,true);}
+else if(d.type==='ss:hoverComponent'){if(!active)return;componentColor=typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor;var hs=Array.isArray(d.hostNodeIds)?d.hostNodeIds:[],he=[];for(var hi=0;hi<hs.length;hi++){var h=treeById[hs[hi]];if(h&&h.isConnected&&!ssInternalNode(h))he.push(h);}ensureHover();if(he.length){var hr=componentRoots(he);hoverBox.style.borderColor=componentColor||SEL_PRIMARY_COLOR;hoverBox.style.borderStyle='solid';place(hoverBox,hr[0]||he[0]);}else{hoverBox.style.borderColor=SEL_PRIMARY_COLOR;hoverBox.style.borderStyle='solid';place(hoverBox,null);}}
+else if(d.type==='ss:componentFocusRequest'){if(active){if(txtEditing)endText(false);showComponent({key:d.key,componentId:d.componentId,instanceId:d.instanceId,name:d.name,hostNodeIds:d.hostNodeIds,color:d.color,focused:true},false);}}
+else if(d.type==='ss:componentFocusExit'){clearComponentScope();if(componentSelection){componentSelection.focused=false;placeSet();}else{placeSet();}componentColor=typeof d.color==='string'&&d.color.trim()?d.color.trim().slice(0,120):componentColor;}
 
 /* Re-select the element matching the given signature (after an HMR reload) so the
    panel re-reads its current source — keeps read/write instant after edits. */

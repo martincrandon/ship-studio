@@ -5,6 +5,7 @@ import {
   buildComponentIndex,
   planInsertComponent,
   planStaticPropEdit,
+  REACT_COMPONENT_PLAN_PARSER_TOKEN,
 } from './index';
 import type { ComponentSourceSnapshot, SourceFileSnapshot } from './types';
 import { normalizeRuntimeSourcePath } from './adapters/react-helpers';
@@ -64,6 +65,33 @@ function reactProject() {
 }
 
 describe('React component index', () => {
+  it('returns a bounded needSources request for an unloaded internal package entry', () => {
+    const source = snapshot([
+      file(
+        'packages/ui/package.json',
+        JSON.stringify({ name: '@acme/ui', exports: { '.': { types: './src/index.ts' } } })
+      ),
+      file(
+        'apps/web/src/page.tsx',
+        `import { Card } from '@acme/ui';
+
+export function Page() {
+  return <Card />;
+}
+`
+      ),
+    ]);
+
+    const index = buildComponentIndex(source, { projectType: 'vite' });
+
+    expect(index.needSources).toEqual(['packages/ui/src/index.ts']);
+    expect(
+      index.importEdges.some((edge) =>
+        edge.diagnostics.some((diagnostic) => diagnostic.code === 'package-source-not-loaded')
+      )
+    ).toBe(true);
+  });
+
   it('normalizes Vite development stack URLs to indexed project paths', () => {
     expect(
       normalizeRuntimeSourcePath('http://localhost:5173/src/Card.tsx?t=123', '/projects/site', '.')
@@ -100,7 +128,13 @@ describe('React component index', () => {
     });
 
     const binding = bindComponentSelection(
-      { file: 'src/Page.tsx', line: usage?.invocation.line, column: 1 },
+      {
+        file: usage?.invocation.file,
+        line: usage?.invocation.line,
+        column: usage?.invocation.column,
+        symbolHint: button?.name,
+        sourceHash: usage?.invocation.contentHash,
+      },
       index
     );
     expect(binding).toMatchObject({
@@ -108,6 +142,56 @@ describe('React component index', () => {
       componentId: button?.id,
       instanceId: usage?.id,
     });
+  });
+
+  it('records stable intrinsic roots for Next Server Component provenance', () => {
+    const source = snapshot([
+      file(
+        'components/Header.tsx',
+        `export default function Header() {
+  return <header className="site-header" />;
+}
+`
+      ),
+      file(
+        'app/layout.tsx',
+        `import Header from '../components/Header';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <><Header />{children}</>;
+}
+`
+      ),
+    ]);
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const header = index.components.find((component) => component.name === 'Header');
+
+    expect(header).toMatchObject({
+      isClientModule: false,
+      renderRoot: {
+        tag: 'header',
+        classTokens: ['site-header'],
+        id: null,
+      },
+    });
+  });
+
+  it('keeps an unverified runtime source line source-anchored', () => {
+    const source = reactProject();
+    const index = buildComponentIndex(source, { projectType: 'vite' });
+    const button = index.components.find((component) => component.name === 'Button');
+    const usage = index.instances.find((instance) => instance.componentId === button?.id);
+
+    const binding = bindComponentSelection(
+      { file: usage?.invocation.file, line: usage?.invocation.line, column: 1 },
+      index
+    );
+
+    expect(binding).toMatchObject({
+      confidence: 'sourceAnchored',
+      componentId: button?.id,
+    });
+    expect(binding).not.toHaveProperty('instanceId');
   });
 
   it('does not treat external package components as unresolved project usages', () => {
@@ -240,6 +324,16 @@ export function Page() {
       expect(result).toContain("import { Badge } from './Badge';");
       expect(result).toContain('<Badge />');
       expect(result).toContain('<Button label={copy} tone="accent" />');
+      expect(planned.plan).toMatchObject({
+        dialect: 'react',
+        parserToken: REACT_COMPONENT_PLAN_PARSER_TOKEN,
+        expectedGraphDelta: {
+          componentId: badge!.id,
+          usagesBefore: 0,
+          usagesAfter: 1,
+          delta: 1,
+        },
+      });
     }
 
     const withExplicitProp = planInsertComponent(
@@ -363,7 +457,7 @@ export function OtherPage() {
       {
         file: 'src/NamedImportPage.tsx',
         content: namedImportPage,
-        importText: `import { Card } from './Card';`,
+        importText: `import Card from './Card';`,
       },
     ];
     for (const testCase of cases) {

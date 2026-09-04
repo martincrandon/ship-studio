@@ -2,15 +2,19 @@ import { useMemo, useState } from 'react';
 import {
   CheckIcon,
   CodeIcon,
+  DuplicateIcon,
+  EditFieldIcon,
   ErrorIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
   InfoIcon,
   PlusIcon,
+  TrashIcon,
   WarningIcon,
 } from '@/components/icons';
 import type {
   ComponentDescriptor,
+  ComponentInsertionAnchor,
   ComponentInstance,
   SourceRef,
   StaticValue,
@@ -18,13 +22,33 @@ import type {
 import { Button } from '../primitives/Button';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { TextField } from '../primitives/TextField';
+import { ComponentDeleteModal } from './ComponentDeleteModal';
+import { ComponentDuplicateModal } from './ComponentDuplicateModal';
+import { ComponentRenameModal } from './ComponentRenameModal';
 
 interface ComponentDetailsProps {
   component: ComponentDescriptor;
   usages?: readonly ComponentInstance[];
   placementAvailable?: boolean;
-  onPlace: (componentId: ComponentDescriptor['id'], props?: Record<string, StaticValue>) => void;
+  onPlace: (
+    componentId: ComponentDescriptor['id'],
+    props?: Record<string, StaticValue>,
+    position?: ComponentInsertionAnchor['position']
+  ) => void;
   onOpenSource: (source: SourceRef) => void;
+  onDuplicate?: (input: {
+    componentId: ComponentDescriptor['id'];
+    newName: string;
+    destinationFile: string;
+  }) => void | Promise<void>;
+  onRename?: (input: {
+    componentId: ComponentDescriptor['id'];
+    newName: string;
+  }) => void | Promise<void>;
+  onDelete?: (input: {
+    componentId: ComponentDescriptor['id'];
+    removeAllUsages: true;
+  }) => void | Promise<void>;
   onSelectUsage?: (instance: ComponentInstance) => void;
 }
 
@@ -37,6 +61,9 @@ const CAPABILITY_LABELS = [
   ['editStaticProps', 'Static props'],
   ['editSlots', 'Slots'],
   ['editMain', 'Edit main'],
+  ['duplicateDefinition', 'Duplicate definition'],
+  ['renameDefinition', 'Rename definition'],
+  ['deleteDefinition', 'Delete definition'],
 ] as const;
 
 function formatValue(value: unknown): string {
@@ -289,7 +316,10 @@ function PlacementSetup({
 }: {
   component: ComponentDescriptor;
   onCancel: () => void;
-  onPlace: (props: Record<string, StaticValue>) => void;
+  onPlace: (
+    props: Record<string, StaticValue>,
+    position: ComponentInsertionAnchor['position']
+  ) => void;
 }) {
   const required = useMemo(
     () => component.props.filter((prop) => prop.required && prop.defaultValue === null),
@@ -297,6 +327,7 @@ function PlacementSetup({
   );
   const [values, setValues] = useState<Record<string, StaticValue>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [position, setPosition] = useState<ComponentInsertionAnchor['position']>('after');
 
   const setValue = (name: string, value: StaticValue | null) => {
     setValues((current) => {
@@ -318,12 +349,31 @@ function PlacementSetup({
       <div className="ss-components-placement__heading">
         <div>
           <h3 id="component-placement-title" className="ss-components-section-title">
-            Required props
+            {required.length > 0 ? 'Required props' : 'Placement'}
           </h3>
-          <p className="ss-components-muted">Set explicit values before Ship Studio writes JSX.</p>
+          <p className="ss-components-muted">
+            {required.length > 0
+              ? 'Set explicit values before Ship Studio writes JSX.'
+              : 'Choose where the component should be inserted.'}
+          </p>
         </div>
         <span className="ss-components-count tabular-nums">{required.length}</span>
       </div>
+
+      <label className="ss-components-placement__field">
+        <span>Insertion position</span>
+        <select
+          aria-label="Choose insertion position"
+          value={position}
+          onChange={(event) =>
+            setPosition(event.currentTarget.value as ComponentInsertionAnchor['position'])
+          }
+        >
+          <option value="before">Before selected element</option>
+          <option value="after">After selected element</option>
+          <option value="inside">Inside selected element</option>
+        </select>
+      </label>
 
       <div className="ss-components-placement__fields">
         {required.map((prop) => {
@@ -408,7 +458,7 @@ function PlacementSetup({
           size="compact"
           disabled={!complete}
           title={supported ? 'Insert this component' : 'A required prop is source-only'}
-          onClick={() => onPlace(values)}
+          onClick={() => onPlace(values, position)}
         >
           Insert component
         </Button>
@@ -424,14 +474,20 @@ export function ComponentDetails({
   placementAvailable = true,
   onPlace,
   onOpenSource,
+  onDuplicate,
+  onRename,
+  onDelete,
   onSelectUsage,
 }: ComponentDetailsProps) {
   const diagnostics = component.diagnostics ?? [];
   const canPlace = component.capabilities.place && placementAvailable;
-  const requiredPlacementProps = component.props.filter(
-    (prop) => prop.required && prop.defaultValue === null
-  );
   const [placementOpen, setPlacementOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const canDuplicate = component.capabilities.duplicateDefinition && onDuplicate !== undefined;
+  const canRename = component.capabilities.renameDefinition && onRename !== undefined;
+  const canDelete = component.capabilities.deleteDefinition && onDelete !== undefined;
 
   return (
     <section className="ss-components-details" data-testid="component-details">
@@ -470,14 +526,65 @@ export function ComponentDetails({
                   ? 'Turn on edit mode and select a source-backed element first'
                   : 'Placement is not supported for this component'
             }
-            aria-expanded={requiredPlacementProps.length > 0 ? placementOpen : undefined}
-            onClick={() => {
-              if (requiredPlacementProps.length > 0) setPlacementOpen((open) => !open);
-              else onPlace(component.id);
-            }}
+            aria-expanded={placementOpen}
+            onClick={() => setPlacementOpen((open) => !open)}
           >
             Place
           </Button>
+          {onDuplicate && (
+            <Button
+              variant="secondary"
+              size="compact"
+              className="ss-components-action-hit ss-components-duplicate-action"
+              leftIcon={<DuplicateIcon size={14} />}
+              disabled={!canDuplicate}
+              title={
+                canDuplicate
+                  ? 'Create a reviewed copy of this component definition'
+                  : 'Definition duplication is not supported for this component'
+              }
+              aria-expanded={duplicateOpen}
+              onClick={() => setDuplicateOpen(true)}
+            >
+              Duplicate
+            </Button>
+          )}
+          {onRename && (
+            <Button
+              variant="secondary"
+              size="compact"
+              className="ss-components-action-hit ss-components-rename-action"
+              leftIcon={<EditFieldIcon size={14} />}
+              disabled={!canRename}
+              title={
+                canRename
+                  ? 'Rename this component definition and its resolved references'
+                  : 'Definition renaming is not supported for this component'
+              }
+              aria-expanded={renameOpen}
+              onClick={() => setRenameOpen(true)}
+            >
+              Rename
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="danger"
+              size="compact"
+              className="ss-components-action-hit ss-components-delete-action"
+              leftIcon={<TrashIcon size={14} />}
+              disabled={!canDelete}
+              title={
+                canDelete
+                  ? 'Delete this component definition and its resolved references'
+                  : 'Definition deletion is not supported for this component'
+              }
+              aria-expanded={deleteOpen}
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       </header>
 
@@ -491,9 +598,45 @@ export function ComponentDetails({
         <PlacementSetup
           component={component}
           onCancel={() => setPlacementOpen(false)}
-          onPlace={(props) => {
+          onPlace={(props, position) => {
             setPlacementOpen(false);
-            onPlace(component.id, props);
+            onPlace(component.id, props, position);
+          }}
+        />
+      )}
+
+      {onDuplicate && (
+        <ComponentDuplicateModal
+          component={component}
+          isOpen={duplicateOpen}
+          onClose={() => setDuplicateOpen(false)}
+          onDuplicate={(input) => {
+            setDuplicateOpen(false);
+            return onDuplicate(input);
+          }}
+        />
+      )}
+
+      {onRename && (
+        <ComponentRenameModal
+          component={component}
+          isOpen={renameOpen}
+          onClose={() => setRenameOpen(false)}
+          onRename={(input) => {
+            setRenameOpen(false);
+            return onRename(input);
+          }}
+        />
+      )}
+
+      {onDelete && (
+        <ComponentDeleteModal
+          component={component}
+          isOpen={deleteOpen}
+          onClose={() => setDeleteOpen(false)}
+          onDelete={(input) => {
+            setDeleteOpen(false);
+            return onDelete(input);
           }}
         />
       )}

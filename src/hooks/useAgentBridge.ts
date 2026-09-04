@@ -23,6 +23,7 @@ import {
 import { beginAgentActivity } from '../lib/agentActivityStore';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
+import type { ComponentFocusContext } from '../lib/components/focus';
 
 interface UseAgentBridgeParams {
   projectPath: string;
@@ -40,6 +41,8 @@ interface UseAgentBridgeParams {
   setViewport: (value: number | ViewportPreset) => void;
   /** Current custom viewport width in px, or null = full pane width. */
   getViewportWidth: () => number | null;
+  /** Read the current revision-bound component focus without rebinding the listener. */
+  getComponentFocusContext?: () => ComponentFocusContext | null;
 }
 
 export function useAgentBridge({
@@ -52,6 +55,7 @@ export function useAgentBridge({
   reload,
   setViewport,
   getViewportWidth,
+  getComponentFocusContext,
 }: UseAgentBridgeParams) {
   // Live values for the long-lived listener — rebinding the Tauri listener on
   // every URL change would race in-flight requests.
@@ -65,6 +69,7 @@ export function useAgentBridge({
     reload,
     setViewport,
     getViewportWidth,
+    getComponentFocusContext,
   });
   useEffect(() => {
     ctxRef.current = {
@@ -77,6 +82,7 @@ export function useAgentBridge({
       reload,
       setViewport,
       getViewportWidth,
+      getComponentFocusContext,
     };
   });
 
@@ -137,6 +143,7 @@ export function useAgentBridge({
             reload: live.reload,
             setViewport: live.setViewport,
             getViewportWidth: live.getViewportWidth,
+            getComponentFocusContext: live.getComponentFocusContext,
           });
           endActivity();
           void trackEvent('agent_bridge_tool_used', {

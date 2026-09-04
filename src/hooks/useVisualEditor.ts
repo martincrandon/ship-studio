@@ -77,6 +77,11 @@ import {
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import {
+  sourceRefFromResolution,
+  validateFocusedSourceTarget,
+  type ComponentFocusContext,
+} from '../lib/components/focus';
 
 /**
  * What the style controls currently edit:
@@ -95,6 +100,37 @@ type WritableResolution = Extract<Resolution, { status: 'resolved' | 'multi' }>;
 /** How many source spots a writable resolution covers (1 for a single location). */
 function locationCount(res: WritableResolution): number {
   return res.status === 'multi' ? res.locations.length : 1;
+}
+
+function focusedTargetError(
+  contextRef: React.RefObject<ComponentFocusContext | null> | undefined,
+  resolution: Resolution | null
+): {
+  context: ComponentFocusContext;
+  source: NonNullable<ReturnType<typeof sourceRefFromResolution>>;
+} | null {
+  const context = contextRef?.current;
+  if (!context) return null;
+  const validation = validateFocusedSourceTarget(context, sourceRefFromResolution(resolution));
+  if (validation.status === 'refused' || !validation.source) {
+    throw new Error(
+      validation.diagnostic?.message ??
+        'The focused component source target is no longer valid. Refresh and re-enter focus.'
+    );
+  }
+  return { context, source: validation.source };
+}
+
+function focusedEditBlocked(
+  contextRef: React.RefObject<ComponentFocusContext | null> | undefined,
+  onToast?: (message: string, type?: 'success' | 'error') => void
+): boolean {
+  if (!contextRef?.current) return false;
+  onToast?.(
+    'Component focus is active. Select a child with an exact source range before editing.',
+    'error'
+  );
+  return true;
 }
 
 /** A breakpoint-scoped slice of the live-preview stylesheet: `decls` applied at
@@ -197,6 +233,10 @@ interface Params {
   /** All breakpoints (incl. Base) — used to recognize/strip variant prefixes. */
   breakpoints: Breakpoint[];
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  /** Revision-bound component definition context, when focus is active. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
+  /** Index-backed UsageScope data; null keeps the legacy backend fallback alive. */
+  getIndexedUsage?: (resolution: Resolution) => UsageReport | null;
 }
 
 export interface Selection {
@@ -215,6 +255,8 @@ export function useVisualEditor({
   activeBreakpoint,
   breakpoints,
   onToast,
+  componentFocusRef,
+  getIndexedUsage,
 }: Params) {
   // User intent; the *effective* mode below also requires the feature be enabled,
   // so it flips off automatically when the server restarts (no reset effect).
@@ -403,12 +445,13 @@ export function useVisualEditor({
   // `@apply` list so every control reflects the class's current styles.
   const editClass = useCallback(
     (name: string, tokens: string[]) => {
+      if (focusedEditBlocked(componentFocusRef, onToast)) return;
       const joined = tokens.join(' ');
       setEditTarget({ kind: 'class', name, baseline: joined });
       setLiveClass(joined);
       post({ type: 'ss:clearClassPreview' });
     },
-    [post, setEditTarget, setLiveClass]
+    [componentFocusRef, onToast, post, setEditTarget, setLiveClass]
   );
 
   // Activate/deactivate the in-iframe selection layer (external-system sync), and
@@ -467,8 +510,12 @@ export function useVisualEditor({
         try {
           const resolution = await resolveClassnameSource(projectPath, sig);
           setSelection({ signature: sig, resolution, instanceCount });
-          // Best-effort scope hint: where else this component is rendered.
-          if (resolution.status === 'resolved') {
+          // Prefer the immutable component index for scope. The old command stays
+          // as a rollout fallback for projects/targets outside that index.
+          const indexedUsage = getIndexedUsage?.(resolution);
+          if (indexedUsage) {
+            if (usageTokenRef.current === usageToken) setUsage(indexedUsage);
+          } else if (resolution.status === 'resolved') {
             try {
               const report = await findComponentUsage(
                 projectPath,
@@ -528,6 +575,7 @@ export function useVisualEditor({
     setMultiTarget,
     setImageTarget,
     setEditTarget,
+    getIndexedUsage,
   ]);
 
   // Load the project's custom classes when edit mode opens; refresh helper lets
@@ -658,10 +706,24 @@ export function useVisualEditor({
       prev: string,
       next: string
     ): Promise<WritableResolution> => {
+      const focused = focusedTargetError(componentFocusRef, res);
       const write = async (r: WritableResolution, oldClass: string) => {
         if (r.status === 'resolved') {
-          await applyClassnameEdit(projectPath, r.file, r.line, oldClass, next);
+          if (focused) {
+            await applyClassnameEdit(projectPath, r.file, r.line, oldClass, next, {
+              expectedHash: focused.source.contentHash,
+              expectedStart: focused.source.start,
+              expectedEnd: focused.source.end,
+            });
+          } else {
+            await applyClassnameEdit(projectPath, r.file, r.line, oldClass, next);
+          }
         } else {
+          if (focused) {
+            throw new Error(
+              'Component focus cannot edit an ambiguous class source. Select the exact child again.'
+            );
+          }
           // Honor the user's multi-location pick ('all' vs one index).
           const mt = multiTargetRef.current;
           const edits = mt === 'all' ? r.locations : r.locations.filter((_, i) => i === mt);
@@ -676,6 +738,7 @@ export function useVisualEditor({
         if (!(cmdErr.type === 'Validation' && cmdErr.field === 'old_class')) throw err;
         const fresh = await resolveClassnameSource(projectPath, sig);
         if (fresh.status !== 'resolved' && fresh.status !== 'multi') throw err;
+        if (focused) focusedTargetError(componentFocusRef, fresh);
         // The multi-location pick ('all' by default) was made against the
         // locations resolved at SELECTION time. If the re-resolve now finds MORE
         // of them, the drift added instances the user never saw in the picker —
@@ -697,7 +760,7 @@ export function useVisualEditor({
         return fresh;
       }
     },
-    [projectPath]
+    [componentFocusRef, projectPath]
   );
 
   /** Persist the current live class to source. `silent` suppresses the success
@@ -710,6 +773,7 @@ export function useVisualEditor({
       // doesn't apply. Suppress the reload our own save triggers (avoids a flash).
       const target = editTargetRef.current;
       if (target.kind === 'class') {
+        if (focusedEditBlocked(componentFocusRef, onToast)) return;
         const next = currentClassRef.current.trim();
         if (next === target.baseline.trim()) return; // unchanged
         const tokens = next.split(/\s+/).filter(Boolean);
@@ -778,7 +842,16 @@ export function useVisualEditor({
         onToast?.(formatCommandError(asCommandError(err)), 'error');
       }
     },
-    [selection, projectPath, onToast, post, setEditTarget, recordCommit, writeClassToSource]
+    [
+      selection,
+      projectPath,
+      onToast,
+      post,
+      setEditTarget,
+      recordCommit,
+      writeClassToSource,
+      componentFocusRef,
+    ]
   );
 
   /** Rewrite the selected element's className in source to `next` (single or
@@ -820,6 +893,7 @@ export function useVisualEditor({
    *  re-resolve so the panel transitions from the no-class state to full controls. */
   const addFirstClass = useCallback(
     async (name: string) => {
+      if (focusedEditBlocked(componentFocusRef, onToast)) return;
       const sig = selectedSigRef.current;
       const n = name.trim().replace(/^\./, '');
       if (!sig || !n) return;
@@ -845,7 +919,7 @@ export function useVisualEditor({
         onToast?.(formatCommandError(asCommandError(err)), 'error');
       }
     },
-    [projectPath, post, setLiveClass, onToast, recordCommit]
+    [componentFocusRef, projectPath, post, setLiveClass, onToast, recordCommit]
   );
 
   /** The selected element's current className — read from the live class in
@@ -904,6 +978,7 @@ export function useVisualEditor({
    *  element briefly shows unstyled until HMR compiles the new rule's `@apply`.) */
   const createClassFromStyles = useCallback(
     async (name: string) => {
+      if (focusedEditBlocked(componentFocusRef, onToast)) return;
       const elTokens = currentElementClass().split(/\s+/).filter(Boolean);
       const classNames = new Set(customClasses.map((c) => c.name));
       const candidateUtilities = elTokens.filter((t) => !classNames.has(t));
@@ -939,6 +1014,7 @@ export function useVisualEditor({
     },
     [
       projectPath,
+      componentFocusRef,
       customClasses,
       currentElementClass,
       writeElementClass,
@@ -960,6 +1036,9 @@ export function useVisualEditor({
    */
   const replaceImage = useCallback(
     async (newSrc: string) => {
+      if (focusedEditBlocked(componentFocusRef, onToast)) {
+        throw new Error('Component focus requires an exact child source target.');
+      }
       const target = imageTargetRef.current;
       if (!target) {
         onToast?.('Lost track of this image — reselect it and try again.', 'error');
@@ -994,7 +1073,7 @@ export function useVisualEditor({
         throw err;
       }
     },
-    [projectPath, onToast, post, recordCommit]
+    [componentFocusRef, projectPath, onToast, post, recordCommit]
   );
 
   // Auto-save: debounce a silent commit after edits settle. Re-running on every

@@ -31,6 +31,7 @@ import {
   duplicateElement,
   ELEMENT_KINDS,
   insertElement,
+  type ExactSourceTarget,
   type ElementKind,
   type InsertPosition,
 } from '../lib/edit-structure';
@@ -38,6 +39,8 @@ import { resolveElementHtml } from '../lib/edit-html';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
+import { validateFocusedSourceTarget, type ComponentFocusContext } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 export interface SelectionRect {
   top: number;
@@ -60,6 +63,8 @@ interface Params {
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  /** Revision-bound definition context for focused structural writes. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
 }
 
 /** How long after a write the iframe `load` handler still replays the reselect. */
@@ -128,7 +133,13 @@ export function isExpectedStructuralRefusal(message: string): boolean {
   );
 }
 
-export function useElementStructure({ iframeRef, projectPath, enabled, onToast }: Params) {
+export function useElementStructure({
+  iframeRef,
+  projectPath,
+  enabled,
+  onToast,
+  componentFocusRef,
+}: Params) {
   const [selection, setSelection] = useState<StructureSelection | null>(null);
   // Inline text editing is in progress — the toolbar hides so it can't cover
   // the contenteditable or the formatting bubble.
@@ -147,6 +158,60 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
   const post = useCallback(
     (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
     [iframeRef]
+  );
+
+  /** Resolve the selected rendered element to the exact source span inside the
+   * focused definition. A repeated class may produce several candidate
+   * locations; only the candidate proven to be inside the definition is used.
+   * No invocation or class-based fallback is allowed once focus is active. */
+  const resolveFocusedSourceTarget = useCallback(
+    async (sel: StructureSelection): Promise<ExactSourceTarget | undefined> => {
+      const context = componentFocusRef?.current;
+      if (!context) return undefined;
+
+      const first = await resolveElementHtml(projectPath, sel.signature);
+      const locations = first.locations?.length
+        ? first.locations
+        : [{ file: first.file, line: first.line, column: first.sourceColumn ?? 1 }];
+      let lastDiagnostic =
+        'The focused component source target is no longer valid. Refresh and reselect the child.';
+      for (const location of locations) {
+        const anchor =
+          location.file === first.file && location.line === first.line
+            ? first
+            : await resolveElementHtml(projectPath, sel.signature, location);
+        if (
+          anchor.sourceStart === undefined ||
+          anchor.sourceEnd === undefined ||
+          !anchor.sourceHash
+        ) {
+          lastDiagnostic =
+            'The focused component source target has no exact range. Refresh and reselect the child.';
+          continue;
+        }
+        const source: SourceRef = {
+          file: anchor.file,
+          start: anchor.sourceStart,
+          end: anchor.sourceEnd,
+          line: anchor.sourceLine ?? anchor.line,
+          column: anchor.sourceColumn ?? location.column,
+          contentHash: anchor.sourceHash,
+        };
+        const validation = validateFocusedSourceTarget(context, source);
+        if (validation.status === 'valid') {
+          return {
+            file: source.file,
+            start: source.start,
+            end: source.end,
+            expectedHash: source.contentHash,
+            expectedHtml: anchor.html,
+          };
+        }
+        lastDiagnostic = validation.diagnostic?.message ?? lastDiagnostic;
+      }
+      throw new Error(lastDiagnostic);
+    },
+    [componentFocusRef, projectPath]
   );
 
   // Drop all transient state when edit mode closes.
@@ -271,7 +336,10 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
       runAction(async () => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const inserted = await insertElement(projectPath, sel.signature, position, kind);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        const inserted = sourceTarget
+          ? await insertElement(projectPath, sel.signature, position, kind, sourceTarget)
+          : await insertElement(projectPath, sel.signature, position, kind);
         const meta = ELEMENT_KINDS.find((k) => k.kind === kind);
         scheduleReselect({
           className: inserted.className,
@@ -286,7 +354,7 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
         void trackEvent('visual_element_inserted');
         onToast?.(`Added ${meta?.label ?? kind}`, 'success');
       }),
-    [projectPath, runAction, scheduleReselect, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
   );
 
   const duplicate = useCallback(
@@ -294,7 +362,10 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
       runAction(async () => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const inserted = await duplicateElement(projectPath, sel.signature);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        const inserted = sourceTarget
+          ? await duplicateElement(projectPath, sel.signature, sourceTarget)
+          : await duplicateElement(projectPath, sel.signature);
         scheduleReselect({
           className: inserted.className,
           tagName: inserted.tagName,
@@ -304,7 +375,7 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
         void trackEvent('visual_element_duplicated');
         onToast?.('Element duplicated', 'success');
       }),
-    [projectPath, runAction, scheduleReselect, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
   );
 
   const remove = useCallback(
@@ -313,8 +384,13 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
         const sel = selectionRef.current;
         if (!sel) return;
         // Resolve at action time so the drift baseline is fresh.
-        const { html } = await resolveElementHtml(projectPath, sel.signature);
-        await deleteElement(projectPath, sel.signature, html);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        if (sourceTarget) {
+          await deleteElement(projectPath, sel.signature, sourceTarget.expectedHtml, sourceTarget);
+        } else {
+          const anchor = await resolveElementHtml(projectPath, sel.signature);
+          await deleteElement(projectPath, sel.signature, anchor.html);
+        }
         setSelection(null);
         void trackEvent('visual_element_deleted');
         onToast?.(
@@ -322,7 +398,7 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
           'success'
         );
       }),
-    [projectPath, runAction, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, onToast]
   );
 
   /** Select a tree node, then run `action` once its ss:select lands — the tree

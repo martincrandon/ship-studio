@@ -223,6 +223,46 @@
   color: var(--property-text);
 }
 
+.ss-tree-row--component {
+  color: var(--accent-component);
+}
+
+.ss-tree-row--component:hover,
+.ss-tree-row--component.focused {
+  background: color-mix(in srgb, var(--accent-component) 14%, transparent);
+}
+
+.ss-tree-row--component.selected {
+  background: color-mix(in srgb, var(--accent-component) 22%, transparent);
+  color: var(--accent-component);
+}
+
+.ss-tree-row--component:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-component);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ss-tree-chevron--component {
+  color: var(--accent-component);
+}
+
+.ss-tree-component-icon,
+.ss-tree-component-name {
+  color: var(--accent-component);
+}
+
+.ss-tree-component-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: var(--font-weight-label);
+}
+
+.ss-tree-component-kind {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
+}
+
 /* The read-only navigator uses neutral highlights; blue is reserved for active
    visual-editing state. */
 .ss-tree-panel--view-only .ss-tree-row:hover {

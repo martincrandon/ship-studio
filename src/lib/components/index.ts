@@ -1,32 +1,64 @@
 import { createReactAdapter } from './adapters/react';
-import { sha256 } from './ranges';
-import type {
-  ComponentAdapter,
-  DialectDetection,
-  GraphContext,
-  ParseContext,
-} from './adapters/types';
+import { createAstroAdapter } from './adapters/astro';
+import { createVueAdapter } from './adapters/vue';
+import { createSvelteAdapter } from './adapters/svelte';
+import { createShopifyAdapter } from './adapters/shopify';
+import { createWebComponentAdapter } from './adapters/web-components';
+import { createReactNativeAdapter } from './adapters/react-native';
+import { ComponentIndexStore } from './index-store';
+import type { ComponentAdapter } from './adapters/types';
 import type { ProjectType } from '@/lib/static-server';
 import type {
   ComponentBinding,
-  ComponentCapabilities,
-  ComponentDialect,
-  ComponentFrameworkProfile,
   ComponentIndex,
   ComponentSourceSnapshot,
+  DeleteComponentInput,
+  DuplicateComponentInput,
+  RenameComponentInput,
   EditComponentPropInput,
+  EditComponentSlotInput,
+  ComponentExtractionInput,
+  ExtractionResult,
   InsertComponentInput,
   MutationResult,
+  RefactorResult,
   SelectionBindingInput,
 } from './types';
+import { planStaticSlotEdit as planSlot } from './slots';
+import { planExtractComponent as planExtract } from './extraction';
 import {
   planInsertComponent as planReactInsert,
   planStaticPropEdit as planReactPropEdit,
 } from './mutation';
+import { planDuplicateComponent as planReactDuplicate } from './refactors';
+import { planDeleteComponent as planReactDelete } from './refactors';
+import { planRenameComponent as planReactRename } from './refactors';
+
+export { previewComponentMutation, REACT_COMPONENT_PLAN_PARSER_TOKEN } from './mutation';
+
+export { usageReportForResolution } from './usage';
 
 export interface BuildComponentIndexOptions {
   projectType?: ProjectType | null;
   adapters?: readonly ComponentAdapter[];
+}
+
+/**
+ * Construct the complete adapter set for source-only callers. The worker does
+ * not use this eager list: it loads this module lazily only for Astro
+ * snapshots, keeping the optional compiler/WASM runtime out of the normal
+ * React/Next worker startup path.
+ */
+export function createComponentAdapters(): readonly ComponentAdapter[] {
+  return [
+    createReactAdapter(),
+    createAstroAdapter(),
+    createVueAdapter(),
+    createSvelteAdapter(),
+    createShopifyAdapter(),
+    createWebComponentAdapter(),
+    createReactNativeAdapter(),
+  ];
 }
 
 /**
@@ -38,50 +70,10 @@ export function buildComponentIndex(
   snapshot: ComponentSourceSnapshot,
   options: BuildComponentIndexOptions = {}
 ): ComponentIndex {
-  const adapters = options.adapters?.length ? options.adapters : [createReactAdapter()];
-  const detections = adapters.map((adapter) => ({
-    adapter,
-    detection: adapter.detect({ files: snapshot.files, projectType: options.projectType }),
-  }));
-  const detected = detections.filter(({ detection }) => detection.detected);
-  const profile = profileForSnapshot(snapshot, options.projectType ?? null, detections);
-  const components = [] as ComponentIndex['components'];
-  const instances = [] as ComponentIndex['instances'];
-  const importEdges = [] as ComponentIndex['importEdges'];
-  const diagnostics = [...snapshot.diagnostics, ...profile.diagnostics];
-  for (const { adapter } of detected) {
-    const adapterFiles = snapshot.files.filter((file) => adapter.accepts(file.file));
-    const parsed = adapterFiles.map((file) =>
-      adapter.parseFile(file, {
-        workspaceRoot: snapshot.workspaceRoot,
-        knownFiles: snapshot.files,
-      } satisfies ParseContext)
-    );
-    const graph = adapter.buildUsageGraph(parsed, {
-      workspaceRoot: snapshot.workspaceRoot,
-      files: parsed,
-      revision: snapshot.revision,
-    } satisfies GraphContext);
-    components.push(...graph.components);
-    instances.push(...graph.instances);
-    importEdges.push(...graph.importEdges);
-    diagnostics.push(...graph.diagnostics);
-  }
-  return {
-    revision:
-      snapshot.revision ||
-      sha256(snapshot.files.map((file) => `${file.file}:${file.contentHash}`).join('\n')),
-    partial:
-      snapshot.partial ||
-      diagnostics.some(
-        (diagnostic) => diagnostic.severity === 'warning' || diagnostic.severity === 'error'
-      ),
-    profile,
-    components,
-    instances,
-    importEdges,
-    diagnostics,
-  };
+  return new ComponentIndexStore().build(snapshot, {
+    ...options,
+    adapters: options.adapters?.length ? options.adapters : createComponentAdapters(),
+  });
 }
 
 /** Bind a runtime/source candidate to the current immutable index. */
@@ -111,6 +103,11 @@ export function planInsertComponent(
   index: ComponentIndex,
   snapshot?: ComponentSourceSnapshot
 ): MutationResult {
+  const component = index.components.find((item) => item.id === input.componentId);
+  const adapter = component ? adapterForDialect(component.dialect) : null;
+  if (adapter && component?.dialect !== 'react') {
+    return adapter.planInsert({ ...input, snapshot: snapshot ?? input.snapshot }, index);
+  }
   return planReactInsert(input, index, snapshot);
 }
 
@@ -120,7 +117,112 @@ export function planStaticPropEdit(
   index: ComponentIndex,
   snapshot?: ComponentSourceSnapshot
 ): MutationResult {
+  const instance = index.instances.find((item) => item.id === input.instanceId);
+  const component = index.components.find((item) => item.id === instance?.componentId);
+  const adapter = component ? adapterForDialect(component.dialect) : null;
+  if (adapter && component?.dialect !== 'react') {
+    return adapter.planPropEdit({ ...input, snapshot: snapshot ?? input.snapshot }, index);
+  }
   return planReactPropEdit(input, index, snapshot);
+}
+
+/** Plan a static default/named slot edit through the owning dialect contract. */
+export function planStaticSlotEdit(
+  input: EditComponentSlotInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): MutationResult {
+  const instance = index.instances.find((item) => item.id === input.instanceId);
+  const component = index.components.find((item) => item.id === instance?.componentId);
+  if (!component) {
+    return planSlot(input, index, snapshot);
+  }
+  const adapter = adapterForDialect(component.dialect);
+  if (adapter?.planSlotEdit) {
+    return adapter.planSlotEdit({ ...input, snapshot: snapshot ?? input.snapshot }, index);
+  }
+  return planSlot({ ...input, snapshot: snapshot ?? input.snapshot }, index, snapshot);
+}
+
+/** Plan a two-round, explicitly approved React extraction. */
+export function planExtractComponent(
+  input: ComponentExtractionInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): ExtractionResult {
+  return planExtract({ ...input, snapshot: snapshot ?? input.snapshot }, index, snapshot);
+}
+
+/** Plan a reviewed React definition duplicate; other dialects remain read-only. */
+export function planDuplicateComponent(
+  input: DuplicateComponentInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): RefactorResult {
+  const component = index.components.find((item) => item.id === input.componentId);
+  if (component?.dialect !== 'react') {
+    return {
+      status: 'refused',
+      code: 'unsupported',
+      message: 'Definition duplication is currently available for React components only.',
+      diagnostics: [
+        {
+          code: 'refactor-unsupported',
+          severity: 'info',
+          message: 'Definition duplication is currently available for React components only.',
+        },
+      ],
+    };
+  }
+  return planReactDuplicate(input, index, snapshot);
+}
+
+/** Plan a reviewed React named-export rename; other dialects remain read-only. */
+export function planRenameComponent(
+  input: RenameComponentInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): RefactorResult {
+  const component = index.components.find((item) => item.id === input.componentId);
+  if (component?.dialect !== 'react') {
+    return {
+      status: 'refused',
+      code: 'unsupported',
+      message: 'Definition renaming is currently available for React components only.',
+      diagnostics: [
+        {
+          code: 'refactor-unsupported',
+          severity: 'info',
+          message: 'Definition renaming is currently available for React components only.',
+        },
+      ],
+    };
+  }
+  return planReactRename(input, index, snapshot);
+}
+
+/** Plan a reviewed React named-export delete; other dialects remain read-only. */
+export function planDeleteComponent(
+  input: DeleteComponentInput,
+  index: ComponentIndex,
+  snapshot?: ComponentSourceSnapshot
+): RefactorResult {
+  const component = index.components.find((item) => item.id === input.componentId);
+  if (component?.dialect !== 'react') {
+    return {
+      status: 'refused',
+      code: 'unsupported',
+      message: 'Definition deletion is currently available for React components only.',
+      diagnostics: [
+        {
+          code: 'refactor-unsupported',
+          severity: 'info',
+          message: 'Definition deletion is currently available for React components only.',
+        },
+      ],
+    };
+  }
+  return planReactDelete(input, index, snapshot);
 }
 
 export function adapterForInput(
@@ -131,80 +233,28 @@ export function adapterForInput(
     (candidate) => candidate.renderer !== 'unknown'
   )?.renderer;
   const dialect = renderer ?? index.profile.primaryDialect;
-  if (dialect === 'react') return createReactAdapter();
-  return null;
+  return dialect && dialect !== 'unknown' ? adapterForDialect(dialect) : null;
 }
 
-function profileForSnapshot(
-  snapshot: ComponentSourceSnapshot,
-  projectType: ProjectType | null,
-  detections: readonly { adapter: ComponentAdapter; detection: DialectDetection }[]
-): ComponentFrameworkProfile {
-  const detected = detections.filter(({ detection }) => detection.detected);
-  const diagnostics = detections.flatMap(({ detection }) => detection.diagnostics);
-  const dialects = detected.map(({ adapter }) => adapter.dialect);
-  const primaryDialect = dialects.includes('react') ? 'react' : (dialects[0] ?? null);
-  const capabilities = emptyCapabilities();
-  for (const { adapter } of detected) {
-    const placeable = adapter.dialect === 'react';
-    capabilities[adapter.dialect] = reactCapabilities(placeable);
+function adapterForDialect(
+  dialect: NonNullable<ComponentIndex['profile']['primaryDialect']>
+): ComponentAdapter | null {
+  switch (dialect) {
+    case 'react':
+      return createReactAdapter();
+    case 'astro':
+      return createAstroAdapter();
+    case 'vue':
+      return createVueAdapter();
+    case 'svelte':
+      return createSvelteAdapter();
+    case 'shopify':
+      return createShopifyAdapter();
+    case 'web-component':
+      return createWebComponentAdapter();
+    case 'react-native':
+      return createReactNativeAdapter();
+    case 'flutter':
+      return null;
   }
-  return {
-    projectType,
-    primaryDialect,
-    dialects,
-    workspaceRoot: snapshot.workspaceRoot,
-    capabilities,
-    diagnostics,
-  };
-}
-
-function emptyCapabilities(): Record<ComponentDialect, ComponentCapabilities> {
-  const disabled: ComponentCapabilities = {
-    catalog: false,
-    usageGraph: false,
-    definitionBinding: false,
-    instanceBinding: false,
-    place: false,
-    editStaticProps: false,
-    editSlots: false,
-    editMain: false,
-    componentTreeBoundary: false,
-    focusedVisualEditing: false,
-    duplicateDefinition: false,
-    renameDefinition: false,
-    deleteDefinition: false,
-    extract: false,
-    isolatedPreview: false,
-  };
-  return {
-    react: { ...disabled },
-    astro: { ...disabled },
-    vue: { ...disabled },
-    svelte: { ...disabled },
-    shopify: { ...disabled },
-    'web-component': { ...disabled },
-    'react-native': { ...disabled },
-    flutter: { ...disabled },
-  };
-}
-
-function reactCapabilities(placeable: boolean): ComponentCapabilities {
-  return {
-    catalog: true,
-    usageGraph: true,
-    definitionBinding: true,
-    instanceBinding: true,
-    place: placeable,
-    editStaticProps: placeable,
-    editSlots: false,
-    editMain: true,
-    componentTreeBoundary: true,
-    focusedVisualEditing: false,
-    duplicateDefinition: false,
-    renameDefinition: false,
-    deleteDefinition: false,
-    extract: false,
-    isolatedPreview: false,
-  };
 }

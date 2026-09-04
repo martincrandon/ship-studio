@@ -278,7 +278,9 @@ export function ElementTreePanel({
             onMouseLeave={() => onComponentHover?.(null)}
           >
             {hasChildren ? (
-              <span className={`ss-tree-chevron ss-tree-chevron--component${isFocused ? ' open' : ''}`}>
+              <span
+                className={`ss-tree-chevron ss-tree-chevron--component${isFocused ? ' open' : ''}`}
+              >
                 <ChevronRightIcon size={10} aria-hidden="true" />
               </span>
             ) : (
@@ -360,6 +362,11 @@ export function ElementTreePanel({
       ref={panelRef}
       className={`ss-tree-panel${structure ? '' : ' ss-tree-panel--view-only'}`}
       data-testid="element-tree-panel"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || componentFocusPath.length === 0) return;
+        event.preventDefault();
+        leaveComponentFocus();
+      }}
     >
       {structure ? (
         <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
@@ -371,7 +378,11 @@ export function ElementTreePanel({
                   variant="ghost"
                   size="compact"
                   onClick={leaveComponentFocus}
-                  title={componentFocusPath.length > 1 ? 'Focus parent component' : 'Exit component focus'}
+                  title={
+                    componentFocusPath.length > 1
+                      ? 'Focus parent component'
+                      : 'Exit component focus'
+                  }
                   aria-label={
                     componentFocusPath.length > 1
                       ? 'Focus parent component'
@@ -383,7 +394,9 @@ export function ElementTreePanel({
                   {componentFocusPath.map((crumb, index) => (
                     <span key={crumb.key}>
                       {index > 0 && <span aria-hidden="true"> / </span>}
-                      <span aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}>
+                      <span
+                        aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}
+                      >
                         {crumb.name}
                       </span>
                     </span>
@@ -461,7 +474,11 @@ export function ElementTreePanel({
                   variant="ghost"
                   size="compact"
                   onClick={leaveComponentFocus}
-                  title={componentFocusPath.length > 1 ? 'Focus parent component' : 'Exit component focus'}
+                  title={
+                    componentFocusPath.length > 1
+                      ? 'Focus parent component'
+                      : 'Exit component focus'
+                  }
                   aria-label={
                     componentFocusPath.length > 1
                       ? 'Focus parent component'
@@ -473,7 +490,9 @@ export function ElementTreePanel({
                   {componentFocusPath.map((crumb, index) => (
                     <span key={crumb.key}>
                       {index > 0 && <span aria-hidden="true"> / </span>}
-                      <span aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}>
+                      <span
+                        aria-current={index === componentFocusPath.length - 1 ? 'page' : undefined}
+                      >
                         {crumb.name}
                       </span>
                     </span>

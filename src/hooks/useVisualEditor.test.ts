@@ -37,6 +37,7 @@ vi.mock('../lib/logger', () => ({
 }));
 
 import { useVisualEditor } from './useVisualEditor';
+import type { ComponentFocusContext } from '../lib/components/focus';
 import { logger } from '../lib/logger';
 import {
   resolveClassnameSource,
@@ -58,6 +59,35 @@ type Fn = ReturnType<typeof vi.fn>;
 
 const BREAKPOINTS = [BASE_BREAKPOINT, ...DEFAULT_BREAKPOINTS];
 
+const FOCUS_CONTEXT: ComponentFocusContext = {
+  indexRevision: 'revision-1',
+  routeKey: '/',
+  componentId: 'react:src/Card.tsx#Card',
+  instanceId: 'react:src/Page.tsx#Card:1',
+  name: 'Card',
+  definition: {
+    file: 'app/page.tsx',
+    start: 0,
+    end: 200,
+    line: 1,
+    column: 1,
+    contentHash: 'source-hash',
+  },
+  invocation: {
+    file: 'src/Page.tsx',
+    start: 0,
+    end: 10,
+    line: 1,
+    column: 1,
+    contentHash: 'invocation-hash',
+  },
+  ancestry: [],
+  capabilities: { editMain: true, focusedVisualEditing: true },
+  usageCount: 2,
+  affectsAllUsages: true,
+  selectedChild: null,
+};
+
 /** A minimal iframe ref: swallows postMessage and the `load` listener the hook
  *  attaches to re-activate across HMR reloads. */
 function fakeIframeRef() {
@@ -70,7 +100,7 @@ function fakeIframeRef() {
   } as unknown as React.RefObject<HTMLIFrameElement | null>;
 }
 
-function setup() {
+function setup(componentFocusRef?: React.RefObject<ComponentFocusContext | null>) {
   const iframeRef = fakeIframeRef();
   const onToast = vi.fn();
   const hook = renderHook(() =>
@@ -81,6 +111,7 @@ function setup() {
       activeBreakpoint: BASE_BREAKPOINT,
       breakpoints: BREAKPOINTS,
       onToast,
+      componentFocusRef,
     })
   );
   return { ...hook, iframeRef, onToast };
@@ -195,6 +226,63 @@ describe('useVisualEditor auto-save', () => {
     expect(localStorage.getItem('ss:visualEditor:autoSave')).toBe('1');
     act(() => result.current.toggleAutoSave());
     expect(localStorage.getItem('ss:visualEditor:autoSave')).toBe('0');
+  });
+});
+
+describe('useVisualEditor focused component writes', () => {
+  it('passes the exact child range and file hash to the focused write', async () => {
+    (resolveClassnameSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'app/page.tsx',
+      line: 4,
+      column: 20,
+      class_name: 'p-3',
+      confidence: 'unique',
+      source_start: 42,
+      source_end: 46,
+      source_hash: 'source-hash',
+    });
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    const { result, iframeRef } = setup(componentFocusRef);
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    expect(applyClassnameEdit).toHaveBeenCalledWith('/proj', 'app/page.tsx', 4, 'p-3', 'p-8', {
+      expectedHash: 'source-hash',
+      expectedStart: 42,
+      expectedEnd: 46,
+    });
+  });
+
+  it('refuses a resolved class range outside the focused definition', async () => {
+    (resolveClassnameSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'app/page.tsx',
+      line: 4,
+      column: 20,
+      class_name: 'p-3',
+      confidence: 'unique',
+      source_start: 242,
+      source_end: 246,
+      source_hash: 'source-hash',
+    });
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    const { result, iframeRef, onToast } = setup(componentFocusRef);
+    act(() => result.current.toggleEditMode());
+    await select('p-3', iframeRef.current!.contentWindow!);
+
+    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    expect(applyClassnameEdit).not.toHaveBeenCalled();
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining('outside'), 'error');
   });
 });
 

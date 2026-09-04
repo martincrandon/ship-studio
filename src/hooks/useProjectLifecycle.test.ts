@@ -21,6 +21,9 @@ vi.mock('../lib/project', () => ({
   getWorkspaceSubpath: vi.fn().mockResolvedValue(''),
   setWorkspaceSubpath: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../lib/static-server', () => ({
+  detectProjectType: vi.fn().mockResolvedValue('nextjs'),
+}));
 vi.mock('../lib/github', () => ({
   getProjectGitHubStatus: vi.fn().mockResolvedValue(null),
 }));
@@ -80,7 +83,10 @@ vi.mock('../lib/session', () => ({
 
 import { invoke } from '@tauri-apps/api/core';
 import { registerExternalProject } from '../lib/external-projects';
+import { getProjectGitHubStatus } from '../lib/github';
 import { logger } from '../lib/logger';
+import { detectProjectType } from '../lib/static-server';
+import { setWindowTitle } from '../lib/window';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -93,6 +99,8 @@ function createParams(overrides?: Partial<UseProjectLifecycleParams>): UseProjec
     setDevServerPort: vi.fn(),
     startServerForProject: vi.fn().mockResolvedValue('nextjs'),
     isServerRunning: vi.fn(() => false),
+    getProjectType: vi.fn(() => 'unknown' as const),
+    setProjectType: vi.fn(),
     restartDevServer: vi.fn().mockResolvedValue(undefined),
     clearNeedsInstall: vi.fn(),
     pasteToActiveTerminal: vi.fn(),
@@ -252,5 +260,35 @@ describe('handleSelectProject — folder-gone toast routing (#640)', () => {
     const [message, type] = vi.mocked(params.showToast).mock.calls[0];
     expect(message).toContain("isn't a recognized project location");
     expect(type).toBe('error');
+  });
+});
+
+describe('handleSelectProject — reused server type hydration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('recovers the project type before reusing a live server', async () => {
+    vi.mocked(invoke).mockResolvedValue(null);
+    vi.mocked(getProjectGitHubStatus).mockResolvedValue({
+      status: 'not-a-repo',
+      github_repo: null,
+      github_url: null,
+    });
+    vi.mocked(detectProjectType).mockResolvedValue('nextjs');
+    vi.mocked(setWindowTitle).mockResolvedValue(undefined);
+    const params = createParams({ isServerRunning: vi.fn(() => true) });
+    const { result } = renderHook(() => useProjectLifecycle(params));
+
+    await act(async () => {
+      await result.current.handleSelectProject({
+        name: 'nextjs-vanilla-test',
+        path: '/projects/nextjs-vanilla-test',
+        thumbnail: null,
+      });
+    });
+
+    expect(params.startServerForProject).not.toHaveBeenCalled();
+    expect(params.setProjectType).toHaveBeenCalledWith('nextjs', '/projects/nextjs-vanilla-test');
   });
 });

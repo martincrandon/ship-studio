@@ -71,6 +71,7 @@ function MediaQueryChunkChip({
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(chunk.value);
   const [filtering, setFiltering] = useState(false);
+  const [navigated, setNavigated] = useState(false);
   const [active, setActive] = useState(0);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [popoverWidth, setPopoverWidth] = useState(220);
@@ -85,6 +86,7 @@ function MediaQueryChunkChip({
   const beginEditing = () => {
     setText(chunk.value);
     setFiltering(false);
+    setNavigated(false);
     setActive(0);
     setEditing(true);
   };
@@ -153,17 +155,20 @@ function MediaQueryChunkChip({
         onChange={(event) => {
           setText(event.target.value);
           setFiltering(true);
+          setNavigated(false);
           setActive(0);
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
-            commit(matches[active]?.value ?? text);
+            commit(filtering || navigated ? (matches[active]?.value ?? text) : text);
           } else if (event.key === 'ArrowDown') {
             event.preventDefault();
+            setNavigated(true);
             setActive((current) => Math.min(current + 1, matches.length - 1));
           } else if (event.key === 'ArrowUp') {
             event.preventDefault();
+            setNavigated(true);
             setActive((current) => Math.max(current - 1, 0));
           } else if (event.key === 'Escape') {
             event.preventDefault();

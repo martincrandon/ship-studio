@@ -33,6 +33,7 @@ import {
 } from './useElementStructure';
 import { insertElement, duplicateElement, deleteElement } from '../lib/edit-structure';
 import { resolveElementHtml } from '../lib/edit-html';
+import type { ComponentFocusContext } from '../lib/components/focus';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -46,11 +47,11 @@ function fakeIframeRef() {
   } as unknown as React.RefObject<HTMLIFrameElement | null>;
 }
 
-function setup(enabled = true) {
+function setup(enabled = true, componentFocusRef?: React.RefObject<ComponentFocusContext | null>) {
   const iframeRef = fakeIframeRef();
   const onToast = vi.fn();
   const hook = renderHook(() =>
-    useElementStructure({ iframeRef, projectPath: '/proj', enabled, onToast })
+    useElementStructure({ iframeRef, projectPath: '/proj', enabled, onToast, componentFocusRef })
   );
   return { ...hook, iframeRef, onToast };
 }
@@ -79,6 +80,35 @@ const SIG = {
   text: 'Old copy',
   ancestorClasses: ['page'],
   rect: { top: 10, left: 20, width: 300, height: 100 },
+};
+
+const FOCUS_CONTEXT: ComponentFocusContext = {
+  indexRevision: 'revision-1',
+  routeKey: '/',
+  componentId: 'react:src/components/Card.tsx#Card',
+  instanceId: 'react:src/pages/index.tsx#Card:1',
+  name: 'Card',
+  definition: {
+    file: 'src/pages/index.astro',
+    start: 0,
+    end: 200,
+    line: 1,
+    column: 1,
+    contentHash: 'source-hash',
+  },
+  invocation: {
+    file: 'src/pages/home.astro',
+    start: 0,
+    end: 10,
+    line: 1,
+    column: 1,
+    contentHash: 'page-hash',
+  },
+  ancestry: [],
+  capabilities: { editMain: true, focusedVisualEditing: true },
+  usageCount: 2,
+  affectsAllUsages: true,
+  selectedChild: null,
 };
 
 beforeEach(() => {
@@ -115,6 +145,49 @@ describe('useElementStructure', () => {
     const moved = { top: 90, left: 20, width: 300, height: 100 };
     await dispatch({ type: 'ss:selRect', rect: moved }, source);
     expect(result.current.selection?.rect).toEqual(moved);
+  });
+
+  it('refuses focused structural writes without an exact source range', async () => {
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    const { result, iframeRef, onToast } = setup(true, componentFocusRef);
+    const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;
+    await dispatch({ type: 'ss:select', signature: SIG, count: 1, nodeId: 7 }, source);
+
+    await act(async () => {
+      await result.current.insert('inside', 'p');
+    });
+
+    expect(insertElement).not.toHaveBeenCalled();
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining('exact range'), 'error');
+  });
+
+  it('passes the exact focused definition range to structural writes', async () => {
+    const componentFocusRef = { current: FOCUS_CONTEXT };
+    (resolveElementHtml as Fn).mockResolvedValue({
+      file: 'src/pages/index.astro',
+      line: 8,
+      html: '<section class="hero">…</section>',
+      sourceStart: 30,
+      sourceEnd: 61,
+      sourceHash: 'source-hash',
+      sourceLine: 8,
+      sourceColumn: 3,
+    });
+    const { result, iframeRef } = setup(true, componentFocusRef);
+    const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;
+    await dispatch({ type: 'ss:select', signature: SIG, count: 1, nodeId: 7 }, source);
+
+    await act(async () => {
+      await result.current.insert('inside', 'p');
+    });
+
+    expect(insertElement).toHaveBeenCalledWith('/proj', SIG, 'inside', 'p', {
+      file: 'src/pages/index.astro',
+      start: 30,
+      end: 61,
+      expectedHash: 'source-hash',
+      expectedHtml: '<section class="hero">…</section>',
+    });
   });
 
   it('ignores messages that are not from the preview iframe', async () => {

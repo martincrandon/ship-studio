@@ -39,6 +39,33 @@
   white-space: nowrap;
 }
 
+.ss-el-toolbar--component .ss-el-toolbar__selection--component {
+  border-color: var(--accent-component);
+  background: var(--accent-component);
+  color: var(--text-white);
+}
+
+.ss-el-toolbar--component .ss-el-toolbar__actions--component {
+  border-color: var(--accent-component);
+  background: var(--accent-component);
+  color: var(--text-white);
+}
+
+.ss-el-toolbar__component-icon,
+.ss-el-toolbar__component-name {
+  color: var(--text-white);
+}
+
+.ss-el-toolbar__component-name {
+  max-width: var(--size-element-toolbar-selector);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ss-el-toolbar--component .ss-el-toolbar__btn {
+  color: var(--text-white);
+}
+
 .ss-el-toolbar__tag {
   color: var(--text-primary);
 }
@@ -69,6 +96,11 @@
   background: var(--property-surface-hover);
 }
 
+.ss-el-toolbar--component:hover .ss-el-toolbar__selection--component,
+.ss-el-toolbar--component:hover .ss-el-toolbar__actions--component {
+  background: var(--accent-component-hover);
+}
+
 .ss-el-toolbar__btn {
   display: flex;
   align-items: center;
@@ -93,6 +125,11 @@
 .ss-el-toolbar__btn:hover {
   background: var(--property-surface);
   color: var(--property-text-hover);
+}
+
+.ss-el-toolbar--component .ss-el-toolbar__btn:hover {
+  background: var(--accent-component-hover);
+  color: var(--text-white);
 }
 
 .ss-el-toolbar__btn--danger:hover {

@@ -33,6 +33,16 @@ export interface InsertedElement {
   tagName: string;
 }
 
+/** Exact element markup span used by focused component definition edits. */
+export interface ExactSourceTarget {
+  file: string;
+  /** UTF-8 byte offsets in the complete expected source file. */
+  start: number;
+  end: number;
+  expectedHash: string;
+  expectedHtml: string;
+}
+
 /**
  * The insert palette — mirrors the template table in `edit_structure.rs`.
  * `text` is each template's placeholder text: it goes into the reselect
@@ -82,29 +92,33 @@ export function insertElement(
   projectPath: string,
   signature: ElementSignature,
   position: InsertPosition,
-  elementKind: ElementKind
+  elementKind: ElementKind,
+  sourceTarget?: ExactSourceTarget
 ): Promise<InsertedElement> {
   return invoke<InsertedElement>('insert_element', {
     projectPath,
     signature,
     position,
     elementKind,
+    sourceTarget,
   });
 }
 
 /** Duplicate the selected element right after itself. */
 export function duplicateElement(
   projectPath: string,
-  signature: ElementSignature
+  signature: ElementSignature,
+  sourceTarget?: ExactSourceTarget
 ): Promise<InsertedElement> {
-  return invoke<InsertedElement>('duplicate_element', { projectPath, signature });
+  return invoke<InsertedElement>('duplicate_element', { projectPath, signature, sourceTarget });
 }
 
 /** Delete the selected element's markup, drift-guarded against `oldHtml`. */
 export function deleteElement(
   projectPath: string,
   signature: ElementSignature,
-  oldHtml: string
+  oldHtml: string,
+  sourceTarget?: ExactSourceTarget
 ): Promise<void> {
-  return invoke<void>('delete_element', { projectPath, signature, oldHtml });
+  return invoke<void>('delete_element', { projectPath, signature, oldHtml, sourceTarget });
 }

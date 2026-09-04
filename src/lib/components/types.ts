@@ -101,6 +101,21 @@ export interface ComponentSlotDescriptor {
 export interface ComponentSlotValue {
   name: string;
   value: ComponentPropExpression | null;
+  /** Exact authored slot text when the adapter can expose it losslessly. */
+  sourceText?: string;
+}
+
+/**
+ * A source-derived signature for the host root returned by a React component.
+ * It is intentionally narrower than a runtime boundary: only stable intrinsic
+ * roots with static identity attributes are eligible for Next Server
+ * Component provenance.
+ */
+export interface ComponentRenderRoot {
+  tag: string;
+  classTokens: string[];
+  id: string | null;
+  source: SourceRef;
 }
 
 export interface ComponentDescriptor {
@@ -113,6 +128,10 @@ export interface ComponentDescriptor {
   exportName: string | null;
   description: string | null;
   definition: SourceRef;
+  /** True when the source file declares a React `use client` boundary. */
+  isClientModule?: boolean;
+  /** Stable root signature used by the Next Server Component fallback. */
+  renderRoot?: ComponentRenderRoot;
   props: ComponentPropDescriptor[];
   slots: ComponentSlotDescriptor[];
   variantProps: string[];
@@ -129,6 +148,13 @@ export interface ComponentInstance {
   route: string | null;
   props: Record<string, ComponentPropExpression>;
   slots: ComponentSlotValue[];
+  /** Exact authored ranges for static slot content, when the adapter can prove them. */
+  slotSources?: Record<string, ComponentSlotSource>;
+}
+
+export interface ComponentSlotSource extends SourceRef {
+  /** Exact authored slot body, when the adapter returned it with the range. */
+  text?: string;
 }
 
 export interface ComponentImportEdge {
@@ -160,9 +186,6 @@ export interface ComponentCapabilities {
   extract: boolean;
   isolatedPreview: boolean;
   /** Lifecycle writes are optional until an adapter proves each operation. */
-  duplicateDefinition?: boolean;
-  renameDefinition?: boolean;
-  deleteDefinition?: boolean;
 }
 
 export interface ComponentFrameworkProfile {
@@ -199,10 +222,24 @@ export interface SourceFileChange {
   kind?: 'created' | 'changed' | 'deleted';
 }
 
+/** Metadata-only event emitted after the Rust source watcher settles a burst. */
+export interface ComponentSourceChangeEvent {
+  windowLabel: string;
+  projectPath: string;
+  revision: string;
+  changedFiles: string[];
+}
+
 export interface ComponentIndex {
   revision: string;
   /** True when source or graph diagnostics mean the catalog may be incomplete. */
   partial: boolean;
+  /**
+   * Exact project-relative files the worker needs for the next bounded
+   * internal-package resolution round. The list is metadata only; the main
+   * thread must satisfy it through the validated Rust batch-read command.
+   */
+  needSources?: string[];
   profile: ComponentFrameworkProfile;
   components: ComponentDescriptor[];
   instances: ComponentInstance[];
@@ -271,6 +308,8 @@ export interface RawComponentTreeNode {
   tag: string;
   cls: string;
   text: string;
+  /** The authored HTML id, when the preview bridge can provide one. */
+  idAttr?: string;
   children: RawComponentTreeNode[];
 }
 
@@ -406,7 +445,7 @@ export type ComponentFocusRefusalCode =
   | 'not-focused';
 
 export interface ComponentFocusDiagnostic extends ComponentDiagnostic {
-  code: ComponentFocusRefusalCode | string;
+  code: ComponentFocusRefusalCode;
 }
 
 export type ComponentFocusTransition =
@@ -426,6 +465,23 @@ export interface ComponentFileMutation {
   expectedHash: string;
   expectedResultHash: string;
   edits: ComponentTextEdit[];
+}
+
+/** Local review data generated from a hash-checked mutation plan. */
+export interface ComponentMutationFilePreview {
+  file: string;
+  beforeHash: string;
+  afterHash: string;
+  /** A compact, unified source diff. It never leaves the local review UI. */
+  diff: string;
+  additions: number;
+  deletions: number;
+}
+
+/** A mutation remains unapplied until the user approves this preview. */
+export interface ComponentMutationPreview {
+  plan: ComponentMutationPlan;
+  files: ComponentMutationFilePreview[];
 }
 
 /**
@@ -511,6 +567,25 @@ export type MutationRefusalCode =
   | 'stale-source'
   | 'invalid-range'
   | 'syntax-error'
+  | 'missing-slot'
+  | 'dynamic-slot'
+  | 'missing-prop-approval'
+  | 'no-op';
+
+export type ExtractionRefusalCode =
+  | 'missing-source'
+  | 'stale-source'
+  | 'partial-snapshot'
+  | 'unsupported'
+  | 'invalid-name'
+  | 'path-collision'
+  | 'invalid-range'
+  | 'dynamic-scope'
+  | 'dynamic-expression'
+  | 'missing-prop-approval'
+  | 'symbol-collision'
+  | 'server-client-boundary'
+  | 'syntax-error'
   | 'no-op';
 
 export type RefactorRefusalCode =
@@ -525,6 +600,7 @@ export type RefactorRefusalCode =
   | 'invalid-name'
   | 'reserved-name'
   | 'path-collision'
+  | 'symbol-collision'
   | 'case-only-rename'
   | 'public-api'
   | 'cross-workspace'
@@ -612,7 +688,88 @@ export interface EditComponentPropInput {
   snapshot?: ComponentSourceSnapshot;
 }
 
-export type ComponentMutationInput = InsertComponentInput | EditComponentPropInput;
+export interface EditComponentSlotInput {
+  kind: 'slot';
+  instanceId: ComponentInstanceId;
+  /** React uses `children`; markup adapters use `default` plus explicit names. */
+  slotName: string;
+  /** Replacement source for the slot body. It must be static JSX/markup. */
+  replacementSource: string;
+  snapshot?: ComponentSourceSnapshot;
+}
+
+export interface ExtractComponentInput {
+  kind?: 'extract';
+  /** Exact source span of one JSX subtree selected in the preview. */
+  source: SourceRef;
+  componentName: string;
+  /** User-confirmed project-relative destination beside the source module. */
+  destinationFile: string;
+  /** Omit on the proposal round; supply the complete approved set to plan. */
+  approvedPropNames?: string[];
+  snapshot?: ComponentSourceSnapshot;
+}
+
+/** Narrow source-only unlink transform; it never deletes the original definition. */
+export interface InlineSimpleComponentInput {
+  kind: 'inline';
+  instanceId: ComponentInstanceId;
+  snapshot?: ComponentSourceSnapshot;
+}
+
+export type ComponentExtractionInput = ExtractComponentInput | InlineSimpleComponentInput;
+
+export interface ComponentExtractionProposal {
+  operation: 'extract' | 'inline';
+  componentName: string;
+  destinationFile: string;
+  source: SourceRef;
+  /** Free variables that must cross the new component boundary. */
+  proposedPropNames: string[];
+  /** Imported bindings that will be preserved in the new source file. */
+  preservedImports: string[];
+  diagnostics: ComponentDiagnostic[];
+}
+
+export interface ComponentExtractionFilePreview {
+  file: string;
+  operation: ComponentFileOperation['kind'];
+  beforeHash: string | null;
+  afterHash: string | null;
+  before?: string;
+  after?: string;
+}
+
+export interface ComponentExtractionPreview {
+  operation: 'extract' | 'inline';
+  componentName: string;
+  destinationFile: string;
+  proposedPropNames: string[];
+  preservedImports: string[];
+  affectedFiles: string[];
+  files: ComponentExtractionFilePreview[];
+  graphDelta: ComponentGraphDelta;
+}
+
+export interface ComponentExtractionPlan extends ComponentMutationPlan {
+  operation: 'extract' | 'inline';
+  preview: ComponentExtractionPreview;
+}
+
+export type ExtractionResult =
+  | { status: 'needs-approval'; proposal: ComponentExtractionProposal }
+  | { status: 'planned'; plan: ComponentExtractionPlan }
+  | {
+      status: 'refused';
+      code: ExtractionRefusalCode;
+      message: string;
+      diagnostics: ComponentDiagnostic[];
+    };
+
+export type ComponentMutationInput =
+  | InsertComponentInput
+  | EditComponentPropInput
+  | EditComponentSlotInput;
 
 export interface MutationValidationInput {
   plan: ComponentMutationPlan;

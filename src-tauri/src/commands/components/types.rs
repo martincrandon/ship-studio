@@ -83,6 +83,56 @@ pub struct ComponentFileMutation {
     pub edits: Vec<ComponentTextEdit>,
 }
 
+/// The source-graph change a parser-backed mutation promises to make.  Rust
+/// validates the arithmetic at the write boundary and, for the current React
+/// and React Native protocols, re-counts the affected JSX invocation sites
+/// before staging files.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentGraphDelta {
+    pub component_id: String,
+    pub usages_before: usize,
+    pub usages_after: usize,
+    pub delta: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_component_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub removed_component_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_usages: Option<usize>,
+}
+
+/// Explicit lifecycle operations are part of the versioned wire contract. The
+/// guarded transaction stages every target before commit, so create, edit,
+/// move, and delete plans cannot be silently downgraded to a partial edit.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ComponentFileOperation {
+    Edit {
+        #[serde(flatten)]
+        mutation: ComponentFileMutation,
+    },
+    Create {
+        file: String,
+        expected_absent: bool,
+        contents: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expected_result_hash: Option<String>,
+    },
+    Move {
+        from: String,
+        to: String,
+        expected_hash: String,
+        expected_absent: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expected_result_hash: Option<String>,
+    },
+    Delete {
+        file: String,
+        expected_hash: String,
+    },
+}
+
 /// A multi-file source mutation. Every file is validated and staged before the
 /// first target is replaced.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -90,6 +140,17 @@ pub struct ComponentFileMutation {
 pub struct ComponentMutationPlan {
     pub files: Vec<ComponentFileMutation>,
     pub expected_revision: String,
+    /// The parser dialect that produced this plan.  These fields are optional
+    /// for compatibility with the original edit-only command payload; all
+    /// current frontend component plans populate them as a group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dialect: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parser_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_graph_delta: Option<ComponentGraphDelta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operations: Option<Vec<ComponentFileOperation>>,
 }
 
 /// Relative paths changed by a committed mutation, in deterministic order.

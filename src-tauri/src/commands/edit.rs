@@ -18,6 +18,7 @@
 //! literals resolves to `Multi` — editable as a group (write all) or one at a
 //! time — so the resolver never guesses a single wrong edit target.
 
+use crate::commands::components::content_hash;
 use crate::commands::projects::detect_project_type;
 use crate::errors::CommandError;
 use crate::types::ProjectType;
@@ -116,6 +117,15 @@ pub enum Resolution {
         column: usize,
         /// The exact className string at that location (write-back's drift baseline).
         class_name: String,
+        /// Exact UTF-8 byte range of the class literal, when resolved by the
+        /// source index. Focused component edits use this to prove scope.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_start: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_end: Option<usize>,
+        /// SHA-256 of the complete source file at resolution time.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_hash: Option<String>,
         /// How the match was reached: "unique" | "tag" | "text" | "ancestor".
         confidence: String,
     },
@@ -144,6 +154,11 @@ struct Occurrence {
     file: String,
     line: usize,
     column: usize,
+    /// UTF-8 byte range of the class literal value.
+    source_start: usize,
+    source_end: usize,
+    /// SHA-256 of the complete source file containing this occurrence.
+    source_hash: String,
     /// Lowercased nearest opening-tag identifier (soft signal; component tags
     /// like `Image` won't match the rendered DOM tag, so this never hard-filters).
     tag: String,
@@ -370,6 +385,9 @@ fn index_occurrences(root: &Path) -> Vec<Occurrence> {
                 file: rel.clone(),
                 line: span.line,
                 column: span.column,
+                source_start: span.value_start,
+                source_end: span.value_end,
+                source_hash: content_hash(src.as_bytes()),
                 tag: span.tag,
             });
         }
@@ -392,6 +410,9 @@ fn resolved(o: &Occurrence, confidence: &str) -> Resolution {
         line: o.line,
         column: o.column,
         class_name: o.class_name.clone(),
+        source_start: Some(o.source_start),
+        source_end: Some(o.source_end),
+        source_hash: Some(o.source_hash.clone()),
         confidence: confidence.to_string(),
     }
 }
@@ -480,6 +501,28 @@ fn normalize_ws(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn source_metadata(
+    root: &Path,
+    file: &str,
+    line: usize,
+    class_name: &str,
+) -> (Option<usize>, Option<usize>, Option<String>) {
+    let Ok(source) = std::fs::read_to_string(root.join(file)) else {
+        return (None, None, None);
+    };
+    let span = find_attr_spans(&source, attrs_for_path(file))
+        .into_iter()
+        .find(|span| span.line == line && span.value == class_name);
+    match span {
+        Some(span) => (
+            Some(span.value_start),
+            Some(span.value_end),
+            Some(content_hash(source.as_bytes())),
+        ),
+        None => (None, None, None),
+    }
+}
+
 /// When several byte-identical className literals match (a shared utility string
 /// on distinct elements), pin the one the user actually clicked using its text
 /// content. The clicked element's text is unique to its source location even when
@@ -517,13 +560,20 @@ fn disambiguate_by_text(
         }
     }
     match matched.as_slice() {
-        [loc] => Some(Resolution::Resolved {
-            file: loc.file.clone(),
-            line: loc.line,
-            column: loc.column,
-            class_name: class_name.to_string(),
-            confidence: "text".into(),
-        }),
+        [loc] => {
+            let (source_start, source_end, source_hash) =
+                source_metadata(root, &loc.file, loc.line, class_name);
+            Some(Resolution::Resolved {
+                file: loc.file.clone(),
+                line: loc.line,
+                column: loc.column,
+                class_name: class_name.to_string(),
+                source_start,
+                source_end,
+                source_hash,
+                confidence: "text".into(),
+            })
+        }
         _ => None,
     }
 }
@@ -567,6 +617,9 @@ pub fn apply_classname_edit(
     line: usize,
     old_class: String,
     new_class: String,
+    expected_hash: Option<String>,
+    expected_start: Option<usize>,
+    expected_end: Option<usize>,
 ) -> Result<(), CommandError> {
     let root = validate_project_path(&project_path)?;
     let abs = root.join(&file);
@@ -582,6 +635,16 @@ pub fn apply_classname_edit(
 
     let src = std::fs::read_to_string(&abs)
         .map_err(|e| classify_fs_error("open this file to edit it", &abs, &e))?;
+    if let Some(expected) = expected_hash.as_deref() {
+        if content_hash(src.as_bytes()) != expected {
+            return Err(CommandError::Validation {
+                field: "source_hash".into(),
+                reason:
+                    "the focused source changed — refresh the component index and re-enter focus"
+                        .into(),
+            });
+        }
+    }
     let span = find_attr_spans(&src, attrs_for_path(&file))
         .into_iter()
         .find(|s| s.line == line && s.value == old_class)
@@ -589,6 +652,19 @@ pub fn apply_classname_edit(
             field: "old_class".into(),
             reason: "source no longer matches — reselect the element".into(),
         })?;
+    if let (Some(expected_start), Some(expected_end)) = (expected_start, expected_end) {
+        if span.value_start != expected_start || span.value_end != expected_end {
+            return Err(CommandError::Validation {
+                field: "source_range".into(),
+                reason: "the focused source range moved — refresh the component index and re-enter focus".into(),
+            });
+        }
+    } else if expected_hash.is_some() || expected_start.is_some() || expected_end.is_some() {
+        return Err(CommandError::Validation {
+            field: "source_range".into(),
+            reason: "a focused class edit requires a complete source range guard".into(),
+        });
+    }
 
     let mut updated = String::with_capacity(src.len() + new_class.len());
     updated.push_str(&src[..span.value_start]);
@@ -1252,6 +1328,11 @@ pub enum TextResolution {
         column: usize,
         /// Current static text (trimmed) — the write-back's drift baseline.
         text: String,
+        /// Exact UTF-8 byte range of the text run in the source file.
+        source_start: usize,
+        source_end: usize,
+        /// SHA-256 of the complete source file at resolution time.
+        source_hash: String,
         /// How the underlying element was reached: "unique" | "tag" | "ancestor".
         confidence: String,
     },
@@ -1553,6 +1634,9 @@ struct TextOccurrence {
     file: String,
     line: usize,
     column: usize,
+    source_start: usize,
+    source_end: usize,
+    source_hash: String,
     /// Lowercased enclosing tag name.
     tag: String,
 }
@@ -1737,6 +1821,9 @@ fn index_text_occurrences(root: &Path) -> Vec<TextOccurrence> {
                 file: rel.clone(),
                 line: span.line,
                 column: span.column,
+                source_start: span.value_start,
+                source_end: span.value_end,
+                source_hash: content_hash(src.as_bytes()),
                 tag: span.tag,
             });
         }
@@ -1759,6 +1846,9 @@ fn resolved_text(o: &TextOccurrence, confidence: &str) -> TextResolution {
         line: o.line,
         column: o.column,
         text: o.value.clone(),
+        source_start: o.source_start,
+        source_end: o.source_end,
+        source_hash: o.source_hash.clone(),
         confidence: confidence.to_string(),
     }
 }
@@ -1858,6 +1948,9 @@ pub fn resolve_text_source(
                         line: ts.line,
                         column: ts.column,
                         text: ts.value,
+                        source_start: ts.value_start,
+                        source_end: ts.value_end,
+                        source_hash: content_hash(src.as_bytes()),
                         confidence,
                     });
                 }
@@ -1918,6 +2011,9 @@ pub fn apply_text_edit(
     column: usize,
     old_text: String,
     new_text: String,
+    expected_hash: Option<String>,
+    expected_start: Option<usize>,
+    expected_end: Option<usize>,
 ) -> Result<(), CommandError> {
     if has_illegal_markup(&new_text) {
         return Err(CommandError::Validation {
@@ -1942,6 +2038,20 @@ pub fn apply_text_edit(
 
     let src = std::fs::read_to_string(&abs)
         .map_err(|e| classify_fs_error("open this file to edit it", &abs, &e))?;
+    if let Some(expected) = expected_hash.as_deref() {
+        if content_hash(src.as_bytes()) != expected {
+            return Err(CommandError::Validation {
+                field: "source_hash".into(),
+                reason: "the focused component source changed — refresh and re-enter focus".into(),
+            });
+        }
+    }
+    if expected_start.is_some() != expected_end.is_some() {
+        return Err(CommandError::Validation {
+            field: "source_range".into(),
+            reason: "the focused text target has an incomplete source range".into(),
+        });
+    }
     let span = find_text_spans(&src)
         .into_iter()
         .find(|s| s.line == line && s.column == column && s.value == old_text)
@@ -1949,6 +2059,14 @@ pub fn apply_text_edit(
             field: "old_text".into(),
             reason: "source no longer matches — reselect the element".into(),
         })?;
+    if let (Some(start), Some(end)) = (expected_start, expected_end) {
+        if span.value_start != start || span.value_end != end {
+            return Err(CommandError::Validation {
+                field: "source_range".into(),
+                reason: "the focused text source range moved — refresh and re-enter focus".into(),
+            });
+        }
+    }
 
     let mut updated = String::with_capacity(src.len() + new_text.len());
     updated.push_str(&src[..span.value_start]);
@@ -3011,6 +3129,18 @@ pub struct ElementHtml {
     pub file: String,
     pub line: usize,
     pub html: String,
+    /// Exact UTF-8 byte range of `html` in `file`.
+    #[serde(rename = "sourceStart")]
+    pub source_start: usize,
+    #[serde(rename = "sourceEnd")]
+    pub source_end: usize,
+    #[serde(rename = "sourceHash")]
+    pub source_hash: String,
+    /// 1-based source location for the start of the element markup.
+    #[serde(rename = "sourceLine")]
+    pub source_line: usize,
+    #[serde(rename = "sourceColumn")]
+    pub source_column: usize,
     /// Present when the element's class string resolves to several identical
     /// source spots whose markup is byte-identical: every candidate location.
     /// Edits write to all of them by default; a `location` argument targets one.
@@ -3028,6 +3158,17 @@ pub(crate) struct LocatedInstance {
     pub(crate) line: usize,
     pub(crate) start: usize,
     pub(crate) end: usize,
+}
+
+/// Return a 1-based line/column for a UTF-8 byte offset. `element_span` only
+/// returns offsets at tag boundaries, so slicing the source here is safe.
+fn source_line_column(source: &str, byte_offset: usize) -> (usize, usize) {
+    let safe_offset = byte_offset.min(source.len());
+    let prefix = &source[..safe_offset];
+    let line = prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let line_start = prefix.rfind('\n').map_or(0, |index| index + 1);
+    let column = prefix[line_start..].chars().count() + 1;
+    (line, column)
 }
 
 /// Locate the element anchored by the className literal at `file:line` and
@@ -3243,6 +3384,11 @@ pub fn resolve_element_html(
         file: first.file.clone(),
         line: first.line,
         html: first.src[first.start..first.end].to_string(),
+        source_start: first.start,
+        source_end: first.end,
+        source_hash: content_hash(first.src.as_bytes()),
+        source_line: source_line_column(&first.src, first.start).0,
+        source_column: source_line_column(&first.src, first.start).1,
         locations,
     })
 }
@@ -3849,6 +3995,9 @@ const items = [];
             file: file.into(),
             line,
             column: 1,
+            source_start: 0,
+            source_end: class.len(),
+            source_hash: "test-hash".into(),
             tag: tag.into(),
         }
     }
@@ -4163,6 +4312,9 @@ const items = [];
             file: file.into(),
             line,
             column: 1,
+            source_start: 0,
+            source_end: value.len(),
+            source_hash: "test-hash".into(),
             tag: tag.into(),
         }
     }

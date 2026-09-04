@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ElementTreePanel } from './ElementTreePanel';
+import type { ComponentAwareTreeNode } from '../../hooks/useElementTree';
+import type { SourceRef } from '../../lib/components/types';
+
+function sourceRef(file: string): SourceRef {
+  return { file, start: 0, end: 1, line: 1, column: 1, contentHash: 'hash' };
+}
 
 describe('ElementTreePanel', () => {
   it('describes pinning the floating panel and unpinning the docked panel', () => {
@@ -114,5 +120,93 @@ describe('ElementTreePanel', () => {
       panel.querySelector('[data-tree-id="6"] [data-icon-name="ElementCodeBlockIcon"]')
     ).toBeInTheDocument();
     expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).not.toBeInTheDocument();
+  });
+
+  it('keeps component children opaque until the component is focused', () => {
+    const component: ComponentAwareTreeNode = {
+      kind: 'component',
+      key: 'card:instance-1',
+      componentId: 'react:src/Card.tsx#Card',
+      instanceId: 'react:src/Page.tsx:12',
+      name: 'Card',
+      confidence: 'exact',
+      hostNodeIds: [2],
+      definition: sourceRef('src/Card.tsx'),
+      invocation: sourceRef('src/Page.tsx'),
+      children: [{ kind: 'element', id: 2, tag: 'section', cls: 'card', text: '', children: [] }],
+    };
+    const componentTree: ComponentAwareTreeNode = {
+      kind: 'element',
+      id: 1,
+      tag: 'body',
+      cls: '',
+      text: '',
+      children: [component],
+    };
+    const onComponentSelect = vi.fn();
+    const onComponentFocus = vi.fn();
+    const onComponentExitFocus = vi.fn();
+
+    const { rerender } = render(
+      <ElementTreePanel
+        tree={componentTree}
+        componentTree={componentTree}
+        truncated={false}
+        selectedId={1}
+        selectedComponentKey={null}
+        componentFocusPath={[]}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        onComponentSelect={onComponentSelect}
+        onComponentFocus={onComponentFocus}
+        onComponentExitFocus={onComponentExitFocus}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+
+    const row = screen.getByRole('button', { name: 'Component Card' });
+    expect(row).toHaveClass('ss-tree-row--component');
+    expect(
+      screen.queryByTestId('element-tree-panel')?.querySelector('[data-tree-id="2"]')
+    ).toBeNull();
+
+    fireEvent.click(row);
+    expect(onComponentSelect).toHaveBeenCalledWith(component);
+    fireEvent.doubleClick(row);
+    expect(onComponentFocus).toHaveBeenCalledWith(component);
+
+    rerender(
+      <ElementTreePanel
+        tree={componentTree}
+        componentTree={componentTree}
+        truncated={false}
+        selectedId={1}
+        selectedComponentKey={component.key}
+        componentFocusPath={[{ key: component.key, name: component.name }]}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        onComponentSelect={onComponentSelect}
+        onComponentFocus={onComponentFocus}
+        onComponentExitFocus={onComponentExitFocus}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Component Card (focused)' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId('element-tree-panel')
+        .querySelector('.ss-tree-panel__component-breadcrumb [aria-current="page"]')
+    ).toHaveTextContent('Card');
+    fireEvent.keyDown(screen.getByTestId('element-tree-panel'), { key: 'Escape' });
+    expect(onComponentExitFocus).toHaveBeenCalledTimes(1);
   });
 });

@@ -32,6 +32,8 @@
 
   --accent-active: var(--color-green-500);
   --accent-active-hover: var(--color-green-600);
+  --accent-component: var(--color-green-700);
+  --accent-component-hover: var(--color-green-600);
   --accent-selected: var(--text-primary);
   --accent-focus: var(--color-blue-500);
 

@@ -31,6 +31,7 @@ pub(crate) const MAX_SOURCE_WALK_ENTRIES: usize = 100_000;
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".astro",
     ".cache",
+    ".dart_tool",
     ".git",
     ".next",
     ".nuxt",
@@ -49,6 +50,15 @@ const IGNORED_DIRECTORIES: &[&str] = &[
     "output",
     "target",
     "vendor",
+];
+
+const STATIC_MANIFEST_NAMES: &[&str] = &[
+    "package.json",
+    "pnpm-workspace.yaml",
+    "pnpm-workspace.yml",
+    "lerna.json",
+    "nx.json",
+    "turbo.json",
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -134,9 +144,10 @@ pub(crate) fn snapshot_for_root_with_limits(
 }
 
 /// Read exactly the requested project-relative source files after checking the
-/// caller's snapshot revision.  Requests are limited to files in that immutable
-/// active-workspace snapshot; callers cannot use this endpoint to probe ignored
-/// files or source outside the indexed workspace.
+/// caller's snapshot revision. Requests are limited to the immutable active
+/// workspace snapshot, plus files beneath a package manifest already returned
+/// as inert metadata for a worker `needSources` round. Callers cannot use this
+/// endpoint to probe ignored files or source outside a known project package.
 pub(crate) fn read_batch_for_project(
     project_path: &str,
     relative_paths: &[String],
@@ -192,13 +203,33 @@ pub(crate) fn read_batch_for_root(
                 format!("duplicate source path '{relative}'"),
             ));
         }
-        if !tracked_files.contains(relative.as_str()) {
+        let is_tracked = tracked_files.contains(relative.as_str());
+        if !is_tracked
+            && std::fs::symlink_metadata(project_root.join(relative))
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(false)
+        {
+            return Err(validation(
+                "relativePaths",
+                format!("source file '{relative}' is a symlink"),
+            ));
+        }
+        if !is_tracked && !is_under_known_package_root(&current, &project_root, relative) {
             return Err(validation(
                 "relativePaths",
                 format!("source file '{relative}' is not in the active source snapshot"),
             ));
         }
-        let file = read_exact_source_file(&project_root, relative, MAX_SOURCE_FILE_BYTES)?;
+        let file = if is_tracked {
+            read_exact_source_file(&project_root, relative, MAX_SOURCE_FILE_BYTES)?
+        } else {
+            let Some(file) =
+                read_optional_source_file(&project_root, relative, MAX_SOURCE_FILE_BYTES)?
+            else {
+                continue;
+            };
+            file
+        };
         total_bytes = total_bytes.saturating_add(file.content.len() as u64);
         if total_bytes > MAX_BATCH_TOTAL_BYTES {
             return Err(validation(
@@ -216,6 +247,25 @@ pub(crate) fn read_batch_for_root(
         ));
     }
     Ok(result)
+}
+
+fn is_under_known_package_root(
+    snapshot: &ComponentSourceSnapshot,
+    project_root: &Path,
+    relative: &str,
+) -> bool {
+    let candidate = project_root.join(relative);
+    snapshot.files.iter().any(|file| {
+        let path = Path::new(&file.file);
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.eq_ignore_ascii_case("package.json"))
+            .unwrap_or(false)
+            && project_root
+                .join(path.parent().unwrap_or(Path::new(".")))
+                .is_dir()
+            && candidate.starts_with(project_root.join(path.parent().unwrap_or(Path::new("."))))
+    })
 }
 
 pub(crate) fn active_workspace_for_root(project_root: &Path) -> Result<PathBuf, CommandError> {
@@ -390,12 +440,117 @@ fn collect_source_files(
         }
     }
 
+    // Keep manifests/configuration as data for alias and workspace resolution.
+    // Source outside the active workspace is still excluded; only bounded
+    // manifest files are added so the worker can request an exact internal
+    // package entry in a later needSources round.
+    for path in collect_static_manifest_paths(project_root, workspace) {
+        if entries_seen >= MAX_SOURCE_WALK_ENTRIES {
+            add_diagnostic(
+                "source_entry_limit",
+                format!("source walk entry limit reached ({MAX_SOURCE_WALK_ENTRIES})"),
+                None,
+            );
+            break;
+        }
+        entries_seen += 1;
+        let relative = relative_posix(project_root, &path);
+        if files.iter().any(|file| file.file == relative) {
+            continue;
+        }
+        if files.len() >= limits.max_files {
+            add_diagnostic(
+                "source_file_limit",
+                format!("source file limit reached ({})", limits.max_files),
+                None,
+            );
+            break;
+        }
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                add_diagnostic(
+                    "manifest_file_inspection",
+                    format!(
+                        "manifest file could not be inspected: {}",
+                        sanitize_error(&error)
+                    ),
+                    Some(relative.clone()),
+                );
+                continue;
+            }
+        };
+        if metadata.file_type().is_symlink() {
+            report_symlink(&mut add_diagnostic, project_root, &path);
+            continue;
+        }
+        if !metadata.is_file() || metadata.len() > limits.max_file_bytes {
+            add_diagnostic(
+                "manifest_file_too_large",
+                format!(
+                    "manifest file exceeds the {}-byte per-file limit",
+                    limits.max_file_bytes
+                ),
+                Some(relative),
+            );
+            continue;
+        }
+        if total_bytes.saturating_add(metadata.len()) > limits.max_total_bytes {
+            add_diagnostic(
+                "source_snapshot_too_large",
+                format!(
+                    "source snapshot total limit reached ({} bytes)",
+                    limits.max_total_bytes
+                ),
+                None,
+            );
+            break;
+        }
+        match read_source_file(&path, metadata.len(), &relative) {
+            Ok(file) => {
+                total_bytes = total_bytes.saturating_add(file.content.len() as u64);
+                files.push(file);
+            }
+            Err(error) => add_diagnostic("manifest_file_read", error, Some(relative)),
+        }
+    }
+
     files.sort_by(|left, right| left.file.cmp(&right.file));
     Ok(InventoryResult {
         files,
         partial,
         diagnostics,
     })
+}
+
+fn collect_static_manifest_paths(project_root: &Path, workspace: &Path) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    for name in STATIC_MANIFEST_NAMES {
+        let path = project_root.join(name);
+        if path.is_file() {
+            paths.push(path);
+        }
+    }
+
+    let mut walker = WalkBuilder::new(project_root);
+    let project_root_for_filter = project_root.to_path_buf();
+    walker
+        .standard_filters(true)
+        .follow_links(false)
+        .filter_entry(move |entry| !is_ignored_directory(entry.path(), &project_root_for_filter));
+    for result in walker.build() {
+        let Ok(entry) = result else { continue };
+        let path = entry.path();
+        if path == workspace || !is_static_manifest_file(path) {
+            continue;
+        }
+        if path.starts_with(project_root) {
+            paths.push(path.to_path_buf());
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 fn read_exact_source_file(
@@ -416,6 +571,22 @@ fn read_exact_source_file(
     read_source_file(&path, metadata.len(), relative).map_err(|message| CommandError::Io {
         message: format!("could not read source file '{relative}': {message}"),
     })
+}
+
+fn read_optional_source_file(
+    project_root: &Path,
+    relative: &str,
+    max_bytes: u64,
+) -> Result<Option<SourceFileSnapshot>, CommandError> {
+    validate_relative_source_path(relative)?;
+    let candidate = project_root.join(relative);
+    match std::fs::symlink_metadata(&candidate) {
+        Ok(_) => read_exact_source_file(project_root, relative, max_bytes).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(CommandError::Io {
+            message: format!("could not inspect source file '{relative}': {error}"),
+        }),
+    }
 }
 
 fn read_source_file(
@@ -480,6 +651,52 @@ pub(crate) fn validated_existing_path(
     Ok(canonical)
 }
 
+/// Resolve a new source path without following symlinked parents or accepting
+/// an already-existing entry. The caller can then use an atomic create/link
+/// operation without risking an overwrite race.
+pub(crate) fn validated_new_path(
+    project_root: &Path,
+    relative: &str,
+) -> Result<PathBuf, CommandError> {
+    validate_relative_source_path(relative)?;
+    let candidate = project_root.join(relative);
+    let parent = candidate.parent().ok_or_else(|| {
+        validation(
+            "file",
+            format!("source path '{relative}' has no parent directory"),
+        )
+    })?;
+    let canonical_parent = dunce::canonicalize(parent).map_err(|error| CommandError::Io {
+        message: format!("could not resolve source directory for '{relative}': {error}"),
+    })?;
+    if !canonical_parent.starts_with(project_root) {
+        return Err(validation(
+            "file",
+            format!("source path '{relative}' is outside the project root"),
+        ));
+    }
+    if path_contains_symlink(project_root, parent) {
+        return Err(validation(
+            "file",
+            format!("source path '{relative}' is reached through a symlink"),
+        ));
+    }
+    match std::fs::symlink_metadata(&candidate) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(validation(
+            "file",
+            format!("source path '{relative}' is a symlink"),
+        )),
+        Ok(_) => Err(validation(
+            "file",
+            format!("source path '{relative}' already exists"),
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(candidate),
+        Err(error) => Err(CommandError::Io {
+            message: format!("could not inspect new source path '{relative}': {error}"),
+        }),
+    }
+}
+
 pub(crate) fn validate_relative_source_path(relative: &str) -> Result<(), CommandError> {
     if relative.is_empty() || relative.contains('\0') {
         return Err(validation(
@@ -522,7 +739,7 @@ pub(crate) fn validate_relative_source_path(relative: &str) -> Result<(), Comman
             format!("source path '{relative}' is inside an ignored or generated directory"),
         ));
     }
-    if !is_source_file(path) {
+    if !is_source_file(path) && !is_static_manifest_file(path) {
         return Err(validation(
             "relativePaths",
             format!("source path '{relative}' is not a supported source extension"),
@@ -537,6 +754,12 @@ fn is_source_file(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
+    if matches!(
+        file_name.as_str(),
+        "package-lock.json" | "pnpm-lock.yaml" | "yarn.lock" | "bun.lock" | "bun.lockb"
+    ) {
+        return false;
+    }
     if file_name.ends_with(".d.ts")
         || file_name.ends_with(".d.mts")
         || file_name.ends_with(".d.cts")
@@ -548,10 +771,56 @@ fn is_source_file(path: &Path) -> bool {
         .map(|extension| {
             matches!(
                 extension.to_ascii_lowercase().as_str(),
-                "ts" | "tsx" | "js" | "jsx" | "mts" | "cts" | "mjs" | "cjs"
+                "ts" | "tsx"
+                    | "js"
+                    | "jsx"
+                    | "mts"
+                    | "cts"
+                    | "mjs"
+                    | "cjs"
+                    | "dart"
+                    | "astro"
+                    | "vue"
+                    | "svelte"
+                    | "html"
+                    | "liquid"
+                    | "json"
             )
         })
         .unwrap_or(false)
+}
+
+fn is_static_manifest_file(path: &Path) -> bool {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    STATIC_MANIFEST_NAMES.iter().any(|name| file_name == *name)
+        || (file_name.starts_with("tsconfig") && file_name.ends_with(".json"))
+        || (file_name.starts_with("jsconfig") && file_name.ends_with(".json"))
+}
+
+/// Notify callbacks can receive directory events as well as file events. A
+/// directory is relevant when it may contain an indexed source file; ignored
+/// and generated subtrees are rejected before they can wake the catalog.
+pub(crate) fn is_relevant_watch_path(path: &Path, workspace: &Path) -> bool {
+    if !path.starts_with(workspace) {
+        return false;
+    }
+    let Ok(relative) = path.strip_prefix(workspace) else {
+        return false;
+    };
+    if relative.components().any(|component| {
+        matches!(
+            component,
+            Component::Normal(part)
+                if part.to_str().map(is_ignored_directory_name).unwrap_or(false)
+        )
+    }) {
+        return false;
+    }
+    is_source_file(path) || path.extension().is_none()
 }
 
 fn is_ignored_directory(path: &Path, workspace: &Path) -> bool {
@@ -591,7 +860,7 @@ fn relative_path_has_unsupported_component(root: &Path, path: &Path) -> bool {
     })
 }
 
-fn path_contains_symlink(root: &Path, path: &Path) -> bool {
+pub(crate) fn path_contains_symlink(root: &Path, path: &Path) -> bool {
     let Ok(relative) = path.strip_prefix(root) else {
         return true;
     };
@@ -805,6 +1074,63 @@ mod tests {
 
         write(temp.path(), "src/a.ts", "export const A = 3;");
         assert!(read_batch_for_root(temp.path(), &paths, &snapshot.revision).is_err());
+    }
+
+    #[test]
+    fn includes_workspace_manifests_and_allows_known_package_need_sources() {
+        use crate::types::ProjectMetadata;
+
+        let temp = TempDir::new().unwrap();
+        write(temp.path(), "package.json", r#"{"name":"workspace"}"#);
+        write(
+            temp.path(),
+            "packages/ui/package.json",
+            r#"{"name":"@acme/ui","types":"./src/index.ts"}"#,
+        );
+        write(
+            temp.path(),
+            "packages/ui/src/index.ts",
+            "export const Card = 1;",
+        );
+        write(
+            temp.path(),
+            "apps/web/src/page.tsx",
+            "export const Page = 1;",
+        );
+        write(temp.path(), "apps/web/package.json", r#"{"name":"web"}"#);
+        let metadata_dir = temp.path().join(".shipstudio");
+        fs::create_dir_all(&metadata_dir).unwrap();
+        fs::write(
+            metadata_dir.join("project.json"),
+            serde_json::to_string(&ProjectMetadata {
+                workspace_subpath: Some("apps/web".to_string()),
+                ..ProjectMetadata::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.file == "package.json"));
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.file == "packages/ui/package.json"));
+        assert!(!snapshot
+            .files
+            .iter()
+            .any(|file| file.file == "packages/ui/src/index.ts"));
+
+        let files = read_batch_for_root(
+            temp.path(),
+            &["packages/ui/src/index.ts".to_string()],
+            &snapshot.revision,
+        )
+        .unwrap();
+        assert_eq!(files[0].content, "export const Card = 1;");
     }
 
     #[cfg(unix)]

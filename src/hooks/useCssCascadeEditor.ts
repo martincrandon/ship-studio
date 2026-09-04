@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ElementSignature } from '../lib/edit';
+import { resolveClassnameSource, type ElementSignature } from '../lib/edit';
 import {
   locateCssRules,
   applyCssRuleText,
@@ -39,6 +39,12 @@ import { keyframesName, parseRulePrelude } from '../lib/cssStructures';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import {
+  sourceRefFromResolution,
+  validateFocusedSourceTarget,
+  type ComponentFocusContext,
+} from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 function toastText(err: unknown): string {
   return formatCommandError(asCommandError(err));
@@ -86,6 +92,8 @@ interface Params {
    *  get a CSS-Modules explanation instead of the generic read-only reason. */
   cssModulesHint?: boolean;
   onToast: (message: string, type?: 'success' | 'error') => void;
+  /** Revision-bound component definition context, when focus is active. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
 }
 
 export function useCssCascadeEditor({
@@ -94,6 +102,7 @@ export function useCssCascadeEditor({
   enabled,
   cssModulesHint = false,
   onToast,
+  componentFocusRef,
 }: Params) {
   const [editModeOn, setEditModeOn] = useState(false);
   const editMode = enabled && editModeOn;
@@ -111,6 +120,8 @@ export function useCssCascadeEditor({
   const [existingSelectors, setExistingSelectors] = useState<string[]>([]);
   // Project CSS variables (`--foo`) for `var(--…)` value autocomplete.
   const [variableSuggestions, setVariableSuggestions] = useState<string[]>([]);
+  /** Exact class-attribute source range proving the current child is inside focus. */
+  const [focusedSource, setFocusedSource] = useState<SourceRef | null>(null);
 
   // Per-rule source baseline (drift guard + diff) and latest body, in refs so the
   // debounced callbacks read fresh values without re-binding.
@@ -164,6 +175,33 @@ export function useCssCascadeEditor({
     previewTimers.current = {};
     saveTimers.current = {};
   }, []);
+
+  /** Re-prove the selected child immediately before a focused CSS write. */
+  const ensureFocusedSelection = useCallback(async (): Promise<SourceRef | null> => {
+    const context = componentFocusRef?.current;
+    if (!context) return null;
+    const signature = lastSignatureRef.current;
+    if (!signature) throw new Error('Select a child element before editing the focused component.');
+    const resolution = await resolveClassnameSource(projectPath, signature);
+    const validation = validateFocusedSourceTarget(context, sourceRefFromResolution(resolution));
+    if (validation.status === 'refused' || !validation.source) {
+      throw new Error(
+        validation.diagnostic?.message ??
+          'The focused component source target is no longer valid. Refresh and re-enter focus.'
+      );
+    }
+    setFocusedSource(validation.source);
+    return validation.source;
+  }, [componentFocusRef, projectPath]);
+
+  const blockFocusedRuleStructure = useCallback((): boolean => {
+    if (!componentFocusRef?.current) return false;
+    onToast(
+      'Focused component editing only changes the proven child style body. Exit focus to change CSS rule structure.',
+      'error'
+    );
+    return true;
+  }, [componentFocusRef, onToast]);
 
   // Activate the in-iframe selection layer in CASCADE mode while editing; re-arm on HMR.
   useEffect(() => {
@@ -240,6 +278,7 @@ export function useCssCascadeEditor({
         clearTimers();
         post({ type: 'ss:clearRulePreview' });
         setSelection({ signature: d.signature, instanceCount: d.count ?? 1 });
+        setFocusedSource(null);
         if (!sameElement) {
           createdRowsRef.current = new Map();
           draftIndexRef.current = new Map();
@@ -252,6 +291,19 @@ export function useCssCascadeEditor({
         }
         setLoading(true);
         void trackEvent('visual_element_selected', { mode: 'css-code', tag: d.signature.tagName });
+        const token = selTokenRef.current;
+        if (componentFocusRef?.current) {
+          void resolveClassnameSource(projectPath, d.signature)
+            .then((resolution) => {
+              if (selTokenRef.current !== token || !componentFocusRef.current) return;
+              const validation = validateFocusedSourceTarget(
+                componentFocusRef.current,
+                sourceRefFromResolution(resolution)
+              );
+              if (validation.status === 'valid') setFocusedSource(validation.source ?? null);
+            })
+            .catch(() => undefined);
+        }
         return;
       }
 
@@ -392,7 +444,16 @@ export function useCssCascadeEditor({
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [editMode, projectPath, post, iframeRef, onToast, clearTimers, cssModulesHint]);
+  }, [
+    componentFocusRef,
+    editMode,
+    projectPath,
+    post,
+    iframeRef,
+    onToast,
+    clearTimers,
+    cssModulesHint,
+  ]);
 
   /** Live-preview a rule's current body in place (in-iframe CSSOM). */
   const previewRule = useCallback(
@@ -426,6 +487,12 @@ export function useCssCascadeEditor({
       setSavingKeys((prev) => new Set(prev).add(key));
       post({ type: 'ss:suppressReload' });
       try {
+        await ensureFocusedSelection();
+        if (componentFocusRef?.current && draftKeysRef.current.has(key)) {
+          throw new Error(
+            'Focused component editing cannot create a guessed stylesheet rule. Select an existing child style.'
+          );
+        }
         // A draft's rule doesn't exist in source yet — create the (empty) rule on its
         // first real property, then write the body into it. After this it's a normal card.
         if (draftKeysRef.current.has(key)) {
@@ -454,7 +521,7 @@ export function useCssCascadeEditor({
         // issue #584). Both are recoverable: re-locate the rule in the current
         // source and retry ONCE so editing stays "instant" instead of hitting
         // a drift wall and dropping the edit.
-        if (isStaleCssRuleError(err)) {
+        if (isStaleCssRuleError(err) && !componentFocusRef?.current) {
           try {
             const locs = await locateCssRules(projectPath, [
               { selector: row.selector, mediaText: row.mediaText, href: null },
@@ -500,12 +567,13 @@ export function useCssCascadeEditor({
         });
       }
     },
-    [projectPath, onToast, post]
+    [componentFocusRef, ensureFocusedSelection, projectPath, onToast, post]
   );
 
   /** Delete a whole rule from source, drop its card, and remove it live. */
   const deleteRule = useCallback(
     async (key: string) => {
+      if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       if (!row || !row.editable || row.file == null || row.selector == null) return;
       clearTimeout(previewTimers.current[key]);
@@ -542,7 +610,7 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast, post]
+    [blockFocusedRuleStructure, projectPath, onToast, post]
   );
 
   /** Wrap a top-level rule in an at-rule (the `@` above the selector). For `@media`
@@ -550,6 +618,7 @@ export function useCssCascadeEditor({
    *  recompiles the moved rule. */
   const wrapRule = useCallback(
     async (key: string, atPrelude: string) => {
+      if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       if (!row || !row.editable || row.file == null || row.selector == null) return;
       post({ type: 'ss:suppressReload' });
@@ -575,13 +644,14 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast, post]
+    [blockFocusedRuleStructure, projectPath, onToast, post]
   );
 
   /** Create a brand-new rule for `selector` and add it as an editable card you can
    *  style immediately (optimistic — the real cascade refreshes on HMR/reselect). */
   const addSelector = useCallback(
     async (input: string, fixedAtPrelude?: string) => {
+      if (blockFocusedRuleStructure()) return;
       const raw = input.trim();
       if (!raw) return;
 
@@ -749,7 +819,7 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast, post]
+    [blockFocusedRuleStructure, projectPath, onToast, post]
   );
 
   /** Change a rule's selector to anything (complex selectors included). Re-keys the
@@ -757,6 +827,7 @@ export function useCssCascadeEditor({
    *  matches the element. */
   const renameSelector = useCallback(
     async (key: string, newSelector: string) => {
+      if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       const ns = newSelector.trim();
       if (!row || !row.editable || row.file == null || row.selector == null) return;
@@ -814,13 +885,14 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast, post, saveRule]
+    [blockFocusedRuleStructure, projectPath, onToast, post, saveRule]
   );
 
   /** Change the `@media` condition wrapping a rule. Re-keys on the new media; HMR
    *  refreshes the (shared) wrapper's sibling rules. */
   const renameAtRule = useCallback(
     async (key: string, newMedia: string) => {
+      if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       const nm = newMedia.trim();
       if (!row || !row.editable || row.file == null || row.selector == null || !nm) return;
@@ -922,7 +994,7 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast, post, saveRule]
+    [blockFocusedRuleStructure, projectPath, onToast, post, saveRule]
   );
 
   /** Update one card's body model → debounced live preview + auto-save. */
@@ -951,6 +1023,7 @@ export function useCssCascadeEditor({
     setEditModeOn((prev) => {
       if (prev) {
         setSelection(null);
+        setFocusedSource(null);
         setRows([]);
         setBodies({});
         bodiesRef.current = {};
@@ -985,6 +1058,7 @@ export function useCssCascadeEditor({
     existingSelectors,
     variableSuggestions,
     animationSuggestions,
+    focusedSource,
     loading,
     savingKeys,
   };

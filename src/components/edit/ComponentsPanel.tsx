@@ -14,23 +14,27 @@ import {
 import type {
   ComponentBinding,
   ComponentDescriptor,
+  ComponentInsertionAnchor,
   ComponentId,
   ComponentIndex,
   ComponentInstance,
+  DuplicateComponentInput,
+  RenameComponentInput,
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
+import { trackEvent } from '../../lib/analytics';
 import { Button } from '../primitives/Button';
 import { EmptyState } from '../primitives/EmptyState';
 import { IconButton } from '../primitives/IconButton';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
-import { Spinner } from '../primitives/Spinner';
 import { SearchField } from '../primitives/SearchField';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import { ComponentDetails } from './ComponentDetails';
 import { ComponentInstanceControls } from './ComponentInstanceControls';
 import { EditMainBanner, type EditMainState } from './EditMainBanner';
+import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
 
 export interface ComponentsPanelProps {
   index: ComponentIndex | null;
@@ -38,9 +42,16 @@ export interface ComponentsPanelProps {
   error?: string | null;
   selectedComponentId: ComponentId | null;
   onSelect: (componentId: ComponentId | null) => void;
-  onPlace: (componentId: ComponentId, props?: Record<string, StaticValue>) => void;
+  onPlace: (
+    componentId: ComponentId,
+    props?: Record<string, StaticValue>,
+    position?: ComponentInsertionAnchor['position']
+  ) => void;
   placementAvailable?: boolean;
   onOpenSource: (source: SourceRef) => void;
+  onDuplicate?: (input: Omit<DuplicateComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
+  onRename?: (input: Omit<RenameComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
+  onDelete?: (input: { componentId: ComponentId; removeAllUsages: true }) => void | Promise<void>;
   onRefresh: () => void;
   onSelectUsage: (instance: ComponentInstance) => void;
   onEditProp?: (
@@ -48,6 +59,12 @@ export interface ComponentsPanelProps {
     propName: string,
     value: StaticValue
   ) => void | Promise<void>;
+  onEditSlot?: (
+    instance: ComponentInstance,
+    slotName: string,
+    replacementSource: string
+  ) => void | Promise<void>;
+  onInline?: (instance: ComponentInstance) => void | Promise<void>;
   instancePropsBusy?: boolean;
   binding?: ComponentBinding;
   editMain?: EditMainState;
@@ -161,6 +178,25 @@ function statusFor(component: ComponentDescriptor) {
   if ((component.diagnostics ?? []).length > 0) return 'warning';
   if (!component.capabilities.place) return 'readonly';
   return 'ready';
+}
+
+function countBucket(count: number) {
+  if (count <= 0) return '0';
+  if (count <= 3) return '1-3';
+  if (count <= 10) return '4-10';
+  if (count <= 50) return '11-50';
+  return '51+';
+}
+
+function capabilityCount(component: ComponentDescriptor) {
+  return Object.values(component.capabilities).filter(Boolean).length;
+}
+
+function panelStatus(index: ComponentIndex | null, loading: boolean, error: string | null) {
+  if (error) return 'error';
+  if (loading) return 'loading';
+  if (!index || index.components.length === 0) return 'empty';
+  return index.partial ? 'partial' : 'ready';
 }
 
 function StatusBadge({ component }: { component: ComponentDescriptor }) {
@@ -343,7 +379,7 @@ function PanelState({
   if (loading) {
     return (
       <div className="ss-components-state" data-testid="components-loading">
-        <Spinner size="lg" label="Loading components" />
+        <PixelLoaderRings size="lg" label="Loading components" />
         <span>Building component index…</span>
       </div>
     );
@@ -381,9 +417,14 @@ export function ComponentsPanel({
   onPlace,
   placementAvailable = true,
   onOpenSource,
+  onDuplicate,
+  onRename,
+  onDelete,
   onRefresh,
   onSelectUsage,
   onEditProp,
+  onEditSlot,
+  onInline,
   instancePropsBusy = false,
   binding,
   editMain,
@@ -398,6 +439,8 @@ export function ComponentsPanel({
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const catalogRef = useRef<HTMLDivElement | null>(null);
+  const panelOpenedRef = useRef(false);
+  const selectionEventRef = useRef<string | null>(null);
 
   const filteredComponents = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -433,6 +476,59 @@ export function ComponentsPanel({
           workspaceWidth - COMPONENTS_PANEL_DETAILS_MIN_WIDTH_PX
         )
       : COMPONENTS_PANEL_CATALOG_MAX_FALLBACK_WIDTH_PX;
+
+  useEffect(() => {
+    if (panelOpenedRef.current) return;
+    panelOpenedRef.current = true;
+    const components = index?.components ?? [];
+    const capabilities = components.reduce(
+      (total, component) => total + capabilityCount(component),
+      0
+    );
+    void trackEvent('components_panel_opened', {
+      status: panelStatus(index, loading, error),
+      dialect_count: new Set(index?.profile.dialects ?? []).size,
+      catalog_count_bucket: countBucket(components.length),
+      capability_count: capabilities,
+    });
+  }, [error, index, loading]);
+
+  const handleSelectComponent = useCallback(
+    (componentId: ComponentId | null) => {
+      onSelect(componentId);
+      if (!componentId || !index) return;
+      const component = index.components.find((item) => item.id === componentId);
+      if (!component) return;
+      const eventKey = `${index.revision}:${componentId}`;
+      if (selectionEventRef.current === eventKey) return;
+      selectionEventRef.current = eventKey;
+      void trackEvent('component_selected', {
+        dialect: component.dialect,
+        status: statusFor(component),
+        usage_count_bucket: countBucket(component.usageCount),
+        capability_count: capabilityCount(component),
+        has_instance_binding: component.capabilities.instanceBinding,
+        has_place: component.capabilities.place,
+      });
+    },
+    [index, onSelect]
+  );
+
+  const handleSelectUsage = useCallback(
+    (instance: ComponentInstance) => {
+      const component = index?.components.find((item) => item.id === instance.componentId);
+      if (component) {
+        void trackEvent('component_usage_opened', {
+          dialect: component.dialect,
+          status: statusFor(component),
+          usage_count_bucket: countBucket(component.usageCount),
+          capability_count: capabilityCount(component),
+        });
+      }
+      onSelectUsage(instance);
+    },
+    [index, onSelectUsage]
+  );
 
   const measureWorkspace = useCallback(() => {
     const workspace = workspaceRef.current;
@@ -625,7 +721,7 @@ export function ComponentsPanel({
                           return next;
                         })
                       }
-                      onSelect={onSelect}
+                      onSelect={handleSelectComponent}
                     />
                   ))
                 )}
@@ -653,7 +749,7 @@ export function ComponentsPanel({
                     <BindingNotice
                       binding={selectedBinding}
                       instances={index?.instances ?? []}
-                      onSelectUsage={onSelectUsage}
+                      onSelectUsage={handleSelectUsage}
                     />
                   )}
                   <ComponentDetails
@@ -663,7 +759,10 @@ export function ComponentsPanel({
                     placementAvailable={placementAvailable}
                     onPlace={onPlace}
                     onOpenSource={onOpenSource}
-                    onSelectUsage={onSelectUsage}
+                    onDuplicate={onDuplicate}
+                    onRename={onRename}
+                    onDelete={onDelete}
+                    onSelectUsage={handleSelectUsage}
                   />
                   {selectedBinding?.confidence === 'exact' && (
                     <ComponentInstanceControls
@@ -673,6 +772,12 @@ export function ComponentsPanel({
                       disabled={editMainForSelected?.active === true}
                       busy={instancePropsBusy}
                       onEditProp={selected.capabilities.editStaticProps ? onEditProp : undefined}
+                      onEditSlot={selected.capabilities.editSlots ? onEditSlot : undefined}
+                      onInline={
+                        selected.capabilities.extract && selected.dialect === 'react'
+                          ? onInline
+                          : undefined
+                      }
                       onOpenSource={onOpenSource}
                     />
                   )}

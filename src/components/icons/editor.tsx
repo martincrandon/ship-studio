@@ -205,13 +205,6 @@ export const ComponentsIcon = createIcon(ComponentsSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
-export const ElementBodyIcon = createIcon(ElementBodySvg, {
-  name: 'ElementBodyIcon',
-  source: 'icons/element-body.svg',
-  kind: 'ui',
-  defaultSize: 16,
-  strokeWidth: '1px',
-});
 export const ElementButtonIcon = createIcon(ElementButtonSvg, {
   name: 'ElementButtonIcon',
   source: 'icons/element-button.svg',

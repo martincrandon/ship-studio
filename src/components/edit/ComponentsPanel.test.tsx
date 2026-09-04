@@ -11,6 +11,9 @@ import { ComponentInstanceControls } from './ComponentInstanceControls';
 import { ComponentsPanel } from './ComponentsPanel';
 import { EditMainBanner } from './EditMainBanner';
 
+const { trackEventMock } = vi.hoisted(() => ({ trackEventMock: vi.fn() }));
+vi.mock('../../lib/analytics', () => ({ trackEvent: trackEventMock }));
+
 function source(file: string, line: number): SourceRef {
   return { file, start: line, end: line + 10, line, column: 1, contentHash: `${file}-hash` };
 }
@@ -24,6 +27,11 @@ const capabilities: ComponentCapabilities = {
   editStaticProps: true,
   editSlots: false,
   editMain: true,
+  componentTreeBoundary: true,
+  focusedVisualEditing: false,
+  duplicateDefinition: false,
+  renameDefinition: false,
+  deleteDefinition: false,
   extract: false,
   isolatedPreview: false,
 };
@@ -148,6 +156,45 @@ function panelProps() {
 }
 
 describe('ComponentsPanel', () => {
+  it('tracks catalog interactions without source identifiers', () => {
+    const props = panelProps();
+    const view = render(<ComponentsPanel {...props} selectedComponentId={null} />);
+
+    expect(trackEventMock).toHaveBeenCalledWith('components_panel_opened', {
+      status: 'partial',
+      dialect_count: 2,
+      catalog_count_bucket: '1-3',
+      capability_count: 14,
+    });
+
+    fireEvent.click(screen.getByTitle('Button · src/components/Button.tsx'));
+    expect(trackEventMock).toHaveBeenCalledWith('component_selected', {
+      dialect: 'react',
+      status: 'ready',
+      usage_count_bucket: '1-3',
+      capability_count: 8,
+      has_instance_binding: true,
+      has_place: true,
+    });
+
+    view.rerender(<ComponentsPanel {...props} selectedComponentId={button.id} />);
+    fireEvent.click(screen.getByRole('tab', { name: /Usages/ }));
+    fireEvent.click(screen.getByRole('button', { name: /src\/pages\/index\.tsx:12/ }));
+    expect(trackEventMock).toHaveBeenCalledWith('component_usage_opened', {
+      dialect: 'react',
+      status: 'ready',
+      usage_count_bucket: '1-3',
+      capability_count: 8,
+    });
+
+    for (const [, properties] of trackEventMock.mock.calls) {
+      expect(properties).not.toHaveProperty('component_id');
+      expect(properties).not.toHaveProperty('component_name');
+      expect(properties).not.toHaveProperty('file');
+      expect(properties).not.toHaveProperty('source');
+    }
+  });
+
   it('deselects the active component when its row is clicked again', () => {
     const props = panelProps();
     const { rerender } = render(<ComponentsPanel {...props} />);
@@ -211,13 +258,20 @@ describe('ComponentsPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Place' }));
     expect(screen.getByRole('heading', { name: 'Required props' })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Choose insertion position' }), {
+      target: { value: 'before' },
+    });
     fireEvent.change(screen.getByRole('textbox', { name: 'Set required label' }), {
       target: { value: 'Ship it' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Insert component' }));
-    expect(props.onPlace).toHaveBeenCalledWith(button.id, {
-      label: { kind: 'string', value: 'Ship it' },
-    });
+    expect(props.onPlace).toHaveBeenCalledWith(
+      button.id,
+      {
+        label: { kind: 'string', value: 'Ship it' },
+      },
+      'before'
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Open main source' }));
     expect(onEnterEditMain).toHaveBeenCalledWith(button.id);
 
@@ -238,12 +292,91 @@ describe('ComponentsPanel', () => {
     expect(screen.getByRole('button', { name: 'Close Components panel' })).toBeInTheDocument();
   });
 
+  it('opens the reviewed duplicate flow for a capable React definition', () => {
+    const props = panelProps();
+    const onDuplicate = vi.fn();
+    const duplicateIndex = {
+      ...index,
+      components: [
+        { ...button, capabilities: { ...button.capabilities, duplicateDefinition: true } },
+        hero,
+      ],
+    };
+    render(<ComponentsPanel {...props} index={duplicateIndex} onDuplicate={onDuplicate} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'New component name' }), {
+      target: { value: 'ButtonCopy' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Review duplicate' }));
+
+    expect(onDuplicate).toHaveBeenCalledWith({
+      componentId: button.id,
+      newName: 'ButtonCopy',
+      destinationFile: 'src/components/ButtonCopy.tsx',
+    });
+  });
+
+  it('opens the reviewed rename flow for a capable named React definition', () => {
+    const props = panelProps();
+    const onRename = vi.fn();
+    const renameIndex = {
+      ...index,
+      components: [
+        { ...button, capabilities: { ...button.capabilities, renameDefinition: true } },
+        hero,
+      ],
+    };
+    render(<ComponentsPanel {...props} index={renameIndex} onRename={onRename} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'New component name' }), {
+      target: { value: 'ActionButton' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Review rename' }));
+
+    expect(onRename).toHaveBeenCalledWith({
+      componentId: button.id,
+      newName: 'ActionButton',
+    });
+  });
+
+  it('requires destructive confirmation before opening the reviewed delete flow', () => {
+    const props = panelProps();
+    const onDelete = vi.fn();
+    const deleteIndex = {
+      ...index,
+      components: [
+        { ...button, capabilities: { ...button.capabilities, deleteDefinition: true } },
+        hero,
+      ],
+    };
+    render(<ComponentsPanel {...props} index={deleteIndex} onDelete={onDelete} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const confirm = screen.getByRole('checkbox', {
+      name: 'Confirm deleting the component and all usages',
+    });
+    expect(screen.getByRole('button', { name: 'Review deletion' })).toBeDisabled();
+    fireEvent.click(confirm);
+    fireEvent.click(screen.getByRole('button', { name: 'Review deletion' }));
+
+    expect(onDelete).toHaveBeenCalledWith({
+      componentId: button.id,
+      removeAllUsages: true,
+    });
+  });
+
   it('shows recoverable loading and error states', () => {
     const onRefresh = vi.fn();
     const { rerender } = render(
       <ComponentsPanel {...panelProps()} index={null} loading onRefresh={onRefresh} />
     );
-    expect(screen.getByRole('status', { name: 'Loading components' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading components' })).toHaveClass(
+      'ss-pixel-loader',
+      'ss-pixel-loader--rings',
+      'ss-pixel-loader--lg'
+    );
 
     rerender(
       <ComponentsPanel

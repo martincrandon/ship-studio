@@ -23,6 +23,7 @@ import { isResourcePressureError } from './errorReporting';
 import { execPreviewAction, type PreviewActionResult } from './previewActions';
 import { agentCursorAt } from './agentActivityStore';
 import { logger } from './logger';
+import { formatFocusContextForAgent, type ComponentFocusContext } from './components/focus';
 
 /** Tool call forwarded from the Rust MCP server. */
 export interface BridgeRequest {
@@ -62,6 +63,8 @@ export interface BridgeToolContext {
   setViewport: (value: number | ViewportPreset) => void;
   /** Current custom viewport width in px, or null = full pane width. */
   getViewportWidth: () => number | null;
+  /** Current revision-bound component focus, if the user is editing one. */
+  getComponentFocusContext?: () => ComponentFocusContext | null;
 }
 
 export const PREVIEW_MCP_SERVER_NAME = 'shipstudio-preview';
@@ -373,6 +376,7 @@ function buildStatusReport(ctx: BridgeToolContext): string {
   lines.push(
     `Network: ${inspectStore.getNetworkEntries().length} requests captured, ${failedRequests} failed.`
   );
+  lines.push(formatFocusContextForAgent(ctx.getComponentFocusContext?.() ?? null));
   return lines.join('\n');
 }
 
@@ -465,7 +469,10 @@ export async function executeBridgeTool(
         return text(formatNetworkForAgent(filtered.slice(-clampLimit(args.limit))));
       }
       case 'preview_dom': {
-        return text(formatElementsForAgent(await freshDomSnapshot()));
+        const dom = formatElementsForAgent(await freshDomSnapshot());
+        return text(
+          `${formatFocusContextForAgent(ctx.getComponentFocusContext?.() ?? null)}\n\n${dom}`
+        );
       }
       case 'preview_navigate': {
         if (!isValidPreviewPath(args.path)) {

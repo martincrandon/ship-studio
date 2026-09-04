@@ -39,6 +39,12 @@ import {
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import {
+  sourceRefFromTextResolution,
+  validateFocusedSourceTarget,
+  type ComponentFocusContext,
+} from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
@@ -46,9 +52,17 @@ interface Params {
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
   onToast?: (message: string, type?: 'success' | 'error') => void;
+  /** Focused component context; text writes require source provenance not yet exposed by the resolver. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
 }
 
-export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Params) {
+export function useTextEditing({
+  iframeRef,
+  projectPath,
+  enabled,
+  onToast,
+  componentFocusRef,
+}: Params) {
   // The resolved text target for the current selection (null when the element's
   // text isn't a plain editable literal). Mirrored into a ref so the ss:textCommit
   // handler reads the latest without re-subscribing. `text` is the source baseline
@@ -57,13 +71,23 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
   // Bumps each time a double-click lands on dynamic text the iframe bounced out of
   // — drives a one-shot pulse on the DynamicTextHelp hand-off so the user notices it.
   const [textBlockedNonce, setTextBlockedNonce] = useState(0);
-  const textTargetRef = useRef<{ file: string; line: number; column: number; text: string } | null>(
-    null
-  );
+  const textTargetRef = useRef<{
+    file: string;
+    line: number;
+    column: number;
+    text: string;
+    source: SourceRef | null;
+  } | null>(null);
   const setTextTarget = useCallback((res: TextResolution | null) => {
     textTargetRef.current =
       res?.status === 'resolved'
-        ? { file: res.file, line: res.line, column: res.column, text: res.text }
+        ? {
+            file: res.file,
+            line: res.line,
+            column: res.column,
+            text: res.text,
+            source: sourceRefFromTextResolution(res),
+          }
         : null;
     setTextResolution(res);
   }, []);
@@ -127,21 +151,75 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
               const res = await resolveTextSource(projectPath, sig);
               if (res.status !== 'resolved')
                 throw new Error(res.reason || 'This text isn’t editable.');
-              target = { file: res.file, line: res.line, column: res.column, text: res.text };
+              target = {
+                file: res.file,
+                line: res.line,
+                column: res.column,
+                text: res.text,
+                source: sourceRefFromTextResolution(res),
+              };
               textTargetRef.current = target;
+            }
+            const focus = componentFocusRef?.current;
+            if (focus && !target.source) {
+              if (!sig) throw new Error('Lost track of this element — reselect it and try again.');
+              const res = await resolveTextSource(projectPath, sig);
+              if (res.status !== 'resolved')
+                throw new Error(res.reason || 'This text isn’t editable.');
+              target = {
+                file: res.file,
+                line: res.line,
+                column: res.column,
+                text: res.text,
+                source: sourceRefFromTextResolution(res),
+              };
+              textTargetRef.current = target;
+            }
+            let focusedSource: SourceRef | null = null;
+            if (focus) {
+              const validation = validateFocusedSourceTarget(
+                focus,
+                target.source,
+                undefined,
+                focus.routeKey
+              );
+              if (validation.status === 'refused' || !validation.source) {
+                throw new Error(
+                  validation.diagnostic?.message ??
+                    'The focused component source target is no longer valid. Refresh and re-enter focus.'
+                );
+              }
+              focusedSource = validation.source;
+              target.source = focusedSource;
             }
             if (next === target.text) {
               post({ type: 'ss:commit' }); // unchanged — just re-baseline, no write
               return;
             }
-            await applyTextEdit(
-              projectPath,
-              target.file,
-              target.line,
-              target.column,
-              target.text,
-              next
-            );
+            if (focusedSource) {
+              await applyTextEdit(
+                projectPath,
+                target.file,
+                target.line,
+                target.column,
+                target.text,
+                next,
+                {
+                  expectedHash: focusedSource.contentHash,
+                  expectedStart: focusedSource.start,
+                  expectedEnd: focusedSource.end,
+                }
+              );
+            } else {
+              await applyTextEdit(
+                projectPath,
+                target.file,
+                target.line,
+                target.column,
+                target.text,
+                next
+              );
+            }
             // Advance the drift baseline so consecutive text edits keep working.
             target.text = next;
             setTextResolution((prev) =>
@@ -163,7 +241,7 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
             // baseline. The guard itself stays intact: the retry writes against
             // a just-read baseline, it never forces a stale one through.
             const isDrift = cmdErr.type === 'Validation' && cmdErr.field === 'old_text';
-            if (isDrift && sig) {
+            if (isDrift && sig && !componentFocusRef?.current) {
               try {
                 const res = await resolveTextSource(projectPath, sig);
                 // Retry whenever the element still resolves, even when the fresh
@@ -190,10 +268,20 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
                     line: res.line,
                     column: res.column,
                     text: next,
+                    source: sourceRefFromTextResolution(res),
                   };
                   setTextResolution((prev) =>
                     prev?.status === 'resolved'
-                      ? { ...prev, file: res.file, line: res.line, column: res.column, text: next }
+                      ? {
+                          ...prev,
+                          file: res.file,
+                          line: res.line,
+                          column: res.column,
+                          text: next,
+                          source_start: res.source_start,
+                          source_end: res.source_end,
+                          source_hash: res.source_hash,
+                        }
                       : prev
                   );
                   post({ type: 'ss:commit' });
@@ -248,8 +336,25 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
             const textRes = await resolveTextSource(projectPath, sig);
             // Ignore if the selection changed underneath us.
             if (selectTokenRef.current !== token) return;
+            const focus = componentFocusRef?.current;
+            const focusedValidation = focus
+              ? validateFocusedSourceTarget(
+                  focus,
+                  sourceRefFromTextResolution(textRes),
+                  undefined,
+                  focus.routeKey
+                )
+              : null;
+            if (focusedValidation?.status === 'refused') {
+              setTextTarget(null);
+              post({ type: 'ss:textInfo', editable: false });
+              return;
+            }
             setTextTarget(textRes);
-            post({ type: 'ss:textInfo', editable: textRes.status === 'resolved' });
+            post({
+              type: 'ss:textInfo',
+              editable: textRes.status === 'resolved' && (!focus || !!focusedValidation?.source),
+            });
           } catch {
             if (selectTokenRef.current === token) post({ type: 'ss:textInfo', editable: false });
           }
@@ -260,7 +365,7 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [enabled, projectPath, onToast, post, iframeRef, setTextTarget]);
+  }, [componentFocusRef, enabled, projectPath, onToast, post, iframeRef, setTextTarget]);
 
   return {
     /** Text-editability of the current selection (drives the panel's hint). */

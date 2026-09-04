@@ -50,6 +50,13 @@ export default defineConfig(async () => ({
     },
   },
 
+  // Component indexing uses a module worker with a lazy Astro adapter. An ES
+  // worker format is required when Vite splits that optional runtime; IIFE
+  // workers cannot contain dynamic import chunks.
+  worker: {
+    format: "es",
+  },
+
   build: {
     chunkSizeWarningLimit: 1000,
     // Explicit transpile floor. Vite 7's implicit default is safari16, which

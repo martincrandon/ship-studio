@@ -6,18 +6,25 @@
 //! files.  All files are staged before the first rename, and already-replaced
 //! files are restored from sibling backups if a later replacement fails.
 
+use super::graph_guard;
 use super::inventory::{
     active_workspace_for_root, snapshot_for_root, validate_relative_source_path,
-    validated_existing_path,
+    validated_existing_path, validated_new_path,
 };
 use super::types::{
-    content_hash, ComponentFileMutation, ComponentMutationPlan, ComponentMutationResult,
-    ComponentTextEdit, SourceFileSnapshot,
+    content_hash, ComponentFileMutation, ComponentFileOperation, ComponentMutationPlan,
+    ComponentMutationResult, ComponentSourceSnapshot, ComponentTextEdit, SourceFileSnapshot,
 };
 use crate::errors::CommandError;
 use crate::utils::{canonicalize_tagged, validate_project_path};
+#[cfg(unix)]
+use std::ffi::CString;
 use std::fs::{self, OpenOptions, Permissions};
 use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -46,6 +53,22 @@ struct StagedFile {
 }
 
 #[derive(Debug)]
+struct PreparedLifecycleTarget {
+    relative: String,
+    path: PathBuf,
+    original: Option<Vec<u8>>,
+    updated: Option<Vec<u8>>,
+    permissions: Permissions,
+}
+
+#[derive(Debug)]
+struct StagedLifecycleTarget {
+    prepared: PreparedLifecycleTarget,
+    staged_path: PathBuf,
+    backup_path: PathBuf,
+}
+
+#[derive(Debug)]
 struct RollbackFailure {
     relative: String,
     retained_backup: Option<PathBuf>,
@@ -53,6 +76,14 @@ struct RollbackFailure {
 
 #[derive(Debug, Clone, Copy)]
 enum RollbackTargetState {
+    Original,
+    Updated,
+    Missing,
+    Changed,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LifecycleTargetState {
     Original,
     Updated,
     Missing,
@@ -83,7 +114,11 @@ pub(crate) fn apply_for_root(
     project_root: &Path,
     plan: &ComponentMutationPlan,
 ) -> Result<ComponentMutationResult, CommandError> {
-    if plan.files.is_empty() {
+    let has_lifecycle_operations = plan
+        .operations
+        .as_ref()
+        .is_some_and(|operations| !operations.is_empty());
+    if plan.files.is_empty() && !has_lifecycle_operations {
         return Err(validation(
             "files",
             "a component mutation must contain at least one file",
@@ -93,6 +128,16 @@ pub(crate) fn apply_for_root(
         return Err(validation(
             "files",
             format!("at most {MAX_MUTATION_FILES} files may be mutated at once"),
+        ));
+    }
+    if plan
+        .operations
+        .as_ref()
+        .is_some_and(|operations| operations.len() > MAX_MUTATION_FILES)
+    {
+        return Err(validation(
+            "operations",
+            format!("at most {MAX_MUTATION_FILES} lifecycle operations may be applied at once"),
         ));
     }
 
@@ -119,23 +164,49 @@ pub(crate) fn apply_for_root(
             "the project source graph changed; refresh the component catalog and retry",
         ));
     }
+    let expected_graph_delta = graph_guard::validate_plan_protocol(plan)?;
+    if expected_graph_delta.is_some() && current_snapshot.partial {
+        return Err(validation(
+            "expectedGraphDelta",
+            "a partial source snapshot cannot safely validate a component graph change",
+        ));
+    }
     let workspace = active_workspace_for_root(&project_root)?;
+    if has_lifecycle_operations {
+        if !plan.files.is_empty() {
+            return Err(validation(
+                "operations",
+                "lifecycle operations cannot be mixed with legacy edit files",
+            ));
+        }
+        return apply_lifecycle_operations(
+            &project_root,
+            &workspace,
+            &current_snapshot,
+            plan,
+            expected_graph_delta,
+        );
+    }
     let prepared = prepare_files(
         &project_root,
         &workspace,
         &current_snapshot.files,
         &plan.files,
     )?;
-    let mut staged = stage_files(&prepared)?;
+    if let Some(delta) = expected_graph_delta {
+        let after_files = snapshot_after_prepared(&current_snapshot.files, &prepared)?;
+        graph_guard::validate_expected_graph_delta(&current_snapshot.files, &after_files, delta)?;
+    }
+    let mut staged = stage_files(&project_root, &prepared)?;
 
-    if let Err(error) = create_backups(&mut staged) {
+    if let Err(error) = create_backups(&project_root, &mut staged) {
         cleanup_staged(&staged);
         return Err(error);
     }
 
     // The initial reads happen before any temp file is created. Re-read each
     // target after all staging and backup I/O as a last pre-commit guard.
-    if let Err(error) = verify_unchanged(&staged) {
+    if let Err(error) = verify_unchanged(&project_root, &staged) {
         cleanup_staged(&staged);
         return Err(error);
     }
@@ -156,16 +227,22 @@ pub(crate) fn apply_for_root(
 
     let mut replaced = 0_usize;
     while replaced < staged.len() {
-        if let Err(error) = verify_entry_unchanged(&staged[replaced]) {
-            return Err(fail_commit(&mut staged, replaced, error));
+        if let Err(error) = verify_entry_unchanged(&project_root, &staged[replaced]) {
+            return Err(fail_commit(&project_root, &mut staged, replaced, error));
         }
-        if let Err(error) = replace_staged(&staged[replaced].staged_path, staged[replaced].path()) {
+        if let Err(error) = replace_staged(
+            &project_root,
+            &staged[replaced].prepared.relative,
+            &staged[replaced].staged_path,
+            staged[replaced].path(),
+        ) {
             // Include the current index for platforms whose replace fallback
             // removes the target before discovering a second rename error.
             let primary = CommandError::Io {
                 message: format!("could not commit component source mutation: {error}"),
             };
             return Err(fail_commit(
+                &project_root,
                 &mut staged,
                 replaced.saturating_add(1),
                 primary,
@@ -175,7 +252,7 @@ pub(crate) fn apply_for_root(
     }
 
     for entry in &staged {
-        if let Err(error) = fs::remove_file(&entry.backup_path) {
+        if let Err(error) = unlink_in_parent(&entry.backup_path) {
             if error.kind() != io::ErrorKind::NotFound {
                 tracing::warn!(
                     file = %entry.prepared.relative,
@@ -195,10 +272,920 @@ pub(crate) fn apply_for_root(
     Ok(ComponentMutationResult { changed_files })
 }
 
+fn apply_lifecycle_operations(
+    project_root: &Path,
+    workspace: &Path,
+    current_snapshot: &ComponentSourceSnapshot,
+    plan: &ComponentMutationPlan,
+    expected_graph_delta: Option<&super::types::ComponentGraphDelta>,
+) -> Result<ComponentMutationResult, CommandError> {
+    let operations = plan.operations.as_deref().ok_or_else(|| {
+        validation(
+            "operations",
+            "a lifecycle mutation must include at least one operation",
+        )
+    })?;
+    let prepared =
+        prepare_lifecycle_operations(project_root, workspace, &current_snapshot.files, operations)?;
+    if let Some(delta) = expected_graph_delta {
+        let after_files = snapshot_after_lifecycle_operations(&current_snapshot.files, &prepared)?;
+        graph_guard::validate_expected_graph_delta(&current_snapshot.files, &after_files, delta)?;
+    }
+    let mut staged = stage_lifecycle_targets(project_root, &prepared)?;
+    if let Err(error) = create_lifecycle_backups(project_root, &mut staged) {
+        cleanup_lifecycle_staged(&staged);
+        return Err(error);
+    }
+
+    if let Err(error) = verify_lifecycle_unchanged(project_root, &staged) {
+        cleanup_lifecycle_staged(&staged);
+        return Err(error);
+    }
+    let before_commit_revision = match snapshot_for_root(project_root) {
+        Ok(snapshot) => snapshot.revision,
+        Err(error) => {
+            cleanup_lifecycle_staged(&staged);
+            return Err(error);
+        }
+    };
+    if before_commit_revision != plan.expected_revision {
+        cleanup_lifecycle_staged(&staged);
+        return Err(validation(
+            "expectedRevision",
+            "the project source graph changed before the lifecycle mutation could commit; refresh and retry",
+        ));
+    }
+
+    let mut committed = 0_usize;
+    while committed < staged.len() {
+        if let Err(error) = verify_lifecycle_entry_unchanged(project_root, &staged[committed]) {
+            return Err(fail_lifecycle_commit(
+                project_root,
+                &mut staged,
+                committed,
+                error,
+            ));
+        }
+        if let Err(error) = apply_lifecycle_target(project_root, &staged[committed]) {
+            let primary = CommandError::Io {
+                message: format!("could not commit component lifecycle mutation: {error}"),
+            };
+            return Err(fail_lifecycle_commit(
+                project_root,
+                &mut staged,
+                committed.saturating_add(1),
+                primary,
+            ));
+        }
+        committed += 1;
+    }
+
+    for entry in &staged {
+        if !entry.backup_path.as_os_str().is_empty() {
+            if let Err(error) = unlink_in_parent(&entry.backup_path) {
+                if error.kind() != io::ErrorKind::NotFound {
+                    tracing::warn!(
+                        file = %entry.prepared.relative,
+                        error = %error,
+                        "component lifecycle mutation committed but backup cleanup failed"
+                    );
+                }
+            }
+        }
+    }
+    let mut changed_files: Vec<String> = staged
+        .iter()
+        .map(|entry| entry.prepared.relative.clone())
+        .collect();
+    cleanup_lifecycle_staged(&staged);
+    changed_files.sort();
+    Ok(ComponentMutationResult { changed_files })
+}
+
+fn prepare_lifecycle_operations(
+    project_root: &Path,
+    workspace: &Path,
+    tracked_files: &[SourceFileSnapshot],
+    operations: &[ComponentFileOperation],
+) -> Result<Vec<PreparedLifecycleTarget>, CommandError> {
+    let mut prepared = Vec::with_capacity(operations.len());
+    let mut seen = std::collections::HashSet::with_capacity(operations.len());
+    let mut total_inserted = 0_u64;
+    let mut total_source_bytes = 0_u64;
+    let mut total_result_bytes = 0_u64;
+
+    for operation in operations {
+        match operation {
+            ComponentFileOperation::Edit { mutation } => {
+                reserve_lifecycle_path(&mut seen, &mutation.file)?;
+                if mutation.expected_hash.is_empty() || mutation.expected_result_hash.is_empty() {
+                    return Err(validation(
+                        "operations",
+                        format!("mutation hashes are required for '{}'", mutation.file),
+                    ));
+                }
+                if mutation.edits.is_empty() {
+                    return Err(validation(
+                        "edits",
+                        format!("mutation '{}' has no edits", mutation.file),
+                    ));
+                }
+                if mutation.edits.len() > MAX_MUTATION_EDITS_PER_FILE {
+                    return Err(validation(
+                        "edits",
+                        format!(
+                            "mutation '{}' has too many edits (maximum {})",
+                            mutation.file, MAX_MUTATION_EDITS_PER_FILE
+                        ),
+                    ));
+                }
+                let (path, original, permissions) = read_lifecycle_source(
+                    project_root,
+                    workspace,
+                    tracked_files,
+                    &mutation.file,
+                    &mutation.expected_hash,
+                )?;
+                add_lifecycle_bytes(
+                    &mut total_source_bytes,
+                    original.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle source files exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                let source = String::from_utf8(original.clone()).map_err(|_| {
+                    validation(
+                        "file",
+                        format!("source file '{}' is not valid UTF-8", mutation.file),
+                    )
+                })?;
+                let inserted_bytes = mutation
+                    .edits
+                    .iter()
+                    .map(|edit| edit.text.len())
+                    .try_fold(0_usize, |total, length| total.checked_add(length))
+                    .ok_or_else(|| validation("edits", "replacement text size overflowed"))?;
+                add_lifecycle_bytes(
+                    &mut total_inserted,
+                    inserted_bytes,
+                    MAX_MUTATION_INSERTED_BYTES as u64,
+                    "edits",
+                    format!(
+                        "replacement text exceeds the {MAX_MUTATION_INSERTED_BYTES}-byte limit"
+                    ),
+                )?;
+                let updated = apply_text_edits(&source, &mutation.edits)?.into_bytes();
+                if content_hash(&updated) != mutation.expected_result_hash {
+                    return Err(validation(
+                        "expectedResultHash",
+                        format!(
+                            "planned result hash does not match mutation file '{}'",
+                            mutation.file
+                        ),
+                    ));
+                }
+                if updated.len() as u64 > MAX_MUTATION_SOURCE_FILE_BYTES {
+                    return Err(validation(
+                        "edits",
+                        format!(
+                            "mutation result for '{}' exceeds the {MAX_MUTATION_SOURCE_FILE_BYTES}-byte source limit",
+                            mutation.file
+                        ),
+                    ));
+                }
+                add_lifecycle_bytes(
+                    &mut total_result_bytes,
+                    updated.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle mutation results exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                prepared.push(PreparedLifecycleTarget {
+                    relative: mutation.file.clone(),
+                    path,
+                    original: Some(original),
+                    updated: Some(updated),
+                    permissions,
+                });
+            }
+            ComponentFileOperation::Create {
+                file,
+                expected_absent,
+                contents,
+                expected_result_hash,
+            } => {
+                reserve_lifecycle_path(&mut seen, file)?;
+                if !expected_absent {
+                    return Err(validation(
+                        "expectedAbsent",
+                        format!("create operation for '{file}' must require an absent destination"),
+                    ));
+                }
+                if tracked_files
+                    .iter()
+                    .any(|candidate| candidate.file == *file)
+                {
+                    return Err(validation(
+                        "file",
+                        format!("create destination '{file}' is already in the source snapshot"),
+                    ));
+                }
+                let (path, permissions) =
+                    prepare_lifecycle_destination(project_root, workspace, file)?;
+                if contents.len() as u64 > MAX_MUTATION_SOURCE_FILE_BYTES {
+                    return Err(validation(
+                        "contents",
+                        format!("create contents for '{file}' exceed the source file limit"),
+                    ));
+                }
+                let updated = contents.as_bytes().to_vec();
+                let actual_hash = content_hash(&updated);
+                if let Some(expected_hash) = expected_result_hash {
+                    if expected_hash.is_empty() || expected_hash != &actual_hash {
+                        return Err(validation(
+                            "expectedResultHash",
+                            format!("planned create hash does not match '{file}'"),
+                        ));
+                    }
+                }
+                add_lifecycle_bytes(
+                    &mut total_result_bytes,
+                    updated.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle mutation results exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                prepared.push(PreparedLifecycleTarget {
+                    relative: file.clone(),
+                    path,
+                    original: None,
+                    updated: Some(updated),
+                    permissions,
+                });
+            }
+            ComponentFileOperation::Move {
+                from,
+                to,
+                expected_hash,
+                expected_absent,
+                expected_result_hash,
+            } => {
+                if from == to {
+                    return Err(validation(
+                        "operations",
+                        format!("move operation for '{from}' must have different source and destination paths"),
+                    ));
+                }
+                reserve_lifecycle_path(&mut seen, from)?;
+                reserve_lifecycle_path(&mut seen, to)?;
+                if !expected_absent {
+                    return Err(validation(
+                        "expectedAbsent",
+                        format!("move destination '{to}' must require an absent destination"),
+                    ));
+                }
+                let (from_path, original, source_permissions) = read_lifecycle_source(
+                    project_root,
+                    workspace,
+                    tracked_files,
+                    from,
+                    expected_hash,
+                )?;
+                if tracked_files.iter().any(|candidate| candidate.file == *to) {
+                    return Err(validation(
+                        "file",
+                        format!("move destination '{to}' is already in the source snapshot"),
+                    ));
+                }
+                let (to_path, _) = prepare_lifecycle_destination(project_root, workspace, to)?;
+                let actual_hash = content_hash(&original);
+                if let Some(expected_result_hash) = expected_result_hash {
+                    if expected_result_hash.is_empty() || expected_result_hash != &actual_hash {
+                        return Err(validation(
+                            "expectedResultHash",
+                            format!("planned move hash does not match '{to}'"),
+                        ));
+                    }
+                }
+                add_lifecycle_bytes(
+                    &mut total_source_bytes,
+                    original.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle source files exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                add_lifecycle_bytes(
+                    &mut total_result_bytes,
+                    original.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle mutation results exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                prepared.push(PreparedLifecycleTarget {
+                    relative: from.clone(),
+                    path: from_path,
+                    original: Some(original.clone()),
+                    updated: None,
+                    permissions: source_permissions.clone(),
+                });
+                prepared.push(PreparedLifecycleTarget {
+                    relative: to.clone(),
+                    path: to_path,
+                    original: None,
+                    updated: Some(original),
+                    permissions: source_permissions,
+                });
+            }
+            ComponentFileOperation::Delete {
+                file,
+                expected_hash,
+            } => {
+                reserve_lifecycle_path(&mut seen, file)?;
+                let (path, original, permissions) = read_lifecycle_source(
+                    project_root,
+                    workspace,
+                    tracked_files,
+                    file,
+                    expected_hash,
+                )?;
+                add_lifecycle_bytes(
+                    &mut total_source_bytes,
+                    original.len(),
+                    MAX_MUTATION_SOURCE_TOTAL_BYTES,
+                    "operations",
+                    format!(
+                        "lifecycle source files exceed the {MAX_MUTATION_SOURCE_TOTAL_BYTES}-byte total limit"
+                    ),
+                )?;
+                prepared.push(PreparedLifecycleTarget {
+                    relative: file.clone(),
+                    path,
+                    original: Some(original),
+                    updated: None,
+                    permissions,
+                });
+            }
+        }
+    }
+
+    if prepared.len() > MAX_MUTATION_FILES.saturating_mul(2) {
+        return Err(validation(
+            "operations",
+            format!(
+                "lifecycle operations may address at most {} source paths",
+                MAX_MUTATION_FILES.saturating_mul(2)
+            ),
+        ));
+    }
+    prepared.sort_by(|left, right| left.relative.cmp(&right.relative));
+    Ok(prepared)
+}
+
+fn reserve_lifecycle_path(
+    seen: &mut std::collections::HashSet<String>,
+    relative: &str,
+) -> Result<(), CommandError> {
+    validate_relative_source_path(relative)
+        .map_err(|error| validation("file", format!("{relative}: {error}")))?;
+    if !seen.insert(relative.to_ascii_lowercase()) {
+        return Err(validation(
+            "operations",
+            format!("duplicate lifecycle path '{relative}'"),
+        ));
+    }
+    Ok(())
+}
+
+fn read_lifecycle_source(
+    project_root: &Path,
+    workspace: &Path,
+    tracked_files: &[SourceFileSnapshot],
+    relative: &str,
+    expected_hash: &str,
+) -> Result<(PathBuf, Vec<u8>, Permissions), CommandError> {
+    if expected_hash.is_empty() {
+        return Err(validation(
+            "expectedHash",
+            format!("a source hash is required for '{relative}'"),
+        ));
+    }
+    if !tracked_files.iter().any(|file| file.file == relative) {
+        return Err(validation(
+            "file",
+            format!("source file '{relative}' is not in the active source snapshot"),
+        ));
+    }
+    let path = validated_existing_path(project_root, relative)?;
+    if !path.starts_with(workspace) {
+        return Err(validation(
+            "file",
+            format!("source file '{relative}' is outside the active workspace"),
+        ));
+    }
+    let metadata =
+        fs::metadata(&path).map_err(|error| error_for_file("inspect", relative, error))?;
+    if metadata.len() > MAX_MUTATION_SOURCE_FILE_BYTES {
+        return Err(validation(
+            "file",
+            format!(
+                "source file '{relative}' exceeds the {MAX_MUTATION_SOURCE_FILE_BYTES}-byte source limit"
+            ),
+        ));
+    }
+    let original = read_bounded(&path, MAX_MUTATION_SOURCE_FILE_BYTES)
+        .map_err(|error| error_for_file("read", relative, error))?;
+    if content_hash(&original) != expected_hash {
+        return Err(validation(
+            "expectedHash",
+            format!("source file '{relative}' changed; refresh and retry"),
+        ));
+    }
+    Ok((path, original, metadata.permissions()))
+}
+
+fn prepare_lifecycle_destination(
+    project_root: &Path,
+    workspace: &Path,
+    relative: &str,
+) -> Result<(PathBuf, Permissions), CommandError> {
+    let path = validated_new_path(project_root, relative)?;
+    let parent = path.parent().ok_or_else(|| {
+        validation(
+            "file",
+            format!("lifecycle destination '{relative}' has no parent directory"),
+        )
+    })?;
+    let canonical_parent = canonicalize_tagged(parent, "component_lifecycle_parent")?;
+    if !canonical_parent.starts_with(workspace) {
+        return Err(validation(
+            "file",
+            format!("lifecycle destination '{relative}' is outside the active workspace"),
+        ));
+    }
+    let metadata =
+        fs::metadata(parent).map_err(|error| error_for_file("inspect", relative, error))?;
+    if !metadata.is_dir() {
+        return Err(validation(
+            "file",
+            format!("lifecycle destination parent for '{relative}' is not a directory"),
+        ));
+    }
+    Ok((path, metadata.permissions()))
+}
+
+fn add_lifecycle_bytes(
+    total: &mut u64,
+    amount: usize,
+    limit: u64,
+    field: &str,
+    limit_reason: String,
+) -> Result<(), CommandError> {
+    *total = total
+        .checked_add(amount as u64)
+        .ok_or_else(|| validation(field, format!("{field} size overflowed")))?;
+    if *total > limit {
+        return Err(validation(field, limit_reason));
+    }
+    Ok(())
+}
+
+fn snapshot_after_lifecycle_operations(
+    files: &[SourceFileSnapshot],
+    prepared: &[PreparedLifecycleTarget],
+) -> Result<Vec<SourceFileSnapshot>, CommandError> {
+    let mut after = files.to_vec();
+    for entry in prepared {
+        match &entry.updated {
+            Some(updated) => {
+                let content = String::from_utf8(updated.clone()).map_err(|_| {
+                    validation(
+                        "expectedGraphDelta",
+                        format!(
+                            "lifecycle result for '{}' is not valid UTF-8",
+                            entry.relative
+                        ),
+                    )
+                })?;
+                if let Some(file) = after.iter_mut().find(|file| file.file == entry.relative) {
+                    file.content = content;
+                    file.content_hash = content_hash(updated);
+                } else {
+                    after.push(SourceFileSnapshot {
+                        file: entry.relative.clone(),
+                        content,
+                        content_hash: content_hash(updated),
+                    });
+                }
+            }
+            None => {
+                let index = after
+                    .iter()
+                    .position(|file| file.file == entry.relative)
+                    .ok_or_else(|| {
+                        validation(
+                            "expectedGraphDelta",
+                            format!(
+                                "lifecycle delete path '{}' disappeared from the source snapshot",
+                                entry.relative
+                            ),
+                        )
+                    })?;
+                after.remove(index);
+            }
+        }
+    }
+    after.sort_by(|left, right| left.file.cmp(&right.file));
+    Ok(after)
+}
+
+fn stage_lifecycle_targets(
+    project_root: &Path,
+    prepared: &[PreparedLifecycleTarget],
+) -> Result<Vec<StagedLifecycleTarget>, CommandError> {
+    let mut staged = Vec::with_capacity(prepared.len());
+    for file in prepared {
+        let staged_path = match &file.updated {
+            Some(updated) => {
+                match write_sibling_temp(
+                    project_root,
+                    &file.path,
+                    "component-staged",
+                    updated,
+                    &file.permissions,
+                ) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        cleanup_lifecycle_staged(&staged);
+                        return Err(error_for_file("stage", &file.relative, error));
+                    }
+                }
+            }
+            None => PathBuf::new(),
+        };
+        staged.push(StagedLifecycleTarget {
+            prepared: PreparedLifecycleTarget {
+                relative: file.relative.clone(),
+                path: file.path.clone(),
+                original: file.original.clone(),
+                updated: file.updated.clone(),
+                permissions: file.permissions.clone(),
+            },
+            staged_path,
+            backup_path: PathBuf::new(),
+        });
+    }
+    Ok(staged)
+}
+
+fn create_lifecycle_backups(
+    project_root: &Path,
+    staged: &mut [StagedLifecycleTarget],
+) -> Result<(), CommandError> {
+    for entry in staged.iter_mut() {
+        let Some(original) = &entry.prepared.original else {
+            continue;
+        };
+        match write_sibling_temp(
+            project_root,
+            &entry.prepared.path,
+            "component-backup",
+            original,
+            &entry.prepared.permissions,
+        ) {
+            Ok(path) => entry.backup_path = path,
+            Err(error) => return Err(error_for_file("backup", &entry.prepared.relative, error)),
+        }
+    }
+    Ok(())
+}
+
+fn verify_lifecycle_unchanged(
+    project_root: &Path,
+    staged: &[StagedLifecycleTarget],
+) -> Result<(), CommandError> {
+    for entry in staged {
+        verify_lifecycle_entry_unchanged(project_root, entry)?;
+    }
+    Ok(())
+}
+
+fn verify_lifecycle_entry_unchanged(
+    project_root: &Path,
+    entry: &StagedLifecycleTarget,
+) -> Result<(), CommandError> {
+    match &entry.prepared.original {
+        Some(original) => {
+            let path = validated_existing_path(project_root, &entry.prepared.relative)?;
+            let current = read_bounded(&path, MAX_MUTATION_SOURCE_FILE_BYTES)
+                .map_err(|error| error_for_file("re-read", &entry.prepared.relative, error))?;
+            if content_hash(&current) != content_hash(original) {
+                return Err(validation(
+                    "expectedHash",
+                    format!(
+                        "source file '{}' changed before commit; refresh and retry",
+                        entry.prepared.relative
+                    ),
+                ));
+            }
+        }
+        None => {
+            validated_new_path(project_root, &entry.prepared.relative)?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_lifecycle_target(
+    project_root: &Path,
+    entry: &StagedLifecycleTarget,
+) -> Result<(), io::Error> {
+    match (&entry.prepared.original, &entry.prepared.updated) {
+        (Some(_), Some(_)) => replace_staged(
+            project_root,
+            &entry.prepared.relative,
+            &entry.staged_path,
+            &entry.prepared.path,
+        ),
+        (None, Some(_)) => {
+            // hard_link gives a create target an atomic no-overwrite commit;
+            // the sibling temp remains available for rollback until the link
+            // has been made successfully.
+            ensure_safe_commit_target(
+                project_root,
+                &entry.prepared.relative,
+                &entry.prepared.path,
+                CommitTargetExpectation::Absent,
+            )?;
+            link_sibling_nofollow(&entry.staged_path, &entry.prepared.path)
+        }
+        (Some(_), None) => {
+            remove_lifecycle_target(project_root, &entry.prepared.relative, &entry.prepared.path)
+        }
+        (None, None) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a lifecycle target must have an original or updated value",
+        )),
+    }
+}
+
+fn remove_lifecycle_target(
+    project_root: &Path,
+    relative: &str,
+    target: &Path,
+) -> Result<(), io::Error> {
+    ensure_safe_commit_target(
+        project_root,
+        relative,
+        target,
+        CommitTargetExpectation::Existing,
+    )?;
+    #[cfg(windows)]
+    {
+        let mut permissions = fs::metadata(target)?.permissions();
+        permissions.set_readonly(false);
+        let _ = fs::set_permissions(target, permissions);
+    }
+    remove_target_nofollow(target)
+}
+
+fn lifecycle_target_state(
+    entry: &StagedLifecycleTarget,
+) -> Result<LifecycleTargetState, io::Error> {
+    let current = match read_bounded(&entry.prepared.path, MAX_MUTATION_SOURCE_FILE_BYTES) {
+        Ok(current) => current,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(LifecycleTargetState::Missing);
+        }
+        Err(error) => return Err(error),
+    };
+    let current_hash = content_hash(&current);
+    if entry
+        .prepared
+        .original
+        .as_ref()
+        .is_some_and(|original| current_hash == content_hash(original))
+    {
+        Ok(LifecycleTargetState::Original)
+    } else if entry
+        .prepared
+        .updated
+        .as_ref()
+        .is_some_and(|updated| current_hash == content_hash(updated))
+    {
+        Ok(LifecycleTargetState::Updated)
+    } else {
+        Ok(LifecycleTargetState::Changed)
+    }
+}
+
+fn rollback_lifecycle(
+    project_root: &Path,
+    staged: &mut [StagedLifecycleTarget],
+    attempted: usize,
+) -> Vec<RollbackFailure> {
+    let mut failures = Vec::new();
+    for entry in staged.iter_mut().take(attempted).rev() {
+        let state = match lifecycle_target_state(entry) {
+            Ok(state) => state,
+            Err(error) => {
+                tracing::error!(
+                    file = %entry.prepared.relative,
+                    error = %error,
+                    "component lifecycle rollback could not verify the target"
+                );
+                failures.push(RollbackFailure {
+                    relative: entry.prepared.relative.clone(),
+                    retained_backup: (!entry.backup_path.as_os_str().is_empty())
+                        .then(|| entry.backup_path.clone()),
+                });
+                continue;
+            }
+        };
+
+        match entry.prepared.original.as_ref() {
+            Some(_) => match state {
+                LifecycleTargetState::Original => continue,
+                LifecycleTargetState::Changed => {
+                    tracing::error!(
+                        file = %entry.prepared.relative,
+                        "component lifecycle rollback skipped because the target changed after commit"
+                    );
+                    failures.push(RollbackFailure {
+                        relative: entry.prepared.relative.clone(),
+                        retained_backup: (!entry.backup_path.as_os_str().is_empty())
+                            .then(|| entry.backup_path.clone()),
+                    });
+                    continue;
+                }
+                LifecycleTargetState::Updated | LifecycleTargetState::Missing => {
+                    if entry.backup_path.as_os_str().is_empty() || !entry.backup_path.exists() {
+                        failures.push(RollbackFailure {
+                            relative: entry.prepared.relative.clone(),
+                            retained_backup: None,
+                        });
+                        continue;
+                    }
+                    if let Err(error) = restore_backup(
+                        project_root,
+                        &entry.prepared.relative,
+                        &entry.backup_path,
+                        &entry.prepared.path,
+                    ) {
+                        tracing::error!(
+                            file = %entry.prepared.relative,
+                            error = %error,
+                            "component lifecycle rollback failed"
+                        );
+                        failures.push(RollbackFailure {
+                            relative: entry.prepared.relative.clone(),
+                            retained_backup: Some(entry.backup_path.clone()),
+                        });
+                    }
+                }
+            },
+            None => match state {
+                LifecycleTargetState::Missing => continue,
+                LifecycleTargetState::Updated => {
+                    if let Err(error) = remove_lifecycle_target(
+                        project_root,
+                        &entry.prepared.relative,
+                        &entry.prepared.path,
+                    ) {
+                        tracing::error!(
+                            file = %entry.prepared.relative,
+                            error = %error,
+                            "component lifecycle rollback could not remove a created target"
+                        );
+                        failures.push(RollbackFailure {
+                            relative: entry.prepared.relative.clone(),
+                            retained_backup: None,
+                        });
+                    }
+                }
+                LifecycleTargetState::Original | LifecycleTargetState::Changed => {
+                    tracing::error!(
+                        file = %entry.prepared.relative,
+                        "component lifecycle rollback skipped because a created target changed after commit"
+                    );
+                    failures.push(RollbackFailure {
+                        relative: entry.prepared.relative.clone(),
+                        retained_backup: None,
+                    });
+                }
+            },
+        }
+    }
+    failures
+}
+
+fn fail_lifecycle_commit(
+    project_root: &Path,
+    staged: &mut [StagedLifecycleTarget],
+    attempted: usize,
+    primary: CommandError,
+) -> CommandError {
+    let failures = rollback_lifecycle(project_root, staged, attempted);
+    cleanup_lifecycle_staged_preserving_backups(staged, &failures);
+    if failures.is_empty() {
+        return primary;
+    }
+    let files = failures
+        .iter()
+        .map(|failure| failure.relative.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let retained = failures
+        .iter()
+        .any(|failure| failure.retained_backup.is_some());
+    CommandError::Io {
+        message: format!(
+            "{primary}; rollback was incomplete for {files}.{}",
+            if retained {
+                " Recovery backups were retained beside the affected source files."
+            } else {
+                " No recovery backup remained for at least one affected file."
+            }
+        ),
+    }
+}
+
+fn cleanup_lifecycle_staged_preserving_backups(
+    staged: &[StagedLifecycleTarget],
+    failures: &[RollbackFailure],
+) {
+    let retained: std::collections::HashSet<&Path> = failures
+        .iter()
+        .filter_map(|failure| failure.retained_backup.as_deref())
+        .collect();
+    for entry in staged {
+        if !entry.staged_path.as_os_str().is_empty() {
+            let _ = unlink_in_parent(&entry.staged_path);
+        }
+        if !entry.backup_path.as_os_str().is_empty()
+            && !retained.contains(entry.backup_path.as_path())
+        {
+            let _ = unlink_in_parent(&entry.backup_path);
+        }
+    }
+}
+
+fn cleanup_lifecycle_staged(staged: &[StagedLifecycleTarget]) {
+    for entry in staged {
+        for path in [&entry.staged_path, &entry.backup_path] {
+            if path.as_os_str().is_empty() {
+                continue;
+            }
+            let _ = unlink_in_parent(path);
+        }
+    }
+}
+
 impl StagedFile {
     fn path(&self) -> &Path {
         &self.prepared.path
     }
+}
+
+fn snapshot_after_prepared(
+    files: &[SourceFileSnapshot],
+    prepared: &[PreparedFile],
+) -> Result<Vec<SourceFileSnapshot>, CommandError> {
+    let mut after = files.to_vec();
+    for entry in prepared {
+        let file = after
+            .iter_mut()
+            .find(|file| file.file == entry.relative)
+            .ok_or_else(|| {
+                validation(
+                    "expectedGraphDelta",
+                    format!(
+                        "mutation file '{}' disappeared from the source snapshot",
+                        entry.relative
+                    ),
+                )
+            })?;
+        file.content = String::from_utf8(entry.updated.clone()).map_err(|_| {
+            validation(
+                "expectedGraphDelta",
+                format!(
+                    "mutation result for '{}' is not valid UTF-8",
+                    entry.relative
+                ),
+            )
+        })?;
+        file.content_hash = content_hash(&entry.updated);
+    }
+    Ok(after)
 }
 
 fn prepare_files(
@@ -243,16 +1230,6 @@ fn prepare_files(
                 ),
             ));
         }
-        if !tracked_files.iter().any(|file| file.file == mutation.file) {
-            return Err(validation(
-                "file",
-                format!(
-                    "mutation file '{}' is not in the active source snapshot",
-                    mutation.file
-                ),
-            ));
-        }
-
         let path = validated_existing_path(project_root, &mutation.file)?;
         let canonical = canonicalize_tagged(&path, "component_mutation_file")?;
         if !canonical.starts_with(workspace) {
@@ -260,6 +1237,15 @@ fn prepare_files(
                 "file",
                 format!(
                     "mutation file '{}' is outside the active workspace",
+                    mutation.file
+                ),
+            ));
+        }
+        if !tracked_files.iter().any(|file| file.file == mutation.file) {
+            return Err(validation(
+                "file",
+                format!(
+                    "mutation file '{}' is not in the active source snapshot",
                     mutation.file
                 ),
             ));
@@ -411,10 +1397,14 @@ fn apply_text_edits(source: &str, edits: &[ComponentTextEdit]) -> Result<String,
     Ok(updated)
 }
 
-fn stage_files(prepared: &[PreparedFile]) -> Result<Vec<StagedFile>, CommandError> {
+fn stage_files(
+    project_root: &Path,
+    prepared: &[PreparedFile],
+) -> Result<Vec<StagedFile>, CommandError> {
     let mut staged = Vec::with_capacity(prepared.len());
     for file in prepared {
         let staged_path = match write_sibling_temp(
+            project_root,
             &file.path,
             "component-staged",
             &file.updated,
@@ -441,9 +1431,10 @@ fn stage_files(prepared: &[PreparedFile]) -> Result<Vec<StagedFile>, CommandErro
     Ok(staged)
 }
 
-fn create_backups(staged: &mut [StagedFile]) -> Result<(), CommandError> {
+fn create_backups(project_root: &Path, staged: &mut [StagedFile]) -> Result<(), CommandError> {
     for entry in staged.iter_mut() {
         match write_sibling_temp(
+            project_root,
             &entry.prepared.path,
             "component-backup",
             &entry.prepared.original,
@@ -456,14 +1447,26 @@ fn create_backups(staged: &mut [StagedFile]) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn verify_unchanged(staged: &[StagedFile]) -> Result<(), CommandError> {
+fn verify_unchanged(project_root: &Path, staged: &[StagedFile]) -> Result<(), CommandError> {
     for entry in staged {
-        verify_entry_unchanged(entry)?;
+        verify_entry_unchanged(project_root, entry)?;
     }
     Ok(())
 }
 
-fn verify_entry_unchanged(entry: &StagedFile) -> Result<(), CommandError> {
+fn verify_entry_unchanged(project_root: &Path, entry: &StagedFile) -> Result<(), CommandError> {
+    ensure_safe_commit_target(
+        project_root,
+        &entry.prepared.relative,
+        &entry.prepared.path,
+        CommitTargetExpectation::Existing,
+    )
+    .map_err(|error| CommandError::Io {
+        message: format!(
+            "could not revalidate mutation file '{}': {error}",
+            entry.prepared.relative
+        ),
+    })?;
     let current =
         read_bounded(&entry.prepared.path, MAX_MUTATION_SOURCE_FILE_BYTES).map_err(|error| {
             CommandError::Io {
@@ -487,7 +1490,7 @@ fn verify_entry_unchanged(entry: &StagedFile) -> Result<(), CommandError> {
 
 fn read_bounded(path: &Path, max_bytes: u64) -> Result<Vec<u8>, io::Error> {
     let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024) as usize);
-    fs::File::open(path)?
+    open_read_nofollow(path)?
         .take(max_bytes.saturating_add(1))
         .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > max_bytes {
@@ -499,7 +1502,233 @@ fn read_bounded(path: &Path, max_bytes: u64) -> Result<Vec<u8>, io::Error> {
     Ok(bytes)
 }
 
+fn open_read_nofollow(path: &Path) -> Result<fs::File, io::Error> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::File::open(path)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum CommitTargetExpectation {
+    Existing,
+    Absent,
+    Either,
+}
+
+fn ensure_safe_parent(project_root: &Path, parent: &Path) -> Result<(), io::Error> {
+    let canonical_root = dunce::canonicalize(project_root)?;
+    let canonical_parent = dunce::canonicalize(parent)?;
+    if !canonical_parent.starts_with(&canonical_root)
+        || super::inventory::path_contains_symlink(&canonical_root, parent)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "component mutation parent is outside the project or reached through a symlink",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_safe_commit_target(
+    project_root: &Path,
+    relative: &str,
+    target: &Path,
+    expectation: CommitTargetExpectation,
+) -> Result<(), io::Error> {
+    validate_relative_source_path(relative).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid component mutation path '{relative}': {error}"),
+        )
+    })?;
+    let candidate = project_root.join(relative);
+    let parent = candidate
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target has no parent"))?;
+    ensure_safe_parent(project_root, parent)?;
+
+    match fs::symlink_metadata(&candidate) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("component mutation target '{relative}' is a symlink"),
+        )),
+        Ok(metadata) if !metadata.is_file() => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("component mutation target '{relative}' is not a regular file"),
+        )),
+        Ok(_) => {
+            match expectation {
+                CommitTargetExpectation::Absent => Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("component mutation target '{relative}' already exists"),
+                )),
+                CommitTargetExpectation::Existing | CommitTargetExpectation::Either => {
+                    let canonical = dunce::canonicalize(&candidate)?;
+                    if canonical != target {
+                        return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!("component mutation target '{relative}' moved during the transaction"),
+                    ));
+                    }
+                    Ok(())
+                }
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if matches!(expectation, CommitTargetExpectation::Existing) {
+                Err(error)
+            } else {
+                Ok(())
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn ensure_regular_temp(path: &Path) -> Result<(), io::Error> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "component mutation temporary file is not a regular file",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn open_directory_nofollow(path: &Path) -> Result<fs::File, io::Error> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let flags = libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    #[cfg(target_os = "linux")]
+    let flags = flags | libc::O_DIRECTORY;
+    OpenOptions::new().read(true).custom_flags(flags).open(path)
+}
+
+#[cfg(unix)]
+fn path_name(path: &Path) -> Result<CString, io::Error> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
+    CString::new(name.as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains a NUL byte"))
+}
+
+#[cfg(unix)]
+fn unlink_in_parent(path: &Path) -> Result<(), io::Error> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no parent"))?;
+    let directory = open_directory_nofollow(parent)?;
+    let name = path_name(path)?;
+    let result = unsafe { libc::unlinkat(directory.as_raw_fd(), name.as_ptr(), 0) };
+    if result == -1 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn rename_in_parent(staged: &Path, target: &Path) -> Result<(), io::Error> {
+    let staged_parent = staged
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "staged path has no parent"))?;
+    let target_parent = target
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target has no parent"))?;
+    if staged_parent != target_parent {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "component mutation files must be siblings",
+        ));
+    }
+    let directory = open_directory_nofollow(target_parent)?;
+    let staged_name = path_name(staged)?;
+    let target_name = path_name(target)?;
+    let result = unsafe {
+        libc::renameat(
+            directory.as_raw_fd(),
+            staged_name.as_ptr(),
+            directory.as_raw_fd(),
+            target_name.as_ptr(),
+        )
+    };
+    if result == -1 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn link_in_parent(staged: &Path, target: &Path) -> Result<(), io::Error> {
+    let staged_parent = staged
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "staged path has no parent"))?;
+    let target_parent = target
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "target has no parent"))?;
+    if staged_parent != target_parent {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "component mutation files must be siblings",
+        ));
+    }
+    let directory = open_directory_nofollow(target_parent)?;
+    let staged_name = path_name(staged)?;
+    let target_name = path_name(target)?;
+    let result = unsafe {
+        libc::linkat(
+            directory.as_raw_fd(),
+            staged_name.as_ptr(),
+            directory.as_raw_fd(),
+            target_name.as_ptr(),
+            0,
+        )
+    };
+    if result == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    let result = unsafe { libc::unlinkat(directory.as_raw_fd(), staged_name.as_ptr(), 0) };
+    if result == -1 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(unix))]
+fn unlink_in_parent(path: &Path) -> Result<(), io::Error> {
+    fs::remove_file(path)
+}
+
+#[cfg(not(unix))]
+fn rename_in_parent(staged: &Path, target: &Path) -> Result<(), io::Error> {
+    fs::rename(staged, target)
+}
+
+#[cfg(not(unix))]
+fn link_in_parent(staged: &Path, target: &Path) -> Result<(), io::Error> {
+    fs::hard_link(staged, target)?;
+    fs::remove_file(staged)
+}
+
+fn remove_target_nofollow(target: &Path) -> Result<(), io::Error> {
+    unlink_in_parent(target)
+}
+
 fn write_sibling_temp(
+    project_root: &Path,
     target: &Path,
     purpose: &str,
     bytes: &[u8],
@@ -513,32 +1742,30 @@ fn write_sibling_temp(
         .and_then(|name| name.to_str())
         .unwrap_or("source");
     for _ in 0..8 {
+        ensure_safe_parent(project_root, parent)?;
         let candidate = parent.join(format!(
             ".{name}.shipstudio-{purpose}-{}.tmp",
             uuid::Uuid::new_v4().simple()
         ));
-        let mut file = match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
+        let mut file = match open_sibling_temp(parent, &candidate) {
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
         };
         if let Err(error) = file.write_all(bytes).and_then(|_| file.flush()) {
-            let _ = fs::remove_file(&candidate);
+            let _ = unlink_in_parent(&candidate);
             return Err(error);
         }
         if let Err(error) = file.sync_all() {
-            let _ = fs::remove_file(&candidate);
+            let _ = unlink_in_parent(&candidate);
+            return Err(error);
+        }
+        if let Err(error) = file.set_permissions(permissions.clone()) {
+            drop(file);
+            let _ = unlink_in_parent(&candidate);
             return Err(error);
         }
         drop(file);
-        if let Err(error) = fs::set_permissions(&candidate, permissions.clone()) {
-            let _ = fs::remove_file(&candidate);
-            return Err(error);
-        }
         return Ok(candidate);
     }
     Err(io::Error::new(
@@ -547,42 +1774,61 @@ fn write_sibling_temp(
     ))
 }
 
-fn replace_staged(staged: &Path, target: &Path) -> Result<(), io::Error> {
-    #[cfg(windows)]
-    {
-        match fs::rename(staged, target) {
-            Ok(()) => Ok(()),
-            Err(first) if first.kind() == io::ErrorKind::AlreadyExists => {
-                // std::fs::rename cannot replace an existing file on some
-                // Windows versions.  Remove only the already validated target
-                // and immediately rename the sibling temp into its place; the
-                // backup lets the caller restore it if the second step fails.
-                let mut permissions = fs::metadata(target)?.permissions();
-                permissions.set_readonly(false);
-                let _ = fs::set_permissions(target, permissions);
-                fs::remove_file(target)?;
-                fs::rename(staged, target)
-            }
-            Err(error) => Err(error),
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        fs::rename(staged, target)
-    }
+fn replace_staged(
+    project_root: &Path,
+    relative: &str,
+    staged: &Path,
+    target: &Path,
+) -> Result<(), io::Error> {
+    ensure_safe_commit_target(
+        project_root,
+        relative,
+        target,
+        CommitTargetExpectation::Existing,
+    )?;
+    ensure_regular_temp(staged)?;
+    rename_in_parent(staged, target)
 }
 
-fn restore_backup(backup: &Path, target: &Path) -> Result<(), io::Error> {
-    #[cfg(windows)]
-    {
-        if target.exists() {
-            let mut permissions = fs::metadata(target)?.permissions();
-            permissions.set_readonly(false);
-            let _ = fs::set_permissions(target, permissions);
-            fs::remove_file(target)?;
-        }
+fn link_sibling_nofollow(staged: &Path, target: &Path) -> Result<(), io::Error> {
+    ensure_regular_temp(staged)?;
+    link_in_parent(staged, target)
+}
+
+fn restore_backup(
+    project_root: &Path,
+    relative: &str,
+    backup: &Path,
+    target: &Path,
+) -> Result<(), io::Error> {
+    ensure_safe_commit_target(
+        project_root,
+        relative,
+        target,
+        CommitTargetExpectation::Either,
+    )?;
+    ensure_regular_temp(backup)?;
+    rename_in_parent(backup, target)
+}
+
+#[cfg(unix)]
+fn open_sibling_temp(parent: &Path, candidate: &Path) -> Result<fs::File, io::Error> {
+    let directory = open_directory_nofollow(parent)?;
+    let name = path_name(candidate)?;
+    let flags = libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC;
+    let descriptor = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags, 0o600) };
+    if descriptor == -1 {
+        return Err(io::Error::last_os_error());
     }
-    fs::rename(backup, target)
+    Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+}
+
+#[cfg(not(unix))]
+fn open_sibling_temp(_parent: &Path, candidate: &Path) -> Result<fs::File, io::Error> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(candidate)
 }
 
 fn rollback_target_state(entry: &StagedFile) -> Result<RollbackTargetState, io::Error> {
@@ -603,7 +1849,11 @@ fn rollback_target_state(entry: &StagedFile) -> Result<RollbackTargetState, io::
     }
 }
 
-fn rollback(staged: &mut [StagedFile], attempted: usize) -> Vec<RollbackFailure> {
+fn rollback(
+    project_root: &Path,
+    staged: &mut [StagedFile],
+    attempted: usize,
+) -> Vec<RollbackFailure> {
     let mut failures = Vec::new();
     for entry in staged.iter_mut().take(attempted).rev() {
         if entry.backup_path.as_os_str().is_empty() || !entry.backup_path.exists() {
@@ -640,7 +1890,12 @@ fn rollback(staged: &mut [StagedFile], attempted: usize) -> Vec<RollbackFailure>
                 continue;
             }
         }
-        if let Err(error) = restore_backup(&entry.backup_path, entry.path()) {
+        if let Err(error) = restore_backup(
+            project_root,
+            &entry.prepared.relative,
+            &entry.backup_path,
+            entry.path(),
+        ) {
             tracing::error!(
                 file = %entry.prepared.relative,
                 error = %error,
@@ -655,8 +1910,13 @@ fn rollback(staged: &mut [StagedFile], attempted: usize) -> Vec<RollbackFailure>
     failures
 }
 
-fn fail_commit(staged: &mut [StagedFile], attempted: usize, primary: CommandError) -> CommandError {
-    let failures = rollback(staged, attempted);
+fn fail_commit(
+    project_root: &Path,
+    staged: &mut [StagedFile],
+    attempted: usize,
+    primary: CommandError,
+) -> CommandError {
+    let failures = rollback(project_root, staged, attempted);
     cleanup_staged_preserving_backups(staged, &failures);
     if failures.is_empty() {
         return primary;
@@ -688,12 +1948,12 @@ fn cleanup_staged_preserving_backups(staged: &[StagedFile], failures: &[Rollback
         .collect();
     for entry in staged {
         if !entry.staged_path.as_os_str().is_empty() {
-            let _ = fs::remove_file(&entry.staged_path);
+            let _ = unlink_in_parent(&entry.staged_path);
         }
         if !entry.backup_path.as_os_str().is_empty()
             && !retained.contains(entry.backup_path.as_path())
         {
-            let _ = fs::remove_file(&entry.backup_path);
+            let _ = unlink_in_parent(&entry.backup_path);
         }
     }
 }
@@ -704,7 +1964,7 @@ fn cleanup_staged(staged: &[StagedFile]) {
             if path.as_os_str().is_empty() {
                 continue;
             }
-            let _ = fs::remove_file(path);
+            let _ = unlink_in_parent(path);
         }
     }
 }
@@ -718,6 +1978,7 @@ fn error_for_file(purpose: &str, file: &str, error: io::Error) -> CommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::components::types::ComponentGraphDelta;
     use std::fs;
     use tempfile::TempDir;
 
@@ -749,6 +2010,10 @@ mod tests {
         ComponentMutationPlan {
             files,
             expected_revision: snapshot_for_root(root).unwrap().revision,
+            dialect: None,
+            parser_token: None,
+            expected_graph_delta: None,
+            operations: None,
         }
     }
 
@@ -901,6 +2166,403 @@ mod tests {
                 .contains("shipstudio-component")));
     }
 
+    #[test]
+    fn validates_parser_and_graph_delta_before_staging() {
+        let temp = TempDir::new().unwrap();
+        write(
+            temp.path(),
+            "src/Button.tsx",
+            "export default function Button() { return <button />; }",
+        );
+        let page = write(
+            temp.path(),
+            "src/Page.tsx",
+            "import Button from './Button'; export function Page() { return <><Button /></>; }",
+        );
+        let source = fs::read_to_string(&page).unwrap();
+        let insertion = source.find("</>").unwrap();
+        let updated = format!("{}<Button />{}", &source[..insertion], &source[insertion..]);
+        let plan = ComponentMutationPlan {
+            files: vec![mutation(
+                temp.path(),
+                "src/Page.tsx",
+                vec![ComponentTextEdit {
+                    start: insertion,
+                    end: insertion,
+                    text: "<Button />".to_string(),
+                }],
+            )],
+            expected_revision: snapshot_for_root(temp.path()).unwrap().revision,
+            dialect: Some("react".to_string()),
+            parser_token: Some(graph_guard::REACT_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "react:src/Button.tsx#default".to_string(),
+                usages_before: 1,
+                usages_after: 2,
+                delta: 1,
+                created_component_id: None,
+                removed_component_id: None,
+                created_usages: None,
+            }),
+            operations: None,
+        };
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(result.changed_files, vec!["src/Page.tsx"]);
+        assert_eq!(fs::read_to_string(page).unwrap(), updated);
+    }
+
+    #[test]
+    fn validates_and_commits_a_native_astro_graph_delta() {
+        let temp = TempDir::new().unwrap();
+        write(
+            temp.path(),
+            "src/components/Card.astro",
+            "---\ninterface Props { label: string }\n---\n<article>{label}</article>",
+        );
+        let page = write(
+            temp.path(),
+            "src/pages/index.astro",
+            "---\nimport Card from '../components/Card.astro';\n---\n<main><Card label=\"One\" /></main>",
+        );
+        let source = fs::read_to_string(&page).unwrap();
+        let insertion = source.find("</main>").unwrap();
+        let updated = format!(
+            "{}<Card label=\"Two\" />{}",
+            &source[..insertion],
+            &source[insertion..]
+        );
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: vec![mutation(
+                temp.path(),
+                "src/pages/index.astro",
+                vec![ComponentTextEdit {
+                    start: insertion,
+                    end: insertion,
+                    text: "<Card label=\"Two\" />".to_string(),
+                }],
+            )],
+            expected_revision: snapshot.revision,
+            dialect: Some("astro".to_string()),
+            parser_token: Some(graph_guard::ASTRO_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "astro:src/components/Card.astro#default".to_string(),
+                usages_before: 1,
+                usages_after: 2,
+                delta: 1,
+                created_component_id: None,
+                removed_component_id: None,
+                created_usages: None,
+            }),
+            operations: None,
+        };
+
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(result.changed_files, vec!["src/pages/index.astro"]);
+        assert_eq!(fs::read_to_string(page).unwrap(), updated);
+    }
+
+    #[test]
+    fn validates_a_named_export_rename_and_preserves_its_usage_count() {
+        let temp = TempDir::new().unwrap();
+        let definition = write(
+            temp.path(),
+            "src/Button.tsx",
+            "export function Button() { return <button />; }",
+        );
+        let page = write(
+            temp.path(),
+            "src/Page.tsx",
+            "import { Button } from './Button'; export function Page() { return <Button />; }",
+        );
+        let definition_source = fs::read_to_string(&definition).unwrap();
+        let page_source = fs::read_to_string(&page).unwrap();
+        let definition_name = definition_source.find("Button").unwrap();
+        let page_import = page_source.find("Button").unwrap();
+        let page_usage = page_source.rfind("Button").unwrap();
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: Vec::new(),
+            expected_revision: snapshot.revision,
+            dialect: Some("react".to_string()),
+            parser_token: Some(graph_guard::REACT_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "react:src/Button.tsx#Button".to_string(),
+                usages_before: 1,
+                usages_after: 0,
+                delta: -1,
+                created_component_id: Some("react:src/Button.tsx#ActionButton".to_string()),
+                removed_component_id: Some("react:src/Button.tsx#Button".to_string()),
+                created_usages: Some(1),
+            }),
+            operations: Some(vec![
+                ComponentFileOperation::Edit {
+                    mutation: mutation(
+                        temp.path(),
+                        "src/Button.tsx",
+                        vec![ComponentTextEdit {
+                            start: definition_name,
+                            end: definition_name + "Button".len(),
+                            text: "ActionButton".to_string(),
+                        }],
+                    ),
+                },
+                ComponentFileOperation::Edit {
+                    mutation: mutation(
+                        temp.path(),
+                        "src/Page.tsx",
+                        vec![
+                            ComponentTextEdit {
+                                start: page_import,
+                                end: page_import + "Button".len(),
+                                text: "ActionButton".to_string(),
+                            },
+                            ComponentTextEdit {
+                                start: page_usage,
+                                end: page_usage + "Button".len(),
+                                text: "ActionButton".to_string(),
+                            },
+                        ],
+                    ),
+                },
+            ]),
+        };
+
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(result.changed_files, vec!["src/Button.tsx", "src/Page.tsx"]);
+        assert!(fs::read_to_string(definition)
+            .unwrap()
+            .contains("ActionButton"));
+        assert!(fs::read_to_string(page).unwrap().contains("ActionButton"));
+    }
+
+    #[test]
+    fn validates_a_named_export_delete_and_allows_the_removed_identity_to_disappear() {
+        let temp = TempDir::new().unwrap();
+        let definition = write(
+            temp.path(),
+            "src/Button.tsx",
+            "export function Button() { return <button />; }",
+        );
+        let page = write(
+            temp.path(),
+            "src/Page.tsx",
+            "import { Button } from './Button'; export function Page() { return <Button />; }",
+        );
+        let page_source = fs::read_to_string(&page).unwrap();
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: Vec::new(),
+            expected_revision: snapshot.revision,
+            dialect: Some("react".to_string()),
+            parser_token: Some(graph_guard::REACT_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "react:src/Button.tsx#Button".to_string(),
+                usages_before: 1,
+                usages_after: 0,
+                delta: -1,
+                created_component_id: None,
+                removed_component_id: Some("react:src/Button.tsx#Button".to_string()),
+                created_usages: None,
+            }),
+            operations: Some(vec![
+                ComponentFileOperation::Edit {
+                    mutation: mutation(
+                        temp.path(),
+                        "src/Button.tsx",
+                        vec![ComponentTextEdit {
+                            start: 0,
+                            end: fs::read_to_string(&definition).unwrap().len(),
+                            text: String::new(),
+                        }],
+                    ),
+                },
+                ComponentFileOperation::Edit {
+                    mutation: mutation(
+                        temp.path(),
+                        "src/Page.tsx",
+                        vec![ComponentTextEdit {
+                            start: 0,
+                            end: page_source.len(),
+                            text: "export function Page() { return <main />; }".to_string(),
+                        }],
+                    ),
+                },
+            ]),
+        };
+
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(result.changed_files, vec!["src/Button.tsx", "src/Page.tsx"]);
+        assert_eq!(fs::read_to_string(definition).unwrap(), "");
+        assert_eq!(
+            fs::read_to_string(page).unwrap(),
+            "export function Page() { return <main />; }"
+        );
+    }
+
+    #[test]
+    fn applies_edit_create_move_and_delete_in_one_guarded_transaction() {
+        let temp = TempDir::new().unwrap();
+        write(temp.path(), "src/Edit.ts", "export const before = true;\n");
+        write(temp.path(), "src/Move.ts", "export const moved = true;\n");
+        write(
+            temp.path(),
+            "src/Delete.ts",
+            "export const deleted = true;\n",
+        );
+        let edit = mutation(
+            temp.path(),
+            "src/Edit.ts",
+            vec![ComponentTextEdit {
+                start: 0,
+                end: "export const before = true;\n".len(),
+                text: "export const after = true;\n".to_string(),
+            }],
+        );
+        let move_source = fs::read(temp.path().join("src/Move.ts")).unwrap();
+        let create_contents = "export const created = true;\n";
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: Vec::new(),
+            expected_revision: snapshot.revision,
+            dialect: None,
+            parser_token: None,
+            expected_graph_delta: None,
+            operations: Some(vec![
+                ComponentFileOperation::Edit { mutation: edit },
+                ComponentFileOperation::Create {
+                    file: "src/Create.ts".to_string(),
+                    expected_absent: true,
+                    contents: create_contents.to_string(),
+                    expected_result_hash: Some(content_hash(create_contents.as_bytes())),
+                },
+                ComponentFileOperation::Move {
+                    from: "src/Move.ts".to_string(),
+                    to: "src/Moved.ts".to_string(),
+                    expected_hash: content_hash(&move_source),
+                    expected_absent: true,
+                    expected_result_hash: Some(content_hash(&move_source)),
+                },
+                ComponentFileOperation::Delete {
+                    file: "src/Delete.ts".to_string(),
+                    expected_hash: content_hash(b"export const deleted = true;\n"),
+                },
+            ]),
+        };
+
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(
+            result.changed_files,
+            vec![
+                "src/Create.ts",
+                "src/Delete.ts",
+                "src/Edit.ts",
+                "src/Move.ts",
+                "src/Moved.ts",
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join("src/Edit.ts")).unwrap(),
+            "export const after = true;\n"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join("src/Create.ts")).unwrap(),
+            create_contents
+        );
+        assert!(!temp.path().join("src/Move.ts").exists());
+        assert_eq!(
+            fs::read_to_string(temp.path().join("src/Moved.ts")).unwrap(),
+            "export const moved = true;\n"
+        );
+        assert!(!temp.path().join("src/Delete.ts").exists());
+    }
+
+    #[test]
+    fn creates_a_guarded_duplicate_without_overwriting_existing_source() {
+        let temp = TempDir::new().unwrap();
+        write(
+            temp.path(),
+            "src/Header.tsx",
+            "export default function Header() { return <header />; }",
+        );
+        write(
+            temp.path(),
+            "src/Page.tsx",
+            "import Header from './Header'; export function Page() { return <Header />; }",
+        );
+        let contents = "export default function NavWrap() { return <header />; }";
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: Vec::new(),
+            expected_revision: snapshot.revision,
+            dialect: Some("react".to_string()),
+            parser_token: Some(graph_guard::REACT_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "react:src/Header.tsx#default".to_string(),
+                usages_before: 1,
+                usages_after: 1,
+                delta: 0,
+                created_component_id: Some("react:src/NavWrap.tsx#default".to_string()),
+                removed_component_id: None,
+                created_usages: Some(0),
+            }),
+            operations: Some(vec![ComponentFileOperation::Create {
+                file: "src/NavWrap.tsx".to_string(),
+                expected_absent: true,
+                contents: contents.to_string(),
+                expected_result_hash: Some(content_hash(contents.as_bytes())),
+            }]),
+        };
+
+        let result = apply_for_root(temp.path(), &plan).unwrap();
+        assert_eq!(result.changed_files, vec!["src/NavWrap.tsx"]);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("src/NavWrap.tsx")).unwrap(),
+            contents
+        );
+        assert_eq!(
+            fs::read_to_string(temp.path().join("src/Header.tsx")).unwrap(),
+            "export default function Header() { return <header />; }"
+        );
+    }
+
+    #[test]
+    fn refuses_a_create_collision_before_staging() {
+        let temp = TempDir::new().unwrap();
+        write(
+            temp.path(),
+            "src/Header.tsx",
+            "export default function Header() { return <header />; }",
+        );
+        let destination = write(temp.path(), "src/NavWrap.tsx", "existing");
+        let snapshot = snapshot_for_root(temp.path()).unwrap();
+        let plan = ComponentMutationPlan {
+            files: Vec::new(),
+            expected_revision: snapshot.revision,
+            dialect: Some("react".to_string()),
+            parser_token: Some(graph_guard::REACT_COMPONENT_PLAN_PARSER_TOKEN.to_string()),
+            expected_graph_delta: Some(ComponentGraphDelta {
+                component_id: "react:src/Header.tsx#default".to_string(),
+                usages_before: 0,
+                usages_after: 0,
+                delta: 0,
+                created_component_id: Some("react:src/NavWrap.tsx#default".to_string()),
+                removed_component_id: None,
+                created_usages: Some(0),
+            }),
+            operations: Some(vec![ComponentFileOperation::Create {
+                file: "src/NavWrap.tsx".to_string(),
+                expected_absent: true,
+                contents: "new".to_string(),
+                expected_result_hash: Some(content_hash(b"new")),
+            }]),
+        };
+
+        let error = apply_for_root(temp.path(), &plan).unwrap_err();
+        assert!(error.to_string().contains("already"));
+        assert_eq!(fs::read_to_string(destination).unwrap(), "existing");
+    }
+
     #[cfg(unix)]
     #[test]
     fn refuses_symlinked_mutation_path() {
@@ -933,6 +2595,31 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.path().join("src/real.ts")).unwrap(),
             "old"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_a_symlinked_parent_before_commit_target_resolution() {
+        use std::os::unix::fs::symlink;
+        let project = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        write(outside.path(), "file.ts", "outside");
+        symlink(outside.path(), project.path().join("src")).unwrap();
+
+        let target = project.path().join("src/file.ts");
+        let error = ensure_safe_commit_target(
+            project.path(),
+            "src/file.ts",
+            &target,
+            CommitTargetExpectation::Existing,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("symlink"));
+        assert_eq!(
+            fs::read_to_string(outside.path().join("file.ts")).unwrap(),
+            "outside"
         );
     }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { StructureSelection } from '../../hooks/useElementStructure';
+import type { SelectedComponent } from '../../hooks/useElementTree';
 import { ElementToolbar } from './ElementToolbar';
 
 function renderToolbar(tagName: string) {
@@ -58,5 +59,50 @@ describe('ElementToolbar', () => {
 
     expect(container.querySelector('.ss-el-toolbar__tag')).toHaveTextContent('article');
     expect(container.querySelector('.ss-el-toolbar__tag-icon')).not.toBeInTheDocument();
+  });
+
+  it('renders the component selection affordance in the semantic component accent', () => {
+    const onComponentFocus = vi.fn();
+    const componentSelection: SelectedComponent = {
+      key: 'card:instance-1',
+      componentId: 'react:src/Card.tsx#Card',
+      instanceId: 'react:src/Page.tsx:12',
+      name: 'Card',
+      hostNodeIds: [2],
+      confidence: 'exact',
+      rect: { top: 80, left: 40, width: 120, height: 24 },
+    };
+
+    const { container } = render(
+      <ElementToolbar
+        selection={null}
+        componentSelection={componentSelection}
+        bounds={{ w: 800, h: 600 }}
+        busy={false}
+        hidden={false}
+        onInsert={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+        onComponentFocus={onComponentFocus}
+      />
+    );
+
+    expect(container.querySelector('.ss-el-toolbar--component')).toBeInTheDocument();
+    expect(
+      container.querySelector('.ss-el-toolbar__component-icon[data-icon-name="ComponentsIcon"]')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Selected component: Card' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Component actions' })).toHaveClass(
+      'ss-el-toolbar__actions--component'
+    );
+    expect(
+      container.querySelector(
+        '.ss-el-toolbar__actions--component [data-icon-name="ComponentsIcon"]'
+      )
+    ).toHaveClass('ss-el-toolbar__control-icon');
+    expect(screen.getByRole('button', { name: 'Focus component' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Focus component' }));
+    expect(onComponentFocus).toHaveBeenCalledTimes(1);
   });
 });

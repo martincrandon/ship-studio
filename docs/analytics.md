@@ -126,6 +126,23 @@ property), `bulk` (count, from the Code view's save), or `created_rule`.
 | `custom_class_unapplied` | — |
 | `custom_class_edited` | `token_count` (one event per settled edit, incl. auto-save) |
 
+### Native Components
+
+The Components catalog reports adoption and reliability without sending source
+identifiers. These events intentionally contain dialect/capability/status
+telemetry only: no component names or IDs, source paths or text, prop names or
+values, route parameters, or runtime payloads are included.
+
+| Event | Fired when | Key properties |
+|---|---|---|
+| `components_panel_opened` | Components panel mounts | `status` (`loading`/`empty`/`error`/`partial`/`ready`), `dialect_count`, `catalog_count_bucket`, `capability_count` |
+| `component_selected` | A catalog definition is selected | `dialect`, `status`, `usage_count_bucket`, `capability_count`, `has_instance_binding`, `has_place` |
+| `component_usage_opened` | A source usage row is opened | `dialect`, `status`, `usage_count_bucket`, `capability_count` |
+
+Counts are bucketed before transmission where a precise count is not needed.
+The event names are registered here alongside their implementation so changes
+to the catalog surface can be reviewed against the privacy contract.
+
 ### Branches & PRs
 
 | Event | Properties |

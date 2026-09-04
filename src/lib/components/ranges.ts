@@ -53,6 +53,14 @@ export function sourceRefFromUtf16Range(
   };
 }
 
+/** Read an exact UTF-8-byte source range without splitting a Unicode code point. */
+export function sourceTextForRef(content: string, source: SourceRef): string | null {
+  const start = utf8ByteOffsetToUtf16Offset(content, source.start);
+  const end = utf8ByteOffsetToUtf16Offset(content, source.end);
+  if (start === null || end === null || end < start) return null;
+  return content.slice(start, end);
+}
+
 /** Apply UTF-8-byte edits while preserving every untouched source byte. */
 export function applyTextEdits(
   content: string,

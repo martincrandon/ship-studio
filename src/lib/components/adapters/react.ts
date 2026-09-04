@@ -1,7 +1,12 @@
 import { planInsertComponent, planStaticPropEdit, validateReactMutation } from '../mutation';
+import { sourceTextForRef } from '../ranges';
+import { planDuplicateComponent } from '../refactors';
+import { planDeleteComponent, planRenameComponent } from '../refactors';
+import { planStaticSlotEdit } from '../slots';
 import { projectComponentTree } from '../component-tree';
 import { parseReactFile } from './react-parser';
 import { isReactSourcePath, normalizeProjectPath, resolveModulePath } from './react-helpers';
+import { resolvePackageModulePath } from '../package-resolution';
 import type {
   ComponentAdapter,
   AdapterGraph,
@@ -14,6 +19,10 @@ import type {
   ResolvedImportEdge,
   InsertComponentInputWithContext,
   EditComponentPropInputWithContext,
+  EditComponentSlotInputWithContext,
+  DuplicateComponentInputWithContext,
+  DeleteComponentInputWithContext,
+  RenameComponentInputWithContext,
 } from './types';
 import type {
   ComponentBinding,
@@ -26,6 +35,7 @@ import type {
   MutationValidationInput,
   MutationValidationResult,
   MutationResult,
+  RefactorResult,
   SelectionBindingInput,
   SourceFileSnapshot,
   SourceRef,
@@ -38,6 +48,20 @@ export class ReactComponentAdapter implements ComponentAdapter {
   readonly dialect = 'react' as const;
 
   detect(context: DetectionContext) {
+    if (context.projectType === 'reactnative') {
+      return {
+        detected: false,
+        confidence: 'low' as const,
+        diagnostics: [
+          {
+            code: 'react-skipped-react-native',
+            severity: 'info' as const,
+            message:
+              'React web indexing is skipped for React Native projects; the native adapter owns JSX source.',
+          },
+        ],
+      };
+    }
     const reactFiles = context.files.filter((file) => isReactSourcePath(file.file));
     const detected = reactFiles.some(
       (file) =>
@@ -72,13 +96,20 @@ export class ReactComponentAdapter implements ComponentAdapter {
 
   resolveImport(edge: RawImportEdge, context: ResolveContext): ResolvedImportEdge {
     const files = context.files.map((file) => file.snapshot);
-    const resolution = resolveModulePath(edge.fromFile, edge.source, files);
-    const diagnostics: ComponentDiagnostic[] = [];
-    if (resolution.status === 'unresolved') {
+    const sourceFiles = context.sourceFiles ?? files;
+    const resolution = edge.source.startsWith('.')
+      ? { ...resolveModulePath(edge.fromFile, edge.source, sourceFiles), diagnostics: [] }
+      : resolvePackageModulePath(edge.source, sourceFiles);
+    const resolutionDiagnostics: ComponentDiagnostic[] = resolution.diagnostics;
+    const diagnostics: ComponentDiagnostic[] = resolutionDiagnostics.map((diagnostic) => ({
+      ...diagnostic,
+      source: diagnostic.source ?? edge.sourceRef,
+    }));
+    if (resolution.status === 'unresolved' && diagnostics.length === 0) {
       diagnostics.push({
         code: 'react-unresolved-import',
         severity: 'warning',
-        message: `Could not resolve the relative import "${edge.source}" from ${edge.fromFile}.`,
+        message: `Could not resolve the import "${edge.source}" from ${edge.fromFile}.`,
         file: edge.fromFile,
         source: edge.sourceRef,
       });
@@ -105,7 +136,11 @@ export class ReactComponentAdapter implements ComponentAdapter {
     const resolvedImports = new Map<string, ResolvedImportEdge>();
     for (const file of files) {
       for (const raw of file.imports) {
-        const resolved = this.resolveImport(raw, { workspaceRoot: context.workspaceRoot, files });
+        const resolved = this.resolveImport(raw, {
+          workspaceRoot: context.workspaceRoot,
+          files,
+          sourceFiles: context.sourceFiles,
+        });
         resolvedImports.set(importKey(raw), resolved);
         importEdges.push({
           fromFile: raw.fromFile,
@@ -118,7 +153,11 @@ export class ReactComponentAdapter implements ComponentAdapter {
         });
       }
       for (const raw of file.reExports) {
-        const resolved = this.resolveImport(raw, { workspaceRoot: context.workspaceRoot, files });
+        const resolved = this.resolveImport(raw, {
+          workspaceRoot: context.workspaceRoot,
+          files,
+          sourceFiles: context.sourceFiles,
+        });
         importEdges.push({
           fromFile: raw.fromFile,
           toFile: resolved.toFile,
@@ -183,7 +222,16 @@ export class ReactComponentAdapter implements ComponentAdapter {
             };
           }
         }
-        const slots = usage.childrenSource ? [{ name: 'children', value: null }] : [];
+        const slots = usage.childrenSource
+          ? [
+              {
+                name: 'children',
+                value: null,
+                sourceText:
+                  sourceTextForRef(file.snapshot.content, usage.childrenSource) ?? undefined,
+              },
+            ]
+          : [];
         const instance: ComponentInstance = {
           id: instanceId(target.id, usage.invocation),
           componentId: target.id,
@@ -196,6 +244,17 @@ export class ReactComponentAdapter implements ComponentAdapter {
           route: null,
           props,
           slots,
+          ...(usage.childrenSource
+            ? {
+                slotSources: {
+                  children: {
+                    ...usage.childrenSource,
+                    text:
+                      sourceTextForRef(file.snapshot.content, usage.childrenSource) ?? undefined,
+                  },
+                },
+              }
+            : {}),
         };
         instances.push(instance);
         target.usageCount += 1;
@@ -355,6 +414,22 @@ export class ReactComponentAdapter implements ComponentAdapter {
 
   planPropEdit(input: EditComponentPropInputWithContext, index: ComponentIndex): MutationResult {
     return planStaticPropEdit(input, index, input.snapshot);
+  }
+
+  planSlotEdit(input: EditComponentSlotInputWithContext, index: ComponentIndex): MutationResult {
+    return planStaticSlotEdit(input, index, input.snapshot);
+  }
+
+  planDuplicate(input: DuplicateComponentInputWithContext, index: ComponentIndex): RefactorResult {
+    return planDuplicateComponent(input, index, input.snapshot);
+  }
+
+  planRename(input: RenameComponentInputWithContext, index: ComponentIndex): RefactorResult {
+    return planRenameComponent(input, index, input.snapshot);
+  }
+
+  planDelete(input: DeleteComponentInputWithContext, index: ComponentIndex): RefactorResult {
+    return planDeleteComponent(input, index, input.snapshot);
   }
 
   validateMutation(input: MutationValidationInput): MutationValidationResult {

@@ -36,7 +36,7 @@
 
 import { useState, useRef, useCallback, type RefObject } from 'react';
 import type { Project, WorkspaceInfo } from '../lib/project';
-import type { ProjectType } from '../lib/static-server';
+import { detectProjectType, type ProjectType } from '../lib/static-server';
 import type { ProjectGitHubStatus } from '../lib/github';
 import {
   getAutoAcceptMode,
@@ -98,6 +98,8 @@ export interface UseProjectLifecycleParams {
     windowLabel: string
   ) => Promise<ProjectType>;
   isServerRunning: (projectPath: string) => boolean;
+  getProjectType: (projectPath: string) => ProjectType;
+  setProjectType: (type: ProjectType, projectPath?: string) => void;
   restartDevServer: (projectPath: string, portOverride?: number) => Promise<void>;
   /** Drop the dependency-install gate on a project's dev server. Called after
    *  a successful pnpm/npm install so a follow-up startServer actually spawns. */
@@ -143,6 +145,8 @@ export function useProjectLifecycle({
   setDevServerPort,
   startServerForProject,
   isServerRunning,
+  getProjectType,
+  setProjectType,
   restartDevServer,
   clearNeedsInstall,
   pasteToActiveTerminal,
@@ -716,6 +720,20 @@ export function useProjectLifecycle({
     stepStart = performance.now();
     let detectedType: ProjectType = 'unknown';
     if (reuseIncomingServer) {
+      detectedType = getProjectType(project.path);
+      if (detectedType === 'unknown') {
+        try {
+          // A live server may have been restored before its in-memory type was
+          // hydrated. Resolve the type without restarting that server so the
+          // workspace gates (including Components) become truthful.
+          detectedType = await detectProjectType(project.path);
+          setProjectType(detectedType, project.path);
+        } catch {
+          logger.warn('[OpenProject] Could not recover the reused server project type', {
+            project: project.path,
+          });
+        }
+      }
       logger.info(`[OpenProject] Step 7: Reusing live pinned server for ${project.name}`);
     } else {
       detectedType = await startServerForProject(project.path, project.name, port, windowLabel);

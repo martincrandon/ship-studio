@@ -397,8 +397,8 @@
 .ss-cascade-selector-display__label {
   color: var(--text-muted);
   font-family: var(--font-code);
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-body);
 }
 .ss-cascade-selector-display[role='button'] {
   cursor: text;
