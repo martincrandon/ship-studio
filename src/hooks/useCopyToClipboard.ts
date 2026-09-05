@@ -29,6 +29,40 @@ export function describeClipboardError(error: Error): string {
   return error.message;
 }
 
+/** How long to wait for the window to regain focus before giving up. */
+const FOCUS_RETRY_MS = 400;
+
+/**
+ * `navigator.clipboard.writeText` throws NotAllowedError when the document
+ * isn't focused at the moment of the call — which happens routinely when a
+ * click lands while another window was frontmost (issue #753). Rather than
+ * making the user click twice, wait briefly for focus and retry once; a real
+ * permission denial still surfaces on the second attempt.
+ */
+export async function writeTextWithFocusRetry(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const notAllowed = e instanceof Error && e.name === 'NotAllowedError';
+    if (!notAllowed) throw e;
+    window.focus();
+    if (!document.hasFocus()) await waitForFocus(FOCUS_RETRY_MS);
+    await navigator.clipboard.writeText(text);
+  }
+}
+
+function waitForFocus(timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      window.removeEventListener('focus', done);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    window.addEventListener('focus', done, { once: true });
+  });
+}
+
 /**
  * Copy text to the OS clipboard. Prefer this over calling `navigator.clipboard`
  * directly — it centralizes error handling, tracking, and the "copied!" flag.
@@ -55,7 +89,7 @@ export function useCopyToClipboard({
         if (!navigator?.clipboard?.writeText) {
           throw new Error('Clipboard API unavailable');
         }
-        await navigator.clipboard.writeText(text);
+        await writeTextWithFocusRetry(text);
         setIsCopied(true);
         setError(null);
         onCopy?.(text);
