@@ -6,6 +6,13 @@ The latest entry is rendered inside the in-app update dialog, so write user-
 facing language — what changed, in plain English — not commit subjects.
 -->
 
+## What's New in v1.1.0
+
+- **Workflows & Inbox** - Standing instructions your own agent runs in a project, on demand or on a schedule, with findings filed to a new Inbox. Start from templates (Security sweep, Secrets & env drift, PR review pass, Accessibility pass, Design-system drift) or just describe one to your agent. Read-only by default and enforced by the agent CLI; runs use your own subscription; nothing runs while Ship Studio is closed
+- **One-click install on Mac** - Download the DMG, drag Ship Studio to Applications, open it. Builds are now notarized by Apple: no terminal command, no "unverified developer" dialog
+- **One download for every Mac** - A single universal build runs natively on Apple Silicon and Intel; existing installs move to it automatically through the in-app updater
+
+
 ## What's New in v1.0.0
 
 - Ship Studio 1.0 — out of beta. A ground-up visual redesign by Martin Crandon: new Geist typeface, deeper dark surfaces, machined controls, and a four-layer design-token system
