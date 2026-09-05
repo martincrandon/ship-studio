@@ -134,6 +134,18 @@ const loadingSpinner = <Spinner size="lg" style={{ color: 'var(--text-muted)' }}
 
 function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
+  // The workspace switcher is a detour, not a destination: remember which
+  // home-level screen (or the workspace) it was opened from so Back / Esc can
+  // return there without switching anything.
+  const viewRef = useRef<AppView>(view);
+  viewRef.current = view;
+  const accountSelectReturnViewRef = useRef<AppView>('projects');
+  const openAccountSelect = useCallback(() => {
+    const from = viewRef.current;
+    accountSelectReturnViewRef.current =
+      from === 'workspace' || from === 'workflows' || from === 'inbox' ? from : 'projects';
+    setView('account-select');
+  }, []);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
   const [compactWorkspaceToolbarEnabled, updateCompactWorkspaceToolbar] =
@@ -994,9 +1006,10 @@ function AppContents({ initialProjectPath }: AppProps) {
       onCloseProject: handleCloseProject,
       onSelectProjectTab: handleSelectProjectTab,
       isProjectDevServerRunning: isServerRunning,
-      onSwitchAccount: () => setView('account-select'),
+      onSwitchAccount: openAccountSelect,
     }),
     [
+      openAccountSelect,
       inboxUnread,
       openProjectPicker,
       isSidebarHidden,
@@ -1133,7 +1146,10 @@ function AppContents({ initialProjectPath }: AppProps) {
     return (
       <>
         <div className="app">
-          <AccountSelectScreen onContinue={() => setView('projects')} />
+          <AccountSelectScreen
+            onContinue={() => setView('projects')}
+            onBack={() => setView(accountSelectReturnViewRef.current)}
+          />
         </div>
         <ToastList toasts={toasts} onDismiss={dismissToast} />
         {quitConfirmModal}
@@ -1177,7 +1193,7 @@ function AppContents({ initialProjectPath }: AppProps) {
               cleanupStatus={cleanupStatus}
               pinnedSet={pinnedProjects.pinnedSet}
               onTogglePin={(path, pinned) => void handleTogglePin(path, pinned)}
-              onSwitchAccount={() => setView('account-select')}
+              onSwitchAccount={openAccountSelect}
             />
           </div>
         </div>
@@ -1260,7 +1276,7 @@ function AppContents({ initialProjectPath }: AppProps) {
               isRestartingDevServer={false}
               devServerRunning={false}
               isProjectDevServerRunning={isServerRunning}
-              onSwitchAccount={() => setView('account-select')}
+              onSwitchAccount={openAccountSelect}
             />
             <div className="project-loading-body">
               {loadingSpinner}
@@ -1310,7 +1326,7 @@ function AppContents({ initialProjectPath }: AppProps) {
         onSelectProjectTab={handleSelectProjectTab}
         onGoHome={handleBackToProjects}
         onOpenProjectPicker={openProjectPicker}
-        onSwitchAccount={() => setView('account-select')}
+        onSwitchAccount={openAccountSelect}
         isProjectDevServerRunning={isServerRunning}
         isSidebarHidden={isSidebarHidden}
         onToggleSidebar={toggleSidebar}
