@@ -104,6 +104,12 @@ pub async fn list_branches(project_path: String) -> Result<Vec<BranchInfo>, Comm
             warn!(error = %stderr.trim(), "git blocked by an environment gap while listing branches");
             return Err(gap);
         }
+        if stderr.trim().is_empty() {
+            if let Some(gap) = crate::utils::git_exit_code_gap(output.status.code()) {
+                warn!(exit_code = ?output.status.code(), "git branch died silently with a known Windows crash code");
+                return Err(gap);
+            }
+        }
         return Err(list_branches_failure_message(stderr.trim(), output.status.code()).into());
     }
 

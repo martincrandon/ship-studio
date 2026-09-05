@@ -129,6 +129,25 @@ pub(crate) fn push_missing_remote_error(stderr: &str) -> Option<CommandError> {
     })
 }
 
+/// `git push` failing with "src refspec … cannot be resolved to branch" /
+/// "… does not match any": the branch name git was asked to push doesn't
+/// resolve — almost always a branch created with different letter-casing on a
+/// case-insensitive filesystem, so the ref on disk and the name in use
+/// disagree. User-side git state, not a malfunction (issue #854).
+pub(crate) fn push_unresolvable_branch_error(stderr: &str, branch: &str) -> Option<CommandError> {
+    let lower = stderr.to_lowercase();
+    let unresolvable = lower.contains("cannot be resolved to branch")
+        || (lower.contains("src refspec") && lower.contains("does not match any"));
+    unresolvable.then(|| {
+        CommandError::expected(format!(
+            "Git couldn't resolve the branch \"{branch}\" for pushing. This usually means a \
+             branch with the same name but different letter-casing already exists. Run \
+             `git branch -a` in a terminal, rename or delete the similarly-named branch, then \
+             try again."
+        ))
+    })
+}
+
 #[tauri::command]
 #[instrument(name = "publish_to_github", skip(project_path, commit_message), fields(project = %project_path))]
 pub async fn publish_to_github(
@@ -453,6 +472,10 @@ pub async fn publish_branch(
         if let Some(err) = push_missing_remote_error(&stderr) {
             return Err(err);
         }
+        if let Some(err) = push_unresolvable_branch_error(&stderr, &branch) {
+            warn!(error = %stderr, branch = %branch, "Push refspec did not resolve");
+            return Err(err);
+        }
         if !stderr.contains("Everything up-to-date") {
             error!(error = %stderr, branch = %branch, "Push failed");
             return Err(CommandError::Process {
@@ -472,7 +495,9 @@ pub async fn publish_branch(
 
 #[cfg(test)]
 mod tests {
-    use super::{push_pre_receive_error, push_transient_server_error};
+    use super::{
+        push_pre_receive_error, push_transient_server_error, push_unresolvable_branch_error,
+    };
     use crate::commands::git::run_git_net;
     use crate::errors::CommandError;
     use std::path::Path;
@@ -545,6 +570,21 @@ mod tests {
 
     // An ordinary non-fast-forward race must NOT classify — it stays on the
     // existing PUSH_REJECTED path with its dedicated pull-first UI.
+    #[test]
+    fn unresolvable_refspec_is_expected() {
+        let stderr = "fatal: Feature/Login cannot be resolved to branch";
+        let err = push_unresolvable_branch_error(stderr, "Feature/Login").expect("classified");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(err.to_string().contains("Feature/Login"));
+        assert!(err.to_string().contains("letter-casing"));
+        assert!(push_unresolvable_branch_error(
+            "error: src refspec main does not match any",
+            "main"
+        )
+        .is_some());
+        assert!(push_unresolvable_branch_error("fatal: unable to access", "main").is_none());
+    }
+
     #[test]
     fn pre_receive_error_ignores_ordinary_push_race() {
         let stderr = " ! [rejected] main -> main (non-fast-forward)\nerror: failed to push some refs to 'https://github.com/o/r.git'\nhint: Updates were rejected because the tip of your current branch is behind";

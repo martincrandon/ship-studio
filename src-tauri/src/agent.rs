@@ -121,7 +121,9 @@ pub const OPENCODE: AgentConfig = AgentConfig {
     binary_name: "opencode",
     process_name: "opencode",
     version_flag: "--version",
-    print_mode_flags: &[],
+    // `opencode run` is its non-interactive mode; with no positional message
+    // it reads the prompt from stdin (verified on 1.18.9 — issue #862).
+    print_mode_flags: &["run"],
     auto_accept_flag: None,
     auth_trigger_args: &["auth", "login"],
     auth_config_dir: ".local/share/opencode",

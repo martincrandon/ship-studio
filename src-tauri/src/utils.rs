@@ -617,7 +617,42 @@ pub fn git_environment_gap(stderr: &str) -> Option<crate::errors::CommandError> 
              try again.",
         ));
     }
+    // git couldn't write `.git/index` itself (not the `.lock` race, which
+    // `output_retrying_index_lock` handles): a full disk or a `.git` folder
+    // the user can't write to. Environment, not malfunction (issue #861).
+    if lower.contains("could not write index") || lower.contains("unable to write index") {
+        return Some(crate::errors::CommandError::expected(
+            "Git couldn't write this project's index file. Check that the disk isn't full \
+             and that the project's .git folder is writable (in a terminal: \
+             sudo chown -R $(whoami) <project>/.git), then try again.",
+        ));
+    }
     None
+}
+
+/// Classify a git process that died with an empty stderr from its exit code
+/// alone. On Windows, a process that fails to start or crashes exits with an
+/// NTSTATUS code and prints nothing; the two seen in the wild are a Git
+/// component failing to load (`STATUS_DLL_INIT_FAILED`, issue #850) and git
+/// segfaulting (`STATUS_ACCESS_VIOLATION`, issue #853). Both are the Git
+/// installation or something interfering with it (antivirus, a broken
+/// update), not an app malfunction. Returns `None` for any other code.
+pub fn git_exit_code_gap(exit_code: Option<i32>) -> Option<crate::errors::CommandError> {
+    const STATUS_DLL_INIT_FAILED: i32 = 0xC0000142_u32 as i32; // -1073741502
+    const STATUS_ACCESS_VIOLATION: i32 = 0xC0000005_u32 as i32; // -1073741819
+    match exit_code {
+        Some(STATUS_DLL_INIT_FAILED) => Some(crate::errors::CommandError::expected(
+            "Git failed to start correctly on Windows — a component of the Git installation \
+             didn't load. This is usually antivirus interference or a broken Git install: \
+             add Git to your antivirus exclusions or reinstall Git for Windows, then try again.",
+        )),
+        Some(STATUS_ACCESS_VIOLATION) => Some(crate::errors::CommandError::expected(
+            "Git crashed on Windows (an access violation). This is usually antivirus \
+             interference or a corrupted Git install: add Git to your antivirus exclusions or \
+             reinstall Git for Windows, then try again.",
+        )),
+        _ => None,
+    }
 }
 
 /// Classify a filesystem `io::Error` for a user-facing command error.
@@ -696,6 +731,16 @@ pub fn classify_fs_error(
             "Ship Studio timed out trying to {action} ({}). The folder looks like it's on a \
              cloud drive (Google Drive, OneDrive, Dropbox, iCloud) that's still syncing — \
              wait for sync to finish and try again, or keep the project on your local disk.",
+            path.display()
+        ))
+    } else if (cfg!(unix) && e.raw_os_error() == Some(28))
+        || (cfg!(windows) && e.raw_os_error() == Some(112))
+    {
+        // ENOSPC / ERROR_DISK_FULL: the disk is full. An environment condition
+        // with a user-side fix, not a malfunction (issue #846).
+        crate::errors::CommandError::expected(format!(
+            "Ship Studio couldn't {action} ({}) — the disk is full. Free up some space, \
+             then try again.",
             path.display()
         ))
     } else if cfg!(windows) && e.raw_os_error() == Some(1224) {
@@ -1629,6 +1674,54 @@ fn format_relative_time_from_now(timestamp_ms: u64, now_ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod environment_classifiers {
+        use super::*;
+        use crate::errors::CommandError;
+
+        #[test]
+        fn disk_full_is_expected() {
+            // ENOSPC (issue #846); the Windows code is 112 but this test runs
+            // on the host, so exercise the host's own code.
+            let code = if cfg!(windows) { 112 } else { 28 };
+            let e = std::io::Error::from_raw_os_error(code);
+            let err = classify_fs_error(
+                "write project metadata",
+                std::path::Path::new("/p/x.json"),
+                &e,
+            );
+            assert!(matches!(err, CommandError::Expected { .. }), "got: {err:?}");
+            assert!(err.to_string().contains("disk is full"), "got: {err}");
+            // Unclassified codes still surface as Io.
+            let other = std::io::Error::from_raw_os_error(99);
+            assert!(matches!(
+                classify_fs_error("write", std::path::Path::new("/p"), &other),
+                CommandError::Io { .. }
+            ));
+        }
+
+        #[test]
+        fn could_not_write_index_is_an_environment_gap() {
+            let err = git_environment_gap("error: could not write index").expect("classified");
+            assert!(matches!(err, CommandError::Expected { .. }));
+            assert!(err.to_string().contains("index file"));
+            assert!(git_environment_gap("fatal: bad object HEAD").is_none());
+        }
+
+        #[test]
+        fn windows_crash_exit_codes_are_environment_gaps() {
+            // STATUS_DLL_INIT_FAILED (issue #850) and STATUS_ACCESS_VIOLATION
+            // (issue #853) as git.exe reports them: negative i32 exit codes.
+            let dll = git_exit_code_gap(Some(-1073741502)).expect("classified");
+            assert!(matches!(dll, CommandError::Expected { .. }));
+            assert!(dll.to_string().contains("didn't load"), "got: {dll}");
+            let av = git_exit_code_gap(Some(-1073741819)).expect("classified");
+            assert!(av.to_string().contains("crashed"), "got: {av}");
+            assert!(git_exit_code_gap(Some(128)).is_none());
+            assert!(git_exit_code_gap(Some(1)).is_none());
+            assert!(git_exit_code_gap(None).is_none());
+        }
+    }
 
     mod canonicalize_tagged_errors {
         use super::*;

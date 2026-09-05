@@ -2156,12 +2156,24 @@ async fn ensure_simulator(preferred: Option<String>) -> Result<BootResult, Comma
 async fn boot_specific_simulator(udid: &str) -> Result<BootResult, CommandError> {
     let mut boot_cmd = xcrun_command();
     boot_cmd.args(["simctl", "boot", udid]);
-    let out = crate::external_command::run_with_timeout(
+    let out = match crate::external_command::run_with_timeout(
         tokio::process::Command::from(boot_cmd),
         "xcrun simctl boot",
         SIMCTL_TIMEOUT_SECS,
     )
-    .await?;
+    .await
+    {
+        Ok(out) => out,
+        // Same class as the bootstatus timeout below: a busy machine, not a
+        // malfunction (issue #865).
+        Err(CommandError::Timeout { .. }) => {
+            return Err(CommandError::expected(
+                "The iOS Simulator is taking a long time to respond to the boot request. Try \
+                 again — if it keeps happening, quit and reopen Simulator.app.",
+            ));
+        }
+        Err(e) => return Err(e),
+    };
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         if !stderr.contains("current state: Booted") {
@@ -2220,8 +2232,29 @@ async fn spawn_serve_sim(udid: &str, start_port: u16) -> Result<MirrorInfo, Comm
         "serve-sim --detach",
         SERVE_SIM_TIMEOUT_SECS,
     )
-    .await?;
+    .await
+    .map_err(|e| npm_cache_permission_error(&e).unwrap_or(e))?;
     parse_mirror_info(&stdout)
+}
+
+/// `npx` failing to fetch serve-sim because `~/.npm` has root-owned files
+/// (left behind by a `sudo npm install`). npm dumps its whole warning/error
+/// transcript to stderr; the user needs the one-line fix, and telemetry
+/// doesn't need the dump (issue #743).
+fn npm_cache_permission_error(err: &CommandError) -> Option<CommandError> {
+    let CommandError::Process { stderr, .. } = err else {
+        return None;
+    };
+    let lower = stderr.to_lowercase();
+    let cache_denied = lower.contains("eacces")
+        && (lower.contains(".npm") || lower.contains("npm cache") || lower.contains("_cacache"));
+    cache_denied.then(|| {
+        CommandError::expected(
+            "The iOS Simulator mirror couldn't start because your npm cache (~/.npm) contains \
+             files owned by another user — usually left behind by a `sudo npm install`. In a \
+             terminal, run: sudo chown -R $(whoami) ~/.npm — then try again.",
+        )
+    })
 }
 
 /// Connection info reconstructed from a live registered session, for the
@@ -3124,6 +3157,29 @@ mod tests {
         );
         // Nothing detected → empty prefix (command runs unchanged).
         assert_eq!(android_build_env_prefix(None, None), "");
+    }
+
+    #[test]
+    fn npm_cache_eacces_becomes_the_friendly_message() {
+        let raw = CommandError::Process {
+            cmd: "serve-sim --detach".into(),
+            exit_code: 243,
+            stderr: "npm ERR! code EACCES\nnpm ERR! syscall mkdir\nnpm ERR! path /Users/x/.npm/_cacache/index-v5\nnpm ERR! errno -13".into(),
+        };
+        let err = npm_cache_permission_error(&raw).expect("classified");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(err.to_string().contains("chown"));
+        let unrelated = CommandError::Process {
+            cmd: "serve-sim --detach".into(),
+            exit_code: 1,
+            stderr: "Error: no booted simulator".into(),
+        };
+        assert!(npm_cache_permission_error(&unrelated).is_none());
+        assert!(npm_cache_permission_error(&CommandError::Timeout {
+            cmd: "x".into(),
+            secs: 1
+        })
+        .is_none());
     }
 
     #[test]

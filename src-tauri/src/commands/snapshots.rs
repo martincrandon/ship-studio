@@ -213,12 +213,16 @@ fn diff_files(project_path: &Path, from_sha: &str, to_sha: &str) -> Vec<String> 
 fn apply_snapshot(project_path: &Path, sha: &str) -> Result<(), CommandError> {
     if sha.is_empty() {
         // Clean working tree: reset tracked files to HEAD.
-        let out = crate::utils::git_command_in(project_path)?
-            .args(["checkout-index", "-a", "-f"])
-            .output()
-            .map_err(|e| CommandError::Io {
-                message: format!("git checkout-index: {e}"),
-            })?;
+        // Retried on `.git/index.lock` contention like every other index
+        // writer in the app (issue #860).
+        let out = crate::utils::output_retrying_index_lock(|| {
+            crate::utils::git_command_in(project_path)?
+                .args(["checkout-index", "-a", "-f"])
+                .output()
+                .map_err(|e| CommandError::Io {
+                    message: format!("git checkout-index: {e}"),
+                })
+        })?;
         if !out.status.success() {
             return Err(CommandError::Process {
                 cmd: "git checkout-index".into(),
@@ -233,12 +237,14 @@ fn apply_snapshot(project_path: &Path, sha: &str) -> Result<(), CommandError> {
     // whose tree is the working tree. Apply that tree to both the index and
     // the working directory.
     let run_read_tree = || {
-        crate::utils::git_command_in(project_path)?
-            .args(["read-tree", "-u", "--reset", sha])
-            .output()
-            .map_err(|e| CommandError::Io {
-                message: format!("git read-tree: {e}"),
-            })
+        crate::utils::output_retrying_index_lock(|| {
+            crate::utils::git_command_in(project_path)?
+                .args(["read-tree", "-u", "--reset", sha])
+                .output()
+                .map_err(|e| CommandError::Io {
+                    message: format!("git read-tree: {e}"),
+                })
+        })
     };
     let mut read_tree = run_read_tree()?;
     if !read_tree.status.success() {

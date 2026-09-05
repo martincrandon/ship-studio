@@ -526,6 +526,15 @@ fn classify_mcp_failure(action: &str, details: &str) -> CommandError {
         return CommandError::expected(message);
     }
 
+    // An older Claude Code CLI that predates the `http` transport ("Invalid
+    // transport type: http. Must be one of: stdio, sse"). The installed
+    // version is the user's, not ours (issue #871).
+    if lower.contains("invalid transport type") && lower.contains("must be one of") {
+        return CommandError::expected(format!(
+            "{message}\n\nYour installed agent CLI is too old to support this server's transport. Update the CLI (for Claude Code: `npm i -g @anthropic-ai/claude-code`) and try again — or, if the server also offers SSE, add it with the `sse` transport instead."
+        ));
+    }
+
     // Claude Code's enterprise-managed settings can refuse servers that
     // aren't on the org's MCP allowlist ("Cannot add MCP server \"x\": not
     // allowed by enterprise policy" / "…explicitly blocked by enterprise
@@ -1054,6 +1063,22 @@ mod tests {
         ));
         assert_eq!(invalid_config_key(details).as_deref(), Some("service_tier"));
         assert_eq!(invalid_config_key("no key here"), None);
+    }
+
+    #[test]
+    fn old_cli_invalid_transport_is_expected() {
+        let err = classify_mcp_failure(
+            "add MCP server",
+            "Invalid transport type: http. Must be one of: stdio, sse",
+        );
+        assert!(matches!(err, CommandError::Expected { .. }), "got: {err:?}");
+        assert!(err.to_string().contains("too old"), "got: {err}");
+        let other =
+            classify_mcp_failure("add MCP server", "Invalid transport type: carrier-pigeon");
+        assert!(
+            !matches!(other, CommandError::Expected { .. }),
+            "got: {other:?}"
+        );
     }
 
     #[test]

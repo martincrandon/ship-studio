@@ -51,8 +51,10 @@ pub async fn register_cursor_mcp(url: String) -> Result<bool, CommandError> {
     }
     let path = cursor_dir.join("mcp.json");
     let mut root: serde_json::Value = if path.exists() {
+        // EACCES on ~/.cursor (left root-owned by a sudo install) is the
+        // user's environment — classify it instead of a raw OS string (#867).
         let raw = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Failed to read Cursor mcp.json: {e}"))?;
+            .map_err(|e| crate::utils::classify_fs_error("read Cursor's mcp.json", &path, &e))?;
         match serde_json::from_str(&raw) {
             Ok(v) => v,
             Err(e) => {
@@ -87,7 +89,7 @@ pub async fn register_cursor_mcp(url: String) -> Result<bool, CommandError> {
         let serialized = serde_json::to_string_pretty(&root)
             .map_err(|e| format!("Failed to serialize Cursor mcp.json: {e}"))?;
         std::fs::write(&path, serialized)
-            .map_err(|e| format!("Failed to write Cursor mcp.json: {e}"))?;
+            .map_err(|e| crate::utils::classify_fs_error("write Cursor's mcp.json", &path, &e))?;
         tracing::info!("Registered shipstudio-preview in Cursor's mcp.json");
     }
     Ok(true)

@@ -53,6 +53,12 @@ pub async fn stash_changes(project_path: String) -> Result<bool, CommandError> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // "could not write index", OOM, unaccepted Xcode license… — git
+        // itself can't work here; environment, not malfunction (issue #861).
+        if let Some(gap) = crate::utils::git_environment_gap(&stderr) {
+            warn!(error = %stderr.trim(), "git blocked by an environment gap while stashing");
+            return Err(gap);
+        }
         return Err((format!("Failed to stash changes: {stderr}")).into());
     }
 
@@ -226,6 +232,10 @@ pub async fn restore_backup(
 
         if !stash_output.status.success() {
             let stderr = String::from_utf8_lossy(&stash_output.stderr);
+            if let Some(gap) = crate::utils::git_environment_gap(&stderr) {
+                warn!(error = %stderr.trim(), "git blocked by an environment gap while stashing");
+                return Err(gap);
+            }
             return Err((format!("Failed to stash changes: {stderr}")).into());
         }
     }

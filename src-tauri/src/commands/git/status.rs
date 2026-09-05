@@ -132,6 +132,12 @@ pub async fn get_changed_files(project_path: String) -> Result<Vec<ChangedFile>,
             warn!(error = %stderr.trim(), "git blocked by an environment gap while getting status");
             return Err(gap);
         }
+        if stderr.trim().is_empty() {
+            if let Some(gap) = crate::utils::git_exit_code_gap(output.status.code()) {
+                warn!(exit_code = ?output.status.code(), "git status died silently with a known Windows crash code");
+                return Err(gap);
+            }
+        }
         return Err(git_status_failure_message(stderr.trim(), output.status.code()).into());
     }
 

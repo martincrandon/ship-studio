@@ -112,6 +112,11 @@ pub async fn fetch_all_branches(project_path: String) -> Result<(), CommandError
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // A vanished remote / auth gap / network blip is the environment, not
+        // a malfunction — same classifier the other net call sites use (#868).
+        if let Some(err) = super::classify_git_net_error(&stderr) {
+            return Err(err);
+        }
         return Err((format!("Failed to fetch: {stderr}")).into());
     }
 
@@ -132,6 +137,9 @@ pub async fn git_pull(project_path: String) -> Result<(), CommandError> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if is_missing_upstream(&stderr) {
             return Err(CommandError::expected(format!("Failed to pull: {stderr}")));
+        }
+        if let Some(err) = super::classify_git_net_error(&stderr) {
+            return Err(err);
         }
         return Err((format!("Failed to pull: {stderr}")).into());
     }
@@ -203,6 +211,9 @@ pub async fn pull_and_merge(
             // (issue #674).
             warn!(error = %stderr, "Merge ref did not resolve to a commit");
             return Err(CommandError::expected(format!("Failed to merge: {stderr}")));
+        }
+        if let Some(err) = super::classify_git_net_error(&stderr) {
+            return Err(err);
         }
         return Err((format!("Failed to merge: {stderr}")).into());
     }

@@ -181,13 +181,16 @@ pub fn update_app_state<T>(
 }
 
 /// Write the app state to disk
-pub fn write_app_state(state: &AppState) -> Result<(), String> {
+pub fn write_app_state(state: &AppState) -> Result<(), crate::errors::CommandError> {
     let path = state::get_app_state_path();
 
-    // Ensure parent directory exists
+    // Ensure parent directory exists. Filesystem failures go through the
+    // shared classifier so EACCES / a read-only volume / a full disk come
+    // back as actionable Expected errors, not raw OS strings (issue #858).
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create app state directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            crate::utils::classify_fs_error("create the app state directory", parent, &e)
+        })?;
     }
 
     let json = serde_json::to_string_pretty(state)
@@ -202,8 +205,9 @@ pub fn write_app_state(state: &AppState) -> Result<(), String> {
     // freshly-created Workspace could vanish on the next launch.
     let tmp_path = path.with_extension("json.tmp");
     std::fs::write(&tmp_path, &json)
-        .map_err(|e| format!("Failed to write app state temp file: {e}"))?;
-    std::fs::rename(&tmp_path, &path).map_err(|e| format!("Failed to persist app state: {e}"))
+        .map_err(|e| crate::utils::classify_fs_error("write the app state file", &tmp_path, &e))?;
+    std::fs::rename(&tmp_path, &path)
+        .map_err(|e| crate::utils::classify_fs_error("persist the app state file", &path, &e))
 }
 
 // ============ Mock Mode ============

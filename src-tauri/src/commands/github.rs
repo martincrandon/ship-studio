@@ -599,6 +599,11 @@ pub async fn push_to_github(options: PushToGitHubOptions) -> Result<String, Comm
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
+            // An unaccepted Xcode license / missing CLT breaks every git
+            // invocation — environment, not malfunction (issue #847).
+            if let Some(gap) = crate::utils::git_environment_gap(&stderr) {
+                return Err(gap);
+            }
             return Err(CommandError::Process {
                 cmd: "git commit".to_string(),
                 exit_code: output.status.code().unwrap_or(-1),

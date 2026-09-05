@@ -182,6 +182,13 @@ fn run_worktree_git(cwd: &Path, args: &[&str]) -> Result<std::process::Output, C
         })
 }
 
+/// `git worktree remove` without `--force` refusing to delete a tree that
+/// still has modified or untracked files.
+fn is_dirty_worktree_refusal(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    lower.contains("contains modified or untracked files") || lower.contains("use --force")
+}
+
 fn process_error(args: &[&str], output: &std::process::Output) -> CommandError {
     CommandError::Process {
         cmd: format!("git {}", args.join(" ")),
@@ -452,6 +459,19 @@ pub async fn remove_worktree(
     info!(force, "Removing git worktree");
     let output = run_worktree_git(&validated_path, &args)?;
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !force && is_dirty_worktree_refusal(&stderr) {
+            // git declining to delete uncommitted work is the safety rail
+            // working; the UI already offers the force path. Expected, with
+            // the raw stderr kept so the frontend's own matcher still fires
+            // (issue #744).
+            return Err(CommandError::expected(format!(
+                "`git {}` exited with status {}: {}",
+                args.join(" "),
+                output.status.code().unwrap_or(-1),
+                stderr.trim()
+            )));
+        }
         return Err(process_error(&args, &output));
     }
 
@@ -596,6 +616,16 @@ branch refs/heads/feature
     /// repository's main worktree — the regression scattered one repo's
     /// worktrees across container folders named after whichever checkout
     /// the user happened to invoke from.
+    #[test]
+    fn dirty_worktree_refusal_is_recognized() {
+        assert!(is_dirty_worktree_refusal(
+            "fatal: '/x/y.worktrees/z' contains modified or untracked files, use --force to delete it"
+        ));
+        assert!(!is_dirty_worktree_refusal(
+            "fatal: '/x/y' is not a working tree"
+        ));
+    }
+
     #[test]
     fn main_worktree_path_resolves_from_linked_worktree() {
         let tmp = tempfile::tempdir().expect("tempdir");

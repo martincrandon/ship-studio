@@ -115,6 +115,15 @@ fn map_spawn_io_error(label: &str, io_err: &std::io::Error) -> CommandError {
         spawn_access_denied_error(label)
     } else if is_windows_path_too_long(&io_err.to_string()) {
         windows_path_too_long_error(label)
+    } else if io_err.raw_os_error() == Some(14001) {
+        // ERROR_SXS_CANT_GEN_ACTCTX: Windows found the executable but its
+        // side-by-side manifest / runtime dependencies are broken, so it can't
+        // be launched at all. A damaged install of that program (issue #857).
+        CommandError::expected(format!(
+            "`{label}` couldn't be launched: Windows reports its installation is corrupted or \
+             incomplete (side-by-side configuration is incorrect). Reinstall or repair that \
+             program, then try again."
+        ))
     } else if io_err.kind() == std::io::ErrorKind::InvalidInput
         && io_err
             .to_string()
@@ -632,6 +641,23 @@ mod tests {
             map_spawn_io_error("Codex CLI", &unrelated),
             CommandError::Io { .. }
         ));
+    }
+
+    #[test]
+    fn map_spawn_io_error_classifies_broken_sxs_install_as_expected() {
+        // Windows ERROR_SXS_CANT_GEN_ACTCTX (issue #857): the binary exists
+        // but its install is damaged.
+        let e = std::io::Error::from_raw_os_error(14001);
+        match map_spawn_io_error("headless browser thumbnail", &e) {
+            CommandError::Expected { message } => {
+                assert!(
+                    message.contains("`headless browser thumbnail`"),
+                    "got: {message}"
+                );
+                assert!(message.contains("Reinstall or repair"), "got: {message}");
+            }
+            other => panic!("expected Expected, got {other:?}"),
+        }
     }
 
     // The #616 shape: `I/O error: `gh pr list`: Resource temporarily

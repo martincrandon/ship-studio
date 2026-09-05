@@ -65,9 +65,10 @@ enum HeadlessInvocation {
 }
 
 /// Build the headless invocation for `agent`, or `None` when the agent can't
-/// run one-shot prompts (Opencode today) — callers surface a friendly
-/// "switch your default agent" error instead of spawning an interactive
-/// session that dies with "stdin is not a terminal".
+/// run one-shot prompts — callers surface a friendly "switch your default
+/// agent" error instead of spawning an interactive session that dies with
+/// "stdin is not a terminal". (Opencode gained `run` with a stdin prompt in
+/// issue #862; every bundled agent now has a headless path.)
 fn headless_invocation(agent: &AgentConfig, prompt: &str) -> Option<HeadlessInvocation> {
     if !agent.print_mode_flags.is_empty() {
         let mut args: Vec<String> = agent
@@ -75,11 +76,12 @@ fn headless_invocation(agent: &AgentConfig, prompt: &str) -> Option<HeadlessInvo
             .iter()
             .map(|f| f.to_string())
             .collect();
-        // Claude's `-p`/`--print` reads the query from stdin when no
-        // positional argument is given — use that to dodge the argv size
-        // ceiling (issue #595). Cursor's print mode isn't verified to accept
-        // a stdin prompt, so it keeps the positional argument.
-        let stdin_prompt = if agent.id == "claude-code" {
+        // Claude's `-p`/`--print` and Opencode's `run` read the query from
+        // stdin when no positional argument is given — use that to dodge the
+        // argv size ceiling (issue #595) and Windows' `.cmd` argument escaping
+        // (issue #663). Cursor's print mode isn't verified to accept a stdin
+        // prompt, so it keeps the positional argument.
+        let stdin_prompt = if agent.id == "claude-code" || agent.id == "opencode" {
             Some(prompt.to_string())
         } else {
             args.push(prompt.to_string());
@@ -214,6 +216,19 @@ pub(crate) fn classify_agent_cli_failure(agent_name: &str, detail: &str) -> Opti
         return Some(CommandError::expected(format!(
             "{agent_name} couldn't load one of your installed skills — its SKILL.md is \
              missing a required field. Fix or remove that skill file, then try again."
+        )));
+    }
+    // Claude Code refusing to start because a permission rule in the
+    // project's own .claude/settings(.local).json has a wildcard before the
+    // rest of the command. The user's config, not ours (issue #864).
+    if lower.contains("permission allow rule")
+        || lower.contains("permission deny rule")
+        || lower.contains("wildcard before the rest of the command")
+    {
+        return Some(CommandError::expected(format!(
+            "{agent_name} refused to start because a permission rule in this project's \
+             .claude/settings.local.json (or .claude/settings.json) is invalid — it has a \
+             wildcard before the rest of the command. Fix or remove that rule, then try again."
         )));
     }
     if lower.contains("has not been trusted") || lower.contains("hastrustdialogaccepted") {
@@ -916,6 +931,18 @@ mod tests {
     // The untrusted-workspace compound error (trust warning + stdin race +
     // "--print needs input") must become one plain remedy (issue #660).
     #[test]
+    fn classify_agent_cli_failure_invalid_permission_rule_is_expected() {
+        let detail =
+            "Claude Code CLI failed: Permission allow rule (.claude/settings.local.json): \
+                      Bash(perl -0pe 's|x.*?y|z|s') has a wildcard before the rest of the command, \
+                      so it also matches any options inserted after it";
+        let err = classify_agent_cli_failure("Claude Code", detail).expect("classified");
+        assert!(matches!(err, CommandError::Expected { .. }));
+        assert!(err.to_string().contains("settings.local.json"));
+        assert!(classify_agent_cli_failure("Claude Code", "segfault").is_none());
+    }
+
+    #[test]
     fn classify_agent_cli_failure_untrusted_workspace_is_expected() {
         let detail = "Ignoring 16 permissions.allow entries from .claude/settings.local.json: \
                       this workspace has not been trusted. Run Claude Code interactively here once \
@@ -1057,10 +1084,17 @@ mod tests {
     }
 
     #[test]
-    fn headless_invocation_none_for_opencode() {
-        // Opencode has no headless mode — callers must show a friendly error
-        // instead of spawning an interactive session ("stdin is not a terminal").
-        assert!(headless_invocation(&crate::agent::OPENCODE, "hello").is_none());
+    fn headless_invocation_opencode_runs_with_stdin_prompt() {
+        // `opencode run` with the prompt on stdin — verified against opencode
+        // 1.18.9, which answered a TITLE:/DESCRIPTION: prompt on stdout with
+        // only session decoration on stderr (issue #862).
+        match headless_invocation(&crate::agent::OPENCODE, "hello").expect("has headless mode") {
+            HeadlessInvocation::PrintMode { args, stdin_prompt } => {
+                assert_eq!(args, vec!["run".to_string()]);
+                assert_eq!(stdin_prompt.as_deref(), Some("hello"));
+            }
+            HeadlessInvocation::CodexExec { .. } => panic!("expected PrintMode, got CodexExec"),
+        }
     }
 
     // The #565 shape: a commit-message CLI timeout is best-effort noise (the
