@@ -281,3 +281,20 @@ describe('describeExitStatus', () => {
     expect(describeExitStatus(-1073741819)).toBe('status 0xC0000005');
   });
 });
+
+describe('extractTerminalError — spinner frames are not content (issue #855)', () => {
+  it('returns null when the tail is only a spinner frame', () => {
+    expect(extractTerminalError('\\')).toBeNull();
+    expect(extractTerminalError('  |  \n/\n-')).toBeNull();
+    expect(extractTerminalError('⠋\n⠙')).toBeNull();
+  });
+
+  it('walks past a trailing spinner frame to the last real line', () => {
+    expect(extractTerminalError('npm ERR! code ELIFECYCLE\n\\\n')).toBe('npm ERR! code ELIFECYCLE');
+    expect(extractTerminalError('installing packages…\r\\\r|\n')).toBe('installing packages…');
+  });
+
+  it('still keeps ordinary lines that merely start with a dash', () => {
+    expect(extractTerminalError('- not-found: foo')).toBe('- not-found: foo');
+  });
+});

@@ -89,11 +89,21 @@ function toVisibleLines(tail: string): string[] {
   return stripAnsi(tail)
     .split('\n')
     .map((line) => {
-      const segments = line.split('\r').filter((segment) => segment.trim().length > 0);
+      const segments = line
+        .split('\r')
+        .filter((segment) => segment.trim().length > 0 && !SPINNER_ONLY_LINE.test(segment));
       return (segments[segments.length - 1] ?? '').trim();
     })
-    .filter((line) => line.length > 0);
+    .filter((line) => line.length > 0 && !SPINNER_ONLY_LINE.test(line));
 }
+
+/**
+ * A line that is nothing but a progress-spinner frame — an ASCII rotation
+ * character or a Braille spinner glyph. npm/pnpm leave one behind when they
+ * die mid-spin, and surfacing "\" as the failure detail is worse than no
+ * detail at all (issue #855).
+ */
+const SPINNER_ONLY_LINE = /^\s*(?:[-\\|/]|[\u2800-\u28FF]+|[◐◓◑◒◴◷◶◵⣾⣽⣻⢿⡿⣟⣯⣷]+)\s*$/;
 
 /**
  * Extract the most useful error line from the tail of a failed command's
