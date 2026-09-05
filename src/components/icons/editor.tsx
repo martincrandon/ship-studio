@@ -13,7 +13,7 @@ import TrashSvg from '../../assets/icons/trash.svg?react';
 import UpSvg from '../../assets/icons/up.svg?react';
 import DownSvg from '../../assets/icons/down.svg?react';
 import CopySvg from '../../assets/icons/copy.svg?react';
-import CutSvg from '../../assets/icons/Cut.svg?react';
+import CutSvg from '../../assets/icons/cut.svg?react';
 import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
 import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
 import ReloadSvg from '../../assets/icons/reload.svg?react';
@@ -149,7 +149,7 @@ export const CopyIcon = createIcon(CopySvg, {
 });
 export const CutIcon = createIcon(CutSvg, {
   name: 'CutIcon',
-  source: 'icons/Cut.svg',
+  source: 'icons/cut.svg',
   kind: 'ui',
   defaultSize: 14,
   compact: true,
