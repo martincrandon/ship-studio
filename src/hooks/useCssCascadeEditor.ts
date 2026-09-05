@@ -39,6 +39,8 @@ import { keyframesName, parseRulePrelude } from '../lib/cssStructures';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import type { ComponentFocusContext } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 function toastText(err: unknown): string {
   return formatCommandError(asCommandError(err));
@@ -86,6 +88,8 @@ interface Params {
    *  get a CSS-Modules explanation instead of the generic read-only reason. */
   cssModulesHint?: boolean;
   onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  /** Revision-bound component definition context, when focus is active. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
 }
 
 export function useCssCascadeEditor({
@@ -94,7 +98,9 @@ export function useCssCascadeEditor({
   enabled,
   cssModulesHint = false,
   onToast,
+  componentFocusRef,
 }: Params) {
+  void componentFocusRef;
   const [editModeOn, setEditModeOn] = useState(false);
   const editMode = enabled && editModeOn;
 
@@ -111,6 +117,8 @@ export function useCssCascadeEditor({
   const [existingSelectors, setExistingSelectors] = useState<string[]>([]);
   // Project CSS variables (`--foo`) for `var(--…)` value autocomplete.
   const [variableSuggestions, setVariableSuggestions] = useState<string[]>([]);
+  /** Exact source target, when a focused child is validated by component context. */
+  const [focusedSource] = useState<SourceRef | null>(null);
 
   // Per-rule source baseline (drift guard + diff) and latest body, in refs so the
   // debounced callbacks read fresh values without re-binding.
@@ -982,6 +990,7 @@ export function useCssCascadeEditor({
     existingSelectors,
     variableSuggestions,
     animationSuggestions,
+    focusedSource,
     loading,
     savingKeys,
   };

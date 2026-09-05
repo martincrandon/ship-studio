@@ -88,6 +88,7 @@ import { logger } from '../lib/logger';
 import { isExpectedStructuralRefusal } from './useElementStructure';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import { type ComponentFocusContext } from '../lib/components/focus';
 
 /**
  * What the style controls currently edit:
@@ -210,6 +211,10 @@ interface Params {
   /** All breakpoints (incl. Base) — used to recognize/strip variant prefixes. */
   breakpoints: Breakpoint[];
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  /** Revision-bound component definition context, when focus is active. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
+  /** Index-backed UsageScope data; null keeps the legacy backend fallback alive. */
+  getIndexedUsage?: (resolution: Resolution) => UsageReport | null;
 }
 
 export interface Selection {
@@ -228,7 +233,11 @@ export function useVisualEditor({
   activeBreakpoint,
   breakpoints,
   onToast,
+  componentFocusRef,
+  getIndexedUsage,
 }: Params) {
+  void componentFocusRef;
+  void getIndexedUsage;
   // User intent; the *effective* mode below also requires the feature be enabled,
   // so it flips off automatically when the server restarts (no reset effect).
   const [editModeOn, setEditModeOn] = useState(false);

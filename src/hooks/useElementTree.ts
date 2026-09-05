@@ -458,15 +458,12 @@ export function useElementTree({
         setTruncated(!!d.truncated);
       } else if (d.type === 'ss:treeDirty') {
         requestTree();
-<<<<<<< HEAD
       } else if (d.type === 'ss:hover') {
         setHoveredId(typeof d.nodeId === 'number' ? d.nodeId : null);
-=======
       } else if (d.type === 'ss:selRect') {
         const rect = mapSelectionRect(d.rect);
         setSelectionRect(rect);
         setSelectedComponent((current) => (current ? { ...current, rect } : current));
->>>>>>> 30e252ca (Complete native components roadmap)
       } else if (d.type === 'ss:select') {
         setSelectedId(typeof d.nodeId === 'number' ? d.nodeId : null);
         const rect = mapSelectionRect(d.rect);
@@ -547,18 +544,6 @@ export function useElementTree({
     };
   }, [enabled, post, requestTree, iframeRef]);
 
-<<<<<<< HEAD
-  const selectNode = useCallback((id: number) => post({ type: 'ss:selectNode', id }), [post]);
-  const hoverNode = useCallback(
-    (id: number | null) => {
-      // The pointer is over the Elements pane, so a previous page-side hover is
-      // no longer the active visual target.
-      setHoveredId(null);
-      post({ type: 'ss:hoverNode', id });
-    },
-    [post]
-  );
-=======
   const selectNode = useCallback(
     (id: number) => {
       setSelectionKind('element');
@@ -568,8 +553,15 @@ export function useElementTree({
     },
     [post]
   );
-  const hoverNode = useCallback((id: number | null) => post({ type: 'ss:hoverNode', id }), [post]);
->>>>>>> 30e252ca (Complete native components roadmap)
+  const hoverNode = useCallback(
+    (id: number | null) => {
+      // The pointer is over the Elements pane, so a previous page-side hover is
+      // no longer the active visual target.
+      setHoveredId(null);
+      post({ type: 'ss:hoverNode', id });
+    },
+    [post]
+  );
   const selectComponent = useCallback(
     (node: ComponentTreeNode) => {
       setSelectionKind('component');
@@ -723,15 +715,10 @@ export function useElementTree({
     truncated,
     selectedId: enabled ? selectedId : null,
     affectedIds: enabled ? affectedIds : [],
-<<<<<<< HEAD
     hoveredId: enabled ? hoveredId : null,
-    selectionKind: enabled ? selectionKind : 'element',
-    selectedComponent: enabled ? selectedComponent : null,
-=======
     selectionKind: enabled && effectiveSelectedComponent ? 'component' : 'element',
     selectedComponent: enabled ? effectiveSelectedComponent : null,
     componentFocusCandidate: enabled ? componentFocusCandidate : null,
->>>>>>> 30e252ca (Complete native components roadmap)
     selectNode,
     hoverNode,
     selectComponent,

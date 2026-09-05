@@ -39,6 +39,7 @@ import { resolveElementHtml } from '../lib/edit-html';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
+import type { ComponentFocusContext } from '../lib/components/focus';
 
 export interface SelectionRect {
   top: number;
@@ -78,6 +79,8 @@ interface Params {
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
+  /** Revision-bound definition context for focused structural writes. */
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
 }
 
 /** How long after a write the iframe `load` handler still replays the reselect. */
@@ -146,7 +149,14 @@ export function isExpectedStructuralRefusal(message: string): boolean {
   );
 }
 
-export function useElementStructure({ iframeRef, projectPath, enabled, onToast }: Params) {
+export function useElementStructure({
+  iframeRef,
+  projectPath,
+  enabled,
+  onToast,
+  componentFocusRef,
+}: Params) {
+  void componentFocusRef;
   const [selection, setSelection] = useState<StructureSelection | null>(null);
   // Inline text editing is in progress — the toolbar hides so it can't cover
   // the contenteditable or the formatting bubble.

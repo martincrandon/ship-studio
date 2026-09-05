@@ -82,6 +82,10 @@ export type Resolution =
       line: number;
       column: number;
       class_name: string;
+      /** Exact UTF-8 byte range and file hash returned by the resolver. */
+      source_start?: number;
+      source_end?: number;
+      source_hash?: string;
       /** How the match was reached: "source" | "dom_path" | "unique" | "tag" | "text" | "ancestor". */
       confidence: string;
     }
@@ -136,6 +140,10 @@ export type TextResolution =
       column: number;
       /** Current static text (trimmed) — the write-back's drift baseline. */
       text: string;
+      /** Exact UTF-8 byte range and file hash returned by the resolver. */
+      source_start?: number;
+      source_end?: number;
+      source_hash?: string;
       confidence: string;
     }
   | { status: 'read_only'; reason: string };
@@ -156,9 +164,23 @@ export function applyTextEdit(
   line: number,
   column: number,
   oldText: string,
-  newText: string
+  newText: string,
+  options?: {
+    /** Optional revision-bound range guard used by focused component editing. */
+    expectedHash?: string;
+    expectedStart?: number;
+    expectedEnd?: number;
+  }
 ): Promise<void> {
-  return invoke('apply_text_edit', { projectPath, file, line, column, oldText, newText });
+  return invoke('apply_text_edit', {
+    projectPath,
+    file,
+    line,
+    column,
+    oldText,
+    newText,
+    ...(options ?? {}),
+  });
 }
 
 // ───────────────────────────── Image source ─────────────────────────────────

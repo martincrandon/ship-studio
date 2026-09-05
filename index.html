@@ -45,40 +45,15 @@
           Try restarting the app. If this keeps happening, reach out on Slack
           and include your app logs (macOS: ~/Library/Logs/ShipStudio).
         </p>
-        <p
-          id="boot-fallback-detail"
-          style="display: none; margin: 12px 0 0; max-width: 520px; font-size: 11px; line-height: 1.5; color: #6b7280"
-        ></p>
       </div>
     </div>
     <script>
-      // Keep enough detail to diagnose a failed module load even when the
-      // structured logger cannot initialise. Module evaluation failures do not
-      // reach React's error boundary, which is why this listener lives here.
-      var bootError = '';
-      window.addEventListener('error', function (event) {
-        var target = event && event.target;
-        var source = target && target.src ? 'Failed to load ' + target.src : '';
-        var message = event && event.message ? event.message : '';
-        bootError = message || source || 'The frontend bundle failed to load.';
-        try {
-          console.error('[Ship Studio] Frontend boot failed:', bootError);
-        } catch (_) {}
-      });
-
       // Safe-mode watchdog: React's first render removes #boot-fallback from
       // the document. If it is still there after 10s, the bundle never
       // mounted — reveal the fallback instead of leaving a black window.
       setTimeout(function () {
         var el = document.getElementById('boot-fallback');
-        if (el) {
-          el.style.display = 'flex';
-          var detail = document.getElementById('boot-fallback-detail');
-          if (detail && bootError) {
-            detail.textContent = bootError;
-            detail.style.display = 'block';
-          }
-        }
+        if (el) el.style.display = 'flex';
       }, 10000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
