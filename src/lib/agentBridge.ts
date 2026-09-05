@@ -18,7 +18,12 @@ import {
   formatElementsForAgent,
 } from './inspectFormat';
 import { addMcpServer, removeMcpServer } from './mcp';
-import { asCommandError, formatCommandError, isProjectFolderGoneError } from './errors';
+import {
+  asCommandError,
+  formatCommandError,
+  isProjectFolderGoneError,
+  isExpectedCommandError,
+} from './errors';
 import { isResourcePressureError } from './errorReporting';
 import { execPreviewAction, type PreviewActionResult } from './previewActions';
 import { agentCursorAt } from './agentActivityStore';
@@ -439,11 +444,31 @@ async function captureScreenshot(
  */
 function isExpectedBridgeFailure(detail: string, err: unknown): boolean {
   return (
-    detail.includes('stopped responding while the screenshot was being captured') ||
+    // The backend's own classification survives IPC now (issue #872) — this
+    // covers every `capture_script_error` Expected branch at once.
+    isExpectedCommandError(err) ||
+    // Wording fallbacks for messages that arrive as plain strings.
+    EXPECTED_BRIDGE_PHRASES.some((phrase) => detail.includes(phrase)) ||
     isProjectFolderGoneError(err) ||
     isResourcePressureError(err)
   );
 }
+
+/**
+ * Stable substrings of the messages `capture_script_error` classifies
+ * Expected (src-tauri/src/commands/ide/screenshots/playwright.rs), for the
+ * cases where the tagged error object isn't available (issue #872).
+ */
+const EXPECTED_BRIDGE_PHRASES = [
+  'stopped responding while the screenshot was being captured',
+  "didn't finish loading in time",
+  'stopped responding while loading the page',
+  'browser crashed while starting up',
+  "couldn't render the capture",
+  'starts a file download instead',
+  'was interrupted',
+  'closed before the screenshot',
+];
 
 /**
  * Execute one bridge tool call. Never throws — failures come back as

@@ -95,6 +95,13 @@ impl Serialize for CommandError {
             },
             Other {
                 message: &'a str,
+                /// Present (and `true`) only for `CommandError::Expected`. The
+                /// `type` tag stays `Other` so no frontend switch has a new
+                /// arm to handle, but the frontend's telemetry chokepoints can
+                /// read the intent instead of re-matching message wording
+                /// (issues #735, #872, #859).
+                #[serde(skip_serializing_if = "Option::is_none")]
+                expected: Option<bool>,
             },
         }
 
@@ -117,8 +124,14 @@ impl Serialize for CommandError {
             }
             // Expected is a backend-only distinction (reporting intent);
             // the frontend renders it exactly like Other.
-            CommandError::Expected { message } => Mirror::Other { message },
-            CommandError::Other { message } => Mirror::Other { message },
+            CommandError::Expected { message } => Mirror::Other {
+                message,
+                expected: Some(true),
+            },
+            CommandError::Other { message } => Mirror::Other {
+                message,
+                expected: None,
+            },
         };
         mirror.serialize(serializer)
     }
@@ -146,6 +159,13 @@ pub fn windows_out_of_memory(err: &std::io::Error, label: Option<&str>) -> Optio
         Some(1450) => Some(CommandError::expected(format!(
             "Windows ran out of system resources{doing}. This usually clears on its own — \
              close some other apps (or restart the machine if it persists), then try again."
+        ))),
+        // ERROR_NOT_ENOUGH_MEMORY ("Not enough memory resources are available to
+        // process this command") — same family, hit by plain fs calls as well
+        // as spawns (issue #849).
+        Some(8) => Some(CommandError::expected(format!(
+            "Windows ran out of memory{doing}. Close some other apps (or restart the \
+             machine if it persists), then try again."
         ))),
         _ => None,
     }
@@ -233,6 +253,24 @@ mod tests {
         assert!(json.contains("\"type\":\"Other\""), "got: {json}");
         assert!(json.contains("Git isn't installed"));
         assert_eq!(err.to_string(), "Git isn't installed");
+        // …but it carries the intent so the frontend can keep it out of
+        // telemetry without re-matching wording (issue #872).
+        assert!(json.contains("\"expected\":true"), "got: {json}");
+        let other = serde_json::to_string(&CommandError::Other {
+            message: "boom".into(),
+        })
+        .unwrap();
+        assert!(!other.contains("expected"), "got: {other}");
+    }
+
+    #[test]
+    fn windows_not_enough_memory_is_expected() {
+        let err = std::io::Error::from_raw_os_error(8);
+        let mapped = windows_out_of_memory(&err, Some("git status")).expect("classified");
+        assert!(matches!(mapped, CommandError::Expected { .. }));
+        assert!(mapped
+            .to_string()
+            .contains("ran out of memory while running `git status`"));
     }
 
     #[test]

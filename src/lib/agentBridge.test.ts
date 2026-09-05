@@ -192,6 +192,29 @@ describe('executeBridgeTool', () => {
     expect(logger.error as Fn).not.toHaveBeenCalled();
   });
 
+  it('warns for any backend-Expected failure via the IPC flag (issue #872)', async () => {
+    (logger.warn as Fn).mockClear();
+    (logger.error as Fn).mockClear();
+    invokeMock.mockRejectedValue({
+      type: 'Other',
+      expected: true,
+      message:
+        "The page at http://localhost:49765 didn't finish loading in time for the screenshot — the dev server is probably still compiling this route.",
+    });
+    const result = await executeBridgeTool(
+      { requestId: 42, tool: 'preview_screenshot' },
+      makeCtx()
+    );
+    expect(result.isError).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the logger mock's calls, not invoking it bound
+    expect(logger.warn as Fn).toHaveBeenCalledWith(
+      '[AgentBridge] Tool execution failed',
+      expect.objectContaining({ tool: 'preview_screenshot' })
+    );
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the logger mock's calls, not invoking it bound
+    expect(logger.error as Fn).not.toHaveBeenCalled();
+  });
+
   it('still errors on an unclassified tool failure', async () => {
     (logger.error as Fn).mockClear();
     invokeMock.mockRejectedValue(new Error('kaboom'));

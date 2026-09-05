@@ -14,7 +14,17 @@ export type CommandError =
   | { type: 'NotAuthenticated'; service: string }
   | { type: 'Io'; message: string }
   | { type: 'MergeConflict'; pr_number: number; stderr: string }
-  | { type: 'Other'; message: string };
+  | {
+      type: 'Other';
+      message: string;
+      /**
+       * Set (to `true`) when the backend returned `CommandError::Expected` — a
+       * recognized environment state with a user-side fix, deliberately kept
+       * out of telemetry. The `type` stays `Other` so no switch needs a new
+       * arm; read this via {@link isExpectedCommandError} (issues #735, #872).
+       */
+      expected?: boolean;
+    };
 
 /**
  * Best-effort coercion of an unknown caught value into a `CommandError`. Used
@@ -68,6 +78,18 @@ export function formatCommandError(err: CommandError): string {
     case 'Other':
       return err.message;
   }
+}
+
+/**
+ * True when a caught error is one the backend classified as Expected — a
+ * known environment state, not a malfunction. Telemetry chokepoints (error
+ * toasts, `logger.error`) should downgrade these rather than auto-file a bug.
+ * Strings and plain Errors can never be Expected: the flag only survives the
+ * IPC round-trip on a tagged CommandError object.
+ */
+export function isExpectedCommandError(value: unknown): boolean {
+  const err = asCommandError(value);
+  return err.type === 'Other' && err.expected === true;
 }
 
 /** True when a caught error is the tagged MergeConflict variant. */
@@ -149,6 +171,10 @@ const BACKEND_HUMANIZED_GIT_PHRASES = [
   // close_pull_request's already-merged refusal (issue #798) — the PR list
   // the Close button was clicked from went stale, an anticipated race.
   "already merged, so there's nothing to close",
+  // switch_branch's own friendly messages (issue #859): an old Git that
+  // rejects `--end-of-options`, and a checkout blocked by an unresolved merge.
+  'your installed git is too old for ship studio',
+  'resolve your current index first',
 ];
 
 /** True when a message is one the backend already humanized (see
@@ -365,6 +391,8 @@ export function humanizeGitError(value: unknown, ctx: GitErrorContext = {}): str
  * error channels that auto-file bug reports (issue #538).
  */
 export function isRecognizedGitFailure(value: unknown, ctx: GitErrorContext = {}): boolean {
+  // The backend said so explicitly — no wording match needed (issue #872).
+  if (isExpectedCommandError(value)) return true;
   const raw = formatCommandError(asCommandError(value));
   // Messages the backend already humanized can come back from
   // humanizeGitError byte-identical (they ARE the friendly form — e.g.

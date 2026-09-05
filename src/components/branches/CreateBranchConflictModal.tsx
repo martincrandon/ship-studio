@@ -19,7 +19,12 @@ import { WarningIcon } from '@/components/icons';
 import { createBranch, switchBranch } from '../../lib/branches';
 import { commitChanges, stashChanges } from '../../lib/git';
 import { generateCommitMessage } from '../../lib/ai';
-import { asCommandError, formatCommandError, humanizeGitError } from '../../lib/errors';
+import {
+  asCommandError,
+  formatCommandError,
+  humanizeGitError,
+  isRecognizedGitFailure,
+} from '../../lib/errors';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { useOptionalToast } from '../../contexts/ToastContext';
@@ -55,7 +60,8 @@ export function CreateBranchConflictModal({
   onClose,
 }: CreateBranchConflictModalProps) {
   const { showToast } = useOptionalToast();
-  const onToast = (message: string, type?: 'success' | 'error') => showToast(message, type);
+  const onToast = (message: string, type?: 'success' | 'error' | 'info') =>
+    showToast(message, type);
   const [isCommitting, setIsCommitting] = useState(false);
   const [isStashing, setIsStashing] = useState(false);
   const isLoading = isCommitting || isStashing;
@@ -84,9 +90,13 @@ export function CreateBranchConflictModal({
       const detail = result.error
         ? humanizeGitError(result.error, { branch: targetBranch })
         : '(git reported failure with no detail)';
+      // A recognized git state (old Git, unresolved merge, network) is the
+      // user's environment — 'error' toasts auto-file bug reports (issue #859).
+      const recognized =
+        !!result.error && isRecognizedGitFailure(result.error, { branch: targetBranch });
       onToast(
         `Created "${targetBranch}", but couldn't switch to it: ${detail} You can switch to it from the Branches tab.${extra ? ` (${extra})` : ''}`,
-        'error'
+        recognized ? 'info' : 'error'
       );
       onClose();
     }

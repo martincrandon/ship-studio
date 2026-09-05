@@ -7,6 +7,7 @@ import {
   friendlyProcessError,
   humanizeGitError,
   isAgentNotInstalledError,
+  isExpectedCommandError,
   isExpectedProjectImportRefusal,
   isMergeConflictError,
   isMissingUpstreamError,
@@ -816,5 +817,50 @@ describe('describeProcessError — git exit-128 causes that are not auth (issue 
       128: 'creation-flow fallback',
     });
     expect(info).toEqual({ expected: true, message: 'creation-flow fallback' });
+  });
+});
+
+describe('isExpectedCommandError — the backend flag survives IPC (issue #872)', () => {
+  it('is true only for a tagged Other carrying expected: true', () => {
+    expect(isExpectedCommandError({ type: 'Other', message: 'anything', expected: true })).toBe(
+      true
+    );
+    expect(isExpectedCommandError({ type: 'Other', message: 'anything' })).toBe(false);
+    expect(isExpectedCommandError({ type: 'Io', message: 'x', expected: true })).toBe(false);
+    expect(isExpectedCommandError('a plain string')).toBe(false);
+    expect(isExpectedCommandError(new Error('boom'))).toBe(false);
+  });
+
+  it('formats identically to a plain Other', () => {
+    expect(formatCommandError({ type: 'Other', message: 'hello', expected: true })).toBe('hello');
+  });
+});
+
+describe('isRecognizedGitFailure — trusts the backend flag and switch_branch wordings', () => {
+  it('treats any Expected error as recognized without matching wording', () => {
+    expect(
+      isRecognizedGitFailure({
+        type: 'Other',
+        message: 'Some brand-new backend message nobody listed here',
+        expected: true,
+      })
+    ).toBe(true);
+    expect(
+      isRecognizedGitFailure({
+        type: 'Other',
+        message: 'Some brand-new backend message nobody listed here',
+      })
+    ).toBe(false);
+  });
+
+  it("recognizes switch_branch's old-Git and unresolved-merge messages (issue #859)", () => {
+    expect(
+      isRecognizedGitFailure(
+        'Your installed Git is too old for Ship Studio (Git 2.24 from 2019 or newer is required). Update Git — run `brew install git` — then try again.'
+      )
+    ).toBe(true);
+    expect(isRecognizedGitFailure('error: you need to resolve your current index first')).toBe(
+      true
+    );
   });
 });
