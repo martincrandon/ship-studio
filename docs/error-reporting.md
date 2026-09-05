@@ -31,25 +31,17 @@ per-site wiring. Coverage comes from choke points, not scattered calls:
 | Frontend crashes (ErrorBoundary) | `logger.logError` → forwarding | message-based |
 | Any `logger.error` / `logger.logError` | forwarding inside `Logger.log()` | message-based |
 | Uncaught JS errors / unhandled rejections | `window` handlers in `main.tsx` | message-based |
+| Error toasts (user-visible failures) | `showToast(…, 'error')` in `useToasts` | message-based |
 
 Excluded on purpose: plugin crashes (`blob:` stacks — third-party code), the
 known Tauri `listeners[eventId]` noise, error logs from dependencies (the
-tracing layer only forwards `ship_studio*` targets), and the `CommandError`
-variants that describe an expected state rather than a malfunction —
-`NotAuthenticated`, `Validation`, and `Expected`.
-
-**Error toasts are not a channel.** `showToast(…, 'error')` used to forward
-its message to the agent. Most error toasts are by-design refusals — "nothing
-to commit", "that branch already exists", "close a tab and try again" — and
-they reached the agent as bugs (#744, #852, #869, #870). A backend refusal
-already returns `CommandError::Expected`, which the IPC choke point skips; the
-toast channel re-reported the same message with no variant to filter on. The
-real faults a toast used to catch still report through `CommandError` crossing
-IPC and through `logger.error`, so nothing that is actually broken went dark.
+tracing layer only forwards `ship_studio*` targets), and
+`CommandError::NotAuthenticated` (a not-yet-connected integration is an
+expected state, not a malfunction).
 
 **The rule for new code**: if something fails in a way that isn't the user's
-expected flow, call `tracing::error!` (Rust) or `logger.error` (frontend) —
-either automatically notifies the agent. A toast alone does not. For
+expected flow, call `tracing::error!` (Rust) or `logger.error` (frontend) or
+surface an error toast — any of those automatically notifies the agent. For
 high-value catch-sites, call `report_error` directly with a stable fingerprint
 slug (see below).
 
@@ -64,7 +56,7 @@ Reports can trigger paid agent investigations, so spam protection is layered —
 all of it client-side before a single byte leaves the machine:
 
 1. **Incident collapse** — one failure often fires several channels within
-   milliseconds (backend error log → `CommandError` over IPC → `logger.error`).
+   milliseconds (backend error log → `CommandError` over IPC → error toast).
    The first channel to send wins; anything else within 5s is suppressed
    without recording dedup state, so real recurrences still report. Panics
    bypass the gap — a crash report is never swallowed by a lesser error.

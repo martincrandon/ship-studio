@@ -294,8 +294,8 @@ would drop exactly the cases the feature exists for.
 | `error_occurred` | `action`, `error_message` (capped 500), `error_type` — fired by `trackError()` from catch blocks. The `action` is the operation that failed (`git_push`, `plugin_install`, `pr_create`, …) |
 
 `error_occurred` is analytics, not bug reporting. The admin-agent pipeline that
-files GitHub issues is documented in [error-reporting.md](error-reporting.md);
-error *toasts* feed neither — most of them are by-design refusals.
+files GitHub issues (including from error toasts) is documented in
+[error-reporting.md](error-reporting.md).
 
 ## Suggested PostHog dashboards
 
