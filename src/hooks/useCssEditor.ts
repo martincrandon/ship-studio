@@ -59,7 +59,7 @@ interface Params {
   /** Feature availability (server ready + a CSS-mode project type). */
   enabled: boolean;
   /** Required: write failures must always surface — never silently swallowed. */
-  onToast: (message: string, type?: 'success' | 'error') => void;
+  onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Params) {
@@ -249,7 +249,10 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
       if (!sig) return false;
       const res = await resolveClassnameSource(projectPath, sig);
       if (res.status !== 'resolved' && res.status !== 'multi') {
-        onToast("Can't edit this element's classes in source — change them in code.", 'error');
+        // A dynamic/computed className the editor declines to rewrite is a
+        // by-design refusal, not a malfunction — 'error' toasts auto-file bug
+        // reports (issue #870).
+        onToast("Can't edit this element's classes in source — change them in code.", 'info');
         return false;
       }
       const prev = res.class_name;

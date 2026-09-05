@@ -85,7 +85,7 @@ interface Params {
   /** The project bundles CSS Modules (Next.js) — unmapped module-hashed selectors
    *  get a CSS-Modules explanation instead of the generic read-only reason. */
   cssModulesHint?: boolean;
-  onToast: (message: string, type?: 'success' | 'error') => void;
+  onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export function useCssCascadeEditor({
@@ -747,7 +747,9 @@ export function useCssCascadeEditor({
           }
           // It exists but we couldn't pin it here (e.g. it lives in a sheet we can't
           // open). Don't show a scary validation error — explain plainly.
-          onToast(`“${sel}” already exists — open it from its stylesheet.`, 'error');
+          // By design, not a malfunction — 'error' toasts auto-file bug
+          // reports (issue #869).
+          onToast(`“${sel}” already exists — open it from its stylesheet.`, 'info');
           return;
         }
         logger.error('[CssCascade] add selector failed', { error: msg });

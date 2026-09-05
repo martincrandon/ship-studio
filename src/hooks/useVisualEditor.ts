@@ -75,6 +75,7 @@ import {
   type CustomClass,
 } from '../lib/customClasses';
 import { logger } from '../lib/logger';
+import { isExpectedStructuralRefusal } from './useElementStructure';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
 
@@ -196,7 +197,7 @@ interface Params {
   activeBreakpoint: Breakpoint;
   /** All breakpoints (incl. Base) — used to recognize/strip variant prefixes. */
   breakpoints: Breakpoint[];
-  onToast?: (message: string, type?: 'success' | 'error') => void;
+  onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 export interface Selection {
@@ -839,10 +840,15 @@ export function useVisualEditor({
         recordCommit('visual_class_added', { mode: 'tailwind', first: true });
         onToast?.('Class added', 'success');
       } catch (err) {
-        logger.error('[VisualEditor] add first class failed', {
-          error: formatCommandError(asCommandError(err)),
+        const message = formatCommandError(asCommandError(err));
+        // The classless-anchor ladder declining to guess among look-alike tags
+        // is a by-design refusal (#318/#818) — warn + info, never a bug report
+        // (issue #852).
+        const refusal = isExpectedStructuralRefusal(message);
+        logger[refusal ? 'warn' : 'error']('[VisualEditor] add first class failed', {
+          error: message,
         });
-        onToast?.(formatCommandError(asCommandError(err)), 'error');
+        onToast?.(message, refusal ? 'info' : 'error');
       }
     },
     [projectPath, post, setLiveClass, onToast, recordCommit]
