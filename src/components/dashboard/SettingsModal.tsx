@@ -286,8 +286,9 @@ export function SettingsModal({
     const newEnabled = !spotifyWidgetEnabled;
     setLocalSpotifyWidgetEnabled(newEnabled);
     void setSpotifyWidgetEnabled(newEnabled);
-    void trackEvent('spotify_widget_toggled', {
-      enabled: newEnabled,
+    void trackEvent('setting_changed', {
+      setting: 'spotify_widget',
+      value: newEnabled,
       $screen_name: 'Settings',
     });
   }, [spotifyWidgetEnabled]);
