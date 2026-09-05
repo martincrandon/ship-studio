@@ -276,12 +276,6 @@ function ssInternalNode(el){return!!(el&&el.hidden&&el.children.length===0&&!(el
    same-tag/same-class siblings without guessing from their labels. */
 function ssElementPath(el){var out=[],p=el,n=0;while(p&&p!==document.body&&p!==document.documentElement&&n<60){if(!ssInternalNode(p))out.unshift({tagName:(p.tagName||'').toLowerCase(),className:(p.getAttribute('class')||'').trim(),domPath:ssDomPath(p)});p=p.parentElement;n++;}return out;}
 
-/* Root-to-leaf path for the host-side element breadcrumb. Keep <body> out of the
-   path: it is the document shell rather than an authored element the editor can
-   meaningfully select. The domPath lets the host reselect classless parents and
-   same-tag/same-class siblings without guessing from their labels. */
-function ssElementPath(el){var out=[],p=el,n=0;while(p&&p!==document.body&&p!==document.documentElement&&n<60){if(!ssInternalNode(p))out.unshift({tagName:(p.tagName||'').toLowerCase(),className:(p.getAttribute('class')||'').trim(),domPath:ssDomPath(p)});p=p.parentElement;n++;}return out;}
-
 
 /* React's development fiber retains the JSX creation stack for each host node.
    Recover its first user-source frame so a classless/empty element selected in the
