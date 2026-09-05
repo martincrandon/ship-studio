@@ -9,6 +9,10 @@
   -ms-overflow-style: none; /* IE/Edge */
 }
 
+.project-thumbnail-input {
+  display: none;
+}
+
 .project-list::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }

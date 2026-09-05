@@ -38,34 +38,23 @@ import { useBranchManagement } from './hooks/useBranchManagement';
 import { useNotifications } from './hooks/useNotifications';
 import { useProjectLifecycle } from './hooks/useProjectLifecycle';
 import { useAppSetup } from './hooks/useAppSetup';
-import { ProjectsView } from './components/dashboard/ProjectsView';
-import { AccountSelectScreen } from './components/accounts/AccountSelectScreen';
-import { WorkspaceView } from './components/workspace/WorkspaceView';
-import { HomeSidebar } from './components/workspace/HomeSidebar';
-import { StandingWorkView } from './components/workspace/StandingWorkView';
+import { AppViewRouter } from './components/AppViewRouter';
 import { useFindingHandoff } from './hooks/useWorkflowHandoff';
 import { useAccountSelectNavigation } from './hooks/useAccountSelectNavigation';
-import { WorkspaceSidebar } from './components/workspace/WorkspaceSidebar';
-import { WorkspaceNavigation, WorkspaceTitlebar } from './components/workspace/WorkspaceHeader';
 import { useProjectRail } from './hooks/useProjectRail';
 import { useActiveAccount } from './hooks/useActiveAccount';
-import { OnboardingRouter } from './components/setup';
 import { Project, renameProject, setTerminalState } from './lib/project';
 import { setActiveAccountId, type Account } from './lib/accounts';
 import { markSetupComplete, getDefaultAgentId as fetchDefaultAgentId } from './lib/setup';
 import { initDefaultAgent } from './lib/agent';
 import { sessionRegistry } from './lib/sessionRegistry';
 import { useCloseProject } from './hooks/useCloseProject';
-import { MonorepoPickerModal } from './components/dashboard/MonorepoPickerModal';
-import { ThumbnailConsentModal } from './components/preview/ThumbnailConsentModal';
 import { QuitConfirmModal } from './components/QuitConfirmModal';
-import { Spinner } from './components/primitives/Spinner';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ModalProvider, useModal } from './contexts/ModalContext';
 import { AgentBridgeProvider } from './contexts/AgentBridgeContext';
 import { CommandPaletteHost } from './components/CommandPalette/CommandPaletteHost';
 import { AppGlobalModals } from './components/AppGlobalModals';
-import { BootLoadingScreen } from './components/BootLoadingScreen';
 import {
   PaletteContextProvider,
   useOpenPalette,
@@ -75,7 +64,6 @@ import { useAppCommands } from './commands/useAppCommands';
 import { useWorkflowCommands } from './commands/useWorkflowCommands';
 import { useProjectNumberShortcuts } from './hooks/useProjectNumberShortcuts';
 import { useWorkspaceNumberShortcuts } from './hooks/useWorkspaceNumberShortcuts';
-import { ToastList } from './components/primitives/ToastList';
 import { TooltipProvider } from './components/primitives/Tooltip';
 import { DevDesignSystemTools } from './components/design-system/DevDesignSystemTools';
 import { logger } from './lib/logger';
@@ -136,11 +124,6 @@ function App({ initialProjectPath }: AppProps) {
     </TooltipProvider>
   );
 }
-
-const EMPTY_TAB_TITLES: Map<number, string> = new Map();
-const EMPTY_ATTENTION_TABS: Set<number> = new Set();
-const noop = () => {};
-const loadingSpinner = <Spinner size="lg" style={{ color: 'var(--text-muted)' }} />; // legacy .spinner look
 
 function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
@@ -1203,242 +1186,108 @@ function AppContents({ initialProjectPath }: AppProps) {
     />
   );
 
-  if (view === 'loading') {
-    return (
-      <>
-        <BootLoadingScreen progress={bootProgress} />
-        {quitConfirmModal}
-      </>
-    );
-  }
+  const handleOnboardingComplete = useCallback(async () => {
+    const defaultAgent = await fetchDefaultAgentId();
+    initDefaultAgent(defaultAgent);
+    await markSetupComplete();
+    await refreshAllCliStatuses();
+    setView('projects');
+  }, [refreshAllCliStatuses]);
 
-  if (view === 'onboarding') {
-    const handleOnboardingComplete = async () => {
-      // Re-hydrate default agent cache (may have been set during onboarding)
-      const defaultAgent = await fetchDefaultAgentId();
-      initDefaultAgent(defaultAgent);
-      // Persist that setup is complete so future launches are fast
-      await markSetupComplete();
-      // Refresh CLI states and go straight to projects (don't re-enter
-      // onboarding). A first-time user only has the Default workspace, so the
-      // picker would just be a dead-end click — it's reachable later via
-      // "Switch Workspace" once they actually create a second workspace.
-      await refreshAllCliStatuses();
-      setView('projects');
-    };
+  const projectsViewProps = {
+    onSelectProject: handleSelectProjectCallback,
+    onCreateProject: handleCreateProject,
+    onImportProject: handleImportProject,
+    onImportLocalFolder: handleImportLocalFolderCallback,
+    isGitHubAuthenticated: integrations.github.cliStatus.authenticated,
+    githubUsername: integrations.github.username,
+    isAuthCheckDone: isInitialCheckDone,
+    onGitHubConnect: handleGitHubConnectFromOverlay,
+    showCreateModal,
+    onCloseCreateModal: handleCloseCreateModal,
+    onProjectCreated: (path: string) => void handleProjectCreated(path),
+    importView,
+    setImportView,
+    onProjectImported: (path: string) => void handleProjectImported(path),
+    authTerminalConfig,
+    closeAuthTerminal,
+    onAuthTerminalExit: handleAuthTerminalExitForProjects,
+    pluginProject,
+    pluginActions,
+    pluginTheme,
+    getSlotPlugins,
+    projectsLoading,
+    onLoadingChange: setProjectsLoading,
+    cleanupStatus,
+    pinnedSet: pinnedProjects.pinnedSet,
+    onTogglePin: (path: string, pinned: boolean) => void handleTogglePin(path, pinned),
+    onSwitchAccount: openAccountSelect,
+  };
 
-    return (
-      <>
-        <div className="app">
-          <OnboardingRouter onComplete={() => void handleOnboardingComplete()} />
-        </div>
-        {quitConfirmModal}
-      </>
-    );
-  }
+  const workspaceViewProps = {
+    homeNav: homeSidebarProps,
+    currentProject,
+    previewRef,
+    terminal: terminalProps,
+    devServer: devServerProps,
+    notifications: notificationsProps,
+    integrationStatus: integrationStatusProps,
+    screenshots: screenshotsProps,
+    layout: layoutProps,
+    pluginState: pluginStateProps,
+    modals: modalsProps,
+    toasts: toastsProps,
+    branchMgmt: branchMgmtProps,
+    plugins: pluginsProps,
+    lifecycle: lifecycleProps,
+    pluginProject,
+    pluginActions,
+    pluginTheme,
+    projectRows: pinnedProjects.rows,
+    onSelectProject: handleRailClick,
+    onCloseProject: handleCloseProject,
+    onUnpinProject: handleRailUnpin,
+    onRenameProject: handleRenameProject,
+    onTogglePinProject: handleTogglePin,
+    onStopDevServer: handleStopDevServer,
+    onSelectProjectTab: handleSelectProjectTab,
+    onGoHome: handleBackToProjects,
+    onOpenProjectPicker: openProjectPicker,
+    onSwitchAccount: openAccountSelect,
+    isProjectDevServerRunning: isServerRunning,
+    isSidebarHidden,
+    onToggleSidebar: toggleSidebar,
+    compactWorkspaceToolbarEnabled,
+  };
 
-  if (view === 'account-select') {
-    return (
-      <>
-        <div className="app">
-          <AccountSelectScreen {...accountSelectProps} />
-        </div>
-        <ToastList toasts={toasts} onDismiss={dismissToast} />
-        {quitConfirmModal}
-      </>
-    );
-  }
+  const thumbnailConsentProps = {
+    isOpen: showThumbnailConsent,
+    onAllow: () => void resolveThumbnailConsent(true),
+    onDeny: () => void resolveThumbnailConsent(false),
+    onDismiss: dismissThumbnailConsent,
+  };
 
-  if (view === 'projects') {
-    return (
-      <>
-        <div className="app workspace workspace-home">
-          <div
-            className={`projects-with-rail${isCompact ? ' is-compact' : ''}`}
-            key="view-projects"
-          >
-            {!isCompact && <HomeSidebar {...homeSidebarProps} activeNav="home" />}
-            <ProjectsView
-              onSelectProject={handleSelectProjectCallback}
-              onCreateProject={handleCreateProject}
-              onImportProject={handleImportProject}
-              onImportLocalFolder={handleImportLocalFolderCallback}
-              isGitHubAuthenticated={integrations.github.cliStatus.authenticated}
-              githubUsername={integrations.github.username}
-              isAuthCheckDone={isInitialCheckDone}
-              onGitHubConnect={handleGitHubConnectFromOverlay}
-              showCreateModal={showCreateModal}
-              onCloseCreateModal={handleCloseCreateModal}
-              onProjectCreated={(path) => void handleProjectCreated(path)}
-              importView={importView}
-              setImportView={setImportView}
-              onProjectImported={(path) => void handleProjectImported(path)}
-              authTerminalConfig={authTerminalConfig}
-              closeAuthTerminal={closeAuthTerminal}
-              onAuthTerminalExit={handleAuthTerminalExitForProjects}
-              pluginProject={pluginProject}
-              pluginActions={pluginActions}
-              pluginTheme={pluginTheme}
-              getSlotPlugins={getSlotPlugins}
-              projectsLoading={projectsLoading}
-              onLoadingChange={setProjectsLoading}
-              cleanupStatus={cleanupStatus}
-              pinnedSet={pinnedProjects.pinnedSet}
-              onTogglePin={(path, pinned) => void handleTogglePin(path, pinned)}
-              onSwitchAccount={openAccountSelect}
-            />
-          </div>
-        </div>
-        {/* .projects-with-rail */}
-        {pendingMonorepoPick && (
-          <MonorepoPickerModal
-            projectName={pendingMonorepoPick.project.name}
-            workspaces={pendingMonorepoPick.workspaces}
-            selectedPick={pendingMonorepoPick.selectedPick}
-            onSelect={handleSelectMonorepoPick}
-            onConfirm={() => void handleConfirmMonorepoPick()}
-            onCancel={() => void handleCancelMonorepoPick()}
-          />
-        )}
-        <ToastList toasts={toasts} onDismiss={dismissToast} />
-        {quitConfirmModal}
-      </>
-    );
-  }
-
-  // Workflows and the Inbox: two home-level screens sharing the home sidebar.
-  if (view === 'workflows' || view === 'inbox') {
-    return (
-      <>
-        <StandingWorkView
-          view={view}
-          isCompact={isCompact}
-          sidebarProps={homeSidebarProps}
-          currentProjectPath={currentProject?.path ?? null}
-          onOpenProject={handleSelectProject}
-        />
-        <ToastList toasts={toasts} onDismiss={dismissToast} />
-        {quitConfirmModal}
-      </>
-    );
-  }
-
-  if (view === 'project-loading') {
-    const showCompactWorkspaceTitlebar = !isCompact && compactWorkspaceToolbarEnabled;
-    return (
-      <>
-        <div
-          className={`app workspace workspace-home${
-            showCompactWorkspaceTitlebar ? ' has-workspace-titlebar workspace--compact-toolbar' : ''
-          }`}
-        >
-          {showCompactWorkspaceTitlebar && (
-            <WorkspaceTitlebar>
-              <WorkspaceNavigation
-                onGoHome={handleBackToProjects}
-                isSidebarHidden={isSidebarHidden}
-                onToggleSidebar={toggleSidebar}
-              />
-            </WorkspaceTitlebar>
-          )}
-          <div className="projects-with-rail" key="view-project-loading">
-            <WorkspaceSidebar
-              key="sidebar-project-loading"
-              isHomeActive={false}
-              onGoHome={handleBackToProjects}
-              onOpenProjectPicker={openProjectPicker}
-              isSidebarHidden={isSidebarHidden}
-              onToggleSidebar={toggleSidebar}
-              showNavigationControls={!compactWorkspaceToolbarEnabled}
-              projects={pinnedProjects.rows}
-              currentProjectPath={currentProject?.path ?? null}
-              currentProjectName={currentProject?.name ?? null}
-              onSelectProject={handleRailClick}
-              onCloseProject={handleCloseProject}
-              onUnpinProject={handleRailUnpin}
-              onRenameProject={handleRenameProject}
-              onTogglePinProject={handleTogglePin}
-              onStopDevServer={handleStopDevServer}
-              onSelectProjectTab={handleSelectProjectTab}
-              terminalTabs={[]}
-              activeTerminalTab={0}
-              tabTitles={EMPTY_TAB_TITLES}
-              attentionTabs={EMPTY_ATTENTION_TABS}
-              maxTabs={5}
-              onSelectTab={noop}
-              onAddTab={noop}
-              onCloseTab={noop}
-              hasDevServer={false}
-              isRestartingDevServer={false}
-              devServerRunning={false}
-              isProjectDevServerRunning={isServerRunning}
-              onSwitchAccount={openAccountSelect}
-            />
-            <div className="project-loading-body">
-              {loadingSpinner}
-              <p>Opening {currentProject?.name}...</p>
-            </div>
-          </div>
-        </div>
-        {quitConfirmModal}
-      </>
-    );
-  }
-
-  // Workspace view (guard against null during back-navigation transition)
-  if (!currentProject) {
-    return (
-      <>
-        <div className="app loading">{loadingSpinner}</div>
-        {quitConfirmModal}
-      </>
-    );
-  }
   return (
-    <>
-      <WorkspaceView
-        homeNav={homeSidebarProps}
-        currentProject={currentProject}
-        previewRef={previewRef}
-        terminal={terminalProps}
-        devServer={devServerProps}
-        notifications={notificationsProps}
-        integrationStatus={integrationStatusProps}
-        screenshots={screenshotsProps}
-        layout={layoutProps}
-        pluginState={pluginStateProps}
-        modals={modalsProps}
-        toasts={toastsProps}
-        branchMgmt={branchMgmtProps}
-        plugins={pluginsProps}
-        lifecycle={lifecycleProps}
-        pluginProject={pluginProject}
-        pluginActions={pluginActions}
-        pluginTheme={pluginTheme}
-        projectRows={pinnedProjects.rows}
-        onSelectProject={handleRailClick}
-        onCloseProject={handleCloseProject}
-        onUnpinProject={handleRailUnpin}
-        onRenameProject={handleRenameProject}
-        onTogglePinProject={handleTogglePin}
-        onStopDevServer={handleStopDevServer}
-        onSelectProjectTab={handleSelectProjectTab}
-        onGoHome={handleBackToProjects}
-        onOpenProjectPicker={openProjectPicker}
-        onSwitchAccount={openAccountSelect}
-        isProjectDevServerRunning={isServerRunning}
-        isSidebarHidden={isSidebarHidden}
-        onToggleSidebar={toggleSidebar}
-        compactWorkspaceToolbarEnabled={compactWorkspaceToolbarEnabled}
-      />
-      <ThumbnailConsentModal
-        isOpen={showThumbnailConsent}
-        onAllow={() => void resolveThumbnailConsent(true)}
-        onDeny={() => void resolveThumbnailConsent(false)}
-        onDismiss={dismissThumbnailConsent}
-      />
-      {quitConfirmModal}
-    </>
+    <AppViewRouter
+      view={view}
+      isCompact={isCompact}
+      compactWorkspaceToolbarEnabled={compactWorkspaceToolbarEnabled}
+      bootProgress={bootProgress}
+      onOnboardingComplete={() => void handleOnboardingComplete()}
+      accountSelectProps={accountSelectProps}
+      homeSidebarProps={homeSidebarProps}
+      projectsViewProps={projectsViewProps}
+      workspaceViewProps={workspaceViewProps}
+      currentProject={currentProject}
+      pendingMonorepoPick={pendingMonorepoPick}
+      onSelectMonorepoPick={handleSelectMonorepoPick}
+      onConfirmMonorepoPick={() => void handleConfirmMonorepoPick()}
+      onCancelMonorepoPick={() => void handleCancelMonorepoPick()}
+      thumbnailConsentProps={thumbnailConsentProps}
+      toasts={toasts}
+      onDismissToast={dismissToast}
+      quitConfirmModal={quitConfirmModal}
+    />
   );
 }
 

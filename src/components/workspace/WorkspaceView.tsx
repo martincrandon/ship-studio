@@ -37,10 +37,8 @@ import { WorkspacePreviewPane } from './WorkspacePreviewPane';
 import { WorkspaceTerminalPane } from './WorkspaceTerminalPane';
 import { WorkspaceHeader, HOSTING_PLUGIN_IDS } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
-import { VariablesIcon } from '@/components/icons';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
-import { useCommands } from '../../commands/useCommands';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
 import { PluginsDropdown } from '../plugins/PluginsDropdown';
@@ -65,6 +63,7 @@ import { useModal } from '../../contexts/ModalContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
 import { defaultWorkspaceTab, workspacePreviewCapabilities } from './workspaceViewState';
 import { useWorkspaceShortcutControls } from '../../hooks/useWorkspaceShortcutControls';
+import { useWorkspacePanelCommands } from '../../hooks/useWorkspacePanelCommands';
 import '../../styles/features/notifications.css';
 
 // ---------------------------------------------------------------------------
@@ -794,79 +793,21 @@ export const WorkspaceView = memo(function WorkspaceView({
     setShowPreviewLogs(!showPreviewLogs);
   }, [showPreviewLogs]);
 
-  useCommands(
-    () => [
-      {
-        id: 'workspace.toggleAgentPanel',
-        title: isAgentPanelHidden ? 'Show Agent panel' : 'Hide Agent panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['terminal', 'pane', 'sidebar'],
-        run: toggleAgentPanel,
-      },
-      {
-        id: 'workspace.toggleAgentPanelPin',
-        title: agentPanelPinned ? 'Float Agent panel' : 'Dock Agent panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['terminal', 'pane', 'pin', 'float', 'dock'],
-        run: toggleAgentPanelPinned,
-      },
-      {
-        id: 'workspace.toggleElementTreePin',
-        title: elementTreePinned ? 'Float Elements panel' : 'Dock Elements panel',
-        category: 'action',
-        when: 'project',
-        keywords: ['elements', 'tree', 'navigator', 'pin', 'float', 'dock'],
-        run: toggleElementTreePinned,
-      },
-      {
-        id: 'workspace.toggleVariablesPanelPin',
-        title: variablesPanelPinned ? 'Float Variables panel' : 'Dock Variables panel',
-        icon: <VariablesIcon size={14} />,
-        category: 'action',
-        when: ({ kind }) => kind === 'project' && isWebProject,
-        keywords: ['variables', 'css', 'token', 'pin', 'float', 'dock'],
-        run: toggleVariablesPanelPinned,
-      },
-      {
-        id: 'css.variables',
-        title: variablesPanelOpen ? 'Hide Variables panel' : 'Show Variables panel',
-        icon: <VariablesIcon size={14} />,
-        category: 'action',
-        when: ({ kind }) => kind === 'project' && isWebProject,
-        keywords: ['css', 'variable', 'custom property', 'token', 'theme', '--'],
-        run: toggleVariablesPanel,
-      },
-      {
-        id: 'workspace.toggleInspector',
-        title: showPreviewLogs ? 'Hide Inspector' : 'Show Inspector',
-        category: 'action',
-        when: 'project',
-        keywords: ['preview', 'browser tools', 'logs', 'console', 'network'],
-        run: togglePreviewLogs,
-      },
-    ],
-    [
-      isAgentPanelHidden,
-      toggleAgentPanel,
-      agentPanelPinned,
-      toggleAgentPanelPinned,
-      elementTreePinned,
-      toggleElementTreePinned,
-      variablesPanelPinned,
-      toggleVariablesPanelPinned,
-      isWebProject,
-      variablesPanelOpen,
-      toggleVariablesPanel,
-      showPreviewLogs,
-      togglePreviewLogs,
-    ]
-  );
-
-  const setInspectTab = useCallback((tab: InspectTab) => {
-    setInspectTabRaw(tab);
-  }, []);
+  useWorkspacePanelCommands({
+    isAgentPanelHidden,
+    toggleAgentPanel,
+    agentPanelPinned,
+    toggleAgentPanelPinned,
+    elementTreePinned,
+    toggleElementTreePinned,
+    variablesPanelPinned,
+    toggleVariablesPanelPinned,
+    isWebProject,
+    variablesPanelOpen,
+    toggleVariablesPanel,
+    showPreviewLogs,
+    togglePreviewLogs,
+  });
 
   useWorkspaceShortcutControls({
     previewRef,
@@ -1253,7 +1194,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                   ? () => {
                       setWorkspaceTab('preview');
                       setShowPreviewLogs(true);
-                      setInspectTab('logs');
+                      setInspectTabRaw('logs');
                     }
                   : undefined
               }
@@ -1379,7 +1320,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                       onDevServerInput={onDevServerInput}
                       onDevServerResize={onDevServerResize}
                       inspectTab={inspectTab}
-                      setInspectTab={setInspectTab}
+                      setInspectTab={setInspectTabRaw}
                       healthPanelRef={healthPanelRef}
                       handleHealthOutput={handleHealthOutput}
                       needsInstall={needsInstall}

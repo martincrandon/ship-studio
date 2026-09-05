@@ -68,8 +68,9 @@ import { useProjectBulkActions } from '../../hooks/useProjectBulkActions';
 import { useProjectViewModeCommands } from '../../hooks/useProjectViewModeCommands';
 import { useProjectRemovalActions } from '../../hooks/useProjectRemovalActions';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { SwitchWorkspaceIcon } from '@/components/icons';
 import { ProjectSettingsModal } from '../workspace/ProjectSettingsModal';
+import { DashboardWorkspaceChip } from './DashboardWorkspaceChip';
+import { ProjectThumbnailInput } from './ProjectThumbnailInput';
 import type { ProjectViewMode } from './ProjectGridView';
 
 /** Basic project info for selection callback */
@@ -137,9 +138,7 @@ export function ProjectList({
   onSwitchAccount,
 }: ProjectListProps) {
   const [projects, setProjects] = useState<ProjectWithThumbnail[]>([]);
-  /** Hidden <input type="file"> reused across cards. The current upload
-   *  target lives in a ref (not state) so the change handler reads the
-   *  freshest path even if the user clicks fast through several cards. */
+  // Reused file picker target; keep the path in a ref so fast clicks stay current.
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
   const thumbnailTargetPathRef = useRef<string | null>(null);
   const [folders, setFolders] = useState<FolderInfo[]>([]);
@@ -155,18 +154,15 @@ export function ProjectList({
   const [projectSettingsPort, setProjectSettingsPort] = useState<number | null>(null);
   const projectSettingsModal = useModal('projectSettings');
 
-  // Folder navigation state
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [currentFolder, setCurrentFolder] = useState<Folder | null>(null);
   const [folderProjectPaths, setFolderProjectPaths] = useState<string[]>([]);
 
-  // Folder modal state
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<FolderInfo | null>(null);
   const [deleteFolderConfirm, setDeleteFolderConfirm] = useState<FolderInfo | null>(null);
   const [deletingFolder, setDeletingFolder] = useState(false);
 
-  // Move to folder modal state
   const [moveProject, setMoveProject] = useState<DashboardProject | null>(null);
   const [moveProjectFolderId, setMoveProjectFolderId] = useState<string | null>(null);
 
@@ -686,19 +682,7 @@ export function ProjectList({
             onGitHubConnectForImport={onGitHubConnectForImport}
             titleAccessory={
               !currentFolderId && hasMultipleWorkspaces && activeAccount && onSwitchAccount ? (
-                <button
-                  type="button"
-                  className="dashboard-workspace-chip text-style-control-semibold"
-                  onClick={onSwitchAccount}
-                  title="Switch workspace"
-                >
-                  <span
-                    className="dashboard-workspace-chip-dot"
-                    style={{ backgroundColor: activeAccount.color }}
-                  />
-                  <span className="dashboard-workspace-chip-name">{activeAccount.name}</span>
-                  <SwitchWorkspaceIcon size={12} />
-                </button>
+                <DashboardWorkspaceChip account={activeAccount} onSwitch={onSwitchAccount} />
               ) : undefined
             }
           />
@@ -735,21 +719,21 @@ export function ProjectList({
                 someVisibleSelected={someVisibleSelected}
                 onSelectAllVisible={handleSelectAllVisible}
                 onToggleProjectSelection={handleToggleProjectSelection}
-                onSelectProject={(project) => onSelectProject(project)}
+                onSelectProject={onSelectProject}
                 onOpenProjectSettings={(project) => void handleOpenProjectSettings(project)}
-                onDeleteProject={(project) => setDeleteConfirm(project)}
-                onRenameProject={(project) => setRenameTarget(project)}
+                onDeleteProject={setDeleteConfirm}
+                onRenameProject={setRenameTarget}
                 onToggleMainBranchWarning={(path, hidden) =>
                   void handleToggleMainBranchWarning(path, hidden)
                 }
                 onOpenMoveModal={(project) => void handleOpenMoveModal(project)}
                 onOpenMoveWorkspaceModal={(project) => void handleOpenMoveWorkspaceModal(project)}
                 onExportAsTemplate={(path) => void handleExportAsTemplate(path)}
-                onUploadThumbnail={(project) => handleUploadThumbnail(project)}
-                onRemoveProject={(project) => setRemoveConfirm(project)}
-                onOpenFolder={(folderId) => setCurrentFolderId(folderId)}
-                onRenameFolder={(folder) => setRenamingFolder(folder)}
-                onDeleteFolder={(folder) => setDeleteFolderConfirm(folder)}
+                onUploadThumbnail={handleUploadThumbnail}
+                onRemoveProject={setRemoveConfirm}
+                onOpenFolder={setCurrentFolderId}
+                onRenameFolder={setRenamingFolder}
+                onDeleteFolder={setDeleteFolderConfirm}
                 pinnedSet={pinnedSet}
                 onTogglePin={onTogglePin}
                 onCreateProject={onCreateProject}
@@ -769,15 +753,9 @@ export function ProjectList({
 
         <div className="dashboard-bottom-spacer" aria-hidden />
 
-        {/* Hidden file picker reused across project cards for "Upload new
-            thumbnail". A single input is enough — handleUploadThumbnail
-            stashes the target path in a ref, then triggers .click() here. */}
-        <input
-          ref={thumbnailInputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          style={{ display: 'none' }}
-          onChange={(e) => void handleThumbnailFileSelected(e)}
+        <ProjectThumbnailInput
+          inputRef={thumbnailInputRef}
+          onChange={(event) => void handleThumbnailFileSelected(event)}
         />
 
         {/* New Folder Modal */}

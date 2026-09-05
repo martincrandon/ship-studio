@@ -1870,14 +1870,8 @@
     },
     {
       "path": "src/styles/features/workspace/sidebar.css",
-      "token": "--space-12",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/workspace/sidebar.css",
       "token": "--space-16",
-      "count": 4,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {

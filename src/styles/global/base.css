@@ -180,6 +180,7 @@ body.compact-mode-active html {
 .app.loading {
   align-items: center;
   justify-content: center;
+  color: var(--text-muted);
   /* Generous space between the logo and the boot loader. */
   gap: var(--space-32);
 }

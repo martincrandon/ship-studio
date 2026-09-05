@@ -413,7 +413,7 @@
   color: var(--text-secondary);
   text-align: left;
   font-size: var(--font-size-body-lg);
-  line-height: var(--line-height-medium);
+  line-height: var(--line-height-compact);
 }
 
 .auto-accept-warning-list {
@@ -422,7 +422,7 @@
   padding-left: 24px;
   color: var(--text-secondary);
   font-size: var(--font-size-body-lg);
-  line-height: var(--line-height-medium);
+  line-height: var(--line-height-compact);
 }
 
 .auto-accept-warning-list li {

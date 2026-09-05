@@ -221,3 +221,68 @@
   padding-inline: var(--button-padding);
   color: var(--text-muted);
 }
+
+/* Keep the switcher and trailing icon controls in fixed footer columns. In the
+ * expanded sidebar, opening the switcher widens its drawer across the trailing
+ * controls while the drawer grows upward from the footer. */
+.workspace-sidebar-footer-actions.has-workspace-switcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-switcher {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  justify-self: start;
+}
+
+.workspace-sidebar:not(.is-hidden)
+  .workspace-sidebar-footer-actions.has-workspace-switcher
+  > .workspace-switcher.is-open {
+  width: calc(100% + (var(--control-height-standard) * 2) + (var(--button-gap) * 2));
+  z-index: var(--z-dropdown);
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support,
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-settings {
+  grid-row: 1;
+  align-self: end;
+  margin-bottom: var(--spacing-2xs);
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support {
+  grid-column: 2;
+}
+
+.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-settings {
+  grid-column: 3;
+}
+
+/* The collapsed rail keeps the workspace switcher in the existing vertical
+ * icon stack while the expanded picker is rendered outside the rail. */
+.workspace-sidebar.is-hidden .workspace-sidebar-footer-actions.has-workspace-switcher {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-sidebar.is-hidden
+  .workspace-sidebar-footer-actions.has-workspace-switcher
+  > .workspace-switcher {
+  width: var(--control-height-standard);
+  min-width: var(--control-height-standard);
+  max-width: var(--control-height-standard);
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  max-height: var(--control-height-standard);
+  flex: 0 0 var(--control-height-standard);
+  align-self: center;
+}
+
+/* The updater is a sibling above the action grid. Keep its existing layer so
+ * it remains visibly above the footer fade while the drawer grows below it. */
+.workspace-sidebar-footer > .update-indicator {
+  z-index: var(--z-workspace-header);
+}
