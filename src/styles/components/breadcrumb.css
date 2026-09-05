@@ -124,7 +124,7 @@
 
 .preview-breadcrumb .breadcrumb__page {
   height: var(--control-height-compact);
-  line-height: var(--line-height-default);
+  line-height: var(--line-height-control);
 }
 
 .preview-breadcrumb .breadcrumb__link.button:hover:not(:disabled) {
@@ -138,7 +138,7 @@
 }
 
 .preview-breadcrumb__menu {
-  max-height: calc(100vh - var(--space-32));
+  max-height: calc(100vh - var(--spacing-2xl));
   overflow-y: auto;
 }
 
@@ -162,7 +162,7 @@
   gap: var(--spacing-3xs);
   min-width: 0;
   height: 100%;
-  line-height: var(--line-height-default);
+  line-height: var(--line-height-control);
 }
 
 .preview-breadcrumb__icon {
