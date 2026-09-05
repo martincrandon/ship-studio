@@ -91,6 +91,36 @@ function getHelpShortcuts(): HelpShortcut[] {
       keys: [kbd('mod', 'shift', 'Z')],
     },
     {
+      id: 'copy-element',
+      label: 'Copy selected element',
+      description: 'Copy the selected element and its children in Edit mode',
+      keys: [kbd('mod', 'C')],
+    },
+    {
+      id: 'cut-element',
+      label: 'Cut selected element',
+      description: 'Cut the selected element and its children in Edit mode',
+      keys: [kbd('mod', 'X')],
+    },
+    {
+      id: 'paste-element',
+      label: 'Paste element',
+      description: 'Paste the copied or cut element inside the selection',
+      keys: [kbd('mod', 'V')],
+    },
+    {
+      id: 'duplicate-element',
+      label: 'Duplicate selected element',
+      description: 'Duplicate the selected element and its children in Edit mode',
+      keys: [kbd('mod', 'D')],
+    },
+    {
+      id: 'delete-element',
+      label: 'Delete selected element',
+      description: 'Delete the selected element and its children in Edit mode',
+      keys: [kbd('⌫')],
+    },
+    {
       id: 'save-code',
       label: 'Save code',
       description: 'Save the current file in Code edit mode',

@@ -109,9 +109,11 @@ interface TerminalProps {
 
 interface DevServerProps {
   hasDevServer: boolean;
+  knownDevServerPort: number | null;
   healthPanelRef: RefObject<HealthTabPanelRef | null>;
   devServerPort: number;
   projectType: ProjectType;
+  projectTypeResolved: boolean;
   isRestartingDevServer: boolean;
   customDevCommand: string | null;
   devServerOutput: string;
@@ -339,6 +341,12 @@ export interface WorkspaceViewProps {
   onSelectProject: (projectPath: string) => void;
   /** Close an active project session from the sidebar. */
   onCloseProject: (projectPath: string) => void;
+  /** Rename a project folder from the sidebar context menu. */
+  onRenameProject?: (projectPath: string, newName: string) => Promise<void>;
+  /** Toggle a project's pin state from the sidebar context menu. */
+  onTogglePinProject?: (projectPath: string, shouldPin: boolean) => void | Promise<void>;
+  /** Stop a project's dev server from the sidebar context menu. */
+  onStopDevServer?: (projectPath: string) => void | Promise<void>;
   /** Switch to another project and focus a specific tab (by session id). */
   onSelectProjectTab: (projectPath: string, tabSessionId: string) => void;
   /** Navigate to the Home (projects) view. */
@@ -388,6 +396,9 @@ export const WorkspaceView = memo(function WorkspaceView({
   projectRows,
   onSelectProject,
   onCloseProject,
+  onRenameProject,
+  onTogglePinProject,
+  onStopDevServer,
   onSelectProjectTab,
   onGoHome,
   homeNav,
@@ -458,9 +469,11 @@ export const WorkspaceView = memo(function WorkspaceView({
 
   const {
     hasDevServer,
+    knownDevServerPort,
     healthPanelRef,
     devServerPort,
     projectType,
+    projectTypeResolved,
     isRestartingDevServer,
     customDevCommand,
     devServerOutput,
@@ -661,16 +674,18 @@ export const WorkspaceView = memo(function WorkspaceView({
   ]);
 
   // Reset the preview-side tab to its default whenever the user switches
-  // projects. Web projects land on Preview; generic/unknown projects land
-  // on Code (no preview available). Without this, switching from a web
-  // project while on Branches/PRs would land you on Branches/PRs in the
-  // next project too, which reads as "sticky state from the wrong place".
+  // projects. While detection is pending, stay on Preview so the workspace
+  // does not flash Code before the dev server capability is known. Once
+  // resolved, generic/unknown projects land on Code (no preview available).
+  // Without this, switching from a web project while on Branches/PRs would
+  // land you on Branches/PRs in the next project too, which reads as "sticky
+  // state from the wrong place".
   useEffect(() => {
-    setWorkspaceTab(defaultWorkspaceTab(hasPreview));
+    setWorkspaceTab(defaultWorkspaceTab(hasPreview, projectTypeResolved));
     // Only re-fire on project path change. We deliberately *don't* depend
     // on `workspaceTab` here — that would force-revert every user click.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject.path, hasPreview]);
+  }, [currentProject.path, hasPreview, projectTypeResolved]);
 
   // Track terminal tab titles from PTY title changes. Titles live in the
   // session registry so (a) they're scoped per-project (tab ids are
@@ -1016,6 +1031,7 @@ export const WorkspaceView = memo(function WorkspaceView({
   const modesNode = (
     <WorkspaceModes
       hasPreview={hasPreview}
+      projectTypeResolved={projectTypeResolved}
       isPreviewHidden={isPreviewHidden}
       workspaceTab={workspaceTab}
       setIsPreviewHidden={setIsPreviewHidden}
@@ -1159,6 +1175,9 @@ export const WorkspaceView = memo(function WorkspaceView({
               projects={projectRows}
               onCloseProject={onCloseProject}
               onUnpinProject={onUnpinProject}
+              onRenameProject={onRenameProject}
+              onTogglePinProject={onTogglePinProject}
+              onStopDevServer={onStopDevServer}
               currentProjectPath={currentProject.path}
               currentProjectName={currentProject.name}
               onSelectProject={onSelectProject}
@@ -1293,7 +1312,8 @@ export const WorkspaceView = memo(function WorkspaceView({
                       workspaceTab={workspaceTab}
                       setWorkspaceTab={setWorkspaceTab}
                       hasPreview={hasPreview}
-                      projectTypeResolved={projectType !== 'unknown'}
+                      projectTypeResolved={projectTypeResolved}
+                      previewConnectionEnabled={knownDevServerPort !== null}
                       projectType={projectType}
                       isWebProject={isWebProject}
                       mobilePreviewAvailable={mobilePreviewAvailable}

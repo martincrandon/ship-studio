@@ -466,6 +466,7 @@ pub fn run() {
             commands::edit::project_uses_react,
             commands::edit_structure::insert_element,
             commands::edit_structure::duplicate_element,
+            commands::edit_structure::paste_element,
             commands::edit_structure::delete_element,
             commands::edit_css::resolve_css_rule,
             commands::edit_css::set_css_declaration,
@@ -750,6 +751,9 @@ pub fn run() {
             commands::setup::sign_out_agent,
             commands::setup::uninstall_agent,
             // Client Editor
+            // Native screen colour sampler
+            commands::color_picker::get_color_sampler_support,
+            commands::color_picker::sample_screen_color,
             // Code Browser
             commands::code::list_project_files,
             commands::code::read_project_file,
