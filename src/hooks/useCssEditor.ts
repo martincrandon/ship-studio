@@ -148,11 +148,6 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
       setTargetClassState(null);
       setPseudoState(null);
       setSelection({ signature: sig, resolution: null, instanceCount });
-      void trackEvent('visual_element_selected', {
-        mode: 'css',
-        tag: sig.tagName,
-        instance_count: instanceCount,
-      });
       // Clear any leftover class preview from a prior selection.
       post({ type: 'ss:clearClassPreview' });
 
@@ -286,7 +281,7 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
         targetClassRef.current = n;
         setTargetClassState(n);
         await reresolve(n, pseudoRef.current);
-        void trackEvent('visual_class_added', { mode: 'css' });
+        void trackEvent('visual_edit_saved', { kind: 'class', mode: 'css' });
       } catch (err) {
         onToast(toastText(err), 'error');
       }
@@ -307,7 +302,7 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
           setTargetClassState(null);
         }
         await reresolve(targetClassRef.current, pseudoRef.current);
-        void trackEvent('visual_class_removed', { mode: 'css' });
+        void trackEvent('visual_edit_saved', { kind: 'class', mode: 'css' });
       } catch (err) {
         onToast(toastText(err), 'error');
       }
@@ -355,7 +350,7 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
         });
         post({ type: 'ss:commit' });
         editsCommittedRef.current += 1;
-        void trackEvent('visual_style_saved', { mode: 'css', removed: value === null });
+        void trackEvent('visual_edit_saved', { kind: 'style', mode: 'css' });
       } catch (err) {
         logger.error('[CssEditor] write-back failed', { error: toastText(err) });
         onToast(toastText(err), 'error');
@@ -385,7 +380,7 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
         setSelection((prev) => (prev ? { ...prev, resolution } : prev));
         post({ type: 'ss:commit' });
         editsCommittedRef.current += changes.length;
-        void trackEvent('visual_style_saved', { mode: 'css', bulk: changes.length });
+        void trackEvent('visual_edit_saved', { kind: 'style', mode: 'css', count: changes.length });
       } catch (err) {
         logger.error('[CssEditor] bulk write-back failed', { error: toastText(err) });
         onToast(toastText(err), 'error');
@@ -407,7 +402,7 @@ export function useCssEditor({ iframeRef, projectPath, enabled, onToast }: Param
         await createCssClass(projectPath, file, selector, declarations, bp);
         const resolution = await resolveCssRule(projectPath, toCssSignature(sel.signature), bp);
         setSelection({ ...sel, resolution });
-        void trackEvent('visual_style_saved', { mode: 'css', created_rule: true });
+        void trackEvent('visual_edit_saved', { kind: 'rule', mode: 'css' });
         onToast(`Created ${selector}`, 'success');
       } catch (err) {
         logger.error('[CssEditor] create rule failed', { error: toastText(err) });

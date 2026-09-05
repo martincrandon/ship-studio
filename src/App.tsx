@@ -139,7 +139,6 @@ function AppContents({ initialProjectPath }: AppProps) {
   const [compactWorkspaceToolbarEnabled, updateCompactWorkspaceToolbar] =
     useCompactWorkspaceToolbar();
   const toggleSidebar = useCallback(() => {
-    void trackEvent('sidebar_toggled', { is_hidden: !isSidebarHidden });
     setIsSidebarHidden(!isSidebarHidden);
   }, [isSidebarHidden]);
   const isCompact = useIsCompact();
@@ -527,9 +526,6 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   const openPalette = useOpenPalette();
   const openProjectPicker = useCallback(() => {
-    // Dedicated picker button only — Cmd+K palette opens are tracked by the
-    // palette itself in Phase 3, with `tab` as a property.
-    void trackEvent('project_picker_button_clicked');
     openPalette({ tab: 'project' });
   }, [openPalette]);
 
