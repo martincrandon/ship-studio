@@ -1,0 +1,552 @@
+/* Inbox — what the workflows found (prototype).
+   Two-pane reading layout: list on the left, report on the right. Unlike the
+   dashboard column this fills the window, because reading is the whole job. */
+
+/* The reader lives inside a dashboard-panel, so the card owns the padding and
+   the two panes are laid out edge to edge within it. */
+.inbox-panel {
+  display: flex;
+  flex-direction: column;
+  /* Grow into the column rather than sitting at content height: reading is
+     the job here, so leftover vertical space belongs to the reader, not to a
+     band of nothing under the card. */
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.inbox-body {
+  display: grid;
+  /* Both tracks need an explicit 0 minimum: the default `auto` minimum lets a
+     long report title push the list track past its max and out from under the
+     divider. */
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  /* Fill what the panel gives us, but never below a height that can hold a
+     readable report — under that the page scrolls instead. A fixed height was
+     shrunk by the surrounding flex column to ~260px, which clipped a list row
+     in half and pushed the detail pane's actions out of sight. */
+  /* Basis 0, not auto: with `auto` the basis is the content height, so one
+     long report stretched the panel past the bottom of the window and the
+     reader's own scrolling never engaged. */
+  flex: 1 1 0;
+  min-height: 320px;
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface-recessed);
+}
+
+/* The filter row: a SegmentedControl beside a dropdown trigger. The segmented
+   control wraps its buttons in a bordered, padded rail, so the two controls
+   have different natural heights even at the same `size`. Stretching both to
+   the row settles it without either file hardcoding the other's box model. */
+.inbox-filters {
+  align-items: stretch;
+}
+
+.inbox-filters > .segmented-control,
+.inbox-filters .inbox-project-filter {
+  height: auto;
+}
+
+/* ---- list ---- */
+
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-right: var(--border-width-default) solid var(--border-subtle);
+  padding: var(--spacing-sm);
+  gap: var(--spacing-3xs);
+  /* Same treatment as .workspace-sidebar-scroll: WKWebView otherwise paints a
+   * permanent light track, which here doubles up with the pane divider. */
+  scrollbar-width: none;
+}
+
+.inbox-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* With nothing to list there is nothing to select, so the two panes collapse
+   into one centred empty state instead of showing it twice. */
+.inbox-empty {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl);
+}
+
+.inbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: none;
+  border: var(--border-width-default) solid transparent;
+  border-radius: var(--radius-card);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  transition: background var(--transition-interaction);
+}
+
+.inbox-item:hover {
+  background: var(--surface-control-hover);
+}
+
+.inbox-item.is-selected {
+  background: var(--surface-selected);
+  border-color: var(--border-default);
+}
+
+.inbox-item-severity {
+  width: 8px;
+  height: 8px;
+  margin-top: var(--spacing-xs);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.inbox-item-severity[data-severity='critical'] {
+  background: var(--accent-error);
+}
+
+.inbox-item-severity[data-severity='warning'] {
+  background: var(--accent-warning);
+}
+
+.inbox-item-severity[data-severity='info'] {
+  background: var(--accent-active);
+}
+
+/* A read item keeps its severity meaning but drops the visual shout. */
+.inbox-item:not(.is-unread) .inbox-item-severity {
+  opacity: 0.4;
+}
+
+.inbox-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  flex: 1;
+}
+
+.inbox-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.inbox-item-top > .inbox-item-title {
+  min-width: 0;
+}
+
+.inbox-item-title {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-compact);
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.inbox-item.is-unread .inbox-item-title {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-label);
+}
+
+.inbox-item-age {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  flex-shrink: 0;
+}
+
+.inbox-item-summary {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+  margin-top: var(--spacing-3xs);
+  flex-wrap: wrap;
+}
+
+.inbox-item-workflow {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Same pill geometry as the severity badge; mono is what marks it as an
+   identifier rather than a status. */
+.inbox-chip {
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  background: var(--surface-control);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-compact);
+  white-space: nowrap;
+}
+
+.inbox-item-repeat {
+  color: var(--accent-warning);
+}
+
+/* ---- detail ---- */
+
+/* The pane is a column: a scrolling report, then a pinned action bar. */
+.inbox-detail-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inbox-detail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.inbox-detail-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.inbox-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-xl);
+  max-width: 74ch;
+}
+
+.inbox-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Same recipe as .branch-card-badge / .publish-row-badge: a quiet tinted
+   pill, sentence case, no border and no tracking. */
+.inbox-detail-severity {
+  align-self: flex-start;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-compact);
+}
+
+.inbox-detail-severity[data-severity='critical'] {
+  background: rgba(var(--accent-error-rgb), 0.1);
+  color: var(--accent-error);
+}
+
+.inbox-detail-severity[data-severity='warning'] {
+  background: rgba(var(--accent-warning-rgb), 0.1);
+  color: var(--accent-warning);
+}
+
+.inbox-detail-severity[data-severity='info'] {
+  background: rgba(var(--accent-active-rgb), 0.1);
+  color: var(--accent-active);
+}
+
+.inbox-detail-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-heading);
+}
+
+.inbox-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs) var(--spacing-xs);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+}
+
+.inbox-detail-locations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  list-style: none;
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.inbox-location {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+}
+
+.inbox-location-path {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox-location-note {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Agent-authored markdown. Kept deliberately plain — this is a report, not a
+   marketing page. */
+.inbox-detail-body {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-reading);
+  overflow-wrap: break-word;
+}
+
+.inbox-detail-body > *:first-child {
+  margin-top: 0;
+}
+
+.inbox-detail-body p {
+  margin: 0 0 var(--spacing-md);
+}
+
+.inbox-detail-body h1,
+.inbox-detail-body h2,
+.inbox-detail-body h3,
+.inbox-detail-body h4 {
+  margin: var(--spacing-xl) 0 var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-subhead);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-compact);
+}
+
+.inbox-detail-body > h1:first-child,
+.inbox-detail-body > h2:first-child,
+.inbox-detail-body > h3:first-child,
+.inbox-detail-body > h4:first-child {
+  margin-top: 0;
+}
+
+/* Lists, links and quotes had no rules at all. The app's reset zeroes list
+   padding, so with `list-style-position: outside` every bullet hung to the
+   left of the text column — the markers sat outside the report's own left
+   edge. This body is the payoff of the whole feature and it is written by an
+   agent in ordinary markdown, so every ordinary markdown element has to land
+   somewhere sensible. */
+.inbox-detail-body ul,
+.inbox-detail-body ol {
+  margin: 0 0 var(--spacing-md);
+  padding-left: var(--spacing-lg);
+}
+
+.inbox-detail-body li {
+  margin-bottom: var(--spacing-2xs);
+}
+
+.inbox-detail-body li::marker {
+  color: var(--text-muted);
+}
+
+/* A nested list is a sub-point, not a new block. */
+.inbox-detail-body li > ul,
+.inbox-detail-body li > ol {
+  margin: var(--spacing-2xs) 0 0;
+}
+
+.inbox-detail-body li > p {
+  margin: 0 0 var(--spacing-2xs);
+}
+
+.inbox-detail-body a {
+  color: var(--accent-active);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.inbox-detail-body a:hover {
+  color: var(--accent-active-hover);
+}
+
+.inbox-detail-body blockquote {
+  margin: 0 0 var(--spacing-md);
+  padding-left: var(--spacing-md);
+  border-left: var(--border-width-default) solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.inbox-detail-body hr {
+  margin: var(--spacing-lg) 0;
+  border: 0;
+  border-top: var(--border-width-default) solid var(--border-subtle);
+}
+
+.inbox-detail-body img {
+  max-width: 100%;
+  border-radius: var(--radius-card);
+}
+
+.inbox-detail-body strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-label);
+}
+
+.inbox-detail-body code {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-md);
+  padding: var(--spacing-3xs) var(--spacing-2xs);
+  background: var(--surface-control);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.inbox-detail-body pre {
+  margin: 0 0 var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  overflow-x: auto;
+}
+
+.inbox-detail-body pre code {
+  padding: 0;
+  background: none;
+  color: var(--text-terminal);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.inbox-detail-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+}
+
+.inbox-detail-body th,
+.inbox-detail-body td {
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  border-bottom: var(--border-width-default) solid var(--border-subtle);
+  text-align: left;
+}
+
+.inbox-detail-body th {
+  color: var(--text-muted);
+  font-weight: var(--font-weight-label);
+}
+
+/* ---- handoff ---- */
+
+.inbox-handoff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-card);
+}
+
+.inbox-handoff-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--text-muted);
+}
+
+.inbox-handoff-prompt {
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-recessed);
+  border-radius: var(--radius-control);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-reading);
+  color: var(--text-secondary);
+}
+
+/* Handing a finding to an agent starts work; it does not finish it. Saying so
+   next to the prompt is cheaper than the disappointment of assuming otherwise. */
+.inbox-handoff-note {
+  margin: 0;
+  line-height: var(--line-height-help);
+}
+
+/* Pinned to the foot of the pane — see InboxDetail. Sits on the panel surface
+   so it reads as chrome over the recessed report rather than part of it. */
+.inbox-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex: none;
+  flex-wrap: wrap;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--surface-panel);
+  border-top: var(--border-width-default) solid var(--border-subtle);
+}
+
+/* Archive and Delete sit together, away from the fix actions: they end the
+   conversation about a finding rather than continue it. */
+.inbox-detail-actions-secondary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.inbox-detail-delete {
+  color: var(--accent-error-light);
+}
+
+.inbox-detail-actions-primary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}

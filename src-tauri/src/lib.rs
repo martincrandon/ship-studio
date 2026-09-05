@@ -24,6 +24,7 @@ pub mod static_server;
 pub mod types;
 pub mod utils;
 pub mod webview_scripts;
+pub mod workflow_scheduler;
 
 use tauri::Manager;
 
@@ -124,6 +125,18 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
+            // Teach the user's own agent about workflows, and start the tick
+            // that fires the armed ones. The skill install is the discovery
+            // path for the whole feature (see commands::workflows::skill); it
+            // is idempotent and skips agents that aren't installed.
+            {
+                let handle = _app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    commands::workflows::install_workflows_skill();
+                    workflow_scheduler::spawn(handle);
+                });
+            }
+
             // Start the agent preview bridge (global loopback MCP server) at
             // launch so it's listening before any agent session spawns —
             // registrations from previous runs stay valid from second zero.
@@ -392,6 +405,22 @@ pub fn run() {
             commands::git::restore_backup,
             // Projects
             commands::projects::list_projects,
+            // Workflows & Inbox
+            commands::workflows::list_all_workflows,
+            commands::workflows::list_project_workflows,
+            commands::workflows::save_workflow_file,
+            commands::workflows::delete_workflow_file,
+            commands::workflows::run_workflow,
+            commands::workflows::running_workflow_ids,
+            commands::workflows::list_inbox_items,
+            commands::workflows::list_workflow_runs,
+            commands::workflows::workflow_progress,
+            commands::workflows::set_inbox_item_read,
+            commands::workflows::set_inbox_item_archived,
+            commands::workflows::delete_inbox_item,
+            commands::workflows::mark_all_inbox_read,
+            commands::workflows::ensure_workflows_skill,
+            workflow_scheduler::fire_push_workflows,
             commands::projects::get_dashboard_projects,
             commands::projects::list_pages,
             commands::projects::open_in_finder,

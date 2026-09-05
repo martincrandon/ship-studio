@@ -1,0 +1,414 @@
+/* Template picker — the first screen of the new-workflow modal.
+ *
+ * Its own file rather than more of workflows.css: this is a self-contained
+ * screen with a two-pane layout of its own, and workflows.css was already at
+ * three quarters of its LOC ceiling.
+ *
+ * The geometry is deliberately the Inbox's (`.inbox-body`): the first
+ * list-and-report pane a new user meets is this one, and the second is the
+ * Inbox itself. Same shape, so the second one is already familiar. */
+
+.workflow-template-modal {
+  /* Wider than the editor: a list beside a readable report needs the room, and
+     the prompt block below it wraps badly under ~40em. */
+  width: min(1000px, 94vw);
+  /* A *definite* height, not a max. `.modal-frame-content` is a flex column
+     sized by its content up to 90vh, and inside a content-sized flex parent a
+     `flex: 1 1 0` child resolves against nothing: both panes below collapsed
+     to zero and the dialog rendered as a bar. This screen is always tall — a
+     browsable list beside a report — so it takes a height and lets the panes
+     divide it. */
+  height: min(860px, 88vh);
+  overflow: hidden;
+}
+
+.workflow-templates {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.workflow-templates-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-bottom: var(--border-width-default) solid var(--border-subtle);
+}
+
+.workflow-templates-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.workflow-templates-aside {
+  margin: 0;
+  color: var(--text-faint);
+}
+
+.workflow-templates-lede {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-help);
+  max-width: 78ch;
+}
+
+.workflow-templates-filter {
+  align-self: flex-start;
+}
+
+/* ---- the two panes ---- */
+
+.workflow-templates-body {
+  display: grid;
+  /* Explicit 0 minimums, or a long template name pushes the list track past
+     its max and out from under the divider. */
+  grid-template-columns: minmax(0, 312px) minmax(0, 1fr);
+  min-height: 0;
+  /* Basis 0, not auto: with `auto` the basis is the content height, so the
+     longest prompt stretches the dialog past the bottom of the window and the
+     panes' own scrolling never engages. */
+  flex: 1 1 0;
+}
+
+.workflow-template-list {
+  display: flex;
+  flex-direction: column;
+  /* Between groups. The gap does the separating, so a hidden label costs
+     nothing. */
+  gap: var(--spacing-xs);
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Rows are full-bleed like the command palette's, so the horizontal inset
+     lives on the rows themselves. The vertical inset stays here: it must not
+     depend on the group label, which is hidden while a filter is active. */
+  padding: var(--spacing-sm) 0 var(--spacing-md);
+  border-right: var(--border-width-default) solid var(--border-subtle);
+  /* Same treatment as the Inbox list: WKWebView otherwise paints a permanent
+     light track that doubles up with the pane divider. */
+  scrollbar-width: none;
+}
+
+.workflow-template-list::-webkit-scrollbar {
+  display: none;
+}
+
+.workflow-template-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+}
+
+/* The app's own grouped-list heading, taken from the command palette rather
+   than invented here: uppercase micro-type, muted, tracked. A grouped,
+   filterable list inside a dialog is exactly what the palette is, so it is
+   the recipe this screen should be wearing.
+
+   Deliberately not sticky. It was, and it looked broken: the label band is
+   ~28px against a ~52px row, so the row scrolling under it was sliced through
+   the middle of its own glyphs. */
+.workflow-template-group-label {
+  display: block;
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-label);
+}
+
+/* Full-bleed rows, no border, no radius — the command palette's row, which is
+   how this app draws a list of things you pick from inside a dialog. The
+   rounded, bordered card this used to be sat on the surface rather than in the
+   list, and a flat grey block that size read as heavier than anything else on
+   the screen. */
+.workflow-template-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  width: 100%;
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  transition: background-color var(--transition-interaction);
+}
+
+.workflow-template-option:hover {
+  background: var(--surface-control-hover);
+}
+
+.workflow-template-option.is-selected {
+  background: var(--surface-control);
+}
+
+/* Selection brightens the row rather than boxing it — the same move the
+   palette makes with its row icon. */
+.workflow-template-option.is-selected .workflow-template-option-name {
+  color: var(--text-primary);
+}
+
+.workflow-template-option:not(.is-selected) .workflow-template-option-name {
+  color: var(--text-secondary);
+}
+
+.workflow-template-option-icon {
+  flex-shrink: 0;
+  width: var(--size-icon-md);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-compact);
+  text-align: center;
+}
+
+.workflow-template-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.workflow-template-option-name {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+}
+
+.workflow-template-option-description {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+/* ---- the preview ---- */
+
+/* Two parts: a scrolling report, and a footer of guarantees that cannot be
+   scrolled away. The facts were previously inside the scroller, pinned with
+   `margin-top: auto` — which pins only while there is spare room. On a laptop
+   window the prompt filled the pane and the honest line about what a schedule
+   promises was clipped by the pane's own edge. */
+.workflow-template-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workflow-template-preview-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-height: 0;
+  flex: 1 1 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-lg);
+  /* Same as .inbox-detail-scroll: WKWebView paints a permanent light track
+     otherwise, which sits right on the dialog's own edge. */
+  scrollbar-width: none;
+}
+
+.workflow-template-preview-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.workflow-template-preview-head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.workflow-template-preview-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-control-large);
+  height: var(--size-control-large);
+  border-radius: var(--radius-card);
+  background: var(--surface-control);
+  font-size: var(--font-size-h3);
+  line-height: 1;
+}
+
+.workflow-template-preview-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.workflow-template-preview-name {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-heading);
+}
+
+/* Category and cadence as muted text with a middot — the same treatment
+   .workflow-row-meta gives the identical facts in the list. */
+.workflow-template-preview-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-2xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+}
+
+.workflow-template-preview-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-help);
+}
+
+.workflow-template-requires {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+}
+
+.workflow-template-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.workflow-template-section-label {
+  color: var(--text-muted);
+}
+
+/* ---- the example finding ---- */
+
+/* Built to the Inbox item's shape on purpose: this is a picture of what the
+   feature produces, and a picture that doesn't match the real thing teaches
+   the wrong lesson. */
+.workflow-template-example {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.workflow-template-example-severity {
+  flex-shrink: 0;
+  /* The Inbox's own dot, to the pixel — this is a picture of that. */
+  width: 8px;
+  height: 8px;
+  margin-top: var(--spacing-2xs);
+  border-radius: var(--radius-pill);
+  background: var(--text-faint);
+}
+
+.workflow-template-example-severity[data-severity='critical'] {
+  background: var(--accent-error);
+}
+
+.workflow-template-example-severity[data-severity='warning'] {
+  background: var(--accent-warning);
+}
+
+.workflow-template-example-severity[data-severity='info'] {
+  background: var(--accent-active);
+}
+
+.workflow-template-example-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.workflow-template-example-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+}
+
+.workflow-template-example-summary {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+}
+
+.workflow-template-example-location {
+  align-self: flex-start;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-body-sm);
+}
+
+.workflow-template-example-note,
+.workflow-template-prompt-note {
+  color: var(--text-faint);
+}
+
+/* ---- the instruction ---- */
+
+.workflow-template-prompt {
+  margin: 0;
+  padding: var(--spacing-md);
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Long prompts get a scroll of their own rather than pushing the facts
+     below them out of the pane. */
+  max-height: 15em;
+  overflow-y: auto;
+}
+
+/* ---- the three standing facts ---- */
+
+/* The foot of the pane, outside the scroller. These three sentences are true
+   of every template, and one of them is the honest limit of what a schedule
+   promises — a guarantee you have to scroll to find is not one.
+   
+   Drawn as `.inbox-detail-actions` is — the app's pinned footer inside a
+   two-pane reader: panel surface, hairline above, content scrolling behind
+   it. Not a floating note block, which left the scrolled prompt clipped
+   against nothing. */
+.workflow-template-facts {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-xl);
+  background: var(--surface-panel);
+  border-top: var(--border-width-default) solid var(--border-subtle);
+}
+
+/* Grid, not flex: a wrapped second line stays in the text column instead of
+   running back underneath the icon. */
+.workflow-template-fact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--spacing-xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.workflow-template-fact svg {
+  margin-top: var(--spacing-3xs);
+}

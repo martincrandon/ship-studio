@@ -1,0 +1,934 @@
+/* Workflows — the standing-instructions page (prototype).
+   Layout mirrors the dashboard's 900px centred column so the two views feel
+   like the same app. */
+
+/* ---- summary ----
+   Section metadata, right-aligned on the controls row rather than a second
+   panel holding one line of text. */
+
+.workflows-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+}
+
+.workflows-summary-item strong {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-label);
+}
+
+.workflows-summary-sep {
+  color: var(--text-faint);
+}
+
+/* ---- list ---- */
+
+.workflows-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Inside the section card the rows are already on --surface-panel, so they use
+   the recessed well instead of stacking panel-on-panel. */
+.workflows-list .workflow-row {
+  background: var(--surface-recessed);
+}
+
+/* The row is a column now: the summary line, then the live activity that can
+   expand under it. */
+.workflow-row {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-md);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  transition:
+    border-color var(--transition-interaction),
+    background var(--transition-interaction);
+}
+
+.workflow-row:hover {
+  border-color: var(--border-default);
+}
+
+.workflow-row-main-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  min-width: 0;
+}
+
+/* Chevrons point down when closed and up when open, matching the app's other
+   disclosure controls. */
+.workflow-row-expand {
+  transition: transform var(--transition-interaction);
+}
+
+.workflow-row-expand.is-open {
+  transform: rotate(180deg);
+}
+
+/* The one-line peek is a button so the whole strip opens the panel — a 4px
+   chevron should not be the only way in. */
+.workflow-row-activity-peek {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  background: var(--surface-recessed);
+  border: none;
+  border-radius: var(--radius-control);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workflow-row-activity-peek:hover {
+  background: var(--surface-control-hover);
+}
+
+.workflow-row-activity-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-row-activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  max-height: 220px;
+  margin: var(--spacing-sm) 0 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  overflow-y: auto;
+  list-style: none;
+  background: var(--surface-recessed);
+  border-radius: var(--radius-control);
+}
+
+.workflow-row-activity-line {
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  overflow-wrap: anywhere;
+}
+
+.workflow-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* One slot for whatever identifies the workflow: its emoji, the green loader
+   while it runs, or a status dot. Fixed size so names stay in one column
+   however the mark changes. */
+.workflow-row-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: var(--spacing-3xs);
+  flex-shrink: 0;
+}
+
+/* An emoji at body size in a 20px box reads as a speck rather than as the
+   workflow's mark. This is the row's identity — it gets the box. */
+.workflow-row-icon {
+  font-size: var(--font-size-h4);
+  line-height: 1;
+}
+
+.workflow-row-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: var(--spacing-2xs);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+
+.workflow-row-dot[data-state='ok'] {
+  background: var(--accent-success);
+}
+
+.workflow-row-dot[data-state='failed'] {
+  background: var(--accent-error);
+}
+
+.workflow-row-dot[data-state='running'] {
+  background: var(--accent-active);
+  animation: workflow-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes workflow-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.workflow-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.workflow-row-title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.workflow-row-name {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-label);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Shares the app's badge recipe — see .branch-card-badge. */
+.workflow-badge {
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-compact);
+  white-space: nowrap;
+}
+
+.workflow-badge--edit {
+  background: rgba(var(--accent-warning-rgb), 0.1);
+  color: var(--accent-warning);
+}
+
+.workflow-row-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  white-space: nowrap;
+}
+
+/* Only the project name gives way — the agent and trigger are short and are
+   the two facts that make the row legible at a glance. */
+.workflow-row-meta-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflow-row-agent,
+.workflow-row-meta-item:last-child {
+  flex-shrink: 0;
+}
+
+.workflow-row-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.workflow-row-meta-sep {
+  color: var(--text-faint);
+}
+
+/* Status and actions sit on one line, vertically centred against the whole row.
+   Stacking them made the right column taller than the left and left a band of
+   dead space under the description. */
+.workflow-row-side {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  flex-shrink: 0;
+}
+
+.workflow-row-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-2xs);
+  text-align: right;
+}
+
+.workflow-row-last {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-md);
+  white-space: nowrap;
+}
+
+/* Amber is reserved for something the user has to act on. A workflow that
+   simply found something is doing its job — the count carries that. */
+.workflow-row-last[data-state='failed'] {
+  color: var(--accent-error);
+}
+
+.workflow-row-next {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  white-space: nowrap;
+}
+
+.workflow-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Matches the switch's track width so Run lines up on every row. */
+.workflow-row-toggle-slot {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+/* Run and the auto-run switch stay visible — pressing Run is the point of the
+   feature, and the switch communicates state. Only history hides until hover. */
+.workflow-row-history {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-interaction);
+}
+
+.workflow-row:hover .workflow-row-history,
+.workflow-row:focus-within .workflow-row-history {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.workflows-page-footer code {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+.workflows-page-footer {
+  margin: 0 0 var(--dashboard-section-gap);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+  max-width: 74ch;
+}
+
+/* The first load has no way to tell "no workflows" from "not read yet", so it
+   shows neither — an empty state that flashes before real content is a lie
+   about the user's data. */
+.workflows-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+
+/* ---- editor modal ---- */
+
+.workflow-editor-modal {
+  width: min(680px, 92vw);
+  /* The body scrolls, not the dialog — otherwise the footer actions scroll
+     away and the form below the fold reads as the end of the dialog. */
+  max-height: 86vh;
+  overflow: hidden;
+}
+
+.workflow-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg) var(--spacing-xl) var(--spacing-lg);
+}
+
+/* ---- name row ---- */
+
+/* The name is the title of the thing, so it reads as one — an icon and a large
+   field on one line, rather than a labelled input the size of every other
+   control in the dialog. */
+.workflow-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.workflow-name-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.workflow-name-input {
+  height: auto;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-heading);
+}
+
+.workflow-icon-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0;
+  font-size: var(--font-size-h3);
+  line-height: 1;
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition:
+    background var(--transition-interaction),
+    border-color var(--transition-interaction);
+}
+
+.workflow-icon-trigger:hover {
+  background: var(--surface-control-hover);
+  border-color: var(--text-muted);
+}
+
+/* Once an emoji is chosen it carries its own colour; the placeholder glyph
+   stays muted so it reads as "not set yet". */
+.workflow-icon-trigger.has-icon {
+  color: var(--text-primary);
+}
+
+.workflow-icon-menu {
+  max-width: 320px;
+}
+
+.workflow-icon-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-2xs);
+}
+
+.workflow-icon-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.workflow-icon-group-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-compact);
+}
+
+.workflow-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: var(--spacing-3xs);
+}
+
+.workflow-icon-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 0;
+  font-size: var(--font-size-body-lg);
+  line-height: 1;
+  background: none;
+  border: var(--border-width-default) solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.workflow-icon-option:hover {
+  background: var(--surface-control-hover);
+}
+
+.workflow-icon-option.is-selected {
+  background: var(--surface-selected);
+  border-color: var(--border-default);
+}
+
+.workflow-icon-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-2xs);
+  border-top: var(--border-width-default) solid var(--border-subtle);
+}
+
+.workflow-icon-custom-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-body-md);
+  outline: none;
+}
+
+.workflow-icon-custom-input:focus-visible {
+  border-color: var(--accent-focus);
+}
+
+/* The form is two named regions — what the workflow says, and how it runs —
+   rather than eight fields of equal weight. */
+.workflow-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  min-width: 0;
+}
+
+.workflow-section-title {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-control);
+}
+
+/* Configuration reads as secondary to the instruction above it. */
+.workflow-section--config {
+  padding: var(--spacing-lg);
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.workflow-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.workflow-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.workflow-field-label {
+  color: var(--text-secondary);
+}
+
+/* SegmentedControl is inline-flex, but a column flex parent stretches it to
+   full width and leaves an empty rail past the last option. */
+.workflow-field > .segmented-control {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* Opt back into filling, with segments sharing the width equally. Used where
+   the control sits in a two-up grid beside a full-width dropdown (a hugging
+   control there leaves the row visibly ragged) and for the trigger rails,
+   whose segments read as a single spectrum. */
+.workflow-field > .segmented-control.workflow-segments-fill,
+.workflow-trigger-detail > .segmented-control.workflow-segments-fill {
+  display: flex;
+  align-self: stretch;
+  width: 100%;
+}
+
+.workflow-segments-fill > .button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The equal-width segments put every label under shrink pressure, and a
+   flexible SVG answers that by collapsing to a sliver — the Claude glyph
+   crushed to a dot. Only the text may give. */
+.workflow-segments-fill > .button > svg {
+  flex-shrink: 0;
+}
+
+.workflow-field-hint {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+  max-width: 74ch;
+}
+
+/* Template blanks left in the prompt — the workflow would run and report
+   nothing useful, so the form says so before you create it. */
+.workflow-field-warning {
+  color: var(--accent-warning);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+  max-width: 74ch;
+}
+
+.workflow-field-warning code {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  padding: 0 var(--spacing-2xs);
+  background: rgba(var(--accent-warning-rgb), 0.12);
+  border-radius: var(--radius-sm);
+}
+
+/* Everything that follows from the trigger choice — where it runs, what that
+   means, its conditions, and the arm switch — grouped so the block breathes
+   without loosening the 4px label-to-control gap every other field uses. */
+.workflow-trigger-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.workflow-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background: var(--surface-recessed);
+  border-radius: var(--radius-control);
+  color: var(--text-muted);
+}
+
+.workflow-note-text {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+  max-width: 74ch;
+}
+
+.workflow-note-text strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-label);
+}
+
+.workflow-scope-trigger {
+  justify-content: space-between;
+}
+
+.workflow-scope-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-prompt {
+  width: 100%;
+  padding: var(--spacing-sm);
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-control);
+  font-family: var(--font-code);
+  font-size: var(--font-size-control);
+  line-height: var(--line-height-help);
+  resize: vertical;
+}
+
+.workflow-prompt:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.workflow-command {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+}
+
+.workflow-command-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--text-muted);
+}
+
+.workflow-command-body {
+  margin: 0;
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  color: var(--text-terminal);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Step position sits at the leading edge of the footer, opposite the actions,
+   so a two-step flow says where you are without a second header row. */
+.workflow-editor-step {
+  margin-right: auto;
+}
+
+/* Where the workflow lands on disk, under the command it runs — the two facts
+   that make "there is no hidden orchestration" checkable rather than claimed. */
+.workflow-command-note {
+  margin: var(--spacing-xs) 0 0;
+  line-height: var(--line-height-help);
+}
+
+.workflow-command-note code {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+.workflow-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+  padding: var(--spacing-md) var(--spacing-xl) var(--spacing-lg);
+  border-top: var(--border-width-default) solid var(--border-default);
+}
+
+.workflow-editor-back {
+  margin-right: auto;
+}
+
+/* ---- run history ---- */
+
+.run-history-modal {
+  width: min(820px, 94vw);
+  /* Definite, not a max — see .workflow-template-modal. `.modal-frame-content`
+     is sized by its content, so the panes' `flex: 1` divided nothing and this
+     dialog rendered as a stub with a two-line transcript window. */
+  height: min(640px, 82vh);
+  overflow: hidden;
+}
+
+.run-history {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
+  padding: var(--spacing-lg) var(--spacing-xl) 0;
+}
+
+.run-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  overflow-y: auto;
+  padding-right: var(--spacing-2xs);
+}
+
+.run-history-empty {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+}
+
+/* The command palette's row, like the template picker's: this is a list you
+   pick from inside a dialog, and that is how this app draws one. */
+.run-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  transition: background-color var(--transition-interaction);
+}
+
+.run-history-item:hover {
+  background: var(--surface-control-hover);
+}
+
+.run-history-item:hover {
+  background: var(--surface-control-hover);
+}
+
+.run-history-item.is-selected {
+  background: var(--surface-control);
+}
+
+.run-history-item-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: var(--spacing-xs);
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  background: var(--accent-success);
+}
+
+.run-history-item-dot[data-state='findings'] {
+  background: var(--accent-warning);
+}
+
+.run-history-item-dot[data-state='failed'] {
+  background: var(--accent-error);
+}
+
+.run-history-item-dot[data-state='running'] {
+  background: var(--accent-active);
+}
+
+.run-history-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+.run-history-item-status {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+}
+
+.run-history-item-meta {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
+}
+
+/* Said plainly and first: a failed run's reason is the thing you opened this
+   for. */
+.run-history-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  margin: 0 0 var(--spacing-sm);
+  color: var(--accent-error);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+}
+
+.run-history-error svg {
+  flex-shrink: 0;
+  margin-top: var(--spacing-3xs);
+}
+
+.run-history-transcript {
+  background: var(--surface-recessed);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  overflow: auto;
+}
+
+.run-history-transcript-body {
+  margin: 0;
+  padding: var(--spacing-md);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  color: var(--text-terminal);
+  white-space: pre;
+}
+
+.run-history-note {
+  margin: 0;
+  flex-shrink: 0;
+  padding: var(--spacing-md) var(--spacing-xl) var(--spacing-lg);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-help);
+}
+
+.run-history-note code {
+  font-family: var(--font-code);
+  color: var(--text-secondary);
+}
+
+/* ---- development-only prototype preview (?workflowsPreview=1) ----
+   Mirrors the primitive lab's overlay geometry so the prototype can be
+   reviewed in a browser without booting a project. */
+
+.dev-workflows-preview {
+  position: fixed;
+  inset: var(--spacing-lg);
+  /* Below the modal tier: the harness is a fullscreen stand-in for the app
+     window, and dialogs opened inside it must still stack above. */
+  z-index: var(--z-preview-fullscreen);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--surface-app);
+  border: var(--border-width-default) solid var(--border-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-ui);
+}
+
+.dev-workflows-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: var(--border-width-default) solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+
+.dev-workflows-preview__eyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-control);
+}
+
+.dev-workflows-preview__body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dev-workflows-preview__body > * {
+  flex: 1;
+  min-width: 0;
+}

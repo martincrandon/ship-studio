@@ -4,5 +4,7 @@ export type AppView =
   | 'onboarding'
   | 'account-select'
   | 'projects'
+  | 'workflows'
+  | 'inbox'
   | 'project-loading'
   | 'workspace';

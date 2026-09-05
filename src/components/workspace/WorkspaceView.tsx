@@ -92,6 +92,8 @@ interface TerminalProps {
   focusActiveTerminal: () => void;
   switchTabAgent: (tabId: number, agentId: string) => void;
   restartTerminalTab: (tabId: number, projectPath?: string) => void;
+  /** Forget a tab's opening prompt once its agent has spawned with it. */
+  clearInitialPrompt: (tabId: number, projectPath?: string) => void;
   getActiveTabAgent: () => AgentConfig;
   /** Side-by-side view: tab ids visible in panes, or null when off. */
   splitPaneTabIds: number[] | null;
@@ -278,7 +280,7 @@ interface LifecycleProps {
   handleStartDevServer: () => Promise<void>;
   handleGitHubStatusChange: () => void;
   handlePreviewReady: () => void;
-  sendToClaude: (text: string) => void;
+  sendToClaude: (text: string) => unknown;
   handleTerminalExit: (code: number | null) => void;
   handleToolbarAutoAcceptToggle: () => void;
   handleAutoAcceptWarningAccept: () => void;
@@ -341,6 +343,12 @@ export interface WorkspaceViewProps {
   onSelectProjectTab: (projectPath: string, tabSessionId: string) => void;
   /** Navigate to the Home (projects) view. */
   onGoHome: () => void;
+  /** Home-level destinations, kept reachable from inside a project. */
+  homeNav?: {
+    onGoWorkflows: () => void;
+    onGoInbox: () => void;
+    inboxUnreadCount: number;
+  };
   /** Open the project picker modal. */
   onOpenProjectPicker: () => void;
   /** Open the "Switch Workspace" picker from the sidebar footer. */
@@ -382,6 +390,7 @@ export const WorkspaceView = memo(function WorkspaceView({
   onCloseProject,
   onSelectProjectTab,
   onGoHome,
+  homeNav,
   onSwitchAccount,
   onUnpinProject,
   onOpenProjectPicker,
@@ -406,6 +415,7 @@ export const WorkspaceView = memo(function WorkspaceView({
     closeTerminalTab,
     focusActiveTerminal,
     restartTerminalTab,
+    clearInitialPrompt,
     getActiveTabAgent,
     splitPaneTabIds,
     splitPaneSizes,
@@ -1024,6 +1034,9 @@ export const WorkspaceView = memo(function WorkspaceView({
     projectPath: currentProject.path,
     projectName: currentProject.name,
     onGoHome,
+    onGoWorkflows: homeNav?.onGoWorkflows,
+    onGoInbox: homeNav?.onGoInbox,
+    inboxUnreadCount: homeNav?.inboxUnreadCount,
     isSidebarHidden,
     onToggleSidebar,
     compactWorkspaceToolbarEnabled,
@@ -1135,6 +1148,7 @@ export const WorkspaceView = memo(function WorkspaceView({
             autoAcceptMode={autoAcceptMode}
             handleTerminalExit={handleTerminalExit}
             restartTerminalTab={restartTerminalTab}
+            clearInitialPrompt={clearInitialPrompt}
             createTabStatusHandler={createTabStatusHandler}
             handleTabTitleChange={handleTabTitleChange}
           />
@@ -1233,6 +1247,7 @@ export const WorkspaceView = memo(function WorkspaceView({
                       createTabStatusHandler={createTabStatusHandler}
                       handleTabTitleChange={handleTabTitleChange}
                       restartTerminalTab={restartTerminalTab}
+                      clearInitialPrompt={clearInitialPrompt}
                       showHealthLogs={showHealthLogs}
                       healthOutput={healthOutput}
                       healthOutputVersion={healthOutputVersion}

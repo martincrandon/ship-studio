@@ -16,6 +16,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   ActivityIcon,
   AddIcon,
+  BellIcon,
   ChevronIcon,
   CloseIcon,
   HomeIcon,
@@ -96,6 +97,17 @@ interface Props {
   onToggleSidebar?: () => void;
   /** Hide the sidebar-owned navigation row when the workspace titlebar owns it. */
   showNavigationControls?: boolean;
+  /**
+   * Which top-level destination is showing, so the
+   * nav row can mark it current. Defaults to Home when omitted.
+   */
+  activeNav?: 'home' | 'workflows' | 'inbox';
+  /** Open the Workflows page. Hides the nav button when omitted. */
+  onGoWorkflows?: () => void;
+  /** Open the Inbox. Hides the nav button when omitted. */
+  onGoInbox?: () => void;
+  /** Unread findings, rendered as a badge on the Inbox button. */
+  inboxUnreadCount?: number;
 
   // Projects
   /** Pinned projects (in pin order). Have live registry data. */
@@ -273,6 +285,10 @@ function projectDotState(
 
 export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   isHomeActive,
+  activeNav,
+  onGoWorkflows,
+  onGoInbox,
+  inboxUnreadCount = 0,
   onGoHome,
   onOpenProjectPicker,
   isSidebarHidden,
@@ -306,7 +322,9 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   onSwitchAccount,
 }: Props) {
   const appSettingsModal = useModal('settings');
-  const [sidebarWidth, setSidebarWidth] = useState(214);
+  // 219, not 214: the top row gained Workflows and Inbox beside Home, and at the
+  // old default the last one sat hard against the resize edge.
+  const [sidebarWidth, setSidebarWidth] = useState(219);
   const { activeAccount, accounts } = useActiveAccount(currentProjectPath);
   // The Workspaces feature is invisible until you actually have more than one.
   // For the ~80% single-workspace users the footer switcher stays hidden; the
@@ -843,6 +861,37 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
               title="Home"
               aria-label="Home"
             />
+            {onGoWorkflows && (
+              <IconButton
+                variant="ghost"
+                className={`workspace-sidebar-home ${activeNav === 'workflows' ? 'is-active' : ''}`}
+                icon={<ActivityIcon size={12} />}
+                onClick={onGoWorkflows}
+                disabled={activeNav === 'workflows'}
+                aria-current={activeNav === 'workflows' ? 'page' : undefined}
+                title="Workflows"
+                aria-label="Workflows"
+              />
+            )}
+            {onGoInbox && (
+              <span className="workspace-sidebar-inbox">
+                <IconButton
+                  variant="ghost"
+                  className={`workspace-sidebar-home ${activeNav === 'inbox' ? 'is-active' : ''}`}
+                  icon={<BellIcon size={12} />}
+                  onClick={onGoInbox}
+                  disabled={activeNav === 'inbox'}
+                  aria-current={activeNav === 'inbox' ? 'page' : undefined}
+                  title="Inbox"
+                  aria-label={inboxUnreadCount > 0 ? `Inbox — ${inboxUnreadCount} unread` : 'Inbox'}
+                />
+                {inboxUnreadCount > 0 && (
+                  <span className="workspace-sidebar-inbox-badge" aria-hidden>
+                    {inboxUnreadCount > 9 ? '9+' : inboxUnreadCount}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         )}
 

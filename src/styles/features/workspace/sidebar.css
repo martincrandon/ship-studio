@@ -83,8 +83,11 @@
   height: calc(var(--control-height-standard) + (var(--space-08) * 2));
   min-height: calc(var(--control-height-standard) + (var(--space-08) * 2));
   gap: 0;
+  /* The left inset clears the traffic lights. The extra --space-08 gives the
+     nav row a little air off them now that it carries four buttons rather
+     than one. */
   padding: 0 var(--space-08) 0
-    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap));
+    calc(var(--space-32) + var(--space-32) + var(--space-12) + var(--button-gap) + var(--space-08));
 }
 
 /* Match the titlebar's icon-only Home control instead of stretching with the
@@ -1263,3 +1266,30 @@
 }
 
 /* Project picker styles removed — replaced by the command palette (⌘O). */
+
+/* PROTOTYPE (workflows/inbox): the Inbox nav button carries an unread badge.
+   The wrapper exists only to anchor the badge to the icon button. */
+.workspace-sidebar-inbox {
+  position: relative;
+  display: inline-flex;
+}
+
+.workspace-sidebar-inbox-badge {
+  position: absolute;
+  top: calc(var(--spacing-2xs) * -1);
+  right: calc(var(--spacing-2xs) * -1);
+  min-width: var(--spacing-md);
+  height: var(--spacing-md);
+  padding: 0 var(--spacing-2xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent-error);
+  color: var(--text-white);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-label);
+  line-height: 1;
+  pointer-events: none;
+}
