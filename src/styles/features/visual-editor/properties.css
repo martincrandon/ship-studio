@@ -661,31 +661,20 @@
   min-width: 0;
 }
 .ss-radius-control__marker {
+  display: block;
   flex: 0 0 var(--size-icon-sm);
   width: var(--size-icon-sm);
   height: var(--size-icon-sm);
   box-sizing: border-box;
   color: var(--text-muted);
 }
-.ss-radius-control__marker--top-left {
-  border-top: var(--border-width-default) solid currentColor;
-  border-left: var(--border-width-default) solid currentColor;
-  border-top-left-radius: var(--radius-lg);
-}
-.ss-radius-control__marker--top-right {
-  border-top: var(--border-width-default) solid currentColor;
-  border-right: var(--border-width-default) solid currentColor;
-  border-top-right-radius: var(--radius-lg);
-}
-.ss-radius-control__marker--bottom-right {
-  border-right: var(--border-width-default) solid currentColor;
-  border-bottom: var(--border-width-default) solid currentColor;
-  border-bottom-right-radius: var(--radius-lg);
-}
-.ss-radius-control__marker--bottom-left {
-  border-bottom: var(--border-width-default) solid currentColor;
-  border-left: var(--border-width-default) solid currentColor;
-  border-bottom-left-radius: var(--radius-lg);
+.ss-radius-control__leading-icon {
+  align-self: center;
+  flex: 0 0 var(--size-icon-sm);
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  margin-inline-start: var(--spacing-2xs);
+  color: var(--text-muted);
 }
 .ss-radius-control__toggle {
   flex: 0 0 var(--size-control-compact);

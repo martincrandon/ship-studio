@@ -190,10 +190,6 @@
   border-right: var(--stroke-1) solid var(--border-default);
 }
 
-.workspace-sidebar.is-hidden .workspace-sidebar-ws-switch {
-  display: none;
-}
-
 /* The resize handle is a sibling of the aside; hide it while collapsed
    since the collapsed rail is not user-resizable. */
 .workspace-sidebar.is-hidden + .panel-resize-handle {
@@ -207,7 +203,6 @@
 
 .workspace-sidebar.is-hidden .workspace-sidebar-toggle,
 .workspace-sidebar.is-hidden .workspace-sidebar-home,
-.workspace-sidebar.is-hidden .workspace-sidebar-add-project,
 .workspace-sidebar.is-hidden .workspace-sidebar-support,
 .workspace-sidebar.is-hidden .workspace-sidebar-settings {
   width: var(--control-height-standard);
@@ -1196,8 +1191,8 @@
 }
 
 /* Keep the switcher and trailing icon controls in fixed footer columns. The
- * switcher stays in the first column while its open width animates across the
- * rest of the row, so its normal height still pushes the updater upward. */
+ * switcher stays in its column while its menu is rendered in a body portal,
+ * so opening it cannot move the trailing controls. */
 .workspace-sidebar-footer-actions.has-workspace-switcher {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1210,11 +1205,6 @@
   width: 100%;
   min-width: 0;
   justify-self: start;
-}
-
-.workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-switcher.is-open {
-  width: calc(100% + (var(--control-height-standard) * 2) + (var(--button-gap) * 2));
-  z-index: var(--z-dropdown);
 }
 
 .workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support,
@@ -1232,11 +1222,24 @@
   grid-column: 3;
 }
 
-/* The collapsed rail hides the workspace switcher and returns the remaining
- * controls to its existing vertical icon stack. */
+/* The collapsed rail keeps the workspace switcher in the existing vertical
+ * icon stack while the expanded picker is rendered outside the rail. */
 .workspace-sidebar.is-hidden .workspace-sidebar-footer-actions.has-workspace-switcher {
   display: flex;
   flex-direction: column;
+}
+
+.workspace-sidebar.is-hidden
+  .workspace-sidebar-footer-actions.has-workspace-switcher
+  > .workspace-switcher {
+  width: var(--control-height-standard);
+  min-width: var(--control-height-standard);
+  max-width: var(--control-height-standard);
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  max-height: var(--control-height-standard);
+  flex: 0 0 var(--control-height-standard);
+  align-self: center;
 }
 
 /* The updater is a sibling above the action grid. Keep its existing layer so
@@ -1274,18 +1277,39 @@
   overflow-x: hidden;
 }
 
-/* Keep the Active-list action inset so the Ghost hover surface has breathing
- * room at the sidebar edges. The button itself owns its visual treatment. */
+/* The Open project action is a full-bleed row, matching the project cards
+ * above it. Its own content padding remains so the icon and label stay
+ * comfortably spaced. */
 .workspace-sidebar-active-actions {
   width: 100%;
-  margin-top: var(--space-08);
-  padding: 0 var(--space-08);
+  margin-top: 0;
+  padding: 0;
 }
 
 .workspace-sidebar-add-project {
   min-width: 0;
   width: 100%;
+  height: var(--size-sidebar-project-row);
+  min-height: var(--size-sidebar-project-row);
+  border-radius: 0;
   justify-content: center;
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-active-actions {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-add-project {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  flex: 0 0 var(--control-height-standard);
+  padding: 0;
 }
 
 .workspace-sidebar-support,

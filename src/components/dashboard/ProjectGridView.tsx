@@ -36,6 +36,7 @@ export interface ProjectGridViewProps {
   onSelectAllVisible: (selected: boolean) => void;
   onToggleProjectSelection: (projectPath: string) => void;
   onSelectProject: (project: ProjectWithThumbnail) => void;
+  onOpenProjectSettings: (project: DashboardProject) => void;
   onDeleteProject: (project: DashboardProject) => void;
   onRenameProject: (project: DashboardProject) => void;
   onToggleMainBranchWarning: (projectPath: string, hidden: boolean) => void;
@@ -74,6 +75,7 @@ export function ProjectGridView({
   onSelectAllVisible,
   onToggleProjectSelection,
   onSelectProject,
+  onOpenProjectSettings,
   onDeleteProject,
   onRenameProject,
   onToggleMainBranchWarning,
@@ -146,6 +148,7 @@ export function ProjectGridView({
             onSelectAllVisible={onSelectAllVisible}
             onToggleProjectSelection={onToggleProjectSelection}
             onSelectProject={onSelectProject}
+            onOpenProjectSettings={onOpenProjectSettings}
             onDeleteProject={onDeleteProject}
             onRenameProject={onRenameProject}
             onToggleMainBranchWarning={onToggleMainBranchWarning}
@@ -182,6 +185,7 @@ export function ProjectGridView({
           project={project}
           thumbnailData={project.thumbnailData}
           onSelect={() => onSelectProject(project)}
+          onOpenSettings={() => onOpenProjectSettings(project)}
           onDelete={() => onDeleteProject(project)}
           onToggleMainBranchWarning={(hidden) => onToggleMainBranchWarning(project.path, hidden)}
           onRename={project.is_external ? undefined : () => onRenameProject(project)}

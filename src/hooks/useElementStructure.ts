@@ -447,10 +447,25 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
   // leaving native text-entry and inline editing alone.
   useEffect(() => {
     if (!enabled) return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || isTextEntryTarget(event.target)) {
+    const runShortcut = (event: Event, shortcutKey: ElementShortcutKey) => {
+      if (
+        event.defaultPrevented ||
+        (event instanceof KeyboardEvent && event.isComposing) ||
+        isTextEntryTarget(event.target)
+      ) {
         return;
       }
+
+      const currentSelection = selectionRef.current;
+      if (!currentSelection || currentSelection.nodeId == null) return;
+      if (shortcutKey === 'v' && !clipboardRef.current) return;
+
+      event.preventDefault();
+      shortcutActionsRef.current?.[shortcutKey]();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || isTextEntryTarget(event.target)) return;
 
       const key = event.key.toLowerCase();
       const isModifierShortcut =
@@ -464,16 +479,26 @@ export function useElementStructure({ iframeRef, projectPath, enabled, onToast }
         return;
       }
 
-      const shortcutKey = key as ElementShortcutKey;
-      const currentSelection = selectionRef.current;
-      if (!currentSelection || currentSelection.nodeId == null) return;
-      if (shortcutKey === 'v' && !clipboardRef.current) return;
-
-      event.preventDefault();
-      shortcutActionsRef.current?.[shortcutKey]();
+      runShortcut(event, key as ElementShortcutKey);
     };
-    window.addEventListener('keydown', handler, true);
-    return () => window.removeEventListener('keydown', handler, true);
+
+    // macOS menu-bar Copy/Cut/Paste commands dispatch clipboard events rather
+    // than a keydown event. Route those through the same element actions.
+    const handleClipboard = (event: ClipboardEvent) => {
+      const shortcutKey = event.type === 'copy' ? 'c' : event.type === 'cut' ? 'x' : 'v';
+      runShortcut(event, shortcutKey);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('copy', handleClipboard, true);
+    document.addEventListener('cut', handleClipboard, true);
+    document.addEventListener('paste', handleClipboard, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('copy', handleClipboard, true);
+      document.removeEventListener('cut', handleClipboard, true);
+      document.removeEventListener('paste', handleClipboard, true);
+    };
   }, [enabled]);
 
   /** Select a tree node, then run `action` once its ss:select lands — the tree

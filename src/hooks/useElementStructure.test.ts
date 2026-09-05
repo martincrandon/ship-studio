@@ -293,6 +293,41 @@ describe('useElementStructure', () => {
     expect(result.current.selection).toBeNull();
   });
 
+  it('handles native macOS clipboard commands through the element actions', async () => {
+    const { result, iframeRef } = setup();
+    const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;
+    await dispatch({ type: 'ss:select', signature: SIG, count: 1, nodeId: 7 }, source);
+
+    await act(async () => {
+      fireEvent.copy(document);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.hasClipboard).toBe(true);
+
+    await act(async () => {
+      fireEvent.cut(document);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(deleteElement as Fn).toHaveBeenCalledWith(
+      '/proj',
+      SIG,
+      '<section class="hero"><p class="child">Child</p></section>'
+    );
+
+    await dispatch(
+      { type: 'ss:select', signature: { ...SIG, className: 'shell', tagName: 'main' }, nodeId: 9 },
+      source
+    );
+    await act(async () => {
+      fireEvent.paste(document);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(pasteElement as Fn).toHaveBeenCalled();
+  });
+
   it('handles element shortcuts forwarded from the preview iframe', async () => {
     const { result, iframeRef } = setup();
     const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;

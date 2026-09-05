@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ElementTreePanel } from './ElementTreePanel';
 
 describe('ElementTreePanel', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('describes pinning the floating panel and unpinning the docked panel', () => {
     const onTogglePin = vi.fn();
     const props = {
@@ -57,6 +61,31 @@ describe('ElementTreePanel', () => {
     expect(
       screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
     ).toHaveClass('affected');
+  });
+
+  it('mirrors a preview hover on the matching row', () => {
+    render(
+      <ElementTreePanel
+        tree={{
+          id: 1,
+          tag: 'body',
+          cls: '',
+          text: '',
+          children: [{ id: 2, tag: 'div', cls: 'card', text: '', children: [] }],
+        }}
+        truncated={false}
+        selectedId={1}
+        hoveredId={2}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+
+    expect(
+      screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')
+    ).toHaveClass('hovered');
   });
 
   it('swaps supported tag names for the Insert Element icons', () => {
@@ -116,6 +145,30 @@ describe('ElementTreePanel', () => {
     expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).not.toBeInTheDocument();
   });
 
+  it('remembers the tag icon preference when the panel remounts', () => {
+    const props = {
+      tree: { id: 1, tag: 'body', cls: '', text: '', children: [] },
+      truncated: false,
+      selectedId: 1,
+      onSelect: vi.fn(),
+      onHover: vi.fn(),
+      projectPath: '/tmp/project',
+      selectedSignature: null,
+    };
+
+    const { unmount } = render(<ElementTreePanel {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show tag icons' }));
+    expect(localStorage.getItem('elementTreeShowTagIcons')).toBe('1');
+
+    unmount();
+    render(<ElementTreePanel {...props} />);
+
+    expect(screen.getByRole('button', { name: 'Show tag names' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
   it('uses the native context menu for structural actions and copies the node selector', async () => {
     const onSelect = vi.fn();
     const selectAndRun = vi.fn((_id: number, action: () => void) => action());
@@ -159,6 +212,24 @@ describe('ElementTreePanel', () => {
     const row = screen.getByTestId('element-tree-panel').querySelector('[data-tree-id="2"]')!;
     fireEvent.contextMenu(row, { clientX: 80, clientY: 100 });
     expect(screen.getByRole('menu')).toBeInTheDocument();
+    const menu = screen.getByRole('menu');
+    expect(
+      Array.from(menu.children).map((child) =>
+        child.getAttribute('role') === 'separator'
+          ? 'divider'
+          : (child.textContent ?? '').replace(/\s+/g, ' ').trim()
+      )
+    ).toEqual([
+      'Insert element…',
+      'Copy ID',
+      'Duplicate⌘D',
+      'divider',
+      'Cut⌘X',
+      'Copy⌘C',
+      'Paste⌘V',
+      'divider',
+      'Delete⌫',
+    ]);
     expect(screen.getByText('⌘D')).toBeInTheDocument();
     expect(screen.getByText('⌫')).toBeInTheDocument();
     expect(screen.getByText('⌘X')).toBeInTheDocument();

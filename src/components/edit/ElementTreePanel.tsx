@@ -27,6 +27,7 @@ import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { InsertMenu } from './InsertMenu';
 import { getElementIcon } from './element-icons';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
+import { useLocalStorageFlag } from '../../hooks/useLocalStorageFlag';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import {
   ContextMenu,
@@ -68,6 +69,8 @@ interface Props {
   tree: ElementTreeNode | null;
   truncated: boolean;
   selectedId: number | null;
+  /** The element currently hovered in the preview, when edit mode is active. */
+  hoveredId?: number | null;
   /** Same-source matches that will also change when the primary selection is edited. */
   affectedIds?: readonly number[];
   onSelect: (id: number) => void;
@@ -92,6 +95,7 @@ interface Props {
 
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
 const AUTO_EXPAND_DEPTH = 3;
+const SHOW_TAG_ICONS_STORAGE_KEY = 'elementTreeShowTagIcons';
 
 /** Map of node id → ancestor id chain, for auto-expanding to a selection. */
 function buildAncestors(root: ElementTreeNode): Map<number, number[]> {
@@ -135,6 +139,7 @@ export function ElementTreePanel({
   tree,
   truncated,
   selectedId,
+  hoveredId = null,
   affectedIds = [],
   onSelect,
   onHover,
@@ -149,7 +154,10 @@ export function ElementTreePanel({
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
-  const [showTagIcons, setShowTagIcons] = useState(false);
+  const [showTagIcons, , toggleShowTagIcons] = useLocalStorageFlag(
+    SHOW_TAG_ICONS_STORAGE_KEY,
+    false
+  );
   // The insert palette is anchored to the most recent context-menu gesture.
   // The primitive owns menu state; this ref only bridges the menu item to the
   // existing InsertMenu, which opens after the context menu closes.
@@ -236,6 +244,7 @@ export function ElementTreePanel({
   const renderNode = (node: ElementTreeNode, depth: number) => {
     const hasChildren = node.children.length > 0;
     const isSelected = node.id === selectedId;
+    const isHovered = node.id === hoveredId;
     const isAffected = !isSelected && affectedSet.has(node.id);
     // Collapsed = explicitly collapsed, or deep and never explicitly expanded.
     // The `collapsed` set tracks explicit toggles both ways via presence.
@@ -246,6 +255,9 @@ export function ElementTreePanel({
       VOID_ELEMENTS.has(node.tag) ||
       clipboardSourceNodeId === node.id ||
       (clipboardSourceNodeId != null && ancestors?.get(node.id)?.includes(clipboardSourceNodeId));
+    const rowClassName = `ss-tree-row${isSelected ? ' selected' : ''}${
+      isHovered ? ' hovered' : ''
+    }${isAffected ? ' affected' : ''}`;
     return (
       <div key={node.id} className="ss-tree-node">
         {structure ? (
@@ -263,7 +275,7 @@ export function ElementTreePanel({
               }}
             >
               <div
-                className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
+                className={rowClassName}
                 style={{ paddingLeft: depth * 14 + 6 }}
                 data-tree-id={node.id}
                 onClick={() => onSelect(node.id)}
@@ -304,19 +316,19 @@ export function ElementTreePanel({
                 <span>Insert element…</span>
               </ContextMenuItem>
               <ContextMenuItem
+                onSelect={() => {
+                  void copyElementId(selectorForNode(node));
+                }}
+              >
+                {elementIdCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
+                <span>{elementIdCopied ? 'Copied' : 'Copy ID'}</span>
+              </ContextMenuItem>
+              <ContextMenuItem
                 onSelect={() => structure.selectAndRun(node.id, structure.duplicate)}
               >
                 <DuplicateIcon size={12} />
                 <span>Duplicate</span>
                 <ContextMenuShortcut>{kbd('mod', 'D')}</ContextMenuShortcut>
-              </ContextMenuItem>
-              <ContextMenuItem
-                variant="destructive"
-                onSelect={() => structure.selectAndRun(node.id, structure.remove)}
-              >
-                <TrashIcon size={12} />
-                <span>Delete</span>
-                <ContextMenuShortcut>{kbd('⌫')}</ContextMenuShortcut>
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem onSelect={() => structure.selectAndRun(node.id, structure.cut)}>
@@ -339,18 +351,18 @@ export function ElementTreePanel({
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem
-                onSelect={() => {
-                  void copyElementId(selectorForNode(node));
-                }}
+                variant="destructive"
+                onSelect={() => structure.selectAndRun(node.id, structure.remove)}
               >
-                {elementIdCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-                <span>{elementIdCopied ? 'Copied' : 'Copy ID'}</span>
+                <TrashIcon size={12} />
+                <span>Delete</span>
+                <ContextMenuShortcut>{kbd('⌫')}</ContextMenuShortcut>
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         ) : (
           <div
-            className={`ss-tree-row${isSelected ? ' selected' : ''}${isAffected ? ' affected' : ''}`}
+            className={rowClassName}
             style={{ paddingLeft: depth * 14 + 6 }}
             data-tree-id={node.id}
             onClick={() => onSelect(node.id)}
@@ -503,7 +515,7 @@ export function ElementTreePanel({
           variant="ghost"
           size="compact"
           className="button--icon-only ss-tree-panel__tag-toggle"
-          onClick={() => setShowTagIcons((shown) => !shown)}
+          onClick={toggleShowTagIcons}
           title={showTagIcons ? 'Show tag names' : 'Show tag icons'}
           aria-label={showTagIcons ? 'Show tag names' : 'Show tag icons'}
           pressed={showTagIcons}

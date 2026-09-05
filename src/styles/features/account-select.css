@@ -121,6 +121,8 @@
   font-size: var(--font-size-h3);
   font-weight: 600;
   color: var(--text-inverse);
+  line-height: 1;
+  text-align: center;
   flex-shrink: 0;
 }
 
@@ -293,27 +295,34 @@
 
 .account-color-picker {
   display: flex;
-  gap: 6px;
+  gap: var(--button-gap);
   flex-wrap: wrap;
   align-items: center;
 }
 
-.account-color-swatch {
-  width: 20px;
-  height: 20px;
+.account-color-swatch.button {
+  width: var(--size-control-compact);
+  min-width: var(--size-control-compact);
+  height: var(--size-control-compact);
+  min-height: var(--size-control-compact);
+  padding: 0;
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  border: 2px solid transparent;
+  border: var(--focus-ring-width) solid transparent;
+  box-shadow: none;
   transition:
     transform var(--transition),
     border-color var(--transition);
 }
 
-.account-color-swatch:hover {
+.account-color-swatch.button:hover:not(:disabled) {
   transform: scale(1.15);
 }
 
-.account-color-swatch.selected {
+.account-color-swatch.button:active:not(:disabled) {
+  transform: scale(var(--button-active-scale));
+}
+
+.account-color-swatch.button.selected {
   border-color: var(--text-primary);
 }
 

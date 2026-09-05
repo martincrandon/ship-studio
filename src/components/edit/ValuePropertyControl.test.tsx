@@ -67,9 +67,13 @@ describe('ValuePropertyControl ancestor inheritance', () => {
 
 describe('ValuePropertyControl radius values', () => {
   it('starts linked and renders the locked icon action', () => {
-    renderControl({ kind: 'radius', currentClass: 'rounded-[12px]' });
+    const { container } = renderControl({ kind: 'radius', currentClass: 'rounded-[12px]' });
 
     expect(screen.getByRole('textbox', { name: 'Radius' })).toHaveValue('12');
+    expect(container.querySelector('.value-field__leading svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/corner-radius.svg'
+    );
     const toggle = screen.getByRole('button', { name: 'Separate radius values' });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle.querySelector('svg')).toHaveAttribute('data-icon-source', 'icons/locked.svg');
@@ -88,8 +92,19 @@ describe('ValuePropertyControl radius values', () => {
     expect(
       screen.getByRole('button', { name: 'Link radius values' }).querySelector('svg')
     ).toHaveAttribute('data-icon-source', 'icons/unlocked.svg');
-    for (const label of ['Top left', 'Top right', 'Bottom right', 'Bottom left']) {
-      expect(screen.getByRole('textbox', { name: `Radius ${label}` })).toHaveValue('12');
+    const cornerSources = {
+      'Top left': 'icons/corner-radius-top-left.svg',
+      'Top right': 'icons/corner-radius-top-right.svg',
+      'Bottom right': 'icons/corner-radius-bottom-right.svg',
+      'Bottom left': 'icons/corner-radius-bottom-left.svg',
+    };
+    for (const [label, source] of Object.entries(cornerSources)) {
+      const field = screen.getByRole('textbox', { name: `Radius ${label}` });
+      expect(field).toHaveValue('12');
+      expect(field.closest('.ss-radius-control__corner')?.querySelector('svg')).toHaveAttribute(
+        'data-icon-source',
+        source
+      );
     }
   });
 

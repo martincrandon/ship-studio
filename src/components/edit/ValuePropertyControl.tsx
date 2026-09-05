@@ -17,7 +17,15 @@ import {
   type LayerContext,
   type ResetSpec,
 } from '../../lib/edit';
-import { LockedIcon, UnlockedIcon } from '@/components/icons';
+import {
+  CornerRadiusBottomLeftIcon,
+  CornerRadiusBottomRightIcon,
+  CornerRadiusIcon,
+  CornerRadiusTopLeftIcon,
+  CornerRadiusTopRightIcon,
+  LockedIcon,
+  UnlockedIcon,
+} from '@/components/icons';
 
 type ValuePropertyKind =
   | 'border'
@@ -766,10 +774,10 @@ interface ValuePropertyControlProps {
 type RadiusValueControlProps = Omit<ValuePropertyControlProps, 'kind'>;
 
 const RADIUS_CORNERS = [
-  { key: 'top-left', label: 'Top left' },
-  { key: 'top-right', label: 'Top right' },
-  { key: 'bottom-right', label: 'Bottom right' },
-  { key: 'bottom-left', label: 'Bottom left' },
+  { key: 'top-left', label: 'Top left', Icon: CornerRadiusTopLeftIcon },
+  { key: 'top-right', label: 'Top right', Icon: CornerRadiusTopRightIcon },
+  { key: 'bottom-right', label: 'Bottom right', Icon: CornerRadiusBottomRightIcon },
+  { key: 'bottom-left', label: 'Bottom left', Icon: CornerRadiusBottomLeftIcon },
 ] as const;
 
 function RadiusValueControl({
@@ -812,10 +820,7 @@ function RadiusValueControl({
             <div className="ss-radius-control__grid">
               {RADIUS_CORNERS.map((corner, index) => (
                 <div key={corner.key} className="ss-radius-control__corner">
-                  <span
-                    className={`ss-radius-control__marker ss-radius-control__marker--${corner.key}`}
-                    aria-hidden="true"
-                  />
+                  <corner.Icon className="ss-radius-control__marker" size={14} aria-hidden="true" />
                   <ValueField
                     className="ss-edit-panel__text ss-radius-control__value"
                     variant="length"
@@ -840,6 +845,13 @@ function RadiusValueControl({
               variant="length"
               variables={variables}
               value={shown}
+              leading={
+                <CornerRadiusIcon
+                  className="ss-radius-control__leading-icon"
+                  size={14}
+                  aria-hidden="true"
+                />
+              }
               aria-label="Radius"
               placeholder="0"
               title="Radius"

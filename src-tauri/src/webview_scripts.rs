@@ -98,6 +98,34 @@ pub const INSPECTOR_SHIM: &str = r#"
       post({ type: 'ss:elementShortcut', key: key });
     }, true);
 
+    // macOS Edit-menu commands dispatch clipboard events without necessarily
+    // delivering the corresponding keydown event to the frame. Keep them on
+    // the same element-action path, while leaving text fields untouched.
+    document.addEventListener('copy', function (event) {
+      if (!structureShortcutsEnabled) return;
+      var target = event.target;
+      if (target && target.matches && target.matches('input,textarea,select,[contenteditable=""],[contenteditable="true"]')) return;
+      if (target && target.closest && target.closest('[contenteditable=""],[contenteditable="true"]')) return;
+      event.preventDefault();
+      post({ type: 'ss:elementShortcut', key: 'c' });
+    }, true);
+    document.addEventListener('cut', function (event) {
+      if (!structureShortcutsEnabled) return;
+      var target = event.target;
+      if (target && target.matches && target.matches('input,textarea,select,[contenteditable=""],[contenteditable="true"]')) return;
+      if (target && target.closest && target.closest('[contenteditable=""],[contenteditable="true"]')) return;
+      event.preventDefault();
+      post({ type: 'ss:elementShortcut', key: 'x' });
+    }, true);
+    document.addEventListener('paste', function (event) {
+      if (!structureShortcutsEnabled) return;
+      var target = event.target;
+      if (target && target.matches && target.matches('input,textarea,select,[contenteditable=""],[contenteditable="true"]')) return;
+      if (target && target.closest && target.closest('[contenteditable=""],[contenteditable="true"]')) return;
+      event.preventDefault();
+      post({ type: 'ss:elementShortcut', key: 'v' });
+    }, true);
+
     // --- Console ---
     ['log', 'info', 'warn', 'error', 'debug'].forEach(function (level) {
       var orig = console[level] ? console[level].bind(console) : function () {};

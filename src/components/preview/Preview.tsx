@@ -141,6 +141,9 @@ interface PreviewProps {
   isDevServerRestarting?: boolean;
   /** Whether this is a static HTML project (changes loading/error messaging) */
   isStaticProject?: boolean;
+  /** Whether the preview may probe its port. The Preview shell stays mounted
+   *  while project setup is still reserving the real port. */
+  previewConnectionEnabled?: boolean;
   /** Detected project type; gates the visual editor to Next.js for v1. */
   projectType?: ProjectType;
   /** Callback to send prompt to Claude terminal */
@@ -271,6 +274,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     isBranchSwitching = false,
     isDevServerRestarting = false,
     isStaticProject = false,
+    previewConnectionEnabled = true,
     projectType,
     onSendToClaude,
     previewPlugins,
@@ -321,6 +325,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     projectPath,
     isDevServerRestarting,
     isStaticProject,
+    enabled: previewConnectionEnabled,
     onServerReady,
     onPageChange,
     onSendToClaude,
@@ -1795,6 +1800,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               tree={elementTree.tree}
               truncated={elementTree.truncated}
               selectedId={elementTree.selectedId}
+              hoveredId={elementTree.hoveredId}
               affectedIds={elementTree.affectedIds}
               onSelect={elementTree.selectNode}
               onHover={elementTree.hoverNode}

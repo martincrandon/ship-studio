@@ -82,7 +82,7 @@ export type Resolution =
       line: number;
       column: number;
       class_name: string;
-      /** How the match was reached: "source" | "unique" | "tag" | "text" | "ancestor". */
+      /** How the match was reached: "source" | "dom_path" | "unique" | "tag" | "text" | "ancestor". */
       confidence: string;
     }
   | {

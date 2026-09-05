@@ -11,6 +11,7 @@ import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
 import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
+import { AccountColorPicker } from './AccountColorPicker';
 import { GitHubIcon, VercelIcon } from '@/components/icons';
 import { useWorkspaceConnect, type ConnectServiceId } from '../../hooks/useWorkspaceConnect';
 import { useOptionalToast } from '../../contexts/ToastContext';
@@ -22,7 +23,6 @@ import {
   clearAccountCredential,
   CREDENTIAL_LABELS,
   CREDENTIAL_DESCRIPTIONS,
-  ACCOUNT_COLORS,
   STATUS_FIELD_TO_KEY,
   SENSITIVE_KEYS,
   type Account,
@@ -192,17 +192,7 @@ export function AccountSettingsModal({
               {!account.isDefault && (
                 <div style={{ marginTop: 'var(--spacing-sm)' }}>
                   <div className="account-section-title">Color</div>
-                  <div className="account-color-picker">
-                    {ACCOUNT_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        className={`account-color-swatch ${c === editColor ? 'selected' : ''}`}
-                        style={{ background: c }}
-                        onClick={() => setEditColor(c)}
-                        title={c}
-                      />
-                    ))}
-                  </div>
+                  <AccountColorPicker value={editColor} onChange={setEditColor} />
                 </div>
               )}
             </div>

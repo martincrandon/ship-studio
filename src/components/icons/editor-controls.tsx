@@ -17,6 +17,11 @@ import DisplayFlexSvg from '../../assets/icons/display-flex.svg?react';
 import DisplayGridSvg from '../../assets/icons/display-grid.svg?react';
 import DisplayInlineBlockSvg from '../../assets/icons/display-inline-block.svg?react';
 import DisplayInlineFlexSvg from '../../assets/icons/display-inline-flex.svg?react';
+import CornerRadiusSvg from '../../assets/icons/corner-radius.svg?react';
+import CornerRadiusTopLeftSvg from '../../assets/icons/corner-radius-top-left.svg?react';
+import CornerRadiusTopRightSvg from '../../assets/icons/corner-radius-top-right.svg?react';
+import CornerRadiusBottomRightSvg from '../../assets/icons/corner-radius-bottom-right.svg?react';
+import CornerRadiusBottomLeftSvg from '../../assets/icons/corner-radius-bottom-left.svg?react';
 import ItalicsOffSvg from '../../assets/icons/italics-off.svg?react';
 import ItalicsOnSvg from '../../assets/icons/italics-on.svg?react';
 import DecorationNoneSvg from '../../assets/icons/decoration-none.svg?react';
@@ -162,6 +167,41 @@ export const DisplayInlineBlockIcon = createIcon(DisplayInlineBlockSvg, {
 export const DisplayInlineFlexIcon = createIcon(DisplayInlineFlexSvg, {
   name: 'DisplayInlineFlexIcon',
   source: 'icons/display-inline-flex.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CornerRadiusIcon = createIcon(CornerRadiusSvg, {
+  name: 'CornerRadiusIcon',
+  source: 'icons/corner-radius.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CornerRadiusTopLeftIcon = createIcon(CornerRadiusTopLeftSvg, {
+  name: 'CornerRadiusTopLeftIcon',
+  source: 'icons/corner-radius-top-left.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CornerRadiusTopRightIcon = createIcon(CornerRadiusTopRightSvg, {
+  name: 'CornerRadiusTopRightIcon',
+  source: 'icons/corner-radius-top-right.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CornerRadiusBottomRightIcon = createIcon(CornerRadiusBottomRightSvg, {
+  name: 'CornerRadiusBottomRightIcon',
+  source: 'icons/corner-radius-bottom-right.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const CornerRadiusBottomLeftIcon = createIcon(CornerRadiusBottomLeftSvg, {
+  name: 'CornerRadiusBottomLeftIcon',
+  source: 'icons/corner-radius-bottom-left.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',
