@@ -3867,14 +3867,21 @@ mod tests {
 
     // ── Multi-instance markup editing (issue #287) ───────────────────────────
 
-    fn multi_res(locs: &[(&str, usize)], class: &str) -> Resolution {
+    fn multi_res(root: &Path, locs: &[(&str, usize)], class: &str) -> Resolution {
         Resolution::Multi {
             locations: locs
                 .iter()
-                .map(|(f, l)| Location {
-                    file: f.to_string(),
-                    line: *l,
-                    column: 1,
+                .map(|(file, line)| {
+                    let src = std::fs::read_to_string(root.join(file)).unwrap();
+                    let span = find_classname_spans(&src)
+                        .into_iter()
+                        .find(|span| span.line == *line && span.value == class)
+                        .unwrap_or_else(|| panic!("missing {class:?} at {file}:{line}"));
+                    Location {
+                        file: file.to_string(),
+                        line: *line,
+                        column: span.column,
+                    }
                 })
                 .collect(),
             class_name: class.to_string(),
@@ -3889,7 +3896,7 @@ mod tests {
         std::fs::write(root.join("A.tsx"), card).unwrap();
         std::fs::write(root.join("B.tsx"), card).unwrap();
 
-        let res = multi_res(&[("A.tsx", 1), ("B.tsx", 1)], "card");
+        let res = multi_res(root, &[("A.tsx", 1), ("B.tsx", 1)], "card");
         let (instances, locations) = locate_instances_at(root, res, None, None).unwrap();
         assert_eq!(instances.len(), 2);
         assert_eq!(locations.as_ref().map(Vec::len), Some(2));
@@ -3922,7 +3929,7 @@ mod tests {
         )
         .unwrap();
 
-        let res = multi_res(&[("A.tsx", 1), ("B.tsx", 1)], "card");
+        let res = multi_res(root, &[("A.tsx", 1), ("B.tsx", 1)], "card");
         let err = locate_instances_at(root, res, None, None).unwrap_err();
         match err {
             CommandError::Validation { reason, .. } => {
@@ -4020,12 +4027,15 @@ mod tests {
         std::fs::write(root.join("A.tsx"), card).unwrap();
         std::fs::write(root.join("B.tsx"), card).unwrap();
 
-        let target = Location {
-            file: "B.tsx".into(),
-            line: 1,
-            column: 1,
+        let res = multi_res(root, &[("A.tsx", 1), ("B.tsx", 1)], "card");
+        let target = match &res {
+            Resolution::Multi { locations, .. } => locations
+                .iter()
+                .find(|location| location.file == "B.tsx")
+                .cloned()
+                .unwrap(),
+            _ => unreachable!("multi_res must return a multi-location resolution"),
         };
-        let res = multi_res(&[("A.tsx", 1), ("B.tsx", 1)], "card");
         let (instances, _) = locate_instances_at(root, res, Some(&target), None).unwrap();
         assert_eq!(instances.len(), 1);
         assert_eq!(instances[0].file, "B.tsx");
@@ -4055,7 +4065,7 @@ mod tests {
         )
         .unwrap();
 
-        let res = multi_res(&[("List.tsx", 3), ("List.tsx", 4)], "item");
+        let res = multi_res(root, &[("List.tsx", 3), ("List.tsx", 4)], "item");
         let (instances, _) = locate_instances_at(root, res, None, None).unwrap();
         assert_eq!(instances.len(), 2);
         let applied = apply_html_to_instances(
@@ -4078,7 +4088,7 @@ mod tests {
         std::fs::write(root.join("A.tsx"), card).unwrap();
         std::fs::write(root.join("B.tsx"), card).unwrap();
 
-        let res = multi_res(&[("A.tsx", 1), ("B.tsx", 1)], "card");
+        let res = multi_res(root, &[("A.tsx", 1), ("B.tsx", 1)], "card");
         let (instances, _) = locate_instances_at(root, res, None, None).unwrap();
         // B drifts after locating (user edited the file directly).
         std::fs::write(
