@@ -323,7 +323,7 @@
 .ss-component-canvas-frame__section h4 {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-body-md);
 }
 
 .ss-component-canvas-frame__fields {

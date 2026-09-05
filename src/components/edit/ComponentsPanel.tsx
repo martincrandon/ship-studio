@@ -58,7 +58,6 @@ export interface ComponentsPanelProps {
   onCaptureCanvasFrame?: (frame: CanvasFrame) => Promise<string | null>;
   onRunCanvasAccessibility?: (frame: CanvasFrame) => Promise<ComponentA11yResult | null>;
   onSendCanvasToAgent?: (prompt: string) => void;
-  onCanvasToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   onDuplicate?: (input: Omit<DuplicateComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onRename?: (input: Omit<RenameComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onDelete?: (input: { componentId: ComponentId; removeAllUsages: true }) => void | Promise<void>;
@@ -431,7 +430,6 @@ export function ComponentsPanel({
   onCaptureCanvasFrame,
   onRunCanvasAccessibility,
   onSendCanvasToAgent,
-  onCanvasToast,
   onDuplicate,
   onRename,
   onDelete,
@@ -827,7 +825,6 @@ export function ComponentsPanel({
           onCaptureFrame={onCaptureCanvasFrame}
           onRunAccessibility={onRunCanvasAccessibility}
           onSendToAgent={onSendCanvasToAgent}
-          onToast={onCanvasToast}
         />
       )}
     </div>

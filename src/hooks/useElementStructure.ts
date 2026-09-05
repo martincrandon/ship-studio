@@ -32,6 +32,7 @@ import {
   ELEMENT_KINDS,
   insertElement,
   pasteElement,
+  type ExactSourceTarget,
   type ElementKind,
   type InsertPosition,
 } from '../lib/edit-structure';
@@ -39,7 +40,8 @@ import { resolveElementHtml } from '../lib/edit-html';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
-import type { ComponentFocusContext } from '../lib/components/focus';
+import { validateFocusedSourceTarget, type ComponentFocusContext } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 export interface SelectionRect {
   top: number;
@@ -156,7 +158,6 @@ export function useElementStructure({
   onToast,
   componentFocusRef,
 }: Params) {
-  void componentFocusRef;
   const [selection, setSelection] = useState<StructureSelection | null>(null);
   // Inline text editing is in progress — the toolbar hides so it can't cover
   // the contenteditable or the formatting bubble.
@@ -187,6 +188,57 @@ export function useElementStructure({
   const post = useCallback(
     (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
     [iframeRef]
+  );
+
+  /** Resolve the selected rendered element to an exact source span inside the
+   * focused component definition. Ambiguous or unproven targets are refused. */
+  const resolveFocusedSourceTarget = useCallback(
+    async (sel: StructureSelection): Promise<ExactSourceTarget | undefined> => {
+      const context = componentFocusRef?.current;
+      if (!context) return undefined;
+      const first = await resolveElementHtml(projectPath, sel.signature);
+      const locations = first.locations?.length
+        ? first.locations
+        : [{ file: first.file, line: first.line, column: first.sourceColumn ?? 1 }];
+      let lastDiagnostic =
+        'The focused component source target is no longer valid. Refresh and reselect the child.';
+      for (const location of locations) {
+        const anchor =
+          location.file === first.file && location.line === first.line
+            ? first
+            : await resolveElementHtml(projectPath, sel.signature, location);
+        if (
+          anchor.sourceStart === undefined ||
+          anchor.sourceEnd === undefined ||
+          !anchor.sourceHash
+        ) {
+          lastDiagnostic =
+            'The focused component source target has no exact range. Refresh and reselect the child.';
+          continue;
+        }
+        const source: SourceRef = {
+          file: anchor.file,
+          start: anchor.sourceStart,
+          end: anchor.sourceEnd,
+          line: anchor.sourceLine ?? anchor.line,
+          column: anchor.sourceColumn ?? location.column,
+          contentHash: anchor.sourceHash,
+        };
+        const validation = validateFocusedSourceTarget(context, source);
+        if (validation.status === 'valid') {
+          return {
+            file: source.file,
+            start: source.start,
+            end: source.end,
+            expectedHash: source.contentHash,
+            expectedHtml: anchor.html,
+          };
+        }
+        lastDiagnostic = validation.diagnostic?.message ?? lastDiagnostic;
+      }
+      throw new Error(lastDiagnostic);
+    },
+    [componentFocusRef, projectPath]
   );
 
   // The preview's initialization shim captures keys before the page can
@@ -329,7 +381,10 @@ export function useElementStructure({
       runAction(async () => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const inserted = await insertElement(projectPath, sel.signature, position, kind);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        const inserted = sourceTarget
+          ? await insertElement(projectPath, sel.signature, position, kind, sourceTarget)
+          : await insertElement(projectPath, sel.signature, position, kind);
         const meta = ELEMENT_KINDS.find((k) => k.kind === kind);
         scheduleReselect({
           className: inserted.className,
@@ -344,7 +399,7 @@ export function useElementStructure({
         void trackEvent('visual_edit_saved', { kind: 'insert' });
         onToast?.(`Added ${meta?.label ?? kind}`, 'success');
       }),
-    [projectPath, runAction, scheduleReselect, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
   );
 
   const duplicate = useCallback(
@@ -352,7 +407,10 @@ export function useElementStructure({
       runAction(async () => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const inserted = await duplicateElement(projectPath, sel.signature);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        const inserted = sourceTarget
+          ? await duplicateElement(projectPath, sel.signature, sourceTarget)
+          : await duplicateElement(projectPath, sel.signature);
         scheduleReselect({
           className: inserted.className,
           tagName: inserted.tagName,
@@ -362,7 +420,7 @@ export function useElementStructure({
         void trackEvent('visual_edit_saved', { kind: 'duplicate' });
         onToast?.('Element duplicated', 'success');
       }),
-    [projectPath, runAction, scheduleReselect, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
   );
 
   const remove = useCallback(
@@ -371,8 +429,13 @@ export function useElementStructure({
         const sel = selectionRef.current;
         if (!sel) return;
         // Resolve at action time so the drift baseline is fresh.
-        const { html } = await resolveElementHtml(projectPath, sel.signature);
-        await deleteElement(projectPath, sel.signature, html);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        if (sourceTarget) {
+          await deleteElement(projectPath, sel.signature, sourceTarget.expectedHtml, sourceTarget);
+        } else {
+          const anchor = await resolveElementHtml(projectPath, sel.signature);
+          await deleteElement(projectPath, sel.signature, anchor.html);
+        }
         setSelection(null);
         void trackEvent('visual_edit_saved', { kind: 'delete' });
         onToast?.(
@@ -380,7 +443,7 @@ export function useElementStructure({
           'success'
         );
       }),
-    [projectPath, runAction, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, onToast]
   );
 
   const copy = useCallback(
@@ -405,10 +468,17 @@ export function useElementStructure({
       runAction(async () => {
         const sel = selectionRef.current;
         if (!sel || sel.nodeId == null) return;
-        const { html } = await resolveElementHtml(projectPath, sel.signature);
-        await deleteElement(projectPath, sel.signature, html);
+        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        const anchor = sourceTarget
+          ? { html: sourceTarget.expectedHtml }
+          : await resolveElementHtml(projectPath, sel.signature);
+        if (sourceTarget) {
+          await deleteElement(projectPath, sel.signature, anchor.html, sourceTarget);
+        } else {
+          await deleteElement(projectPath, sel.signature, anchor.html);
+        }
         updateClipboard({
-          html,
+          html: anchor.html,
           sourceClassName: sel.signature.className,
           sourceNodeId: sel.nodeId,
           mode: 'cut',
@@ -416,12 +486,17 @@ export function useElementStructure({
         setSelection(null);
         onToast?.('Element cut', 'success');
       }),
-    [projectPath, runAction, updateClipboard, onToast]
+    [projectPath, resolveFocusedSourceTarget, runAction, updateClipboard, onToast]
   );
 
   const paste = useCallback(
     () =>
       runAction(async () => {
+        if (componentFocusRef?.current) {
+          throw new Error(
+            'Focused component paste is unavailable until the source target can be proven exactly.'
+          );
+        }
         const sel = selectionRef.current;
         const currentClipboard = clipboardRef.current;
         if (!sel || !currentClipboard) return;
@@ -441,7 +516,7 @@ export function useElementStructure({
         if (currentClipboard.mode === 'cut') updateClipboard(null);
         onToast?.('Element pasted', 'success');
       }),
-    [projectPath, runAction, scheduleReselect, updateClipboard, onToast]
+    [componentFocusRef, projectPath, runAction, scheduleReselect, updateClipboard, onToast]
   );
 
   shortcutActionsRef.current = {

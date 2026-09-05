@@ -55,6 +55,7 @@ import {
   type OrphanedComponentPreviewPreset,
 } from '../../lib/components/presets';
 import { trackEvent } from '../../lib/analytics';
+import { useOptionalToast } from '../../contexts/ToastContext';
 import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { ModalFrame } from '../primitives/ModalFrame';
@@ -74,7 +75,6 @@ export interface ComponentCanvasProps {
   /** The host may provide a real axe/runtime bridge when a dialect supports it. */
   onRunAccessibility?: (frame: ComponentCanvasFrame) => Promise<ComponentA11yResult | null>;
   onSendToAgent?: (prompt: string) => void;
-  onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   /** Verified options from the preview host; absent means only neutral defaults. */
   breakpointOptions?: readonly CanvasOption[];
   localeOptions?: readonly CanvasOption[];
@@ -653,10 +653,10 @@ export function ComponentCanvas({
   onCaptureFrame,
   onRunAccessibility,
   onSendToAgent,
-  onToast,
   breakpointOptions = DEFAULT_BREAKPOINT_OPTIONS,
   localeOptions = DEFAULT_LOCALE_OPTIONS,
 }: ComponentCanvasProps) {
+  const { showToast } = useOptionalToast();
   const projectKey = index.profile.workspaceRoot || 'unknown-project';
   const presetKey = componentPreviewPresetStorageKey(projectKey);
   const qaKey = componentQAStorageKey(projectKey);
@@ -734,7 +734,7 @@ export function ComponentCanvas({
       sourceRevision: index.revision,
     });
     if (result.refused) {
-      onToast?.(
+      showToast(
         `The Component Canvas is capped at ${COMPONENT_CANVAS_MAX_FRAMES} explicit frames.`,
         'info'
       );
@@ -742,7 +742,7 @@ export function ComponentCanvas({
     }
     setFrames(result.frames);
     setSelectedFrameId(result.frames[result.frames.length - 1]?.id ?? null);
-  }, [frames, index.revision, onToast, selectedFrame]);
+  }, [frames, index.revision, selectedFrame, showToast]);
   const saveBaseline = useCallback(
     async (frame: ComponentCanvasFrame) => {
       if (!onCaptureFrame) return;
@@ -759,14 +759,14 @@ export function ComponentCanvas({
         writeComponentQABaselineStore(localStorage, qaKey, { version: 1, baselines: updated });
         return updated;
       });
-      onToast?.(`Saved a baseline for ${frame.name}.`, 'success');
+      showToast(`Saved a baseline for ${frame.name}.`, 'success');
       void trackEvent('component_qa_baseline_saved', {
         dialect: component.dialect,
         has_screenshot: true,
         diff_state: 'baseline-saved',
       });
     },
-    [component.dialect, index.revision, onCaptureFrame, onToast, qaKey]
+    [component.dialect, index.revision, onCaptureFrame, qaKey, showToast]
   );
   const runA11y = useCallback(
     async (frame: ComponentCanvasFrame) => {

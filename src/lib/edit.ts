@@ -1818,7 +1818,13 @@ export function applyClassnameEdit(
   file: string,
   line: number,
   oldClass: string,
-  newClass: string
+  newClass: string,
+  options?: {
+    /** Optional revision-bound range guard used by focused component editing. */
+    expectedHash?: string;
+    expectedStart?: number;
+    expectedEnd?: number;
+  }
 ): Promise<void> {
   return invoke<void>('apply_classname_edit', {
     projectPath,
@@ -1826,6 +1832,7 @@ export function applyClassnameEdit(
     line,
     oldClass,
     newClass,
+    ...(options ?? {}),
   });
 }
 
