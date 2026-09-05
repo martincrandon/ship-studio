@@ -174,6 +174,19 @@ describe('WorkspaceSidebar project activity indicator', () => {
     expect(onUnpinProject).toHaveBeenCalledWith(PROJECT_PATH);
   });
 
+  it('keeps the full project action set visible and disables unavailable actions', () => {
+    const { container } = render(<WorkspaceSidebar {...sidebarProps()} />, {
+      wrapper: Providers,
+    });
+
+    fireEvent.contextMenu(container.querySelector<HTMLElement>('.sidebar-project-row')!);
+
+    expect(screen.getByRole('menuitem', { name: 'Project Settings' })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: 'Rename project' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Stop dev server' })).toBeDisabled();
+    expect(screen.getByRole('menuitem', { name: 'Unpin from sidebar' })).toBeDisabled();
+  });
+
   it('toggles a pinned project to unpinned from the context menu', async () => {
     const user = userEvent.setup();
     const onTogglePinProject = vi.fn().mockResolvedValue(undefined);
@@ -304,8 +317,9 @@ describe('WorkspaceSidebar project activity indicator', () => {
     expect(currentWorkspaceButton).toHaveAttribute('aria-current', 'true');
     expect(currentWorkspaceButton).toHaveAttribute('data-selected', 'true');
     const options = screen.getByRole('group', { name: 'Available workspaces' });
-    expect(options).toHaveClass('workspace-switcher-options', 'is-portal');
-    expect(options.parentElement).toBe(document.body);
+    expect(options).toHaveClass('workspace-switcher-options');
+    expect(options).not.toHaveClass('is-portal');
+    expect(options.parentElement).toBe(trigger.closest('.workspace-switcher'));
     expect(options.querySelector('.workspace-switcher-options-stack')?.lastElementChild).toBe(
       currentWorkspaceButton
     );

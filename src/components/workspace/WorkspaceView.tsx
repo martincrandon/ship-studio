@@ -64,6 +64,7 @@ import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
 import { useModal } from '../../contexts/ModalContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
 import { defaultWorkspaceTab, workspacePreviewCapabilities } from './workspaceViewState';
+import { useWorkspaceShortcutControls } from '../../hooks/useWorkspaceShortcutControls';
 import '../../styles/features/notifications.css';
 
 // ---------------------------------------------------------------------------
@@ -781,6 +782,17 @@ export const WorkspaceView = memo(function WorkspaceView({
     }
     setIsAgentPanelHidden(!isAgentPanelHidden);
   }, [isAgentPanelHidden, setIsPreviewHidden]);
+  const handleSelectPreview = useCallback(() => {
+    void handleStartDevServer();
+  }, [handleStartDevServer]);
+
+  // Opening the inspect panel is the adoption signal for browser tools; the
+  // close and the sub-tab switches are not. Read previous state from the
+  // closure (not a functional updater) to avoid double-firing under StrictMode.
+  const togglePreviewLogs = useCallback(() => {
+    if (!showPreviewLogs) void trackEvent('inspect_panel_opened');
+    setShowPreviewLogs(!showPreviewLogs);
+  }, [showPreviewLogs]);
 
   useCommands(
     () => [
@@ -826,6 +838,14 @@ export const WorkspaceView = memo(function WorkspaceView({
         keywords: ['css', 'variable', 'custom property', 'token', 'theme', '--'],
         run: toggleVariablesPanel,
       },
+      {
+        id: 'workspace.toggleInspector',
+        title: showPreviewLogs ? 'Hide Inspector' : 'Show Inspector',
+        category: 'action',
+        when: 'project',
+        keywords: ['preview', 'browser tools', 'logs', 'console', 'network'],
+        run: togglePreviewLogs,
+      },
     ],
     [
       isAgentPanelHidden,
@@ -839,19 +859,25 @@ export const WorkspaceView = memo(function WorkspaceView({
       isWebProject,
       variablesPanelOpen,
       toggleVariablesPanel,
+      showPreviewLogs,
+      togglePreviewLogs,
     ]
   );
 
   const setInspectTab = useCallback((tab: InspectTab) => {
     setInspectTabRaw(tab);
   }, []);
-  // Opening the inspect panel is the adoption signal for browser tools; the
-  // close and the sub-tab switches are not. Read previous state from the
-  // closure (not a functional updater) to avoid double-firing under StrictMode.
-  const togglePreviewLogs = useCallback(() => {
-    if (!showPreviewLogs) void trackEvent('inspect_panel_opened');
-    setShowPreviewLogs(!showPreviewLogs);
-  }, [showPreviewLogs]);
+
+  useWorkspaceShortcutControls({
+    previewRef,
+    hasPreview,
+    projectTypeResolved,
+    setIsPreviewHidden,
+    setIsAgentPanelHidden,
+    setWorkspaceTab,
+    togglePreviewLogs,
+    onSelectPreview: handleSelectPreview,
+  });
 
   // Workspace-scoped palette commands (branch + PR flows).
   useWorkspaceCommands({
@@ -949,13 +975,27 @@ export const WorkspaceView = memo(function WorkspaceView({
     return map;
   }, [currentProject.path, registryVersion]);
 
-  // Cmd/Ctrl+1-5 to switch terminal tabs, Cmd/Ctrl+T to add new tab, Cmd/Ctrl+W to close tab
+  // Cmd/Ctrl+T to add a new tab and Cmd/Ctrl+W to close the active tab.
+  // Control+1-9 switches terminal/agent tabs; the F1-F10 range remains
+  // available to the operating system and existing app controls.
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+    const switchTerminalTab = (number: number) => {
+      if (!Number.isInteger(number) || number < 1 || number > 9) return;
 
+      const index = number - 1;
+      const tab = terminalTabs[index];
+      if (!tab) {
+        // Guidance about a keystroke, not a malfunction — 'info' skips the
+        // error-report pipeline (issue #437).
+        showToast(`No terminal tab ${number} — you have ${terminalTabs.length} open`, 'info');
+        return;
+      }
+      setActiveTerminalTab(tab.id);
+    };
+
+    function handleKeyDown(e: KeyboardEvent) {
       // Cmd+W — close active terminal tab (instead of closing the window)
-      if (e.key === 'w') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 'w') {
         e.preventDefault();
         if (terminalTabs.length > 1) {
           closeTerminalTab(activeTerminalTab);
@@ -964,34 +1004,39 @@ export const WorkspaceView = memo(function WorkspaceView({
       }
 
       // Cmd+T — new tab
-      if (e.key === 't') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === 't') {
         e.preventDefault();
         addTerminalTab();
         return;
       }
 
-      const num = parseInt(e.key, 10);
-      if (isNaN(num) || num < 1 || num > 5) return;
+      // Control+1-9 is intentionally distinct from Cmd+Control+1-3, which
+      // belongs to workspace modes. On non-macOS, add Alt because Ctrl+1-9
+      // is the platform's primary-modifier equivalent used for projects.
+      const isTerminalNumberShortcut = isMac()
+        ? e.ctrlKey && !e.metaKey && !e.altKey
+        : e.ctrlKey && e.altKey && !e.metaKey;
+      if (!isTerminalNumberShortcut || e.shiftKey) return;
+      const num = Number(e.key);
+      if (!Number.isInteger(num) || num < 1 || num > 9) return;
       e.preventDefault();
-      const index = num - 1;
-      const tab = terminalTabs[index];
-      if (!tab) {
-        // Guidance about a keystroke, not a malfunction — 'info' skips the
-        // error-report pipeline (issue #437).
-        showToast(`No terminal tab ${num} — you have ${terminalTabs.length} open`, 'info');
-        return;
-      }
-      setActiveTerminalTab(tab.id);
+      switchTerminalTab(num);
     }
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    const unlisten = listen<number>('switch-terminal-shortcut', ({ payload }) => {
+      switchTerminalTab(payload);
+    });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      void unlisten.then((fn) => fn());
+    };
   }, [
     terminalTabs,
     activeTerminalTab,
-    setActiveTerminalTab,
-    showToast,
     addTerminalTab,
     closeTerminalTab,
+    setActiveTerminalTab,
+    showToast,
   ]);
 
   // Listen for native menu "Close Tab" (Cmd+W) event from Tauri
@@ -1037,7 +1082,7 @@ export const WorkspaceView = memo(function WorkspaceView({
       setIsPreviewHidden={setIsPreviewHidden}
       setIsAgentPanelHidden={setIsAgentPanelHidden}
       setWorkspaceTab={setWorkspaceTab}
-      onSelectPreview={() => void handleStartDevServer()}
+      onSelectPreview={handleSelectPreview}
     />
   );
 

@@ -447,7 +447,7 @@
   gap: var(--space-06);
   width: 100%;
   height: var(--size-sidebar-project-row);
-  padding: 0 var(--space-16) 0 var(--space-06);
+  padding: 0 var(--space-12) 0 var(--space-06);
   background: none;
   border: none;
   border-radius: 0;
@@ -613,7 +613,7 @@
   top: 50%;
   /* Center on the status slot: right padding + half the slot/button size
    * difference (the button is larger than the slot it covers). */
-  right: calc(var(--space-16) + (var(--pixel-loader-size-sm) - var(--button-height-compact)) / 2);
+  right: calc(var(--space-12) + (var(--pixel-loader-size-sm) - var(--button-height-compact)) / 2);
   transform: translateY(-50%);
   opacity: 0;
   transition:
@@ -1193,9 +1193,9 @@
   position: relative;
 }
 
-/* Keep the switcher and trailing icon controls in fixed footer columns. The
- * switcher stays in its column while its menu is rendered in a body portal,
- * so opening it cannot move the trailing controls. */
+/* Keep the switcher and trailing icon controls in fixed footer columns. In the
+ * expanded sidebar, opening the switcher widens its drawer across the trailing
+ * controls while the drawer grows upward from the footer. */
 .workspace-sidebar-footer-actions.has-workspace-switcher {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1208,6 +1208,13 @@
   width: 100%;
   min-width: 0;
   justify-self: start;
+}
+
+.workspace-sidebar:not(.is-hidden)
+  .workspace-sidebar-footer-actions.has-workspace-switcher
+  > .workspace-switcher.is-open {
+  width: calc(100% + (var(--control-height-standard) * 2) + (var(--button-gap) * 2));
+  z-index: var(--z-dropdown);
 }
 
 .workspace-sidebar-footer-actions.has-workspace-switcher > .workspace-sidebar-support,
@@ -1295,6 +1302,7 @@
   height: var(--size-sidebar-project-row);
   min-height: var(--size-sidebar-project-row);
   border-radius: 0;
+  color: var(--text-faint);
   justify-content: center;
 }
 

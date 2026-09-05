@@ -7,8 +7,6 @@
   flex-direction: column;
   min-width: 0;
   width: 100%;
-  height: calc(var(--workspace-switcher-summary-height) + (var(--spacing-2xs) * 2));
-  min-height: calc(var(--workspace-switcher-summary-height) + (var(--spacing-2xs) * 2));
   max-height: calc(var(--workspace-switcher-summary-height) + (var(--spacing-2xs) * 2));
   padding: var(--spacing-2xs);
   overflow: hidden;
@@ -17,11 +15,14 @@
   color: var(--text-secondary);
   box-shadow: none;
   transition:
+    width var(--transition-interaction),
+    max-height var(--transition-interaction),
     background-color var(--transition-interaction),
     box-shadow var(--transition-interaction);
 }
 
 .workspace-switcher.is-open {
+  max-height: calc(var(--spacing-2xl) * 10);
   background: var(--surface-control);
   box-shadow: var(--shadow-sm);
 }
@@ -165,6 +166,14 @@
 }
 
 .workspace-switcher-options-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  width: 100%;
+}
+
+.workspace-switcher-options.is-portal .workspace-switcher-options-stack {
   display: grid;
   grid-template-columns: max-content;
   grid-auto-rows: max-content;
@@ -172,7 +181,7 @@
   row-gap: var(--spacing-2xs);
 }
 
-.workspace-switcher-options-stack .button {
+.workspace-switcher-options.is-portal .workspace-switcher-options-stack .button {
   width: auto;
   justify-self: stretch;
 }

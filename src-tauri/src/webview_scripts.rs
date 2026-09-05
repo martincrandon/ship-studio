@@ -80,6 +80,21 @@ pub const INSPECTOR_SHIM: &str = r#"
       } catch (_) {}
     };
 
+    // The preview iframe owns keyboard focus while a project is being
+    // previewed, so the host window cannot observe Option+number directly.
+    // Forward workspace shortcuts to the host; the native menu remains the
+    // fallback for frames where WebKit handles the accelerator first.
+    document.addEventListener('keydown', function (event) {
+      if (event.isComposing || event.metaKey || event.ctrlKey || event.shiftKey || !event.altKey) return;
+      var target = event.target;
+      if (target && target.matches && target.matches('input,textarea,select,[contenteditable=""],[contenteditable="true"]')) return;
+      if (target && target.closest && target.closest('[contenteditable=""],[contenteditable="true"]')) return;
+      var match = /^Digit([1-9])$/.exec(String(event.code || ''));
+      if (!match) return;
+      event.preventDefault();
+      post({ type: 'ss:workspaceShortcut', index: Number(match[1]) - 1 });
+    }, true);
+
     // Element-editing shortcuts must be captured here rather than only in the
     // injected selection script: the preview can replace that script during a
     // reload, while this initialization script is installed for every frame.

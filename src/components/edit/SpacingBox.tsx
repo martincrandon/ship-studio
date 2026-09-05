@@ -18,6 +18,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { SpacingValuePopover } from './SpacingValuePopover';
+import { parseValueFieldVariable, type ValueFieldVariable } from '../primitives/ValueField';
 import {
   boxSide,
   boxSideResetSpec,
@@ -54,7 +55,7 @@ interface FieldProps {
   dir: { axis: 'x' | 'y'; sign: 1 | -1 };
   allowNegative: boolean;
   /** Cascade state for the value tag. */
-  state: 'default' | 'inherited' | 'modified';
+  state: 'default' | 'inherited' | 'modified' | 'variable';
   onReset?: () => void;
 }
 
@@ -244,6 +245,8 @@ interface Props {
   /** Position variant uses the same four-sided interaction model with top/right/bottom/left. */
   variant?: 'spacing' | 'position';
   onSetPositionSide?: (side: Side, value: SpacingValue) => void;
+  /** Project CSS custom properties offered by the popup value fields. */
+  variables?: ValueFieldVariable[];
 }
 
 interface OpenField {
@@ -260,9 +263,17 @@ function positionSideLabel(side: Side): string {
   return side.replace(/^./, (letter) => letter.toUpperCase());
 }
 
+function variableName(value: SpacingValue | null): string | null {
+  return value?.kind === 'arbitrary' ? parseValueFieldVariable(value.raw) : null;
+}
+
+function spacingFieldDisplay(value: SpacingValue | null): string {
+  return variableName(value) ?? spacingDisplay(value);
+}
+
 function positionDisplay(value: SpacingValue | null): string {
   if (!value || (value.kind === 'arbitrary' && value.raw.toLowerCase() === 'auto')) return 'Auto';
-  return spacingDisplay(value);
+  return spacingFieldDisplay(value);
 }
 
 function sideResetSpec(type: BoxControlType, side: Side, layer: LayerContext): ResetSpec {
@@ -283,6 +294,7 @@ export function SpacingBox({
   onReset,
   variant = 'spacing',
   onSetPositionSide,
+  variables,
 }: Props) {
   const [openField, setOpenField] = useState<OpenField | null>(null);
   const isPosition = variant === 'position';
@@ -300,19 +312,25 @@ export function SpacingBox({
 
   const field = (type: BoxControlType, side: Side, edge: string) => {
     const { value, definedAt } = sideData(type, side);
-    const state =
-      definedAt === null ? 'default' : definedAt.name === layer.bp.name ? 'modified' : 'inherited';
+    const modified = definedAt?.name === layer.bp.name;
+    const state = variableName(value)
+      ? 'variable'
+      : definedAt === null
+        ? 'default'
+        : modified
+          ? 'modified'
+          : 'inherited';
     return (
       <SideField
         value={value}
-        display={type === 'position' ? positionDisplay(value) : spacingDisplay(value)}
+        display={type === 'position' ? positionDisplay(value) : spacingFieldDisplay(value)}
         onSet={(next) => setSide(type, side, next)}
         label={type === 'position' ? positionSideLabel(side) : sideLabel(type, side)}
         className={`ss-box__edge--${edge}`}
         dir={SIDE_DRAG[side]}
         allowNegative={type === 'position' || type === 'margin'}
         state={state}
-        onReset={state === 'modified' ? () => onReset(sideResetSpec(type, side, layer)) : undefined}
+        onReset={modified ? () => onReset(sideResetSpec(type, side, layer)) : undefined}
         open={openField?.type === type && openField.side === side}
         onOpen={(anchor) => setOpenField({ type, side, anchor })}
       />
@@ -391,6 +409,7 @@ export function SpacingBox({
           emptyValue={openField.type === 'position' ? 'auto' : '0px'}
           side={openField.side}
           value={sideData(openField.type, openField.side).value}
+          variables={variables}
           onSet={(next) => setSide(openField.type, openField.side, next)}
           onClose={() =>
             setOpenField((current) =>

@@ -48,8 +48,10 @@ import { useAccountSelectNavigation } from './hooks/useAccountSelectNavigation';
 import { WorkspaceSidebar } from './components/workspace/WorkspaceSidebar';
 import { WorkspaceNavigation, WorkspaceTitlebar } from './components/workspace/WorkspaceHeader';
 import { useProjectRail } from './hooks/useProjectRail';
+import { useActiveAccount } from './hooks/useActiveAccount';
 import { OnboardingRouter } from './components/setup';
 import { Project, renameProject, setTerminalState } from './lib/project';
+import { setActiveAccountId, type Account } from './lib/accounts';
 import { markSetupComplete, getDefaultAgentId as fetchDefaultAgentId } from './lib/setup';
 import { initDefaultAgent } from './lib/agent';
 import { sessionRegistry } from './lib/sessionRegistry';
@@ -72,6 +74,7 @@ import {
 import { useAppCommands } from './commands/useAppCommands';
 import { useWorkflowCommands } from './commands/useWorkflowCommands';
 import { useProjectNumberShortcuts } from './hooks/useProjectNumberShortcuts';
+import { useWorkspaceNumberShortcuts } from './hooks/useWorkspaceNumberShortcuts';
 import { ToastList } from './components/primitives/ToastList';
 import { TooltipProvider } from './components/primitives/Tooltip';
 import { DevDesignSystemTools } from './components/design-system/DevDesignSystemTools';
@@ -557,6 +560,28 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   // Cmd/Ctrl+1..9 → jump to Nth sidebar project (pinned first, then active).
   useProjectNumberShortcuts({ pinnedPaths, handleSelectProject });
+
+  const { activeAccount, accounts } = useActiveAccount(currentProject?.path ?? null);
+  const handleSelectWorkspaceShortcut = useCallback(
+    async (account: Account) => {
+      if (account.id === activeAccount?.id) return;
+      try {
+        await setActiveAccountId(account.id);
+        handleBackToProjects();
+      } catch (error) {
+        showToast(
+          `Failed to switch workspace: ${formatCommandError(asCommandError(error))}`,
+          'error'
+        );
+      }
+    },
+    [activeAccount?.id, handleBackToProjects, showToast]
+  );
+  useWorkspaceNumberShortcuts({
+    accounts,
+    activeAccountId: activeAccount?.id ?? null,
+    handleSelectWorkspace: handleSelectWorkspaceShortcut,
+  });
 
   // Palette commands with real handlers — see src/commands/useAppCommands.tsx
   useAppCommands({
@@ -1066,8 +1091,12 @@ function AppContents({ initialProjectPath }: AppProps) {
       projects: pinnedProjects.rows,
       onSelectProject: handleRailClick,
       onCloseProject: handleCloseProject,
+      onUnpinProject: handleRailUnpin,
+      onRenameProject: handleRenameProject,
+      onTogglePinProject: handleTogglePin,
       onSelectProjectTab: handleSelectProjectTab,
       isProjectDevServerRunning: isServerRunning,
+      onStopDevServer: handleStopDevServer,
       onSwitchAccount: openAccountSelect,
     }),
     [
@@ -1079,8 +1108,12 @@ function AppContents({ initialProjectPath }: AppProps) {
       pinnedProjects.rows,
       handleRailClick,
       handleCloseProject,
+      handleRailUnpin,
+      handleRenameProject,
+      handleTogglePin,
       handleSelectProjectTab,
       isServerRunning,
+      handleStopDevServer,
       setView,
     ]
   );

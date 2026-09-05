@@ -9,6 +9,7 @@ import {
   type UsageReport,
 } from '../../lib/edit';
 import type { Selection } from '../../hooks/useVisualEditor';
+import type { ValueFieldVariable } from '../primitives/ValueField';
 
 const BREAKPOINTS: Breakpoint[] = [BASE_BREAKPOINT, ...DEFAULT_BREAKPOINTS];
 const MD = BREAKPOINTS.find((b) => b.name === 'md')!;
@@ -38,7 +39,8 @@ function renderPanel(
   onSetSide = vi.fn(),
   onReset = vi.fn(),
   editTarget: import('../../hooks/useVisualEditor').EditTarget = { kind: 'element' },
-  onSetPositionSide = vi.fn()
+  onSetPositionSide = vi.fn(),
+  variables: ValueFieldVariable[] = []
 ) {
   return render(
     <VisualEditorPanel
@@ -46,6 +48,7 @@ function renderPanel(
       projectPath="/Users/test/ShipStudio/demo"
       onReplaceImage={vi.fn(async () => {})}
       currentClass={currentClass}
+      variables={variables}
       breakpoints={BREAKPOINTS}
       activeBreakpoint={activeBreakpoint}
       breakpointTooWide={breakpointTooWide}
@@ -412,6 +415,59 @@ describe('VisualEditorPanel', () => {
       'REM'
     );
     expect(within(popover).getByRole('textbox', { name: 'Padding Top' })).toHaveFocus();
+  });
+
+  it('opens the variable picker from a box-model value field after typing --', () => {
+    const variables = [{ name: '--margin-gutter', value: '24px' }];
+    renderPanel(
+      resolvedSelection,
+      'p-3',
+      BASE_BREAKPOINT,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { kind: 'element' },
+      vi.fn(),
+      variables
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Margin left' }));
+    const input = within(screen.getByRole('dialog', { name: 'Margin Left' })).getByRole(
+      'combobox',
+      { name: 'Margin Left' }
+    );
+    fireEvent.change(input, { target: { value: '--' } });
+
+    expect(screen.getByRole('listbox', { name: 'Margin Left variables' })).toHaveTextContent(
+      '--margin-gutter'
+    );
+  });
+
+  it('uses the variable presentation for compact box-model values', () => {
+    renderPanel(
+      resolvedSelection,
+      'm-(--margin-gutter)',
+      BASE_BREAKPOINT,
+      vi.fn(),
+      false,
+      false,
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      vi.fn(),
+      { kind: 'element' },
+      vi.fn(),
+      [{ name: '--margin-gutter', value: '24px' }]
+    );
+
+    const field = screen.getByRole('button', { name: 'Margin left' });
+    expect(field).toHaveClass('ss-box__field--variable');
+    expect(field).not.toHaveClass('ss-box__field--modified');
+    expect(field).toHaveTextContent('--margin-gutter');
   });
 
   it('styles box-model value triggers by cascade state', () => {

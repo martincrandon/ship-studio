@@ -516,7 +516,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   }, []);
 
   useLayoutEffect(() => {
-    if (!workspaceSwitcherOpen) return;
+    if (!isSidebarHidden || !workspaceSwitcherOpen) return;
 
     updateWorkspaceSwitcherPosition();
     const handleViewportChange = () => updateWorkspaceSwitcherPosition();
@@ -529,7 +529,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   }, [isSidebarHidden, updateWorkspaceSwitcherPosition, workspaceSwitcherOpen]);
 
   useLayoutEffect(() => {
-    if (!workspaceSwitcherOpen || !workspaceSwitcherPosition) return;
+    if (!isSidebarHidden || !workspaceSwitcherOpen || !workspaceSwitcherPosition) return;
     const menu = workspaceSwitcherOptionsRef.current;
     if (!menu) return;
 
@@ -1157,7 +1157,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
       ) : (
         <Button
           variant="ghost"
-          width="hug"
+          width={isSidebarHidden ? 'hug' : 'fill'}
           className="workspace-switcher-manage"
           onClick={() => {
             closeWorkspaceSwitcher();
@@ -1182,7 +1182,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
       ) : (
         <Button
           variant="ghost"
-          width="hug"
+          width={isSidebarHidden ? 'hug' : 'fill'}
           className="workspace-switcher-new"
           onClick={openNewWorkspace}
           tabIndex={workspaceSwitcherOpen ? 0 : -1}
@@ -1223,7 +1223,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
             <Button
               key={account.id}
               variant="ghost"
-              width="hug"
+              width={isSidebarHidden ? 'hug' : 'fill'}
               className="workspace-switcher-option"
               onClick={() => void handleWorkspaceSelect(account)}
               disabled={switchingWorkspaceId !== null}
@@ -1244,7 +1244,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
       {activeAccount && (
         <Button
           variant="ghost"
-          width="hug"
+          width={isSidebarHidden ? 'hug' : 'fill'}
           className="workspace-switcher-option is-current"
           onClick={closeWorkspaceSwitcher}
           tabIndex={workspaceSwitcherOpen ? 0 : -1}
@@ -1457,9 +1457,20 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
                     </span>
                   </Button>
                 )}
+                {!isSidebarHidden && (
+                  <div
+                    id="workspace-switcher-options"
+                    className="workspace-switcher-options"
+                    role="group"
+                    aria-label="Available workspaces"
+                    aria-hidden={!workspaceSwitcherOpen}
+                  >
+                    {workspaceSwitcherOptionContent}
+                  </div>
+                )}
               </div>
             )}
-            {workspaceSwitcherOpen && workspaceSwitcherPosition
+            {isSidebarHidden && workspaceSwitcherOpen && workspaceSwitcherPosition
               ? createPortal(
                   <div
                     ref={workspaceSwitcherOptionsRef}
@@ -1862,25 +1873,19 @@ function ProjectGroup({
             <SettingsIcon size={14} aria-hidden="true" />
             <span>Project Settings</span>
           </ContextMenuItem>
-          {onOpenRenameProject && (
-            <ContextMenuItem onSelect={onOpenRenameProject}>
-              <EditFieldIcon size={14} aria-hidden="true" />
-              <span>Rename project</span>
-            </ContextMenuItem>
-          )}
-          {(onStopDevServer || onTogglePin) && <ContextMenuSeparator />}
-          {onStopDevServer && (
-            <ContextMenuItem onSelect={onStopDevServer}>
-              <CloseIcon size={14} aria-hidden="true" />
-              <span>Stop dev server</span>
-            </ContextMenuItem>
-          )}
-          {onTogglePin && (
-            <ContextMenuItem onSelect={() => onTogglePin(!isPinned)}>
-              <PinIcon size={14} aria-hidden="true" />
-              <span>{isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}</span>
-            </ContextMenuItem>
-          )}
+          <ContextMenuItem disabled={!onOpenRenameProject} onSelect={onOpenRenameProject}>
+            <EditFieldIcon size={14} aria-hidden="true" />
+            <span>Rename project</span>
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem disabled={!onStopDevServer} onSelect={onStopDevServer}>
+            <CloseIcon size={14} aria-hidden="true" />
+            <span>Stop dev server</span>
+          </ContextMenuItem>
+          <ContextMenuItem disabled={!onTogglePin} onSelect={() => onTogglePin?.(!isPinned)}>
+            <PinIcon size={14} aria-hidden="true" />
+            <span>{isPinned ? 'Unpin from sidebar' : 'Pin to sidebar'}</span>
+          </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
       {!compact && isExpanded && children && <div className="sidebar-project-body">{children}</div>}

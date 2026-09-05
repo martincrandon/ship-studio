@@ -15,7 +15,7 @@ import {
   type Side,
   type SpacingValue,
 } from '../../lib/edit';
-import { ValueField } from '../primitives/ValueField';
+import { ValueField, type ValueFieldVariable } from '../primitives/ValueField';
 
 /* The reference surface is sized as a proportion of the box behind it. Keep
    that relationship tied to the measured box rather than screenshot pixels. */
@@ -42,6 +42,8 @@ interface Props {
   value: SpacingValue | null;
   /** Empty display for properties whose CSS initial value is not 0 (e.g. offsets). */
   emptyValue?: string;
+  /** Project CSS custom properties offered by the value field picker. */
+  variables?: ValueFieldVariable[];
   onSet: (value: SpacingValue) => void;
   onClose: () => void;
 }
@@ -65,6 +67,7 @@ export function SpacingValuePopover({
   side,
   value,
   emptyValue = '0px',
+  variables,
   onSet,
   onClose,
 }: Props) {
@@ -230,6 +233,7 @@ export function SpacingValuePopover({
         aria-label={label}
         variant="length"
         value={initialValue}
+        variables={variables}
         onKeyDown={(event) => {
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
           event.preventDefault();

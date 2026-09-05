@@ -229,6 +229,8 @@ export interface PreviewHandle {
   refresh: () => void;
   /** Check if the dev server is ready and responding */
   isServerReady: () => boolean;
+  /** Toggle the active visual editor from a workspace-level shortcut. */
+  toggleEditMode: () => void;
 }
 
 /** Smallest the Inspect panel can be dragged to. Below this the tab bar
@@ -1134,6 +1136,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       isCapturing: () => capture.isCapturing,
       refresh,
       isServerReady: () => conn.serverReady,
+      toggleEditMode: toggleActiveEditor,
     }),
     [
       capture.captureForClaude,
@@ -1141,6 +1144,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       capture.isCapturing,
       refresh,
       conn.serverReady,
+      toggleActiveEditor,
     ]
   );
 

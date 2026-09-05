@@ -102,6 +102,7 @@ export function PropControlRenderer({
           layer={ctx.layer}
           onSetSide={ctx.onSetSide}
           onReset={ctx.onReset}
+          variables={ctx.variables}
         />
       );
     case 'positionBox':
@@ -113,6 +114,7 @@ export function PropControlRenderer({
           onSetSide={ctx.onSetSide}
           onReset={ctx.onReset}
           onSetPositionSide={ctx.onSetPositionSide}
+          variables={ctx.variables}
         />
       );
     case 'gap':
