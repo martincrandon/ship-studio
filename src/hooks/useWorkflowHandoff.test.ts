@@ -60,6 +60,28 @@ describe('useFindingHandoff', () => {
     expect(addTerminalTab).toHaveBeenCalled();
   });
 
+  it('delivers a second finding for the project that is already hot', () => {
+    // Inbox → Fix → workspace → Inbox (via the sidebar, which keeps the hot
+    // project current) → Fix again. Nothing about the terminals changes, so
+    // the caller signals the round trip by passing null while off-workspace.
+    queueHandoff('/p/demo', 'First finding');
+    const { addTerminalTab, view, props } = setup();
+    act(() => void vi.advanceTimersByTime(500));
+    expect(addTerminalTab).toHaveBeenCalledTimes(1);
+
+    view.rerender({ ...props, path: null as unknown as string });
+    queueHandoff('/p/demo', 'Second finding');
+    view.rerender(props);
+    act(() => void vi.advanceTimersByTime(500));
+
+    expect(addTerminalTab).toHaveBeenCalledTimes(2);
+    expect(addTerminalTab).toHaveBeenLastCalledWith(undefined, {
+      initialPrompt: 'Second finding',
+      projectPath: '/p/demo',
+    });
+    expect(peekHandoff('/p/demo')).toBeNull();
+  });
+
   it('never delivers a prompt into a different project', () => {
     queueHandoff('/p/other', 'Not for this one');
     const { addTerminalTab } = setup();

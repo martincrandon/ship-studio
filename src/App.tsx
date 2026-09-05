@@ -732,8 +732,16 @@ function AppContents({ initialProjectPath }: AppProps) {
     handleRunInstall(currentProject.path, needsInstall.packageManager);
   }, [currentProject, needsInstall, handleRunInstall]);
 
-  // "Send to agent" from the Inbox — see hooks/useWorkflowHandoff.
-  useFindingHandoff(currentProject?.path ?? null, terminalProps, showToast);
+  // "Send to agent" from the Inbox — see hooks/useWorkflowHandoff. Only while
+  // the workspace is on screen: the home sidebar's Inbox link leaves the hot
+  // project and its tabs current, so a second finding for that project would
+  // change nothing the hook watches and sit queued until a tab was closed.
+  // Passing null off-workspace makes the flip back to 'workspace' re-arm it.
+  useFindingHandoff(
+    view === 'workspace' ? (currentProject?.path ?? null) : null,
+    terminalProps,
+    showToast
+  );
 
   const devServerProps = useMemo(
     () => ({
