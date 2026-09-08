@@ -91,6 +91,7 @@
 
   --size-icon-gallery-width: 480px;
   --size-icon-gallery-column: 120px;
+  --size-component-review-width: 960px;
 
   --size-color-picker-width: 320px;
   --size-color-picker-height: 510px;
@@ -260,7 +261,7 @@
 
   --editor-panel-w: 300px;
   --editor-panel-visual-w: 240px;
-  --components-panel-w: 275px;
+  --components-panel-w: 300px;
   --editor-panel-inline-pad: var(--spacing-md);
   --editor-panel-row-gap: var(--space-06);
   --editor-panel-section-h: 40px;

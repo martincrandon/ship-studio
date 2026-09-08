@@ -125,6 +125,43 @@
   max-width: 100%;
 }
 
+.ss-components-instance__json-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--control-height-large) + var(--spacing-2xl));
+  padding: var(--spacing-xs) var(--spacing-sm);
+  resize: vertical;
+  color: var(--text-primary);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  font-family: var(--font-code);
+  font-size: var(--font-size-badge);
+}
+
+.ss-components-instance__json-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
+.ss-components-asset-field {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  gap: var(--spacing-xs);
+}
+
+.ss-components-asset-field code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-badge);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ss-components-instance__select {
   box-sizing: border-box;
   min-width: 0;
@@ -213,6 +250,40 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.ss-components-instance__slot-children,
+.ss-components-instance__slot-child,
+.ss-components-instance__slot-insert {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+}
+
+.ss-components-instance__slot-children {
+  margin-bottom: var(--spacing-xs);
+}
+
+.ss-components-instance__slot-insert {
+  margin: var(--spacing-xs) 0;
+}
+
+.ss-components-instance__slot-insert select,
+.ss-components-placement__field .ss-components-asset-field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ss-components-instance__slot-insert select {
+  min-height: var(--control-height-compact);
+  padding: 0 var(--spacing-xs);
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+
 .ss-components-instance__slot-input {
   box-sizing: border-box;
   width: 100%;
@@ -266,6 +337,22 @@
   flex-direction: column;
   min-width: 0;
   gap: var(--spacing-md);
+}
+
+.ss-components-review__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-sm);
+  color: var(--accent-warning);
+  background: color-mix(in srgb, var(--accent-warning) 10%, var(--surface-panel));
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-badge);
+}
+
+.ss-components-review__warnings p {
+  margin: 0;
+  text-wrap: pretty;
 }
 
 .ss-components-review__file {

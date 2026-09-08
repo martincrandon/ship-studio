@@ -14,6 +14,8 @@ export interface ComponentQABaseline {
   screenshotPath: string;
   capturedAt: string;
   pixelThreshold: number;
+  /** Host-issued fingerprint of the pixels captured for this baseline. */
+  renderFingerprint?: string;
 }
 
 export interface ComponentQABaselineStore {
@@ -87,7 +89,11 @@ function isBaseline(value: unknown): value is ComponentQABaseline {
     typeof value.pixelThreshold === 'number' &&
     Number.isFinite(value.pixelThreshold) &&
     value.pixelThreshold >= 0 &&
-    value.pixelThreshold <= 1
+    value.pixelThreshold <= 1 &&
+    (value.renderFingerprint === undefined ||
+      (typeof value.renderFingerprint === 'string' &&
+        value.renderFingerprint.length > 0 &&
+        value.renderFingerprint.length <= 512))
   );
 }
 
@@ -134,7 +140,8 @@ export function createComponentQABaseline(
   sourceRevision: string,
   frameIdentity: string,
   capturedAt = new Date().toISOString(),
-  pixelThreshold = COMPONENT_QA_DEFAULT_PIXEL_THRESHOLD
+  pixelThreshold = COMPONENT_QA_DEFAULT_PIXEL_THRESHOLD,
+  renderFingerprint?: string
 ): ComponentQABaseline {
   return {
     version: COMPONENT_QA_VERSION,
@@ -144,6 +151,7 @@ export function createComponentQABaseline(
     screenshotPath,
     capturedAt,
     pixelThreshold: Math.max(0, Math.min(1, pixelThreshold)),
+    ...(renderFingerprint ? { renderFingerprint } : {}),
   };
 }
 
@@ -153,6 +161,10 @@ export function compareComponentQABaseline(
     frameIdentity: string;
     sourceRevision: string;
     currentFingerprint?: string | null;
+    /** Optional host-computed normalized pixel difference in [0, 1]. */
+    currentPixelDifference?: number | null;
+    /** Baseline identity the host used for the optional pixel difference. */
+    currentComparedBaselineFingerprint?: string | null;
   }
 ): ComponentQADiff {
   if (!baseline) {
@@ -179,7 +191,34 @@ export function compareComponentQABaseline(
       message: 'A current render fingerprint is unavailable; no diff is claimed.',
     };
   }
-  return input.currentFingerprint === baseline.frameIdentity
+  if (!baseline.renderFingerprint) {
+    return {
+      state: 'unavailable',
+      threshold: baseline.pixelThreshold,
+      message:
+        'This baseline predates host pixel fingerprints; capture it again to compare renders.',
+    };
+  }
+  if (
+    input.currentPixelDifference !== undefined &&
+    input.currentPixelDifference !== null &&
+    Number.isFinite(input.currentPixelDifference) &&
+    input.currentComparedBaselineFingerprint === baseline.renderFingerprint
+  ) {
+    const difference = Math.max(0, Math.min(1, input.currentPixelDifference));
+    return difference <= baseline.pixelThreshold
+      ? {
+          state: 'match',
+          threshold: baseline.pixelThreshold,
+          message: `Current render is within the ${baseline.pixelThreshold} pixel threshold (${difference}).`,
+        }
+      : {
+          state: 'changed',
+          threshold: baseline.pixelThreshold,
+          message: `Current render exceeds the ${baseline.pixelThreshold} pixel threshold (${difference}).`,
+        };
+  }
+  return input.currentFingerprint === baseline.renderFingerprint
     ? {
         state: 'match',
         threshold: baseline.pixelThreshold,

@@ -6,6 +6,11 @@ import { useInvoke } from './useInvoke';
 import { ComponentWorkerClient } from '../lib/components/component-worker-client';
 import { previewComponentMutation } from '../lib/components/mutation';
 import {
+  planLibraryFork,
+  type ComponentIndexWithLibraries,
+  type LibraryForkInput,
+} from '../lib/components/libraries';
+import {
   COMPONENT_SOURCE_CHANGED_EVENT,
   readComponentSourceBatch,
   startComponentSourceWatch,
@@ -17,7 +22,6 @@ import { logger } from '../lib/logger';
 import type {
   AppliedComponentMutation,
   ComponentBinding,
-  ComponentIndex,
   ComponentInstance,
   ComponentMutationPlan,
   ComponentMutationPreview,
@@ -30,6 +34,7 @@ import type {
   DeleteComponentInput,
   DuplicateComponentInput,
   ExtractComponentInput,
+  EditComponentSlotInput,
   ExtractionResult,
   InsertComponentInput,
   MutationResult,
@@ -140,10 +145,10 @@ function mergeSupplementalSources(
 }
 
 function indexWithNeedSourcesDiagnostic(
-  index: ComponentIndex,
+  index: ComponentIndexWithLibraries,
   code: string,
   message: string
-): ComponentIndex {
+): ComponentIndexWithLibraries {
   return {
     ...index,
     partial: true,
@@ -165,7 +170,7 @@ export function useComponentCatalog({
   const workerRef = useRef<ComponentWorkerClient | null>(null);
   const snapshotRef = useRef<ComponentSourceSnapshot | null>(null);
   const supplementalSourcesRef = useRef(new Map<string, SourceFileSnapshot>());
-  const indexRef = useRef<ComponentIndex | null>(null);
+  const indexRef = useRef<ComponentIndexWithLibraries | null>(null);
   const applyErrorRef = useRef<Error | null>(null);
   const mutationInFlightRef = useRef(false);
   const pendingMutationRef = useRef<ComponentMutationPreview | null>(null);
@@ -220,7 +225,7 @@ export function useComponentCatalog({
     reset: resetIndex,
     isLoading: indexLoading,
     error: indexError,
-  } = useAsyncState<ComponentIndex, [ComponentSourceSnapshot, ProjectType | null]>(
+  } = useAsyncState<ComponentIndexWithLibraries, [ComponentSourceSnapshot, ProjectType | null]>(
     (snapshot, type) => getWorker().build(snapshot, type),
     { latestOnly: true }
   );
@@ -800,6 +805,49 @@ export function useComponentCatalog({
     [applyPlannedMutation, getWorker]
   );
 
+  const editStructuredSlot = useCallback(
+    async (
+      instance: ComponentInstance,
+      input: Omit<EditComponentSlotInput, 'kind' | 'instanceId' | 'snapshot'>
+    ): Promise<ComponentMutationOutcome> => {
+      if (!indexRef.current || !snapshotRef.current) {
+        return { status: 'failed', message: 'The component catalog is not ready yet.' };
+      }
+      if (mutationInFlightRef.current) {
+        return { status: 'failed', message: 'Another component edit is still being applied.' };
+      }
+      if (
+        pendingMutationRef.current ||
+        pendingRefactorRef.current ||
+        pendingExtractionRef.current
+      ) {
+        return {
+          status: 'failed',
+          message: 'Review or cancel the pending component source changes first.',
+        };
+      }
+      mutationInFlightRef.current = true;
+      setPlanningMutation(true);
+      try {
+        const result = await getWorker().planSlotEdit({
+          kind: 'slot',
+          instanceId: instance.id,
+          ...input,
+        });
+        return await applyPlannedMutation(result);
+      } catch (error) {
+        return {
+          status: 'failed',
+          message: error instanceof Error ? error.message : 'The component slot edit failed.',
+        };
+      } finally {
+        mutationInFlightRef.current = false;
+        setPlanningMutation(false);
+      }
+    },
+    [applyPlannedMutation, getWorker]
+  );
+
   const extract = useCallback(
     async (
       input: Omit<ExtractComponentInput, 'kind' | 'snapshot'>
@@ -878,6 +926,42 @@ export function useComponentCatalog({
       }
     },
     [getWorker]
+  );
+
+  const forkLibraryComponent = useCallback(
+    async (input: Omit<LibraryForkInput, 'newName'>): Promise<ComponentMutationOutcome> => {
+      const currentIndex = indexRef.current;
+      const snapshot = snapshotRef.current;
+      if (!currentIndex || !snapshot) {
+        return { status: 'failed', message: 'The component catalog is not ready yet.' };
+      }
+      if (mutationInFlightRef.current) {
+        return { status: 'failed', message: 'Another component edit is still being applied.' };
+      }
+      if (
+        pendingMutationRef.current ||
+        pendingRefactorRef.current ||
+        pendingExtractionRef.current
+      ) {
+        return {
+          status: 'failed',
+          message: 'Review or cancel the pending component source changes first.',
+        };
+      }
+      const result = planLibraryFork(input, currentIndex, snapshot);
+      if (result.status === 'refused') return { status: 'failed', message: result.message };
+      const preview = previewComponentMutation(result.plan, snapshot);
+      if (!preview) {
+        return {
+          status: 'failed',
+          message: 'The library source preview is no longer current. Refresh and try again.',
+        };
+      }
+      pendingMutationRef.current = preview;
+      setPendingMutation(preview);
+      return { status: 'preview', preview };
+    },
+    []
   );
 
   const confirmExtraction = useCallback(async (): Promise<ComponentExtractionOutcome> => {
@@ -975,8 +1059,10 @@ export function useComponentCatalog({
     place,
     editProp,
     editSlot,
+    editStructuredSlot,
     extract,
     inline,
+    forkLibraryComponent,
     confirmExtraction,
     cancelExtraction,
     bindSelection,

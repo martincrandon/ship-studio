@@ -49,7 +49,15 @@ describe('component QA model', () => {
       compareComponentQABaseline(null, { frameIdentity: 'frame', sourceRevision: 'revision-1' })
         .state
     ).toBe('baseline-missing');
-    const baseline = createComponentQABaseline(frame, '/tmp/card.png', 'revision-1', 'frame');
+    const baseline = createComponentQABaseline(
+      frame,
+      '/tmp/card.png',
+      'revision-1',
+      'frame',
+      undefined,
+      undefined,
+      'frame'
+    );
     expect(
       compareComponentQABaseline(baseline, {
         frameIdentity: 'changed',
@@ -67,6 +75,59 @@ describe('component QA model', () => {
         currentFingerprint: 'frame',
       }).state
     ).toBe('match');
+  });
+
+  it('uses a host pixel difference when one is available', () => {
+    const frame = createComponentCanvasFrame(component, 'revision-1');
+    const baseline = createComponentQABaseline(
+      frame,
+      '/tmp/card.png',
+      'revision-1',
+      'frame',
+      undefined,
+      0.1,
+      'pixels-1'
+    );
+    expect(
+      compareComponentQABaseline(baseline, {
+        frameIdentity: 'frame',
+        sourceRevision: 'revision-1',
+        currentFingerprint: 'pixels-2',
+        currentPixelDifference: 0.05,
+        currentComparedBaselineFingerprint: 'pixels-1',
+      }).state
+    ).toBe('match');
+    expect(
+      compareComponentQABaseline(baseline, {
+        frameIdentity: 'frame',
+        sourceRevision: 'revision-1',
+        currentFingerprint: 'pixels-3',
+        currentPixelDifference: 0.2,
+        currentComparedBaselineFingerprint: 'pixels-1',
+      }).state
+    ).toBe('changed');
+  });
+
+  it('ignores an unbound pixel difference and falls back to the exact fingerprint', () => {
+    const frame = createComponentCanvasFrame(component, 'revision-1');
+    const baseline = createComponentQABaseline(
+      frame,
+      '/tmp/card.png',
+      'revision-1',
+      'frame',
+      undefined,
+      0.1,
+      'pixels-baseline'
+    );
+    expect(
+      compareComponentQABaseline(baseline, {
+        frameIdentity: 'frame',
+        sourceRevision: 'revision-1',
+        currentFingerprint: 'pixels-current',
+        currentPixelDifference: 0,
+        currentComparedBaselineFingerprint: 'not-the-baseline',
+      }).state
+    ).toBe('changed');
   });
 
   it('refuses an oversized breakpoint/locale matrix', () => {

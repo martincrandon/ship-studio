@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { ComponentsIcon } from '@/components/icons';
 import type {
   ComponentExtractionPreview,
+  ComponentExtractionPropApproval,
+  ComponentExtractionPropSuggestion,
   ComponentExtractionProposal,
 } from '../../lib/components/types';
 import { Button } from '../primitives/Button';
@@ -12,6 +14,7 @@ export interface ComponentExtractionApproval {
   componentName: string;
   destinationFile: string;
   approvedPropNames: string[];
+  approvedProps?: ComponentExtractionPropApproval[];
 }
 
 export interface ComponentExtractionReviewModalProps {
@@ -59,6 +62,19 @@ export function ComponentExtractionReviewModal({
   const [componentName, setComponentName] = useState('');
   const [destinationFile, setDestinationFile] = useState('');
   const [approvedProps, setApprovedProps] = useState<Set<string>>(new Set());
+  const [propNames, setPropNames] = useState<Record<string, string>>({});
+  const requiredSuggestions: ComponentExtractionPropSuggestion[] =
+    proposal?.requiredProps ??
+    proposal?.proposedPropNames.map((name) => ({
+      sourceName: name,
+      suggestedName: name,
+      kind: 'attribute',
+      typeText: null,
+      required: true,
+    })) ??
+    [];
+  const optionalSuggestions = proposal?.suggestedProps ?? [];
+  const suggestions = [...requiredSuggestions, ...optionalSuggestions];
 
   useEffect(() => {
     if (!proposal) return;
@@ -66,11 +82,27 @@ export function ComponentExtractionReviewModal({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setComponentName(proposal.componentName);
     setDestinationFile(proposal.destinationFile);
-    setApprovedProps(new Set(proposal.proposedPropNames));
+    setApprovedProps(new Set(suggestions.map((suggestion) => suggestion.sourceName)));
+    setPropNames(
+      Object.fromEntries(
+        suggestions.map((suggestion) => [suggestion.sourceName, suggestion.suggestedName])
+      )
+    );
   }, [proposal]);
 
   if (proposal && onApprove) {
-    const canContinue = componentName.trim() !== '' && destinationFile.trim() !== '';
+    const approvedNames = suggestions
+      .filter((suggestion) => approvedProps.has(suggestion.sourceName))
+      .map((suggestion) => propNames[suggestion.sourceName]?.trim() ?? '');
+    const approvedRequiredNames = requiredSuggestions
+      .filter((suggestion) => approvedProps.has(suggestion.sourceName))
+      .map((suggestion) => propNames[suggestion.sourceName]?.trim() ?? '');
+    const canContinue =
+      componentName.trim() !== '' &&
+      destinationFile.trim() !== '' &&
+      approvedRequiredNames.length === requiredSuggestions.length &&
+      approvedNames.every((name) => /^[A-Za-z_$][\w$]*$/.test(name)) &&
+      new Set(approvedNames).size === approvedNames.length;
     return (
       <ModalFrame
         isOpen
@@ -111,30 +143,50 @@ export function ComponentExtractionReviewModal({
                   Boundary values
                 </h3>
                 <p className="ss-components-muted">
-                  Approved values become explicit props on the new component.
+                  Required boundary values must remain accepted. Optional static values are
+                  suggestions: accept, rename, or reject them; rejected literals stay in the new
+                  component as authored.
                 </p>
               </div>
               <span className="ss-components-count tabular-nums">{approvedProps.size}</span>
             </div>
-            {proposal.proposedPropNames.length === 0 ? (
+            {suggestions.length === 0 ? (
               <p className="ss-components-muted">No free values cross this boundary.</p>
             ) : (
               <div className="ss-components-extraction__prop-list">
-                {proposal.proposedPropNames.map((name) => (
-                  <label key={name} className="ss-components-extraction__prop">
+                {suggestions.map((suggestion) => (
+                  <label
+                    key={suggestion.sourceName}
+                    className={`ss-components-extraction__prop${suggestion.required ? ' ss-components-extraction__prop--required' : ''}`}
+                  >
                     <input
                       type="checkbox"
-                      checked={approvedProps.has(name)}
+                      checked={approvedProps.has(suggestion.sourceName)}
+                      disabled={suggestion.required}
                       onChange={(event) =>
                         setApprovedProps((current) => {
                           const next = new Set(current);
-                          if (event.currentTarget.checked) next.add(name);
-                          else next.delete(name);
+                          if (event.currentTarget.checked) next.add(suggestion.sourceName);
+                          else next.delete(suggestion.sourceName);
                           return next;
                         })
                       }
                     />
-                    <code>{name}</code>
+                    <code title={suggestion.sourceText ?? suggestion.typeText ?? undefined}>
+                      {suggestion.displayName ?? suggestion.sourceName}
+                    </code>
+                    <span className="ss-components-extraction__prop-kind">{suggestion.kind}</span>
+                    <TextField
+                      aria-label={`Rename ${suggestion.sourceName} prop`}
+                      value={propNames[suggestion.sourceName] ?? ''}
+                      disabled={!approvedProps.has(suggestion.sourceName)}
+                      onChange={(event) =>
+                        setPropNames((current) => ({
+                          ...current,
+                          [suggestion.sourceName]: event.currentTarget.value,
+                        }))
+                      }
+                    />
                   </label>
                 ))}
               </div>
@@ -157,7 +209,14 @@ export function ComponentExtractionReviewModal({
                 void onApprove({
                   componentName: componentName.trim(),
                   destinationFile: destinationFile.trim(),
-                  approvedPropNames: [...approvedProps].sort(),
+                  approvedPropNames: approvedRequiredNames,
+                  approvedProps: suggestions
+                    .filter((suggestion) => approvedProps.has(suggestion.sourceName))
+                    .map((suggestion) => ({
+                      sourceName: suggestion.sourceName,
+                      propName:
+                        propNames[suggestion.sourceName]?.trim() ?? suggestion.suggestedName,
+                    })),
                 })
               }
               leftIcon={<ComponentsIcon size={14} />}

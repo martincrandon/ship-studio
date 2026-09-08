@@ -6,6 +6,8 @@ import {
   ErrorIcon,
   FolderOpenIcon,
   InfoIcon,
+  LockedIcon,
+  PackageIcon,
   PinIcon,
   ResetIcon,
   SearchIcon,
@@ -25,6 +27,14 @@ import type {
 } from '../../lib/components/types';
 import type { ComponentCanvasFrame as CanvasFrame } from '../../lib/components/canvas';
 import type { ComponentA11yResult } from '../../lib/components/qa';
+import type { ComponentIsolatedRendererCapability } from '../../lib/components/isolated-renderer';
+import {
+  compareComponentLibrary,
+  type ComponentIndexWithLibraries,
+  type ComponentLibraryMetadata,
+  type ComponentLibraryUpdateDiff,
+  type LibraryForkInput,
+} from '../../lib/components/libraries';
 import { trackEvent } from '../../lib/analytics';
 import { Button } from '../primitives/Button';
 import { EmptyState } from '../primitives/EmptyState';
@@ -35,12 +45,26 @@ import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import { ComponentDetails } from './ComponentDetails';
 import { ComponentCanvas } from './ComponentCanvas';
-import { ComponentInstanceControls } from './ComponentInstanceControls';
+import {
+  ComponentInstanceControls,
+  type ComponentInstanceControlsProps,
+} from './ComponentInstanceControls';
 import { EditMainBanner, type EditMainState } from './EditMainBanner';
 import { PixelLoaderRings } from '../workspace/PixelLoaderRings';
+import { ComponentLibraryForkModal } from './ComponentLibraryForkModal';
+import {
+  mergePropertyPresentation,
+  readComponentPropertyPresentationStore,
+  upsertComponentPropertyPresentation,
+  writeComponentPropertyPresentationStore,
+  type ComponentPresentationMetadata,
+  type ComponentPropertyPresentationStore,
+} from '../../lib/components/property-metadata';
 
 export interface ComponentsPanelProps {
-  index: ComponentIndex | null;
+  index: ComponentIndexWithLibraries | null;
+  /** Project root used by source-backed property asset pickers. */
+  projectPath?: string;
   loading?: boolean;
   error?: string | null;
   selectedComponentId: ComponentId | null;
@@ -57,10 +81,12 @@ export interface ComponentsPanelProps {
   /** Optional host integrations; absent means the corresponding QA action is disabled. */
   onCaptureCanvasFrame?: (frame: CanvasFrame) => Promise<string | null>;
   onRunCanvasAccessibility?: (frame: CanvasFrame) => Promise<ComponentA11yResult | null>;
+  isolatedRenderer?: ComponentIsolatedRendererCapability | null;
   onSendCanvasToAgent?: (prompt: string) => void;
   onDuplicate?: (input: Omit<DuplicateComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onRename?: (input: Omit<RenameComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onDelete?: (input: { componentId: ComponentId; removeAllUsages: true }) => void | Promise<void>;
+  onForkLibrary?: (input: Omit<LibraryForkInput, 'newName'>) => void | Promise<void>;
   onRefresh: () => void;
   onSelectUsage: (instance: ComponentInstance) => void;
   onEditProp?: (
@@ -73,6 +99,8 @@ export interface ComponentsPanelProps {
     slotName: string,
     replacementSource: string
   ) => void | Promise<void>;
+  onEditStructuredSlot?: ComponentInstanceControlsProps['onEditStructuredSlot'];
+  onEditSlotChildMain?: ComponentInstanceControlsProps['onEditSlotChildMain'];
   onInline?: (instance: ComponentInstance) => void | Promise<void>;
   instancePropsBusy?: boolean;
   binding?: ComponentBinding;
@@ -90,11 +118,19 @@ interface ComponentGroup {
   components: ComponentDescriptor[];
 }
 
-const COMPONENTS_PANEL_CATALOG_DEFAULT_WIDTH_PX = 275;
+interface CatalogSection {
+  key: string;
+  title: string;
+  subtitle?: string;
+  components: ComponentDescriptor[];
+  library?: ComponentLibraryMetadata;
+}
+
+const COMPONENTS_PANEL_CATALOG_DEFAULT_WIDTH_PX = 300;
 const COMPONENTS_PANEL_CATALOG_MIN_WIDTH_PX = 180;
 const COMPONENTS_PANEL_DETAILS_MIN_WIDTH_PX = 240;
 const COMPONENTS_PANEL_CATALOG_MAX_FALLBACK_WIDTH_PX = 420;
-const COMPONENTS_PANEL_CATALOG_WIDTH_KEY = 'componentsPanelCatalogWidth';
+const COMPONENTS_PANEL_CATALOG_WIDTH_KEY = 'componentsPanelCatalogWidthV2';
 
 function readCatalogWidth() {
   const saved = Number(localStorage.getItem(COMPONENTS_PANEL_CATALOG_WIDTH_KEY));
@@ -123,6 +159,17 @@ function dialectLabel(dialect: ComponentDescriptor['dialect']) {
   if (dialect === 'web-component') return 'Web Component';
   if (dialect === 'react-native') return 'React Native';
   return dialect.charAt(0).toUpperCase() + dialect.slice(1);
+}
+
+function presentedComponentName(name: string) {
+  return name
+    .trim()
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 function diagnosticText(diagnostic: unknown) {
@@ -165,6 +212,67 @@ function groupComponents(components: ComponentDescriptor[]) {
   return [...groups.values()].sort((a, b) =>
     `${a.dialect}/${a.folder}/${a.kind}`.localeCompare(`${b.dialect}/${b.folder}/${b.kind}`)
   );
+}
+
+function libraryMetaLabel(library: ComponentLibraryMetadata) {
+  return [library.packageName, library.version ? `v${library.version}` : null]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function catalogSections(
+  components: ComponentDescriptor[],
+  libraries: readonly ComponentLibraryMetadata[]
+): CatalogSection[] {
+  const ownership = new Map<string, ComponentLibraryMetadata>();
+  for (const library of libraries) {
+    for (const componentId of library.componentIds) ownership.set(componentId, library);
+  }
+  const project = components.filter((component) => {
+    const library = ownership.get(component.id);
+    return !library || library.ownership === 'project';
+  });
+  const sections: CatalogSection[] = [];
+  if (project.length > 0) {
+    sections.push({ key: 'project', title: 'Project Components', components: project });
+  }
+  for (const library of libraries) {
+    const libraryComponents = components.filter(
+      (component) => library.ownership === 'library' && library.componentIds.includes(component.id)
+    );
+    if (libraryComponents.length === 0) continue;
+    sections.push({
+      key: `library:${library.id}`,
+      title: 'Library Components',
+      subtitle: libraryMetaLabel(library),
+      components: libraryComponents,
+      library,
+    });
+  }
+  return sections;
+}
+
+function libraryBaselineKey(projectPath: string, libraryId: string) {
+  return `shipstudio.components.library-baseline:${encodeURIComponent(projectPath)}:${encodeURIComponent(libraryId)}`;
+}
+
+function readLibraryBaseline(projectPath: string | undefined, libraryId: string) {
+  if (!projectPath) return null;
+  try {
+    const raw = localStorage.getItem(libraryBaselineKey(projectPath, libraryId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ComponentLibraryMetadata;
+    return parsed && parsed.id === libraryId && typeof parsed.packageName === 'string'
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLibraryBaseline(projectPath: string | undefined, library: ComponentLibraryMetadata) {
+  if (!projectPath) return;
+  localStorage.setItem(libraryBaselineKey(projectPath, library.id), JSON.stringify(library));
 }
 
 function matchesSearch(component: ComponentDescriptor, query: string) {
@@ -225,7 +333,7 @@ function StatusBadge({ component }: { component: ComponentDescriptor }) {
     );
   }
   if (status === 'readonly') {
-    return <span className="ss-components-status-text">Read-only</span>;
+    return null;
   }
   return null;
 }
@@ -239,20 +347,21 @@ function ComponentRow({
   selected: boolean;
   onSelect: (componentId: ComponentId | null) => void;
 }) {
+  const presentedName = presentedComponentName(component.name);
+
   return (
     <button
       type="button"
       className={`ss-components-row${selected ? ' is-selected' : ''}`}
       onClick={() => onSelect(selected ? null : component.id)}
       aria-pressed={selected}
-      title={`${component.name} · ${component.definition.file}`}
+      title={`${presentedName} · ${component.definition.file}`}
     >
       <span className="ss-components-row__icon" aria-hidden="true">
         <ComponentsIcon size={15} />
       </span>
       <span className="ss-components-row__copy">
-        <span className="ss-components-row__name">{component.name}</span>
-        <span className="ss-components-row__meta">{component.definition.file}</span>
+        <span className="ss-components-row__name">{presentedName}</span>
       </span>
       <span className="ss-components-row__status">
         <StatusBadge component={component} />
@@ -311,6 +420,94 @@ function Group({
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function LibraryOwnershipNotice({
+  library,
+  onFork,
+}: {
+  library: ComponentLibraryMetadata;
+  onFork?: () => void;
+}) {
+  const knownMetadata = [
+    library.version ? `Version ${library.version}` : null,
+    library.repository ? `Source ${library.repository}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="ss-components-library-notice" role="note">
+      <LockedIcon size={14} aria-hidden="true" />
+      <div className="ss-components-library-notice__copy">
+        <strong>Library-owned · read-only in this project</strong>
+        <span>
+          {library.packageName}
+          {knownMetadata.length > 0 ? ` · ${knownMetadata.join(' · ')}` : ''}
+        </span>
+        <span>Open the owning source project to edit this definition.</span>
+      </div>
+      {onFork && (
+        <Button
+          variant="secondary"
+          size="compact"
+          className="ss-components-library-fork-action"
+          onClick={onFork}
+        >
+          Copy to project
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function LibraryUpdateCard({
+  update,
+  deferred = false,
+  onAccept,
+  onDefer,
+}: {
+  update: ComponentLibraryUpdateDiff;
+  deferred?: boolean;
+  onAccept: () => void;
+  onDefer: () => void;
+}) {
+  return (
+    <section
+      className="ss-components-library-update"
+      aria-labelledby={`library-update-${update.libraryId}`}
+    >
+      <div className="ss-components-library-update__heading">
+        <div>
+          <h3 id={`library-update-${update.libraryId}`}>Library update review</h3>
+          <p>
+            {update.packageName} · {update.fromVersion ?? 'unknown'} →{' '}
+            {update.toVersion ?? 'unknown'}
+          </p>
+        </div>
+        <span className="ss-components-status-badge ss-components-status-badge--warning">
+          {deferred ? 'Deferred' : 'Review'}
+        </span>
+      </div>
+      <div className="ss-components-library-update__changes">
+        {update.changes.map((change, index) => (
+          <div key={`${change.kind}-${change.detail}-${index}`}>
+            <strong>{change.label}</strong>
+            <span>{change.detail}</span>
+          </div>
+        ))}
+      </div>
+      <p className="ss-components-muted">
+        Accept acknowledges the resolved package metadata only. Dependency and lockfile changes
+        require a separate reviewed package-manager plan.
+      </p>
+      <div className="ss-components-library-update__actions">
+        <Button variant="ghost" size="compact" onClick={onDefer}>
+          {deferred ? 'Review again' : 'Defer'}
+        </Button>
+        <Button variant="secondary" size="compact" onClick={onAccept}>
+          Accept review
+        </Button>
+      </div>
     </section>
   );
 }
@@ -419,6 +616,7 @@ function PanelState({
  */
 export function ComponentsPanel({
   index,
+  projectPath,
   loading = false,
   error = null,
   selectedComponentId,
@@ -429,14 +627,18 @@ export function ComponentsPanel({
   onOpenCanvas,
   onCaptureCanvasFrame,
   onRunCanvasAccessibility,
+  isolatedRenderer,
   onSendCanvasToAgent,
   onDuplicate,
   onRename,
   onDelete,
+  onForkLibrary,
   onRefresh,
   onSelectUsage,
   onEditProp,
   onEditSlot,
+  onEditStructuredSlot,
+  onEditSlotChildMain,
   onInline,
   instancePropsBusy = false,
   binding,
@@ -451,18 +653,108 @@ export function ComponentsPanel({
   const [catalogWidth, setCatalogWidth] = useState(readCatalogWidth);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [libraryForkOpen, setLibraryForkOpen] = useState(false);
+  const [libraryBaselineVersion, setLibraryBaselineVersion] = useState(0);
+  const [deferredLibraryIds, setDeferredLibraryIds] = useState<Set<string>>(new Set());
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const catalogRef = useRef<HTMLDivElement | null>(null);
   const panelOpenedRef = useRef(false);
   const selectionEventRef = useRef<string | null>(null);
 
+  const [propertyPresentationStore, setPropertyPresentationStore] =
+    useState<ComponentPropertyPresentationStore>(() =>
+      readComponentPropertyPresentationStore(
+        typeof localStorage === 'undefined' ? null : localStorage,
+        projectPath
+      )
+    );
+  useEffect(() => {
+    // Project switches must never leak presentation metadata across projects.
+    setPropertyPresentationStore(
+      readComponentPropertyPresentationStore(
+        typeof localStorage === 'undefined' ? null : localStorage,
+        projectPath
+      )
+    );
+  }, [projectPath]);
+  const propertyPresentationByComponent = useMemo(
+    () =>
+      new Map(
+        propertyPresentationStore.components.map((metadata) => [metadata.componentId, metadata])
+      ),
+    [propertyPresentationStore]
+  );
+
   const filteredComponents = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
-    return (index?.components ?? []).filter((component) => matchesSearch(component, normalized));
-  }, [index?.components, query]);
-  const groups = useMemo(() => groupComponents(filteredComponents), [filteredComponents]);
-  const selected =
+    const libraries = index?.libraries ?? [];
+    return (index?.components ?? []).filter((component) => {
+      if (matchesSearch(component, normalized)) return true;
+      const library = libraries.find((candidate) => candidate.componentIds.includes(component.id));
+      return library ? library.packageName.toLocaleLowerCase().includes(normalized) : false;
+    });
+  }, [index?.components, index?.libraries, query]);
+  const libraries = index?.libraries ?? [];
+  const sections = useMemo(
+    () => catalogSections(filteredComponents, libraries),
+    [filteredComponents, libraries]
+  );
+  const selectedSource =
     index?.components.find((component) => component.id === selectedComponentId) ?? null;
+  const selected = selectedSource
+    ? {
+        ...selectedSource,
+        props: mergePropertyPresentation(
+          selectedSource.props,
+          propertyPresentationByComponent.get(selectedSource.id)
+        ),
+      }
+    : null;
+  const savePropertyPresentation = useCallback(
+    (metadata: ComponentPresentationMetadata) => {
+      if (!selectedSource) return;
+      const next = upsertComponentPropertyPresentation(
+        propertyPresentationStore,
+        selectedSource,
+        metadata
+      );
+      writeComponentPropertyPresentationStore(
+        typeof localStorage === 'undefined' ? null : localStorage,
+        projectPath ?? '',
+        next
+      );
+      setPropertyPresentationStore(next);
+    },
+    [projectPath, propertyPresentationStore, selectedSource]
+  );
+  const selectedLibrary = selected
+    ? (libraries.find(
+        (library) => library.ownership === 'library' && library.componentIds.includes(selected.id)
+      ) ?? null)
+    : null;
+  const selectedLibraryReadOnly = selectedLibrary !== null;
+  const libraryBaselines = useMemo(() => {
+    const baselines = new Map<string, ComponentLibraryMetadata>();
+    for (const library of libraries) {
+      const baseline = readLibraryBaseline(projectPath, library.id);
+      if (baseline) baselines.set(library.id, baseline);
+    }
+    return baselines;
+  }, [libraries, libraryBaselineVersion, projectPath]);
+  const libraryUpdates = useMemo(
+    () =>
+      libraries.flatMap((library) => {
+        const baseline = libraryBaselines.get(library.id);
+        if (!baseline) return [];
+        const update = compareComponentLibrary(baseline, library);
+        return update.changes.length > 0 ? [update] : [];
+      }),
+    [libraries, libraryBaselines]
+  );
+  const libraryUpdatesById = useMemo(
+    () => new Map(libraryUpdates.map((update) => [update.libraryId, update])),
+    [libraryUpdates]
+  );
   const usages = selected
     ? (index?.instances ?? []).filter((instance) => instance.componentId === selected.id)
     : [];
@@ -485,7 +777,7 @@ export function ComponentsPanel({
   }, [onOpenCanvas]);
   const partialDiagnostics = index?.diagnostics ?? [];
   const indexIsPartial = index?.partial ?? false;
-  const editMainForSelected = selected ? editMain : undefined;
+  const editMainForSelected = selected && !selectedLibraryReadOnly ? editMain : undefined;
   const hasSelection = selected !== null;
   const catalogMaxWidth =
     workspaceWidth > 0
@@ -494,6 +786,30 @@ export function ComponentsPanel({
           workspaceWidth - COMPONENTS_PANEL_DETAILS_MIN_WIDTH_PX
         )
       : COMPONENTS_PANEL_CATALOG_MAX_FALLBACK_WIDTH_PX;
+
+  useEffect(() => {
+    for (const library of libraries) {
+      if (!readLibraryBaseline(projectPath, library.id)) saveLibraryBaseline(projectPath, library);
+    }
+  }, [libraries, projectPath]);
+
+  const acceptLibraryUpdate = useCallback(
+    (library: ComponentLibraryMetadata) => {
+      saveLibraryBaseline(projectPath, library);
+      setDeferredLibraryIds((current) => {
+        if (!current.has(library.id)) return current;
+        const next = new Set(current);
+        next.delete(library.id);
+        return next;
+      });
+      setLibraryBaselineVersion((version) => version + 1);
+    },
+    [projectPath]
+  );
+
+  const deferLibraryUpdate = useCallback((libraryId: string) => {
+    setDeferredLibraryIds((current) => new Set(current).add(libraryId));
+  }, []);
 
   useEffect(() => {
     if (panelOpenedRef.current) return;
@@ -554,13 +870,7 @@ export function ComponentsPanel({
     const width = workspace.getBoundingClientRect().width;
     if (width <= 0) return;
     setWorkspaceWidth((current) => (current === width ? current : width));
-    setCatalogWidth((current) => {
-      const next = hasSelection
-        ? clampCatalogWidth(current, width - COMPONENTS_PANEL_DETAILS_MIN_WIDTH_PX)
-        : clampCatalogWidth(width, width);
-      return next === current ? current : next;
-    });
-  }, [hasSelection]);
+  }, []);
 
   useEffect(() => {
     measureWorkspace();
@@ -570,7 +880,7 @@ export function ComponentsPanel({
     const observer = new ResizeObserver(measureWorkspace);
     observer.observe(workspace);
     return () => observer.disconnect();
-  }, [hasSelection, measureWorkspace]);
+  }, [measureWorkspace]);
 
   useEffect(() => {
     localStorage.setItem(COMPONENTS_PANEL_CATALOG_WIDTH_KEY, String(catalogWidth));
@@ -603,10 +913,7 @@ export function ComponentsPanel({
       aria-busy={loading}
     >
       <header className="ss-edit-panel__header" data-dockable-drag-handle>
-        <div className="ss-components-panel__title-wrap">
-          <ComponentsIcon size={16} aria-hidden="true" />
-          <span className="ss-edit-panel__title">Components</span>
-        </div>
+        <span className="ss-edit-panel__title">Components</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
             <ToggleButton
@@ -702,6 +1009,23 @@ export function ComponentsPanel({
               )}
 
               <div className="ss-components-panel__list" aria-label="Component catalog">
+                {libraryUpdates.length > 0 && (
+                  <div className="ss-components-library-updates" aria-label="Library updates">
+                    {libraryUpdates.map((update) => {
+                      const library = libraries.find((item) => item.id === update.libraryId);
+                      if (!library) return null;
+                      return (
+                        <LibraryUpdateCard
+                          key={update.libraryId}
+                          update={update}
+                          deferred={deferredLibraryIds.has(update.libraryId)}
+                          onAccept={() => acceptLibraryUpdate(library)}
+                          onDefer={() => deferLibraryUpdate(update.libraryId)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
                 {filteredComponents.length === 0 ? (
                   <EmptyState
                     className="ss-components-empty-state"
@@ -725,23 +1049,50 @@ export function ComponentsPanel({
                     }
                   />
                 ) : (
-                  groups.map((group) => (
-                    <Group
-                      key={group.key}
-                      group={group}
-                      collapsed={collapsedGroups.has(group.key)}
-                      selectedComponentId={selectedComponentId}
-                      onToggle={() =>
-                        setCollapsedGroups((current) => {
-                          const next = new Set(current);
-                          if (next.has(group.key)) next.delete(group.key);
-                          else next.add(group.key);
-                          return next;
-                        })
-                      }
-                      onSelect={handleSelectComponent}
-                    />
-                  ))
+                  sections.map((section) => {
+                    const groups = groupComponents(section.components);
+                    return (
+                      <section key={section.key} className="ss-components-catalog-section">
+                        <header className="ss-components-catalog-section__header">
+                          <div>
+                            <h3>
+                              {section.library && <PackageIcon size={13} aria-hidden="true" />}
+                              {section.title}
+                            </h3>
+                            {section.subtitle && <span>{section.subtitle}</span>}
+                          </div>
+                          <span className="ss-components-count tabular-nums">
+                            {section.components.length}
+                          </span>
+                        </header>
+                        {section.library && libraryUpdatesById.has(section.library.id) && (
+                          <span className="ss-components-catalog-section__update">
+                            Update available · review above
+                          </span>
+                        )}
+                        {groups.map((group) => {
+                          const groupKey = `${section.key}:${group.key}`;
+                          return (
+                            <Group
+                              key={groupKey}
+                              group={{ ...group, key: groupKey }}
+                              collapsed={collapsedGroups.has(groupKey)}
+                              selectedComponentId={selectedComponentId}
+                              onToggle={() =>
+                                setCollapsedGroups((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(groupKey)) next.delete(groupKey);
+                                  else next.add(groupKey);
+                                  return next;
+                                })
+                              }
+                              onSelect={handleSelectComponent}
+                            />
+                          );
+                        })}
+                      </section>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -758,6 +1109,12 @@ export function ComponentsPanel({
                   onResizeBy={resizeCatalogBy}
                 />
                 <div className="ss-components-panel__selection">
+                  {selectedLibrary && (
+                    <LibraryOwnershipNotice
+                      library={selectedLibrary}
+                      onFork={onForkLibrary ? () => setLibraryForkOpen(true) : undefined}
+                    />
+                  )}
                   <EditMainBanner
                     component={selected}
                     usageCount={selected.usageCount}
@@ -773,13 +1130,19 @@ export function ComponentsPanel({
                   <ComponentDetails
                     key={selected.id}
                     component={selected}
+                    projectPath={projectPath}
+                    propertyPresentation={propertyPresentationByComponent.get(selected.id) ?? null}
+                    propertyPresentationEditable={!selectedLibraryReadOnly}
+                    onSavePropertyPresentation={
+                      selectedLibraryReadOnly ? undefined : savePropertyPresentation
+                    }
                     usages={usages}
-                    placementAvailable={placementAvailable}
+                    placementAvailable={selectedLibraryReadOnly ? false : placementAvailable}
                     onPlace={onPlace}
                     onOpenSource={onOpenSource}
-                    onDuplicate={onDuplicate}
-                    onRename={onRename}
-                    onDelete={onDelete}
+                    onDuplicate={selectedLibraryReadOnly ? undefined : onDuplicate}
+                    onRename={selectedLibraryReadOnly ? undefined : onRename}
+                    onDelete={selectedLibraryReadOnly ? undefined : onDelete}
                     onSelectUsage={handleSelectUsage}
                     onOpenCanvas={openCanvas}
                   />
@@ -787,11 +1150,29 @@ export function ComponentsPanel({
                     <ComponentInstanceControls
                       instance={selectedInstance}
                       component={selected}
+                      projectPath={projectPath}
+                      availableComponents={index?.components}
                       bindingConfidence={selectedBinding.confidence}
                       disabled={editMainForSelected?.active === true}
                       busy={instancePropsBusy}
-                      onEditProp={selected.capabilities.editStaticProps ? onEditProp : undefined}
-                      onEditSlot={selected.capabilities.editSlots ? onEditSlot : undefined}
+                      onEditProp={
+                        !selectedLibraryReadOnly && selected.capabilities.editStaticProps
+                          ? onEditProp
+                          : undefined
+                      }
+                      onEditSlot={
+                        !selectedLibraryReadOnly && selected.capabilities.editSlots
+                          ? onEditSlot
+                          : undefined
+                      }
+                      onEditStructuredSlot={
+                        !selectedLibraryReadOnly && selected.capabilities.editSlots
+                          ? onEditStructuredSlot
+                          : undefined
+                      }
+                      onEditSlotChildMain={
+                        selectedLibraryReadOnly ? undefined : onEditSlotChildMain
+                      }
                       onSelectSlotChild={(child) => {
                         const childInstance = index.instances.find(
                           (instance) => instance.id === child.instanceId
@@ -799,7 +1180,9 @@ export function ComponentsPanel({
                         if (childInstance) handleSelectUsage(childInstance);
                       }}
                       onInline={
-                        selected.capabilities.extract && selected.dialect === 'react'
+                        !selectedLibraryReadOnly &&
+                        selected.capabilities.extract &&
+                        selected.dialect === 'react'
                           ? onInline
                           : undefined
                       }
@@ -824,7 +1207,20 @@ export function ComponentsPanel({
           onSelectUsage={onSelectUsage}
           onCaptureFrame={onCaptureCanvasFrame}
           onRunAccessibility={onRunCanvasAccessibility}
+          isolatedRenderer={isolatedRenderer}
           onSendToAgent={onSendCanvasToAgent}
+        />
+      )}
+      {selected && selectedLibrary && onForkLibrary && (
+        <ComponentLibraryForkModal
+          component={selected}
+          library={selectedLibrary}
+          isOpen={libraryForkOpen}
+          onClose={() => setLibraryForkOpen(false)}
+          onFork={(input) => {
+            setLibraryForkOpen(false);
+            return onForkLibrary(input);
+          }}
         />
       )}
     </div>

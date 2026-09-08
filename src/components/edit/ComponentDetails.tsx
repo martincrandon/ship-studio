@@ -17,18 +17,26 @@ import type {
   ComponentDescriptor,
   ComponentInsertionAnchor,
   ComponentInstance,
+  ComponentPropDescriptor,
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
+import type { ComponentPresentationMetadata } from '../../lib/components/property-metadata';
+import { assetWebPath, type Asset } from '../../lib/assets';
+import { AssetsModal } from '../workspace/AssetsPanel';
 import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { TextField } from '../primitives/TextField';
 import { ComponentDeleteModal } from './ComponentDeleteModal';
 import { ComponentDuplicateModal } from './ComponentDuplicateModal';
 import { ComponentRenameModal } from './ComponentRenameModal';
+import { ComponentPropertyPresentationModal } from './ComponentPropertyPresentationModal';
 
 interface ComponentDetailsProps {
   component: ComponentDescriptor;
+  /** Project root is required to open the shared, validated asset browser. */
+  projectPath?: string;
   usages?: readonly ComponentInstance[];
   placementAvailable?: boolean;
   onPlace: (
@@ -52,6 +60,9 @@ interface ComponentDetailsProps {
     removeAllUsages: true;
   }) => void | Promise<void>;
   onSelectUsage?: (instance: ComponentInstance) => void;
+  propertyPresentation?: ComponentPresentationMetadata | null;
+  propertyPresentationEditable?: boolean;
+  onSavePropertyPresentation?: (metadata: ComponentPresentationMetadata) => void | Promise<void>;
 }
 
 const CAPABILITY_LABELS = [
@@ -139,6 +150,10 @@ function diagnosticSeverity(diagnostic: unknown): 'error' | 'warning' | 'info' {
   return severity === 'error' || severity === 'info' ? severity : 'warning';
 }
 
+function sourceFileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
 function DiagnosticIcon({ severity }: { severity: 'error' | 'warning' | 'info' }) {
   if (severity === 'error') return <ErrorIcon size={14} aria-hidden="true" />;
   if (severity === 'info') return <InfoIcon size={14} aria-hidden="true" />;
@@ -148,9 +163,11 @@ function DiagnosticIcon({ severity }: { severity: 'error' | 'warning' | 'info' }
 function SourceButton({
   source,
   onOpenSource,
+  showLine = true,
 }: {
   source: SourceRef;
   onOpenSource: (source: SourceRef) => void;
+  showLine?: boolean;
 }) {
   return (
     <Button
@@ -159,10 +176,10 @@ function SourceButton({
       className="ss-components-source-link"
       leftIcon={<CodeIcon size={14} />}
       onClick={() => onOpenSource(source)}
-      title={`Open ${source.file}:${source.line}`}
+      title={`Open ${source.file}${showLine ? `:${source.line}` : ''}`}
     >
-      <span className="ss-components-source-link__file">{source.file}</span>
-      <span className="ss-components-source-link__line">:{source.line}</span>
+      <span className="ss-components-source-link__file">{sourceFileName(source.file)}</span>
+      {showLine && <span className="ss-components-source-link__line">:{source.line}</span>}
       <ExternalLinkIcon size={12} aria-hidden="true" />
     </Button>
   );
@@ -179,29 +196,47 @@ function PropList({
     return <p className="ss-components-muted">No declared props.</p>;
   }
 
+  const ordered = [...component.props].sort(
+    (left, right) =>
+      (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER) ||
+      left.name.localeCompare(right.name)
+  );
+  const groups = new Map<string, ComponentPropDescriptor[]>();
+  for (const prop of ordered) {
+    const group = prop.group ?? 'Properties';
+    groups.set(group, [...(groups.get(group) ?? []), prop]);
+  }
   return (
     <div className="ss-components-prop-list">
-      {component.props.map((prop) => (
-        <div key={prop.name} className="ss-components-prop-row">
-          <div className="ss-components-prop-row__name">
-            <span>{prop.name}</span>
-            {prop.required && <span className="ss-components-required">Required</span>}
-          </div>
-          <div className="ss-components-prop-row__meta">
-            <span className="ss-components-code-pill">{prop.typeText ?? prop.control}</span>
-            {prop.defaultValue !== null && (
-              <span className="ss-components-prop-row__default">
-                Default: <code>{formatValue(prop.defaultValue)}</code>
-              </span>
-            )}
-            {prop.choices && prop.choices.length > 0 && (
-              <span className="ss-components-prop-row__choices">
-                {prop.choices.map((choice) => formatValue(choice)).join(' · ')}
-              </span>
-            )}
-            <SourceButton source={prop.source} onOpenSource={onOpenSource} />
-          </div>
-        </div>
+      {[...groups.entries()].map(([group, props]) => (
+        <section key={group} className="ss-components-prop-group" aria-label={group}>
+          {groups.size > 1 && <h4 className="ss-components-subsection-title">{group}</h4>}
+          {props.map((prop) => (
+            <div key={prop.name} className="ss-components-prop-row">
+              <div className="ss-components-prop-row__name">
+                <span title={prop.description ?? undefined}>{prop.label ?? prop.name}</span>
+                {prop.required && <span className="ss-components-required">Required</span>}
+              </div>
+              <div className="ss-components-prop-row__meta">
+                <span className="ss-components-code-pill">{prop.typeText ?? prop.control}</span>
+                {prop.defaultValue !== null && (
+                  <span className="ss-components-prop-row__default">
+                    Default: <code>{formatValue(prop.defaultValue)}</code>
+                  </span>
+                )}
+                {prop.choices && prop.choices.length > 0 && (
+                  <span className="ss-components-prop-row__choices">
+                    {prop.choices.map((choice) => formatValue(choice)).join(' · ')}
+                  </span>
+                )}
+                {prop.description && (
+                  <span className="ss-components-prop-row__description">{prop.description}</span>
+                )}
+                <SourceButton source={prop.source} onOpenSource={onOpenSource} />
+              </div>
+            </div>
+          ))}
+        </section>
       ))}
     </div>
   );
@@ -219,6 +254,9 @@ function SlotList({ component }: { component: ComponentDescriptor }) {
           <span className="ss-components-slot-row__name">{slot.name}</span>
           <span className="ss-components-slot-row__meta">
             {slot.required ? 'Required' : 'Optional'} · {slot.scoped ? 'Scoped' : 'Default content'}
+            {slot.allowedComponentIds && slot.allowedComponentIds.length > 0
+              ? ` · ${slot.allowedComponentIds.length} allowed`
+              : ''}
           </span>
         </div>
       ))}
@@ -305,26 +343,152 @@ function UsageList({
   );
 }
 
-const PLACEMENT_CONTROLS = new Set(['text', 'number', 'boolean', 'select', 'asset']);
+const PLACEMENT_CONTROLS = new Set([
+  'text',
+  'number',
+  'boolean',
+  'select',
+  'asset',
+  'url',
+  'rich-text',
+  'class',
+  'attributes',
+  'nullable',
+  'array',
+  'object',
+]);
 
 function encodedChoice(value: StaticValue) {
   return JSON.stringify(value);
 }
 
+function staticValueFromJson(value: unknown): StaticValue | null {
+  if (value === null) return { kind: 'null', value: null };
+  if (typeof value === 'string') return { kind: 'string', value };
+  if (typeof value === 'number' && Number.isFinite(value)) return { kind: 'number', value };
+  if (typeof value === 'boolean') return { kind: 'boolean', value };
+  if (Array.isArray(value)) {
+    const items = value.map(staticValueFromJson);
+    return items.every((item): item is StaticValue => item !== null)
+      ? { kind: 'array', value: items }
+      : null;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).map(
+      ([key, item]) => [key, staticValueFromJson(item)] as const
+    );
+    if (entries.some(([, item]) => item === null)) return null;
+    return { kind: 'object', value: Object.fromEntries(entries) as Record<string, StaticValue> };
+  }
+  return null;
+}
+
+function staticValueFromPlacementInput(
+  prop: ComponentPropDescriptor,
+  value: string
+): StaticValue | null {
+  if (prop.control === 'number') {
+    const parsed = Number(value);
+    return value !== '' && Number.isFinite(parsed) ? { kind: 'number', value: parsed } : null;
+  }
+  if (prop.control === 'boolean') {
+    return value === 'true' || value === 'false'
+      ? { kind: 'boolean', value: value === 'true' }
+      : null;
+  }
+  if (prop.control === 'array' || prop.control === 'object' || prop.control === 'attributes') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (prop.control === 'array' && !Array.isArray(parsed)) return null;
+      if (prop.control !== 'array' && (parsed === null || typeof parsed !== 'object')) return null;
+      return staticValueFromJson(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return { kind: 'string', value };
+}
+
+function placementValueDraft(value: StaticValue | undefined): string {
+  if (!value) return '';
+  if (value.kind === 'array' || value.kind === 'object') {
+    const plain = (current: StaticValue): unknown => {
+      if (current.kind === 'array') return current.value.map(plain);
+      if (current.kind === 'object') {
+        return Object.fromEntries(
+          Object.entries(current.value).map(([key, item]) => [key, plain(item)])
+        );
+      }
+      return current.value;
+    };
+    return JSON.stringify(plain(value), null, 2);
+  }
+  return value.kind === 'null' ? '' : String(value.value);
+}
+
+function placementControlSupported(prop: ComponentPropDescriptor, projectPath?: string): boolean {
+  if (!PLACEMENT_CONTROLS.has(prop.control)) return false;
+  if (prop.control === 'asset') return Boolean(projectPath);
+  if (prop.control === 'select') return (prop.choices?.length ?? 0) > 0;
+  return true;
+}
+
+function AssetPlacementField({
+  projectPath,
+  value,
+  onChange,
+}: {
+  projectPath: string;
+  value: StaticValue | undefined;
+  onChange: (value: StaticValue | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = value?.kind === 'string' ? value.value : '';
+  return (
+    <>
+      <div className="ss-components-asset-field">
+        <code title={current}>{current || 'Unset'}</code>
+        <Button variant="secondary" size="compact" onClick={() => setOpen(true)}>
+          Choose asset…
+        </Button>
+        {current && (
+          <Button variant="ghost" size="compact" onClick={() => onChange(null)}>
+            Clear
+          </Button>
+        )}
+      </div>
+      <AssetsModal
+        projectPath={projectPath}
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        pick={{
+          title: 'Choose component asset',
+          onPick: (asset: Asset) => {
+            onChange({ kind: 'string', value: assetWebPath(asset.path) });
+            setOpen(false);
+          },
+        }}
+      />
+    </>
+  );
+}
+
 function PlacementSetup({
   component,
+  projectPath,
   onCancel,
   onPlace,
 }: {
   component: ComponentDescriptor;
+  projectPath?: string;
   onCancel: () => void;
   onPlace: (
     props: Record<string, StaticValue>,
     position: ComponentInsertionAnchor['position']
   ) => void;
 }) {
-  const required = useMemo(
-    () => component.props.filter((prop) => prop.required && prop.defaultValue === null),
+  const placementProps = useMemo(
+    () => component.props.filter((prop) => PLACEMENT_CONTROLS.has(prop.control) || prop.required),
     [component.props]
   );
   const [values, setValues] = useState<Record<string, StaticValue>>({});
@@ -339,27 +503,37 @@ function PlacementSetup({
       return next;
     });
   };
-  const supported = required.every(
-    (prop) =>
-      PLACEMENT_CONTROLS.has(prop.control) &&
-      (prop.control !== 'select' || (prop.choices?.length ?? 0) > 0)
-  );
+  const required = component.props.filter((prop) => prop.required && prop.defaultValue === null);
+  const supported = required.every((prop) => placementControlSupported(prop, projectPath));
   const complete = supported && required.every((prop) => values[prop.name] !== undefined);
+
+  const unset = (name: string) => {
+    setValue(name, null);
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  };
 
   return (
     <section className="ss-components-placement" aria-labelledby="component-placement-title">
       <div className="ss-components-placement__heading">
         <div>
           <h3 id="component-placement-title" className="ss-components-section-title">
-            {required.length > 0 ? 'Required props' : 'Placement'}
+            {required.length > 0
+              ? 'Required props'
+              : placementProps.length > 0
+                ? 'Component properties'
+                : 'Placement'}
           </h3>
           <p className="ss-components-muted">
             {required.length > 0
-              ? 'Set explicit values before Ship Studio writes JSX.'
+              ? 'Optional props stay at their source default until you set them explicitly.'
               : 'Choose where the component should be inserted.'}
           </p>
         </div>
-        <span className="ss-components-count tabular-nums">{required.length}</span>
+        <span className="ss-components-count tabular-nums">{placementProps.length}</span>
       </div>
 
       <label className="ss-components-placement__field">
@@ -378,12 +552,16 @@ function PlacementSetup({
       </label>
 
       <div className="ss-components-placement__fields">
-        {required.map((prop) => {
+        {placementProps.map((prop) => {
           const value = values[prop.name];
+          const draft = drafts[prop.name] ?? placementValueDraft(value);
           return (
-            <label key={prop.name} className="ss-components-placement__field">
+            <div key={prop.name} className="ss-components-placement__field">
               <span>
-                {prop.name} <span className="ss-components-required">Required</span>
+                {prop.name}{' '}
+                {prop.required && prop.defaultValue === null && (
+                  <span className="ss-components-required">Required</span>
+                )}
               </span>
               {prop.control === 'boolean' ? (
                 <select
@@ -420,25 +598,74 @@ function PlacementSetup({
                     </option>
                   ))}
                 </select>
+              ) : prop.control === 'nullable' ? (
+                <div className="ss-components-placement__nullable">
+                  <select
+                    aria-label={`Set ${prop.name} nullability`}
+                    value={value === undefined ? '' : value.kind === 'null' ? 'null' : 'value'}
+                    onChange={(event) => {
+                      const selected = event.currentTarget.value;
+                      if (selected === '') return setValue(prop.name, null);
+                      if (selected === 'null')
+                        return setValue(prop.name, { kind: 'null', value: null });
+                      const parsed = staticValueFromPlacementInput(prop, drafts[prop.name] ?? '');
+                      setValue(prop.name, parsed);
+                    }}
+                  >
+                    <option value="">Default</option>
+                    <option value="null">Null</option>
+                    <option value="value">Value</option>
+                  </select>
+                  <TextField
+                    aria-label={`Set ${prop.name} value`}
+                    value={draft}
+                    placeholder="Value"
+                    disabled={value?.kind === 'null'}
+                    onChange={(event) => {
+                      const next = event.currentTarget.value;
+                      setDrafts((current) => ({ ...current, [prop.name]: next }));
+                      if (value?.kind === 'null') return;
+                      setValue(prop.name, staticValueFromPlacementInput(prop, next));
+                    }}
+                  />
+                </div>
+              ) : prop.control === 'array' ||
+                prop.control === 'object' ||
+                prop.control === 'attributes' ? (
+                <textarea
+                  className="ss-components-instance__json-input"
+                  aria-label={`Set ${prop.name}`}
+                  value={draft}
+                  placeholder={prop.control === 'array' ? '[]' : '{}'}
+                  rows={3}
+                  onChange={(event) => {
+                    const next = event.currentTarget.value;
+                    setDrafts((current) => ({ ...current, [prop.name]: next }));
+                    setValue(prop.name, staticValueFromPlacementInput(prop, next));
+                  }}
+                />
+              ) : prop.control === 'asset' && projectPath ? (
+                <AssetPlacementField
+                  projectPath={projectPath}
+                  value={value}
+                  onChange={(next) => setValue(prop.name, next)}
+                />
+              ) : prop.control === 'asset' ? (
+                <span className="ss-components-placement__unsupported">
+                  Asset values require the source-backed Assets picker.
+                </span>
               ) : PLACEMENT_CONTROLS.has(prop.control) ? (
                 <TextField
                   aria-label={`Set required ${prop.name}`}
                   type={prop.control === 'number' ? 'number' : 'text'}
-                  value={drafts[prop.name] ?? ''}
+                  value={draft}
+                  placeholder={
+                    prop.defaultValue ? `Default: ${formatValue(prop.defaultValue)}` : 'Unset'
+                  }
                   onChange={(event) => {
                     const next = event.currentTarget.value;
                     setDrafts((current) => ({ ...current, [prop.name]: next }));
-                    if (prop.control === 'number') {
-                      const parsed = Number(next);
-                      setValue(
-                        prop.name,
-                        next !== '' && Number.isFinite(parsed)
-                          ? { kind: 'number', value: parsed }
-                          : null
-                      );
-                    } else {
-                      setValue(prop.name, { kind: 'string', value: next });
-                    }
+                    setValue(prop.name, staticValueFromPlacementInput(prop, next));
                   }}
                 />
               ) : (
@@ -446,7 +673,17 @@ function PlacementSetup({
                   This prop type must be authored in source.
                 </span>
               )}
-            </label>
+              {!prop.required && values[prop.name] !== undefined && (
+                <Button variant="ghost" size="compact" onClick={() => unset(prop.name)}>
+                  Unset
+                </Button>
+              )}
+              {prop.description && (
+                <span className="ss-components-placement__hint" title={prop.description}>
+                  {prop.description}
+                </span>
+              )}
+            </div>
           );
         })}
       </div>
@@ -472,6 +709,7 @@ function PlacementSetup({
 /** Definition details and usage graph for the currently selected component. */
 export function ComponentDetails({
   component,
+  projectPath,
   usages = [],
   placementAvailable = true,
   onPlace,
@@ -481,6 +719,9 @@ export function ComponentDetails({
   onRename,
   onDelete,
   onSelectUsage,
+  propertyPresentation,
+  propertyPresentationEditable = false,
+  onSavePropertyPresentation,
 }: ComponentDetailsProps) {
   const diagnostics = component.diagnostics ?? [];
   const canPlace = component.capabilities.place && placementAvailable;
@@ -488,6 +729,7 @@ export function ComponentDetails({
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [propertyPresentationOpen, setPropertyPresentationOpen] = useState(false);
   const canDuplicate = component.capabilities.duplicateDefinition && onDuplicate !== undefined;
   const canRename = component.capabilities.renameDefinition && onRename !== undefined;
   const canDelete = component.capabilities.deleteDefinition && onDelete !== undefined;
@@ -501,109 +743,97 @@ export function ComponentDetails({
           </span>
           <div className="ss-components-details__heading">
             <h2>{component.name}</h2>
+            {!component.capabilities.place && (
+              <span className="ss-components-status-badge">Read-only</span>
+            )}
             <p>
               {dialectLabel(component.dialect)} · {kindLabel(component.kind)}
             </p>
           </div>
         </div>
-        <div className="ss-components-details__actions">
+        <SourceButton source={component.definition} onOpenSource={onOpenSource} showLine={false} />
+      </header>
+
+      <div className="ss-components-details__actions">
+        <Button
+          variant="primary"
+          size="compact"
+          className="ss-components-action-hit"
+          leftIcon={<PlusIcon size={14} />}
+          disabled={!canPlace}
+          title={
+            canPlace
+              ? 'Place this component'
+              : component.capabilities.place
+                ? 'Turn on edit mode and select a source-backed element first'
+                : 'Placement is not supported for this component'
+          }
+          aria-expanded={placementOpen}
+          onClick={() => setPlacementOpen((open) => !open)}
+        >
+          Place
+        </Button>
+        {onOpenCanvas && (
           <Button
             variant="secondary"
             size="compact"
-            className="ss-components-action-hit"
-            leftIcon={<CodeIcon size={14} />}
-            onClick={() => onOpenSource(component.definition)}
+            className="ss-components-open-canvas"
+            leftIcon={<ComponentsIcon size={14} />}
+            onClick={onOpenCanvas}
+            title="Create saved test cases and review this component"
           >
-            Open source
+            Review component
           </Button>
-          <Button
-            variant="primary"
-            size="compact"
-            className="ss-components-action-hit"
-            leftIcon={<PlusIcon size={14} />}
-            disabled={!canPlace}
+        )}
+        {onDuplicate && (
+          <IconButton
+            variant="secondary"
+            className="ss-components-duplicate-action"
+            icon={<DuplicateIcon size={14} />}
+            aria-label="Duplicate"
+            disabled={!canDuplicate}
             title={
-              canPlace
-                ? 'Place this component'
-                : component.capabilities.place
-                  ? 'Turn on edit mode and select a source-backed element first'
-                  : 'Placement is not supported for this component'
+              canDuplicate
+                ? 'Create a reviewed copy of this component definition'
+                : 'Definition duplication is not supported for this component'
             }
-            aria-expanded={placementOpen}
-            onClick={() => setPlacementOpen((open) => !open)}
-          >
-            Place
-          </Button>
-          {onOpenCanvas && (
-            <Button
-              variant="secondary"
-              size="compact"
-              className="ss-components-open-canvas"
-              leftIcon={<ComponentsIcon size={14} />}
-              onClick={onOpenCanvas}
-              title="Open explicit component frames in the Component Canvas"
-            >
-              Open canvas
-            </Button>
-          )}
-          {onDuplicate && (
-            <Button
-              variant="secondary"
-              size="compact"
-              className="ss-components-action-hit ss-components-duplicate-action"
-              leftIcon={<DuplicateIcon size={14} />}
-              disabled={!canDuplicate}
-              title={
-                canDuplicate
-                  ? 'Create a reviewed copy of this component definition'
-                  : 'Definition duplication is not supported for this component'
-              }
-              aria-expanded={duplicateOpen}
-              onClick={() => setDuplicateOpen(true)}
-            >
-              Duplicate
-            </Button>
-          )}
-          {onRename && (
-            <Button
-              variant="secondary"
-              size="compact"
-              className="ss-components-action-hit ss-components-rename-action"
-              leftIcon={<EditFieldIcon size={14} />}
-              disabled={!canRename}
-              title={
-                canRename
-                  ? 'Rename this component definition and its resolved references'
-                  : 'Definition renaming is not supported for this component'
-              }
-              aria-expanded={renameOpen}
-              onClick={() => setRenameOpen(true)}
-            >
-              Rename
-            </Button>
-          )}
-          {onDelete && (
-            <Button
-              variant="danger"
-              size="compact"
-              className="ss-components-action-hit ss-components-delete-action"
-              leftIcon={<TrashIcon size={14} />}
-              disabled={!canDelete}
-              title={
-                canDelete
-                  ? 'Delete this component definition and its resolved references'
-                  : 'Definition deletion is not supported for this component'
-              }
-              aria-expanded={deleteOpen}
-              onClick={() => setDeleteOpen(true)}
-            >
-              Delete
-            </Button>
-          )}
-        </div>
-      </header>
-
-      <SourceButton source={component.definition} onOpenSource={onOpenSource} />
+            aria-expanded={duplicateOpen}
+            onClick={() => setDuplicateOpen(true)}
+          />
+        )}
+        {onRename && (
+          <IconButton
+            variant="secondary"
+            className="ss-components-rename-action"
+            icon={<EditFieldIcon size={14} />}
+            aria-label="Rename"
+            disabled={!canRename}
+            title={
+              canRename
+                ? 'Rename this component definition and its resolved references'
+                : 'Definition renaming is not supported for this component'
+            }
+            aria-expanded={renameOpen}
+            onClick={() => setRenameOpen(true)}
+          />
+        )}
+        {onDelete && (
+          <IconButton
+            variant="danger"
+            className="ss-components-delete-action"
+            icon={<TrashIcon size={14} />}
+            aria-label="Delete"
+            disabled={!canDelete}
+            title={
+              canDelete
+                ? 'Delete this component definition and its resolved references'
+                : 'Definition deletion is not supported for this component'
+            }
+            aria-expanded={deleteOpen}
+            onClick={() => setDeleteOpen(true)}
+          />
+        )}
+      </div>
 
       {component.description && (
         <p className="ss-components-details__description">{component.description}</p>
@@ -612,6 +842,7 @@ export function ComponentDetails({
       {placementOpen && (
         <PlacementSetup
           component={component}
+          projectPath={projectPath}
           onCancel={() => setPlacementOpen(false)}
           onPlace={(props, position) => {
             setPlacementOpen(false);
@@ -656,6 +887,16 @@ export function ComponentDetails({
         />
       )}
 
+      {onSavePropertyPresentation && (
+        <ComponentPropertyPresentationModal
+          component={component}
+          metadata={propertyPresentation}
+          isOpen={propertyPresentationOpen}
+          onClose={() => setPropertyPresentationOpen(false)}
+          onSave={onSavePropertyPresentation}
+        />
+      )}
+
       <Tabs defaultValue="overview" size="compact">
         <TabsList aria-label={`${component.name} details`} className="ss-components-details__tabs">
           <TabsTab value="overview">Overview</TabsTab>
@@ -685,9 +926,26 @@ export function ComponentDetails({
           </div>
 
           <section className="ss-components-detail-section" aria-labelledby="component-props-title">
-            <h3 id="component-props-title" className="ss-components-section-title">
-              Props
-            </h3>
+            <div className="ss-components-detail-section__heading">
+              <h3 id="component-props-title" className="ss-components-section-title">
+                Props
+              </h3>
+              {onSavePropertyPresentation && (
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  disabled={!propertyPresentationEditable || component.props.length === 0}
+                  onClick={() => setPropertyPresentationOpen(true)}
+                  title={
+                    propertyPresentationEditable
+                      ? 'Organize property labels, groups, and order for this project'
+                      : 'Library component presentation is read-only; fork it to customize'
+                  }
+                >
+                  Organize
+                </Button>
+              )}
+            </div>
             <PropList component={component} onOpenSource={onOpenSource} />
           </section>
 

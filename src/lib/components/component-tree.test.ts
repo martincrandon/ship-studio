@@ -169,6 +169,125 @@ describe('component tree projection', () => {
     expect(result.tree?.children).toHaveLength(1);
   });
 
+  it('projects exact component slots as visible drop-zone rows while focused', () => {
+    const card = file(
+      'src/SlotCard.tsx',
+      `export function SlotCard({ children }: { children?: React.ReactNode }) {
+  return <section>{children}</section>;
+}
+`
+    );
+    const page = file(
+      'src/SlotPage.tsx',
+      `import { SlotCard } from './SlotCard';
+import { Badge } from './Badge';
+export function SlotPage() { return <main><SlotCard><div className="slot-wrap"><Badge /></div></SlotCard></main>; }
+`
+    );
+    const badge = file(
+      'src/Badge.tsx',
+      `export function Badge() { return <span className="badge">Badge</span>; }
+`
+    );
+    const snapshot: ComponentSourceSnapshot = {
+      workspaceRoot: '.',
+      revision: sha256(
+        [card, page, badge].map((entry) => `${entry.file}:${entry.contentHash}`).join('\n')
+      ),
+      files: [card, page, badge],
+      partial: false,
+      diagnostics: [],
+    };
+    const index = buildComponentIndex(snapshot, { projectType: 'vite' });
+    const component = index.components.find((candidate) => candidate.name === 'SlotCard')!;
+    const instance = index.instances.find((candidate) => candidate.componentId === component.id)!;
+    const childComponent = index.components.find((candidate) => candidate.name === 'Badge')!;
+    const childInstance = index.instances.find(
+      (candidate) => candidate.componentId === childComponent.id
+    )!;
+    const boundaryValue: ComponentBoundary = {
+      key: instance.id,
+      componentId: component.id,
+      instanceId: instance.id,
+      name: component.name,
+      confidence: 'exact',
+      hostNodeIds: [3],
+      definition: component.definition,
+      invocation: instance.invocation,
+      indexRevision: index.revision,
+    };
+    const focused: ComponentFocusSession = {
+      ...boundaryValue,
+      ancestry: [],
+      routeKey: null,
+    };
+    const result = projectComponentTree({
+      tree: {
+        id: 1,
+        tag: 'body',
+        cls: '',
+        text: '',
+        children: [
+          {
+            id: 2,
+            tag: 'main',
+            cls: '',
+            text: '',
+            children: [
+              {
+                id: 3,
+                tag: 'section',
+                cls: '',
+                text: '',
+                children: [
+                  {
+                    id: 5,
+                    tag: 'span',
+                    cls: 'badge',
+                    text: 'Badge',
+                    children: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      index,
+      boundaries: [
+        boundaryValue,
+        {
+          ...boundaryValue,
+          key: childInstance.id,
+          componentId: childComponent.id,
+          instanceId: childInstance.id,
+          name: childComponent.name,
+          definition: childComponent.definition,
+          invocation: childInstance.invocation,
+          hostNodeIds: [5],
+        },
+      ],
+      focus: focused,
+    });
+    const main = result.tree?.kind === 'element' ? result.tree.children[0] : null;
+    const projected = main?.children[0];
+    expect(projected?.kind).toBe('component');
+    expect(projected?.children[0]).toMatchObject({
+      kind: 'slot',
+      slotName: 'children',
+      sourceAvailable: true,
+      childInstanceIds: [childInstance.id],
+    });
+    expect(projected?.children[0]?.children[0]).toMatchObject({
+      kind: 'component',
+      instanceId: childInstance.id,
+    });
+    expect(projected?.children).toHaveLength(1);
+    expect(
+      projected?.children.some((child) => child.kind === 'element' && child.nodeId === 4)
+    ).toBe(false);
+  });
+
   it('shows nested exact boundaries only after the containing component is focused', () => {
     const { index, cardComponent, badgeComponent, cardInstance, badgeInstance } = fixture();
     const cardBoundary = boundary(cardComponent, cardInstance, [3], index.revision);

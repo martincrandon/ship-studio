@@ -65,6 +65,45 @@ function reactProject() {
 }
 
 describe('React component index', () => {
+  it('publishes only source-proven richer property controls and JSDoc descriptions', () => {
+    const source = snapshot([
+      file(
+        'src/Details.tsx',
+        `interface DetailsProps {
+  /**
+   * Destination users open.
+   * @ship-studio-control url
+   */
+  href?: UrlValue;
+  /** @ship-studio-control class */
+  className?: ClassNameValue;
+  tags?: string[];
+  /** @ship-studio-control attributes */
+  attributes?: Record<string, string>;
+  note?: string | null;
+}
+type UrlValue = string;
+type ClassNameValue = string;
+export function Details({ href, className, tags, attributes, note }: DetailsProps) {
+  return <a href={href} className={className} data-note={note} />;
+}`
+      ),
+    ]);
+    const details = buildComponentIndex(source, { projectType: 'vite' }).components.find(
+      (component) => component.name === 'Details'
+    );
+    expect(details?.props.map((prop) => [prop.name, prop.control])).toEqual([
+      ['href', 'url'],
+      ['className', 'class'],
+      ['tags', 'array'],
+      ['attributes', 'attributes'],
+      ['note', 'nullable'],
+    ]);
+    expect(details?.props.find((prop) => prop.name === 'href')?.description).toBe(
+      'Destination users open.'
+    );
+  });
+
   it('returns a bounded needSources request for an unloaded internal package entry', () => {
     const source = snapshot([
       file(
@@ -510,9 +549,16 @@ export function OtherPage() {
     const index = buildComponentIndex(source, { projectType: 'vite' });
     expect(index.components).toEqual([]);
     expect(index.profile.primaryDialect).toBeNull();
-    expect(index.diagnostics).toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: 'react-no-jsx' })])
-    );
+    expect(index.profile.diagnostics).toEqual([]);
+    expect(index.diagnostics).toEqual([]);
+  });
+
+  it('does not surface negative adapter probes for a detected Next React project', () => {
+    const index = buildComponentIndex(reactProject(), { projectType: 'nextjs' });
+
+    expect(index.profile.dialects).toEqual(['react']);
+    expect(index.profile.diagnostics).toEqual([]);
+    expect(index.diagnostics).toEqual([]);
   });
 
   it('uses authored prop names and disables unsafe placement when a prop contract is unresolved', () => {

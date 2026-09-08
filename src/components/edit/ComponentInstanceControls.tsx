@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CodeIcon, ComponentsIcon, InfoIcon } from '@/components/icons';
+import { assetWebPath, type Asset } from '../../lib/assets';
 import type {
   BindingConfidence,
   ComponentDescriptor,
@@ -10,10 +11,13 @@ import type {
 } from '../../lib/components/types';
 import { Button } from '../primitives/Button';
 import { TextField } from '../primitives/TextField';
+import { AssetsModal } from '../workspace/AssetsPanel';
 
 export interface ComponentInstanceControlsProps {
   instance: ComponentInstance | null;
   component?: ComponentDescriptor | null;
+  projectPath?: string;
+  availableComponents?: readonly ComponentDescriptor[];
   bindingConfidence?: BindingConfidence;
   disabled?: boolean;
   busy?: boolean;
@@ -27,7 +31,19 @@ export interface ComponentInstanceControlsProps {
     slotName: string,
     replacementSource: string
   ) => void | Promise<void>;
+  onEditStructuredSlot?: (
+    instance: ComponentInstance,
+    input: {
+      slotName: string;
+      operation: 'insert' | 'remove' | 'reorder';
+      componentId?: string;
+      childInstanceId?: string;
+      beforeChildInstanceId?: string;
+      props?: Record<string, StaticValue>;
+    }
+  ) => void | Promise<void>;
   onSelectSlotChild?: (child: ComponentSlotChild) => void;
+  onEditSlotChildMain?: (child: ComponentSlotChild) => void;
   onInline?: (instance: ComponentInstance) => void | Promise<void>;
   onOpenSource?: (source: SourceRef) => void;
 }
@@ -128,14 +144,75 @@ function valueForExpression(value: unknown): unknown {
 }
 
 function staticValueForInput(
-  control: 'text' | 'number' | 'asset',
+  control: ComponentDescriptor['props'][number]['control'],
   value: string
 ): StaticValue | null {
   if (control === 'number') {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? { kind: 'number', value: parsed } : null;
   }
+  if (control === 'array' || control === 'object' || control === 'attributes') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return control === 'array' && Array.isArray(parsed)
+        ? staticValueFromJson(parsed)
+        : control !== 'array' && parsed !== null && typeof parsed === 'object'
+          ? staticValueFromJson(parsed)
+          : null;
+    } catch {
+      return null;
+    }
+  }
   return { kind: 'string', value };
+}
+
+function staticValueFromJson(value: unknown): StaticValue | null {
+  if (value === null) return { kind: 'null', value: null };
+  if (typeof value === 'string') return { kind: 'string', value };
+  if (typeof value === 'number' && Number.isFinite(value)) return { kind: 'number', value };
+  if (typeof value === 'boolean') return { kind: 'boolean', value };
+  if (Array.isArray(value)) {
+    const items = value.map(staticValueFromJson);
+    return items.every((item): item is StaticValue => item !== null)
+      ? { kind: 'array', value: items }
+      : null;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).map(
+      ([key, item]) => [key, staticValueFromJson(item)] as const
+    );
+    if (entries.some(([, item]) => item === null)) return null;
+    return { kind: 'object', value: Object.fromEntries(entries) as Record<string, StaticValue> };
+  }
+  return null;
+}
+
+function jsonDraft(value: unknown): string {
+  const unwrapped = valueForExpression(value);
+  const record = asRecord(unwrapped);
+  if (record?.kind === 'array' && Array.isArray(record.value)) {
+    return JSON.stringify(record.value.map(staticPlainValue), null, 2);
+  }
+  if (record?.kind === 'object' && record.value && typeof record.value === 'object') {
+    return JSON.stringify(staticPlainValue(record.value), null, 2);
+  }
+  return '';
+}
+
+function staticPlainValue(value: unknown): unknown {
+  const record = asRecord(value);
+  if (!record || typeof record.kind !== 'string') return value;
+  if (record.kind === 'array' && Array.isArray(record.value))
+    return record.value.map(staticPlainValue);
+  if (record.kind === 'object' && record.value && typeof record.value === 'object') {
+    return Object.fromEntries(
+      Object.entries(record.value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        staticPlainValue(item),
+      ])
+    );
+  }
+  return record.value;
 }
 
 function isEditableControl(control: ComponentDescriptor['props'][number]['control']) {
@@ -144,7 +221,14 @@ function isEditableControl(control: ComponentDescriptor['props'][number]['contro
     control === 'number' ||
     control === 'boolean' ||
     control === 'select' ||
-    control === 'asset'
+    control === 'asset' ||
+    control === 'url' ||
+    control === 'rich-text' ||
+    control === 'class' ||
+    control === 'attributes' ||
+    control === 'nullable' ||
+    control === 'array' ||
+    control === 'object'
   );
 }
 
@@ -182,6 +266,7 @@ function dynamicReason(value: unknown): string | null {
 
 function InstancePropRow({
   instance,
+  projectPath,
   name,
   descriptor,
   value,
@@ -191,6 +276,7 @@ function InstancePropRow({
   onOpenSource,
 }: {
   instance: ComponentInstance;
+  projectPath?: string;
   name: string;
   descriptor: ComponentDescriptor['props'][number] | undefined;
   value: unknown;
@@ -213,10 +299,7 @@ function InstancePropRow({
 
   const commitText = () => {
     if (!editable || !onEditProp || !dirtyRef.current) return;
-    const next = staticValueForInput(
-      control === 'asset' ? 'asset' : control === 'number' ? 'number' : 'text',
-      draft
-    );
+    const next = staticValueForInput(control, draft);
     if (next !== null) {
       dirtyRef.current = false;
       void onEditProp(instance, name, next);
@@ -286,6 +369,54 @@ function InstancePropRow({
             </option>
           ))}
         </select>
+      ) : control === 'nullable' ? (
+        <select
+          className="ss-components-instance__select"
+          aria-label={`Set ${name}`}
+          value={
+            kind === 'unset'
+              ? ''
+              : sourceValue && asRecord(sourceValue)?.kind === 'null'
+                ? 'null'
+                : 'value'
+          }
+          onChange={(event) => {
+            const selected = event.currentTarget.value;
+            commitChoice(
+              selected === ''
+                ? null
+                : selected === 'null'
+                  ? { kind: 'null', value: null }
+                  : { kind: 'string', value: draft }
+            );
+          }}
+          disabled={disabled || busy}
+        >
+          <option value="">Default</option>
+          <option value="null">Null</option>
+          <option value="value">Value</option>
+        </select>
+      ) : control === 'asset' && projectPath ? (
+        <AssetInstanceField
+          projectPath={projectPath}
+          value={sourceValue}
+          disabled={disabled || busy}
+          onChange={commitChoice}
+        />
+      ) : control === 'array' || control === 'object' || control === 'attributes' ? (
+        <textarea
+          className="ss-components-instance__json-input"
+          aria-label={`Set ${name}`}
+          value={draft || jsonDraft(sourceValue)}
+          placeholder={control === 'array' ? '[]' : '{}'}
+          rows={3}
+          onChange={(event) => {
+            dirtyRef.current = true;
+            setDraft(event.currentTarget.value);
+          }}
+          onBlur={commitText}
+          disabled={disabled || busy}
+        />
       ) : (
         <TextField
           className="ss-components-instance__input"
@@ -359,16 +490,62 @@ function InstancePropRow({
   );
 }
 
+function AssetInstanceField({
+  projectPath,
+  value,
+  disabled,
+  onChange,
+}: {
+  projectPath: string;
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: StaticValue | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = typeof value === 'string' ? value : '';
+  return (
+    <>
+      <div className="ss-components-asset-field">
+        <code title={current}>{current || 'Unset'}</code>
+        <Button
+          variant="secondary"
+          size="compact"
+          onClick={() => setOpen(true)}
+          disabled={disabled}
+        >
+          Choose asset…
+        </Button>
+      </div>
+      <AssetsModal
+        projectPath={projectPath}
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        pick={{
+          title: 'Choose component asset',
+          onPick: (asset: Asset) => {
+            onChange({ kind: 'string', value: assetWebPath(asset.path) });
+            setOpen(false);
+          },
+        }}
+      />
+    </>
+  );
+}
+
 function InstanceSlotRow({
   instance,
   slot,
+  availableComponents,
   disabled,
   busy,
   onEditSlot,
+  onEditStructuredSlot,
   onSelectSlotChild,
+  onEditSlotChildMain,
 }: {
   instance: ComponentInstance;
   slot: ComponentInstance['slots'][number];
+  availableComponents?: readonly ComponentDescriptor[];
   disabled: boolean;
   busy: boolean;
   onEditSlot?: (
@@ -376,11 +553,14 @@ function InstanceSlotRow({
     slotName: string,
     replacementSource: string
   ) => void | Promise<void>;
+  onEditStructuredSlot?: ComponentInstanceControlsProps['onEditStructuredSlot'];
   onSelectSlotChild?: (child: ComponentSlotChild) => void;
+  onEditSlotChildMain?: (child: ComponentSlotChild) => void;
 }) {
   const source = instance.slotSources?.[slot.name];
   const editable = Boolean(onEditSlot && source && source.text !== undefined) && !disabled;
   const [draft, setDraft] = useState(source?.text ?? '');
+  const [insertComponentId, setInsertComponentId] = useState('');
   const dirtyRef = useRef(false);
 
   useEffect(() => {
@@ -407,18 +587,112 @@ function InstanceSlotRow({
           className="ss-components-instance__slot-children"
           aria-label={`${slot.name} slot children`}
         >
-          {slot.children.map((child) => (
-            <Button
-              key={child.instanceId}
-              variant="ghost"
-              size="compact"
-              onClick={() => onSelectSlotChild?.(child)}
-              disabled={!onSelectSlotChild}
-              title={`Focus ${child.name} in the ${slot.name} slot`}
-            >
-              {child.name}
-            </Button>
+          {slot.children.map((child, index) => (
+            <div key={child.instanceId} className="ss-components-instance__slot-child">
+              <Button
+                variant="ghost"
+                size="compact"
+                onClick={() => onSelectSlotChild?.(child)}
+                disabled={!onSelectSlotChild}
+                title={`Focus ${child.name} in the ${slot.name} slot`}
+              >
+                {child.name}
+              </Button>
+              {onEditSlotChildMain && source && (
+                <Button
+                  variant="ghost"
+                  size="compact"
+                  onClick={() => onEditSlotChildMain(child)}
+                  disabled={disabled || busy}
+                  title={`Edit ${child.name} main definition`}
+                >
+                  Edit main
+                </Button>
+              )}
+              {onEditStructuredSlot && source && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="compact"
+                    aria-label={`Move ${child.name} up`}
+                    disabled={disabled || busy || index === 0}
+                    onClick={() =>
+                      void onEditStructuredSlot(instance, {
+                        slotName: slot.name,
+                        operation: 'reorder',
+                        childInstanceId: child.instanceId,
+                        beforeChildInstanceId: slot.children?.[Math.max(0, index - 1)]?.instanceId,
+                      })
+                    }
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="compact"
+                    aria-label={`Move ${child.name} down`}
+                    disabled={disabled || busy || index === (slot.children?.length ?? 1) - 1}
+                    onClick={() =>
+                      void onEditStructuredSlot(instance, {
+                        slotName: slot.name,
+                        operation: 'reorder',
+                        childInstanceId: child.instanceId,
+                        beforeChildInstanceId: slot.children?.[index + 2]?.instanceId,
+                      })
+                    }
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="compact"
+                    aria-label={`Remove ${child.name}`}
+                    disabled={disabled || busy}
+                    onClick={() =>
+                      void onEditStructuredSlot(instance, {
+                        slotName: slot.name,
+                        operation: 'remove',
+                        childInstanceId: child.instanceId,
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </>
+              )}
+            </div>
           ))}
+        </div>
+      )}
+      {onEditStructuredSlot && source && availableComponents && availableComponents.length > 0 && (
+        <div className="ss-components-instance__slot-insert">
+          <select
+            aria-label={`Choose component for ${slot.name} slot`}
+            value={insertComponentId}
+            onChange={(event) => setInsertComponentId(event.currentTarget.value)}
+            disabled={disabled || busy}
+          >
+            <option value="">Choose component…</option>
+            {availableComponents.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            variant="secondary"
+            size="compact"
+            disabled={disabled || busy || !insertComponentId}
+            onClick={() =>
+              void onEditStructuredSlot(instance, {
+                slotName: slot.name,
+                operation: 'insert',
+                componentId: insertComponentId,
+              })
+            }
+          >
+            Add component
+          </Button>
         </div>
       )}
       {editable ? (
@@ -465,12 +739,16 @@ function bindingMessage(confidence: BindingConfidence, disabled: boolean) {
 export function ComponentInstanceControls({
   instance,
   component,
+  projectPath,
+  availableComponents,
   bindingConfidence = 'exact',
   disabled = false,
   busy = false,
   onEditProp,
   onEditSlot,
+  onEditStructuredSlot,
   onSelectSlotChild,
+  onEditSlotChildMain,
   onInline,
   onOpenSource,
 }: ComponentInstanceControlsProps) {
@@ -555,6 +833,7 @@ export function ComponentInstanceControls({
               <InstancePropRow
                 key={`${instance.id}:${name}:${encodeChoice(value)}`}
                 instance={instance}
+                projectPath={projectPath}
                 name={name}
                 descriptor={descriptor}
                 value={value}
@@ -579,7 +858,10 @@ export function ComponentInstanceControls({
               disabled={disabled}
               busy={busy}
               onEditSlot={onEditSlot}
+              onEditStructuredSlot={onEditStructuredSlot}
+              availableComponents={availableComponents}
               onSelectSlotChild={onSelectSlotChild}
+              onEditSlotChildMain={onEditSlotChildMain}
             />
           ))}
         </div>

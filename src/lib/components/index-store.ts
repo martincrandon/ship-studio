@@ -260,7 +260,11 @@ function profileForSnapshot(
   detections: readonly { adapter: ComponentAdapter; detection: DialectDetection }[]
 ): ComponentFrameworkProfile {
   const detected = detections.filter(({ detection }) => detection.detected);
-  const diagnostics = detections.flatMap(({ detection }) => detection.diagnostics);
+  // A dialect that is absent from the snapshot is an expected result, not an
+  // indexing problem. Only detected adapters may contribute detection
+  // diagnostics to the user-facing profile; parser, source, and graph
+  // diagnostics are still preserved by the index below.
+  const diagnostics = detected.flatMap(({ detection }) => detection.diagnostics);
   const dialects = detected.map(({ adapter }) => adapter.dialect);
   const primaryDialect = dialects.includes('react') ? 'react' : (dialects[0] ?? null);
   const capabilities = emptyCapabilities();

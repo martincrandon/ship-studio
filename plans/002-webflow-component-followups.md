@@ -19,7 +19,9 @@
 - **Depends on**: `plans/001-native-components.md`
 - **Category**: correctness, tech debt, tests, and direction
 - **Planned at**: commit `30e252ca`, 2026-09-04
-- **Implementation status**: PAUSED — continuation-ready checkpoint recorded below
+- **Implementation status**: ACTIVE — safe renderer host remains blocked by the
+  instrumentation/cleanup STOP condition; all other safe continuation slices are
+  implemented and focused-verified below
 
 ## Progress checkpoint — 2026-09-04
 
@@ -55,20 +57,49 @@ Implemented in the current uncommitted worktree:
 - [x] Bounded workspace-package/library discovery and a conservative local-fork
       planner exist. Fork renames and relative dependency closures fail closed.
 
+## Continuation checkpoint — 2026-09-08
+
+Three Luna/xhigh executor tracks completed the remaining safe UI/model slices,
+then passed root review and targeted correction rounds.
+
+- [x] Added a protocol-, project-, revision-, frame-, and baseline-bound
+      isolated-renderer capability boundary. No current adapter supplies a host,
+      so rendered frames and renderer-backed QA remain honestly disabled.
+- [x] Added optional placement values, Assets-picker integration, explicit-only
+      rich controls, source descriptions, project-scoped property presentation,
+      and reviewed extraction suggestions with accept/rename/reject behavior.
+- [x] Added Element Tree slot rows with exact child nesting and reviewed
+      insert/remove/reorder controls. These remain source-only; the live-preview
+      drop-zone is fail-closed because no adapter/bridge supplies a
+      slot-qualified rendered boundary.
+- [x] Added project/library catalog grouping, consumer read-only ownership,
+      reviewed local forks, explicit update review/defer behavior, Cmd+K actions,
+      cross-dialect panel tests, and precise internal documentation.
+- [x] Combined focused verification passes: 73 component tests, `pnpm typecheck`,
+      `pnpm check:patterns`, changed-file Prettier validation, and
+      `git diff --check`. The known Component Canvas React `act(...)` warnings
+      remain non-fatal. No Rust files changed and no full CI suite was run.
+
 Highest-priority continuation work:
 
 - [ ] Add safe isolated-renderer host capability; until then screenshots,
       actual visual diffs, automated a11y, and rendered variant frames remain
       disabled.
-- [ ] Wire structured slot insert/remove/reorder planners into user-facing
-      Element Tree/preview controls; the current UI only exposes proven child
-      navigation plus the raw-source fallback.
-- [ ] Complete Properties 2.0 beyond reset: optional placement props, asset
+- [ ] Add a source-proven slot drop-zone indicator to the live preview. Element
+      Tree and exact-instance insert/remove/reorder controls now use the
+      reviewed mutation pipeline.
+      The current `ss:tree` payload exposes only ephemeral DOM identity, while
+      React Fiber hints can bind a component host but carry no slot name/body
+      range; Vue, Svelte, Shopify, and Web Components have no exact preview
+      boundary. Do not implement this until a versioned host protocol returns a
+      slot-qualified, source/hash-bound rendered boundary and rejects stale or
+      ambiguous mappings.
+- [x] Complete Properties 2.0 beyond reset: optional placement props, asset
       picker, richer static controls, metadata groups/tooltips, and reviewed
       suggested props.
-- [ ] Integrate libraries into catalog grouping, read-only ownership UI,
+- [x] Integrate libraries into catalog grouping, read-only ownership UI,
       reviewed fork/apply flow, update diffs, and Cmd+K.
-- [ ] Add full cross-dialect panel integration tests and update
+- [x] Add full cross-dialect panel integration tests and update
       `docs/internal/components.md` to distinguish implemented models/planners
       from user-facing and renderer-backed capability.
 - [ ] After completing the remaining UI integrations, obtain operator approval
@@ -117,9 +148,10 @@ Primary references:
       editing, isolated preview, and library ownership remain separate
       capabilities.
 - [x] Dynamic or ambiguous source is surfaced as read-only with a diagnostic.
-- [ ] All new user-facing actions are registered with `useCommands`.
+- [x] All new user-facing actions are registered with `useCommands`.
 - [x] UI uses shared primitives and design-token-only CSS.
-- [ ] New Rust commands use `Result<T, CommandError>`,
+- [x] No new Rust commands were introduced; future commands must use
+      `Result<T, CommandError>`,
       `validate_project_path()`, bounded execution where applicable, and
       `#[tracing::instrument]`.
 
@@ -145,7 +177,7 @@ Checklist:
       Shopify, and eligible Web Component projects.
 - [x] Preserve source-only behavior for mobile dialects and read-only behavior
       wherever a runtime/write capability is false.
-- [ ] Add integration tests proving panel reachability and correct disabled
+- [x] Add integration tests proving panel reachability and correct disabled
       actions for every advertised dialect.
 - [x] Remove the stale "React is the first native Components adapter" comment.
 
@@ -263,7 +295,7 @@ Checklist:
       props; require explicit frame selection and enforce a documented cap.
 - [x] Reconcile renamed/deleted props and components as visible orphaned
       presets rather than silently retargeting them.
-- [ ] Add focused canvas/preset/frame tests and document each dialect's
+- [x] Add focused canvas/preset/frame tests and document each dialect's
       isolated-preview capability.
 
 ## Product Delivery 2 — Properties 2.0
@@ -273,21 +305,21 @@ source-backed property workflow while preserving explicit contracts.
 
 Checklist:
 
-- [ ] Allow users to configure optional as well as required props before
+- [x] Allow users to configure optional as well as required props before
       placement.
 - [x] Include the reset/remove-to-default behavior from the P1 fix above.
-- [ ] Reuse the Assets panel picker for image/file props instead of a raw path
+- [x] Reuse the Assets panel picker for image/file props instead of a raw path
       field.
-- [ ] Add reliable controls for URL/link, rich text, class, attribute-object,
+- [x] Add reliable controls for URL/link, rich text, class, attribute-object,
       nullable, array, and object values when their static source form is
       provable.
-- [ ] Read descriptions/tooltips from JSDoc, framework schema, or explicit
+- [x] Read descriptions/tooltips from JSDoc, framework schema, or explicit
       component metadata; never invent descriptions.
-- [ ] Store property groups and presentation ordering as explicit companion
+- [x] Store property groups and presentation ordering as explicit companion
       metadata when the framework source does not represent them.
-- [ ] During extraction, offer reviewed "suggested props" only for provable
+- [x] During extraction, offer reviewed "suggested props" only for provable
       selected text, links, images, visibility, and attributes.
-- [ ] Allow users to accept, rename, or reject each suggested prop before the
+- [x] Allow users to accept, rename, or reject each suggested prop before the
       source transform is planned.
 - [x] Keep dynamic expressions read-only with direct source navigation.
 - [x] Add tests for every new control and each framework-specific serializer.
@@ -300,18 +332,24 @@ the primary workflow should make composable structure visible.
 Checklist:
 
 - [ ] Project proven slots as consistently named drop zones in the Element
-      Tree and preview.
-- [ ] Allow placing an existing indexed component into a statically proven
+      Tree and preview. Element Tree rows are source-only; the live preview
+      remains blocked pending slot-qualified runtime provenance.
+- [x] Allow placing an existing indexed component into a statically proven
       slot through the same reviewed source-mutation pipeline.
-- [ ] Allow reordering and removing exact static slot children.
-- [ ] Support nested component focus and Edit main directly inside a slot.
-- [ ] Support optional allowed-component restrictions only from explicit
+- [x] Allow reordering and removing exact static slot children.
+- [x] Support nested component focus and Edit main directly inside a slot.
+- [x] Support optional allowed-component restrictions only from explicit
       framework types or saved metadata.
 - [x] Preserve the raw source editor as a clearly labelled advanced fallback.
 - [x] Refuse dynamic slot names, scoped/control-flow slot bodies, spreads, and
       runtime-generated children with actionable diagnostics.
-- [ ] Add nested, empty, named/default, restricted, stale, and dynamic slot
-      tests across supported adapters.
+- [x] Add nested, empty, named/default, restricted, stale, and dynamic slot
+      tests across each adapter that advertises slot writes.
+
+Delivery 3 stop condition: no current adapter/preview bridge exposes an exact,
+slot-qualified source-to-rendered-boundary mapping. Keep the live-preview
+drop-zone disabled until that provenance is supplied and stale/ambiguous
+matches fail closed.
 
 ## Product Delivery 4 — Component QA workflows
 
@@ -347,23 +385,24 @@ Checklist:
 
 - [x] Detect eligible workspace/npm packages that explicitly export indexed
       components.
-- [ ] Group the catalog into Project Components and Library Components by
+- [x] Group the catalog into Project Components and Library Components by
       reliable package/source identity.
-- [ ] Keep library definitions read-only in consumer projects unless the user
+- [x] Keep library definitions read-only in consumer projects unless the user
       opens the owning source project.
-- [ ] Display only known package version, source repository, and ownership
+- [x] Display only known package version, source repository, and ownership
       metadata.
-- [ ] Provide reviewed library-update diffs including component contract,
-      token, asset, font, and removed/renamed export changes where known.
-- [ ] Offer "copy/fork to project" with collision detection and a reviewed
+- [x] Provide reviewed library-update diffs including component contract,
+      token, asset, font, and explicit added/removed export changes; export
+      renames are not inferred without rename metadata.
+- [x] Offer "copy/fork to project" with collision detection and a reviewed
       source/import plan; copied components stop receiving library updates.
-- [ ] Provide explicit accept/defer behavior for dependency-backed updates;
+- [x] Provide explicit accept/defer behavior for dependency-backed updates;
       never rewrite a dependency or lockfile without a reviewed plan.
 - [x] Prevent library source outside the validated project/package boundary
       from entering mutation commands.
 - [x] Add package-alias, monorepo, version-change, removed-export, collision,
       read-only ownership, and fork-local tests.
-- [ ] Document unsupported package managers, remote registries, framework
+- [x] Document unsupported package managers, remote registries, framework
       transforms, and update semantics instead of guessing.
 
 ## Deferred lower-priority completeness
@@ -394,16 +433,16 @@ Checklist:
 
 ## Done criteria
 
-- [ ] Every reliability finding is fixed with a focused regression test.
+- [x] Every reliability finding is fixed with a focused regression test.
 - [ ] All five product deliveries have user-facing flows, capability gates,
       Cmd+K actions, documentation, and focused tests.
-- [ ] Unsupported dialects and dynamic cases remain visible but read-only.
-- [ ] No product path treats a source-only usage as a proven rendered runtime
+- [x] Unsupported dialects and dynamic cases remain visible but read-only.
+- [x] No product path treats a source-only usage as a proven rendered runtime
       boundary.
-- [ ] No unbounded variant matrix, source scan, library traversal, screenshot
+- [x] No unbounded variant matrix, source scan, library traversal, screenshot
       batch, or agent payload is introduced.
 - [x] `pnpm typecheck` passes.
-- [ ] Focused frontend and Rust tests for changed areas pass.
+- [x] Focused frontend tests for changed areas pass; no Rust files changed.
 - [ ] The operator has approved and the final executor has run the repository's
       three long CI gates before the work is declared complete.
 

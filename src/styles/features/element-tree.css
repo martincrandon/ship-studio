@@ -315,6 +315,62 @@
   font-size: var(--font-size-badge);
 }
 
+.ss-tree-row--slot {
+  color: var(--accent-component);
+  border-left: var(--border-width-default) dashed var(--accent-component);
+  background: var(--surface-control);
+}
+
+.ss-tree-row--slot:hover {
+  background: var(--surface-control-hover);
+}
+
+.ss-tree-slot-icon,
+.ss-tree-slot-name {
+  color: var(--accent-component);
+}
+
+.ss-tree-slot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+}
+
+.ss-tree-slot-kind {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
+}
+
+.ss-tree-slot-actions,
+.ss-tree-slot-child-actions {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--spacing-2xs);
+}
+
+.ss-tree-slot-actions {
+  padding-block: var(--spacing-2xs);
+}
+
+.ss-tree-slot-actions select {
+  min-width: 0;
+  max-width: 12rem;
+  min-height: var(--control-height-compact);
+  padding: 0 var(--spacing-xs);
+  color: var(--text-secondary);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-badge);
+}
+
+.ss-tree-slot-child-actions {
+  margin-left: auto;
+}
+
 /* The read-only navigator uses neutral highlights; blue is reserved for active
    visual-editing state. */
 .ss-tree-panel--view-only .ss-tree-row:hover,

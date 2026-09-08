@@ -213,18 +213,22 @@ function isStaticExpression(expression: ts.Expression): boolean {
   return false;
 }
 
-function isStaticMarkupBody(body: string): boolean {
+function isStaticMarkupBody(body: string, fileName = ''): boolean {
   if (!body.trim()) return true;
   // Liquid/Vue/Svelte control blocks and template expressions carry scope that
   // a slot replacement cannot prove without executing the framework compiler.
   if (/[{][{%#/@]|[{][{]/.test(body) || /{%|{{|}}|#(?:if|each|await)\b/.test(body)) return false;
+  // Svelte's ordinary `{expression}` interpolation is dynamic even when it is
+  // not a control block. The adapter can still index its source range, but a
+  // structured write must not treat runtime-generated children as static.
+  if (/\.svelte$/i.test(fileName) && /{[^{}]+}/.test(body)) return false;
   if (/<\s*(?:script|style)\b/i.test(body)) return false;
   return true;
 }
 
 function validateStaticReplacement(body: string, file: SourceFileSnapshot): boolean {
   const extension = `.${file.file.split('.').pop()?.toLowerCase() ?? ''}`;
-  if (STATIC_MARKUP_EXTENSIONS.has(extension)) return isStaticMarkupBody(body);
+  if (STATIC_MARKUP_EXTENSIONS.has(extension)) return isStaticMarkupBody(body, file.file);
   const fragment = parseJsxFragment(body, file.file);
   return !!fragment && fragment.children.every((child) => isStaticJsxNode(child));
 }
@@ -401,7 +405,17 @@ export function planStructuredSlotEdit(
     );
 
   if (input.operation === 'insert') {
-    return planSlotInsert(input, index, snapshot, parent, parentComponent, slot, file, slotStart);
+    return planSlotInsert(
+      input,
+      index,
+      snapshot,
+      parent,
+      parentComponent,
+      slot,
+      parentComponent.slots.find((candidate) => candidate.name === input.slotName),
+      file,
+      slotStart
+    );
   }
 
   const children = directSlotChildren(parent, slot, index);
@@ -486,6 +500,7 @@ function planSlotInsert(
   parent: ComponentInstance,
   parentComponent: ComponentIndex['components'][number],
   slot: ComponentInstance['slots'][number],
+  slotDescriptor: ComponentIndex['components'][number]['slots'][number] | undefined,
   file: SourceFileSnapshot,
   slotStart: number
 ): MutationResult {
@@ -497,6 +512,15 @@ function planSlotInsert(
       'unsupported',
       'A slot can only contain an indexed component from the same dialect.'
     );
+  if (
+    slotDescriptor?.allowedComponentIds &&
+    !slotDescriptor.allowedComponentIds.includes(childComponent.id)
+  ) {
+    return refusal(
+      'unsupported',
+      `The ${slot.name} slot only accepts explicitly allowed component types.`
+    );
+  }
   if (!childComponent.capabilities.place)
     return refusal('not-placeable', 'The selected component is not safe to place in a slot.');
   const propsResult = structuredProps(childComponent, input.props ?? {});

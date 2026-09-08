@@ -7,7 +7,7 @@ import {
   utf16OffsetToUtf8ByteOffset,
   utf8ByteOffsetToUtf16Offset,
 } from '../ranges';
-import { basenameWithoutExtension, isStaticAssetProp, normalizeProjectPath } from './react-helpers';
+import { basenameWithoutExtension, normalizeProjectPath } from './react-helpers';
 import { resolvePackageModulePath } from '../package-resolution';
 import {
   ASTRO_COMPONENT_PLAN_PARSER_TOKEN,
@@ -606,12 +606,21 @@ function parseAstroProps(
   return [...seeds.values()].map((seed) => {
     const typeText = seed.typeNode?.getText(sourceFile) ?? null;
     const choices = literalChoices(seed.typeNode);
+    const explicitControl = astroExplicitControl(
+      file.content,
+      frontmatter.bodyStart + seed.sourceStart
+    );
     let control: ComponentPropDescriptor['control'] = 'readonly';
     if (choices) control = 'select';
+    else if (explicitControl) control = explicitControl;
     else if (typeText && /boolean/i.test(typeText)) control = 'boolean';
     else if (typeText && /(?:number|bigint)/i.test(typeText)) control = 'number';
-    else if (typeText && /string/i.test(typeText))
-      control = isStaticAssetProp(seed.name) ? 'asset' : 'text';
+    else if (typeText && /(?:\[\]|Array<|ReadonlyArray<)/i.test(typeText)) control = 'array';
+    else if (typeText && /(?:Record<|object|Object|Map<)/.test(typeText)) control = 'object';
+    else if (typeText && /string/i.test(typeText)) {
+      control = astroSemanticControl(typeText) ?? 'text';
+      if (typeText.includes('null')) control = 'nullable';
+    } else if (typeText && /null/.test(typeText)) control = 'nullable';
     return {
       name: seed.name,
       required: seed.required && seed.defaultValue === null,
@@ -629,6 +638,47 @@ function parseAstroProps(
       diagnostics: [],
     } satisfies ComponentPropDescriptor;
   });
+}
+
+function astroSemanticControl(typeText: string): ComponentPropDescriptor['control'] | null {
+  if (/\b(?:Asset|AssetRef|ImageAsset|FileAsset|ImageSource|MediaSource)\b/.test(typeText)) {
+    return 'asset';
+  }
+  if (/\b(?:RichText|RichTextContent|Markdown|MarkdownContent|HTMLContent)\b/.test(typeText)) {
+    return 'rich-text';
+  }
+  if (/\b(?:URL|Url|URI|Uri|Href|Link|UrlValue|HrefValue)\b/.test(typeText)) return 'url';
+  if (/\b(?:ClassName|ClassNames|CSSClass|ClassValue)\b/.test(typeText)) return 'class';
+  if (/\b(?:Attributes|AttributeMap|HTMLAttributes|AriaAttributes)\b/.test(typeText)) {
+    return 'attributes';
+  }
+  return null;
+}
+
+function astroExplicitControl(
+  content: string,
+  propStart: number
+): ComponentPropDescriptor['control'] | null {
+  const leading = content.slice(0, propStart);
+  const comment = leading.match(/\/\*\*([\s\S]*?)\*\/\s*$/)?.[1] ?? '';
+  const value = comment.match(/@(?:ship-studio-)?control\s+([\w-]+)/i)?.[1]?.toLowerCase();
+  return value &&
+    [
+      'text',
+      'number',
+      'boolean',
+      'select',
+      'asset',
+      'url',
+      'rich-text',
+      'class',
+      'attributes',
+      'nullable',
+      'array',
+      'object',
+    ].includes(value)
+    ? (value as ComponentPropDescriptor['control'])
+    : null;
 }
 
 function astroPropertyName(name: ts.PropertyName, sourceFile: ts.SourceFile): string | null {

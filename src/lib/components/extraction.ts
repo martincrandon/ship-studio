@@ -2,6 +2,7 @@ import ts from 'typescript';
 import {
   applyTextEdits,
   sha256,
+  sourceRefFromUtf16Range,
   utf16OffsetToUtf8ByteOffset,
   utf8ByteOffsetToUtf16Offset,
 } from './ranges';
@@ -15,6 +16,9 @@ import type {
   ComponentExtractionFilePreview,
   ComponentExtractionPlan,
   ComponentExtractionPreview,
+  ComponentExtractionPropApproval,
+  ComponentExtractionPropKind,
+  ComponentExtractionPropSuggestion,
   ComponentExtractionProposal,
   ComponentFileOperation,
   ComponentIndex,
@@ -74,6 +78,8 @@ interface AnalyzedSelection {
   freeNames: string[];
   imports: ImportBinding[];
   propTypes: Map<string, string>;
+  requiredProps: ComponentExtractionPropSuggestion[];
+  suggestedProps: ComponentExtractionPropSuggestion[];
   clientBoundary: boolean;
 }
 
@@ -346,6 +352,207 @@ function collectReferencedNames(node: ts.Node): string[] {
   return [...names].filter((name) => !BUILTIN_NAMES.has(name)).sort();
 }
 
+function extractionKindForAttribute(name: string): ComponentExtractionPropKind {
+  const normalized = name.toLowerCase();
+  if (/^(?:href|to|action|formaction)$/.test(normalized)) return 'link';
+  if (/^(?:src|poster|srcset|imagesrcset)$/.test(normalized)) return 'image';
+  if (/^(?:hidden|visible|disabled|aria-hidden|data-visible)$/.test(normalized)) {
+    return 'visibility';
+  }
+  return 'attribute';
+}
+
+function suggestionTypeForKind(kind: ComponentExtractionPropKind): string {
+  return kind === 'visibility' ? 'boolean' : 'string';
+}
+
+function staticLiteralType(expression: ts.Expression): 'string' | 'number' | 'boolean' | null {
+  if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+    return 'string';
+  }
+  if (ts.isNumericLiteral(expression)) return 'number';
+  if (
+    expression.kind === ts.SyntaxKind.TrueKeyword ||
+    expression.kind === ts.SyntaxKind.FalseKeyword
+  ) {
+    return 'boolean';
+  }
+  if (
+    ts.isPrefixUnaryExpression(expression) &&
+    (expression.operator === ts.SyntaxKind.PlusToken ||
+      expression.operator === ts.SyntaxKind.MinusToken) &&
+    staticLiteralType(expression.operand) === 'number'
+  ) {
+    return 'number';
+  }
+  return null;
+}
+
+function literalSourceRef(file: SourceFileSnapshot, start: number, end: number): SourceRef {
+  return sourceRefFromUtf16Range(file.file, file.content, file.contentHash, start, end);
+}
+
+function isStaticLiteralExpression(expression: ts.Expression): boolean {
+  if (
+    ts.isStringLiteral(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression) ||
+    ts.isNumericLiteral(expression) ||
+    expression.kind === ts.SyntaxKind.TrueKeyword ||
+    expression.kind === ts.SyntaxKind.FalseKeyword ||
+    expression.kind === ts.SyntaxKind.NullKeyword
+  ) {
+    return true;
+  }
+  return (
+    ts.isPrefixUnaryExpression(expression) &&
+    (expression.operator === ts.SyntaxKind.PlusToken ||
+      expression.operator === ts.SyntaxKind.MinusToken) &&
+    isStaticLiteralExpression(expression.operand)
+  );
+}
+
+function uniqueSuggestedName(base: string, used: Set<string>): string {
+  const normalized = base.replace(/[^A-Za-z0-9_$]/g, '') || 'value';
+  let candidate = normalized;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${normalized}${suffix++}`;
+  used.add(candidate);
+  return candidate;
+}
+
+function collectLiteralSuggestions(
+  node: ts.Node,
+  file: SourceFileSnapshot,
+  sourceFile: ts.SourceFile
+): ComponentExtractionPropSuggestion[] {
+  const suggestions: ComponentExtractionPropSuggestion[] = [];
+  const usedNames = new Set<string>();
+  const add = (
+    kind: ComponentExtractionPropKind,
+    start: number,
+    end: number,
+    sourceText: string,
+    displayName: string,
+    baseName: string,
+    typeText = suggestionTypeForKind(kind)
+  ) => {
+    if (!sourceText || (kind === 'text' && sourceText.trim() === '')) return;
+    const sourceName = `literal:${kind}:${start}`;
+    suggestions.push({
+      sourceName,
+      suggestedName: uniqueSuggestedName(baseName, usedNames),
+      kind,
+      typeText,
+      required: false,
+      sourceRange: literalSourceRef(file, start, end),
+      sourceText,
+      displayName,
+    });
+  };
+  const visit = (candidate: ts.Node) => {
+    if (ts.isJsxText(candidate)) {
+      const text = candidate.getText(sourceFile);
+      if (text.trim()) {
+        add('text', candidate.getStart(sourceFile), candidate.end, text, 'Text', 'text');
+      }
+      return;
+    }
+    if (ts.isJsxAttribute(candidate)) {
+      const name = candidate.name.getText(sourceFile);
+      const kind = extractionKindForAttribute(name);
+      const initializer = candidate.initializer;
+      if (!initializer) {
+        const start = candidate.getStart(sourceFile);
+        add(kind, start, candidate.end, candidate.getText(sourceFile), name, name, 'boolean');
+      } else if (ts.isStringLiteral(initializer)) {
+        add(
+          kind,
+          initializer.getStart(sourceFile),
+          initializer.end,
+          initializer.getText(sourceFile),
+          name,
+          name,
+          'string'
+        );
+      } else if (
+        ts.isJsxExpression(initializer) &&
+        initializer.expression &&
+        isStaticLiteralExpression(initializer.expression)
+      ) {
+        const typeText = staticLiteralType(initializer.expression);
+        if (!typeText) return;
+        add(
+          kind,
+          initializer.getStart(sourceFile),
+          initializer.end,
+          initializer.getText(sourceFile),
+          name,
+          name,
+          typeText
+        );
+      }
+      return;
+    }
+    ts.forEachChild(candidate, visit);
+  };
+  visit(node);
+  return suggestions;
+}
+
+function collectRequiredProps(
+  node: ts.Node,
+  freeNames: readonly string[]
+): ComponentExtractionPropSuggestion[] {
+  const names = new Map<string, ComponentExtractionPropKind>();
+  const add = (sourceName: string, kind: ComponentExtractionPropKind) => {
+    if (!freeNames.includes(sourceName)) return;
+    const previous = names.get(sourceName);
+    if (!previous || previous === 'text') names.set(sourceName, kind);
+  };
+  const visit = (candidate: ts.Node) => {
+    if (ts.isJsxAttribute(candidate)) {
+      const initializer = candidate.initializer;
+      if (initializer && ts.isJsxExpression(initializer) && initializer.expression) {
+        if (ts.isIdentifier(initializer.expression)) {
+          add(initializer.expression.text, extractionKindForAttribute(candidate.name.getText()));
+        }
+      }
+      return;
+    }
+    if (ts.isJsxExpression(candidate)) {
+      if (
+        candidate.expression &&
+        ts.isIdentifier(candidate.expression) &&
+        (ts.isJsxElement(candidate.parent) || ts.isJsxFragment(candidate.parent))
+      ) {
+        add(candidate.expression.text, 'text');
+      }
+      return;
+    }
+    ts.forEachChild(candidate, visit);
+  };
+  visit(node);
+  return [...names.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, kind]) => ({
+      sourceName: name,
+      suggestedName: name,
+      kind,
+      typeText: null,
+      required: true,
+    }));
+}
+
+function hasSpreadAttribute(node: ts.Node): boolean {
+  let found = false;
+  const visit = (candidate: ts.Node) => {
+    if (ts.isJsxSpreadAttribute(candidate)) found = true;
+    if (!found) ts.forEachChild(candidate, visit);
+  };
+  visit(node);
+  return found;
+}
+
 function inferTypeFromInitializer(initializer: ts.Expression | undefined): string | null {
   if (!initializer) return null;
   if (ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer))
@@ -503,6 +710,13 @@ function analyzeSelection(
       input.source
     );
   }
+  if (hasSpreadAttribute(node)) {
+    return extractionRefusal(
+      'unsupported',
+      'Selections with spread attributes are read-only until their source contract is explicit.',
+      input.source
+    );
+  }
   const containingComponent = findContainingComponent(index, input.source);
   if (!containingComponent) {
     return extractionRefusal(
@@ -518,6 +732,24 @@ function analyzeSelection(
   const selectedImports = imports.filter(
     (item) => !item.typeOnly && [...item.localNames].some((name) => references.includes(name))
   );
+  const propTypes = inferredPropTypes(sourceFile, freeNames);
+  const requiredProps = collectRequiredProps(node, freeNames).map((suggestion) => ({
+    ...suggestion,
+    typeText: propTypes.get(suggestion.sourceName) ?? null,
+  }));
+  const suggestedProps = collectLiteralSuggestions(node, file, sourceFile);
+  for (const suggestion of suggestedProps) {
+    propTypes.set(suggestion.sourceName, suggestion.typeText ?? 'string');
+  }
+  const supportedRequiredNames = new Set(requiredProps.map((suggestion) => suggestion.sourceName));
+  const unsupported = freeNames.filter((name) => !supportedRequiredNames.has(name));
+  if (unsupported.length > 0) {
+    return extractionRefusal(
+      'unsupported',
+      `Only direct text, link, image, visibility, and attribute values can become suggested props: ${unsupported.join(', ')}.`,
+      input.source
+    );
+  }
   return {
     file,
     sourceFile,
@@ -525,7 +757,9 @@ function analyzeSelection(
     containingComponent,
     freeNames,
     imports: selectedImports,
-    propTypes: inferredPropTypes(sourceFile, freeNames),
+    propTypes,
+    requiredProps,
+    suggestedProps,
     clientBoundary: hasUseClientDirective(sourceFile),
   };
 }
@@ -602,12 +836,14 @@ function proposalFor(
     componentName: validated.name,
     destinationFile: validated.destination,
     source: input.source,
-    proposedPropNames: analyzed.freeNames,
+    proposedPropNames: analyzed.requiredProps.map((suggestion) => suggestion.suggestedName),
+    requiredProps: analyzed.requiredProps,
+    suggestedProps: analyzed.suggestedProps,
     preservedImports: analyzed.imports.map((item) => item.source).sort(),
-    diagnostics: analyzed.freeNames.map((name) => ({
+    diagnostics: analyzed.requiredProps.map((suggestion) => ({
       code: 'component-extraction-prop-approval',
       severity: 'info' as const,
-      message: `The free variable ${name} must be approved as an extracted prop.`,
+      message: `The free variable ${suggestion.sourceName} must be approved as an extracted prop.`,
       source: input.source,
     })),
   };
@@ -615,12 +851,12 @@ function proposalFor(
 
 function renderPropsType(
   name: string,
-  props: readonly string[],
+  props: readonly ComponentExtractionPropApproval[],
   types: ReadonlyMap<string, string>,
   extension: string
 ): string {
   if (props.length === 0 || extension === '.jsx') return '';
-  const lines = props.map((prop) => `  ${prop}: ${types.get(prop) ?? 'any'};`);
+  const lines = props.map((prop) => `  ${prop.propName}: ${types.get(prop.sourceName) ?? 'any'};`);
   return [
     '/* eslint-disable @typescript-eslint/no-explicit-any -- extracted boundary keeps untyped caller values lossless. */',
     `export type ${name}Props = {`,
@@ -633,7 +869,7 @@ function renderPropsType(
 function renderExtractedFile(
   analyzed: AnalyzedSelection,
   name: string,
-  props: readonly string[]
+  props: readonly ComponentExtractionPropApproval[]
 ): string {
   const extension = `.${analyzed.file.file.split('.').pop()?.toLowerCase() ?? ''}`;
   const importText = analyzed.imports.map((item) => item.statement).join('\n');
@@ -651,12 +887,64 @@ function renderExtractedFile(
     props.length === 0
       ? `export function ${name}()`
       : extension === '.tsx'
-        ? `export function ${name}({ ${props.join(', ')} }: ${name}Props)`
-        : `export function ${name}({ ${props.join(', ')} })`;
-  const selectedText = analyzed.file.content.slice(
+        ? `export function ${name}({ ${props
+            .map((prop) => {
+              const literal = analyzed.suggestedProps.some(
+                (suggestion) => suggestion.sourceName === prop.sourceName
+              );
+              return literal
+                ? prop.propName
+                : prop.sourceName === prop.propName
+                  ? prop.sourceName
+                  : `${prop.propName}: ${prop.sourceName}`;
+            })
+            .join(', ')} }: ${name}Props)`
+        : `export function ${name}({ ${props
+            .map((prop) => {
+              const literal = analyzed.suggestedProps.some(
+                (suggestion) => suggestion.sourceName === prop.sourceName
+              );
+              return literal
+                ? prop.propName
+                : prop.sourceName === prop.propName
+                  ? prop.sourceName
+                  : `${prop.propName}: ${prop.sourceName}`;
+            })
+            .join(', ')} })`;
+  const originalSelectedText = analyzed.file.content.slice(
     analyzed.node.getStart(analyzed.sourceFile),
     analyzed.node.end
   );
+  const selectedStart = analyzed.node.getStart(analyzed.sourceFile);
+  const approvedBySource = new Map(props.map((prop) => [prop.sourceName, prop]));
+  const literalEdits = analyzed.suggestedProps.flatMap((suggestion) => {
+    const approval = approvedBySource.get(suggestion.sourceName);
+    if (!approval || !suggestion.sourceRange || suggestion.sourceText === undefined) return [];
+    const absoluteStart = utf8ByteOffsetToUtf16Offset(
+      analyzed.file.content,
+      suggestion.sourceRange.start
+    );
+    const absoluteEnd = utf8ByteOffsetToUtf16Offset(
+      analyzed.file.content,
+      suggestion.sourceRange.end
+    );
+    if (absoluteStart === null || absoluteEnd === null) return [];
+    const start = absoluteStart - selectedStart;
+    const end = absoluteEnd - selectedStart;
+    if (start < 0 || end <= start || end > originalSelectedText.length) return [];
+    const replacement =
+      suggestion.sourceText.trim() === suggestion.displayName
+        ? `${suggestion.displayName}={${approval.propName}}`
+        : `{${approval.propName}}`;
+    return [
+      {
+        start: utf16OffsetToUtf8ByteOffset(originalSelectedText, start),
+        end: utf16OffsetToUtf8ByteOffset(originalSelectedText, end),
+        text: replacement,
+      },
+    ];
+  });
+  const selectedText = applyTextEdits(originalSelectedText, literalEdits) ?? originalSelectedText;
   return `${prefix ? `${prefix}\n` : ''}${signature} {\n  return (\n${selectedText}\n  );\n}\n`;
 }
 
@@ -714,23 +1002,58 @@ function planExtraction(
   analyzed: AnalyzedSelection,
   validated: ExtractedValidation,
   snapshot: ComponentSourceSnapshot,
-  approvedPropNames: string[]
+  approvedPropNames: string[] | undefined,
+  approvedProps: ComponentExtractionPropApproval[] | undefined
 ): ExtractionResult {
-  const proposed = analyzed.freeNames;
-  const approved = [...new Set(approvedPropNames)].sort();
-  if (
-    approved.length !== proposed.length ||
-    approved.some((name, index) => name !== proposed[index])
-  ) {
+  const required = analyzed.requiredProps.map((suggestion) => suggestion.sourceName);
+  const optional = new Map(
+    analyzed.suggestedProps.map((suggestion) => [suggestion.sourceName, suggestion])
+  );
+  const approved = approvedProps
+    ? [...approvedProps].sort((left, right) => left.sourceName.localeCompare(right.sourceName))
+    : approvedPropNames
+      ? [...new Set(approvedPropNames)]
+          .sort()
+          .map((propName) => ({ sourceName: propName, propName }))
+      : null;
+  const approvedRequired = new Set(
+    approved?.filter((item) => required.includes(item.sourceName)).map((item) => item.sourceName) ??
+      []
+  );
+  const invalidApproval = approved?.some(
+    (item, index) =>
+      (!required.includes(item.sourceName) && !optional.has(item.sourceName)) ||
+      !/^[A-Za-z_$][\w$]*$/.test(item.propName) ||
+      approved.some(
+        (other, otherIndex) => otherIndex !== index && other.sourceName === item.sourceName
+      ) ||
+      approved.some((other, otherIndex) => otherIndex !== index && other.propName === item.propName)
+  );
+  if (!approved || approvedRequired.size !== required.length || invalidApproval) {
     return extractionRefusal(
       'missing-prop-approval',
-      `Approve every proposed prop exactly once before extraction: ${proposed.join(', ') || 'none'}.`,
+      `Approve every required boundary value exactly once before extraction: ${required.join(', ') || 'none'}.`,
       input.source
     );
   }
-  const extracted = renderExtractedFile(analyzed, validated.name, approved);
+  const accepted = approved.filter(
+    (item, index, all) =>
+      (required.includes(item.sourceName) || optional.has(item.sourceName)) &&
+      all.findIndex((other) => other.sourceName === item.sourceName) === index
+  );
+  const extracted = renderExtractedFile(analyzed, validated.name, accepted);
   const target = analyzed.file;
-  const invocation = `<${validated.name}${approved.map((name) => ` ${name}={${name}}`).join('')} />`;
+  const invocation = `<${validated.name}${accepted
+    .map((prop) => {
+      const literal = optional.get(prop.sourceName);
+      if (!literal || literal.sourceText === undefined)
+        return ` ${prop.propName}={${prop.sourceName}}`;
+      if (literal.sourceText.trim() === literal.displayName) return ` ${prop.propName}`;
+      if (literal.kind === 'text')
+        return ` ${prop.propName}={${JSON.stringify(literal.sourceText)}}`;
+      return ` ${prop.propName}=${literal.sourceText}`;
+    })
+    .join('')} />`;
   const sourceStart = utf16OffsetToUtf8ByteOffset(
     target.content,
     analyzed.node.getStart(analyzed.sourceFile)
@@ -811,7 +1134,7 @@ function planExtraction(
     operation: 'extract',
     componentName: validated.name,
     destinationFile: validated.destination,
-    proposedPropNames: proposed,
+    proposedPropNames: accepted.map((prop) => prop.propName),
     preservedImports: analyzed.imports.map((item) => item.source).sort(),
     affectedFiles: [target.file, validated.destination].sort(),
     files: [
@@ -1047,8 +1370,8 @@ function planInlineSimpleComponent(
 
 /**
  * Plan a lossless React extraction in two rounds. The first round returns the
- * exact free-variable/import proposal; the second must repeat that proposal as
- * an explicit approval before any source operation is emitted.
+ * exact source-value proposal; the second must repeat that proposal as an
+ * explicit approval before any source operation is emitted.
  */
 export function planExtractComponent(
   input: ComponentExtractionInput,
@@ -1065,6 +1388,15 @@ export function planExtractComponent(
   if ('code' in validated)
     return extractionRefusal(validated.code, validated.message, input.source);
   const proposal = proposalFor(input, analyzed, validated);
-  if (input.approvedPropNames === undefined) return { status: 'needs-approval', proposal };
-  return planExtraction(input, analyzed, validated, snapshot, input.approvedPropNames);
+  if (input.approvedPropNames === undefined && input.approvedProps === undefined) {
+    return { status: 'needs-approval', proposal };
+  }
+  return planExtraction(
+    input,
+    analyzed,
+    validated,
+    snapshot,
+    input.approvedPropNames,
+    input.approvedProps
+  );
 }

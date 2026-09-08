@@ -41,14 +41,17 @@ import {
 } from '../primitives/ContextMenu';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { IconButton } from '../primitives/IconButton';
+import { Button } from '../primitives/Button';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import type {
   ComponentAwareTreeNode,
+  ComponentSlotTreeNode,
   ComponentTreeNode,
   ElementTreeNode,
 } from '../../hooks/useElementTree';
 import type { ElementSignature } from '../../lib/edit';
+import type { ComponentDescriptor } from '../../lib/components/types';
 import {
   STRUCTURAL_ELEMENTS,
   VOID_ELEMENTS,
@@ -92,6 +95,19 @@ interface Props {
   onComponentFocus?: (node: ComponentTreeNode) => void;
   onComponentFocusParent?: () => void;
   onComponentExitFocus?: () => void;
+  /** Reviewed source mutation callback for exact slot projection controls. */
+  onEditStructuredSlot?: (
+    instanceId: string,
+    input: {
+      slotName: string;
+      operation: 'insert' | 'remove' | 'reorder';
+      componentId?: string;
+      childInstanceId?: string;
+      beforeChildInstanceId?: string;
+    }
+  ) => void | Promise<void>;
+  /** Source-indexed candidates used by the slot add control. */
+  availableComponents?: readonly Pick<ComponentDescriptor, 'id' | 'name'>[];
   /** The currently-selected element (for the Code/HTML view). */
   projectPath: string;
   selectedSignature: ElementSignature | null;
@@ -115,6 +131,13 @@ export interface ComponentFocusCrumb {
   name: string;
 }
 
+interface SlotActionContext {
+  instanceId: string;
+  slotName: string;
+  childInstanceIds: readonly string[];
+  childIndex: number;
+}
+
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
 const AUTO_EXPAND_DEPTH = 3;
 const SHOW_TAG_ICONS_STORAGE_KEY = 'elementTreeShowTagIcons';
@@ -124,6 +147,10 @@ function buildAncestors(root: ComponentAwareTreeNode): Map<number, number[]> {
   const out = new Map<number, number[]>();
   const walk = (node: ComponentAwareTreeNode, chain: number[]) => {
     if (node.kind === 'component') {
+      for (const child of node.children) walk(child, chain);
+      return;
+    }
+    if (node.kind === 'slot') {
       for (const child of node.children) walk(child, chain);
       return;
     }
@@ -137,6 +164,10 @@ function buildAncestors(root: ComponentAwareTreeNode): Map<number, number[]> {
 
 function isComponentNode(node: ComponentAwareTreeNode): node is ComponentTreeNode {
   return node.kind === 'component';
+}
+
+function isSlotNode(node: ComponentAwareTreeNode): node is ComponentSlotTreeNode {
+  return node.kind === 'slot';
 }
 
 function RowLabel({ node, showTagIcons }: { node: ElementTreeNode; showTagIcons: boolean }) {
@@ -181,6 +212,8 @@ export function ElementTreePanel({
   onComponentFocus,
   onComponentFocusParent,
   onComponentExitFocus,
+  onEditStructuredSlot,
+  availableComponents = [],
   projectPath,
   selectedSignature,
   onViewChange,
@@ -192,6 +225,7 @@ export function ElementTreePanel({
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [view, setView] = useState<'visual' | 'code'>('visual');
+  const [slotInsertIds, setSlotInsertIds] = useState<Record<string, string>>({});
   const [showTagIcons, , toggleShowTagIcons] = useLocalStorageFlag(
     SHOW_TAG_ICONS_STORAGE_KEY,
     false
@@ -291,12 +325,107 @@ export function ElementTreePanel({
   const collapsedState = (id: number, depth: number) =>
     depth < AUTO_EXPAND_DEPTH ? collapsed.has(id) : !collapsed.has(id);
 
-  const renderNode = (node: ComponentAwareTreeNode, depth: number) => {
+  const renderNode = (
+    node: ComponentAwareTreeNode,
+    depth: number,
+    slotContext?: SlotActionContext
+  ) => {
+    if (isSlotNode(node)) {
+      const selectedInsertId = slotInsertIds[node.key] ?? '';
+      const canEditSlot = Boolean(onEditStructuredSlot && node.sourceAvailable);
+      return (
+        <div key={node.key} className="ss-tree-node ss-tree-node--slot">
+          <div
+            className="ss-tree-row ss-tree-row--slot"
+            style={{ paddingLeft: depth * 14 + 6 }}
+            role="note"
+            aria-label={`${node.slotName} slot${node.required ? ' (required)' : ''}`}
+            title={
+              node.sourceAvailable
+                ? `${node.childInstanceIds.length} exact component child${node.childInstanceIds.length === 1 ? '' : 'ren'} indexed`
+                : 'Slot source range unavailable'
+            }
+          >
+            <span className="ss-tree-chevron-spacer" />
+            <span className="ss-tree-slot-icon" aria-hidden="true">
+              <ComponentsIcon size={13} />
+            </span>
+            <span className="ss-tree-slot-name">Slot: {node.slotName}</span>
+            <span className="ss-tree-slot-kind">
+              {node.required ? 'Required' : 'Optional'} ·{' '}
+              {node.sourceAvailable
+                ? `${node.childInstanceIds.length} children`
+                : 'Source unavailable'}
+            </span>
+          </div>
+          {canEditSlot && (
+            <div
+              className="ss-tree-slot-actions"
+              style={{ paddingLeft: depth * 14 + 34 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <select
+                aria-label={`Choose component for ${node.slotName} slot`}
+                value={selectedInsertId}
+                onChange={(event) =>
+                  setSlotInsertIds((current) => ({
+                    ...current,
+                    [node.key]: event.currentTarget.value,
+                  }))
+                }
+              >
+                <option value="">Choose component…</option>
+                {availableComponents.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="secondary"
+                size="compact"
+                disabled={!selectedInsertId}
+                onClick={() => {
+                  if (!selectedInsertId || !onEditStructuredSlot) return;
+                  void onEditStructuredSlot(node.instanceId, {
+                    slotName: node.slotName,
+                    operation: 'insert',
+                    componentId: selectedInsertId,
+                  });
+                }}
+              >
+                Add
+              </Button>
+            </div>
+          )}
+          {node.children.map((child) =>
+            renderNode(child, depth + 1, {
+              instanceId: node.instanceId,
+              slotName: node.slotName,
+              childInstanceIds: node.childInstanceIds,
+              childIndex: node.childInstanceIds.indexOf(
+                child.kind === 'component' ? child.instanceId : ''
+              ),
+            })
+          )}
+        </div>
+      );
+    }
     if (isComponentNode(node)) {
       const isSelected = node.key === selectedComponentKey;
       const isFocused = focusKeys.has(node.key);
       const hasChildren = node.children.length > 0;
       const canFocus = node.confidence === 'exact' && !!onComponentFocus;
+      const slotChildIndex = slotContext?.childIndex ?? -1;
+      const canEditChild = Boolean(slotContext && onEditStructuredSlot && slotChildIndex >= 0);
+      const previousChildId =
+        slotContext && slotChildIndex > 0
+          ? slotContext.childInstanceIds[slotChildIndex - 1]
+          : undefined;
+      const nextAfterChildId =
+        slotContext && slotChildIndex >= 0
+          ? slotContext.childInstanceIds[slotChildIndex + 2]
+          : undefined;
       return (
         <div key={node.key} className="ss-tree-node ss-tree-node--component">
           <div
@@ -340,6 +469,60 @@ export function ElementTreePanel({
             <span className="ss-tree-component-name">{node.name}</span>
             <span className="ss-tree-component-kind">Component</span>
           </div>
+          {canEditChild && slotContext && (
+            <div
+              className="ss-tree-slot-child-actions"
+              style={{ paddingLeft: depth * 14 + 34 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Button
+                variant="ghost"
+                size="compact"
+                aria-label={`Move ${node.name} up`}
+                disabled={!previousChildId}
+                onClick={() =>
+                  void onEditStructuredSlot?.(slotContext.instanceId, {
+                    slotName: slotContext.slotName,
+                    operation: 'reorder',
+                    childInstanceId: node.instanceId,
+                    beforeChildInstanceId: previousChildId,
+                  })
+                }
+              >
+                ↑
+              </Button>
+              <Button
+                variant="ghost"
+                size="compact"
+                aria-label={`Move ${node.name} down`}
+                disabled={slotChildIndex >= slotContext.childInstanceIds.length - 1}
+                onClick={() =>
+                  void onEditStructuredSlot?.(slotContext.instanceId, {
+                    slotName: slotContext.slotName,
+                    operation: 'reorder',
+                    childInstanceId: node.instanceId,
+                    beforeChildInstanceId: nextAfterChildId,
+                  })
+                }
+              >
+                ↓
+              </Button>
+              <Button
+                variant="ghost"
+                size="compact"
+                aria-label={`Remove ${node.name}`}
+                onClick={() =>
+                  void onEditStructuredSlot?.(slotContext.instanceId, {
+                    slotName: slotContext.slotName,
+                    operation: 'remove',
+                    childInstanceId: node.instanceId,
+                  })
+                }
+              >
+                Remove
+              </Button>
+            </div>
+          )}
           {hasChildren && isFocused && node.children.map((child) => renderNode(child, depth + 1))}
         </div>
       );

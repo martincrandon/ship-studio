@@ -16,6 +16,32 @@ import type {
 /** Ownership of a package source is explicit and never inferred from a name. */
 export type ComponentLibraryOwnership = 'project' | 'library';
 
+export type ComponentLibraryResourceKind = 'token' | 'asset' | 'font';
+
+/** Contract fields that were explicitly parsed from a library definition. */
+export interface ComponentLibraryComponentContract {
+  componentId: string;
+  name: string;
+  exportName: string | null;
+  definitionFile: string;
+  definitionHash: string;
+  props: Array<{
+    name: string;
+    required: boolean;
+    typeText: string | null;
+    choices: string[] | null;
+  }>;
+  slots: Array<{ name: string; required: boolean; scoped: boolean }>;
+  variantProps: string[];
+}
+
+/** Resource metadata is optional and is only populated by an explicit source scanner. */
+export interface ComponentLibraryResource {
+  kind: ComponentLibraryResourceKind;
+  id: string;
+  revision?: string;
+}
+
 /**
  * Metadata for a package that explicitly exports one or more indexed
  * components. All paths are project-relative and all optional values are
@@ -30,10 +56,12 @@ export interface ComponentLibraryMetadata {
   ownership: ComponentLibraryOwnership;
   exportedFiles: string[];
   componentIds: string[];
+  contracts?: ComponentLibraryComponentContract[];
+  resources?: ComponentLibraryResource[];
 }
 
 export type ComponentIndexWithLibraries = ComponentIndex & {
-  libraries: ComponentLibraryMetadata[];
+  libraries?: ComponentLibraryMetadata[];
 };
 
 export type LibraryForkRefusalCode =
@@ -67,6 +95,31 @@ export type LibraryForkResult =
       message: string;
     };
 
+export type ComponentLibraryChangeKind =
+  | 'package-metadata'
+  | 'added-export'
+  | 'removed-export'
+  | 'component-contract'
+  | ComponentLibraryResourceKind;
+
+export interface ComponentLibraryUpdateChange {
+  kind: ComponentLibraryChangeKind;
+  label: string;
+  detail: string;
+  before?: string;
+  after?: string;
+}
+
+export interface ComponentLibraryUpdateDiff {
+  libraryId: string;
+  packageName: string;
+  fromVersion: string | null;
+  toVersion: string | null;
+  changes: ComponentLibraryUpdateChange[];
+  /** Dependency updates are reviewed metadata only; no package manager is run. */
+  requiresDependencyPlan: boolean;
+}
+
 /**
  * Discover internal workspace packages whose manifest entry points resolve to
  * source files that actually export indexed components. The package manifest
@@ -91,6 +144,10 @@ export function discoverComponentLibraries(
     if (componentIds.length === 0) continue;
 
     const packageRoot = normalizeProjectPath(manifest.root);
+    const contracts = components
+      .filter((component) => reachableFiles.has(normalizeProjectPath(component.definition.file)))
+      .map(componentContract)
+      .sort((left, right) => left.componentId.localeCompare(right.componentId));
     libraries.push({
       id: libraryId(manifest),
       packageName: manifest.name,
@@ -100,9 +157,122 @@ export function discoverComponentLibraries(
       ownership: packageRoot === '.' ? 'project' : 'library',
       exportedFiles: [...reachableFiles].sort(),
       componentIds,
+      contracts,
     });
   }
   return libraries.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+/**
+ * Compare two explicitly saved library snapshots. A missing previous snapshot
+ * is intentionally not treated as an update; callers must establish a
+ * baseline before showing update claims.
+ */
+export function compareComponentLibrary(
+  previous: ComponentLibraryMetadata,
+  current: ComponentLibraryMetadata
+): ComponentLibraryUpdateDiff {
+  const changes: ComponentLibraryUpdateChange[] = [];
+  if (previous.version !== current.version) {
+    changes.push({
+      kind: 'package-metadata',
+      label: 'Package version',
+      detail: `${previous.version ?? 'unknown'} → ${current.version ?? 'unknown'}`,
+      before: previous.version ?? undefined,
+      after: current.version ?? undefined,
+    });
+  }
+  if (previous.repository !== current.repository) {
+    changes.push({
+      kind: 'package-metadata',
+      label: 'Source repository',
+      detail: `${previous.repository ?? 'unknown'} → ${current.repository ?? 'unknown'}`,
+      before: previous.repository ?? undefined,
+      after: current.repository ?? undefined,
+    });
+  }
+
+  const previousContracts = new Map(
+    (previous.contracts ?? []).map((contract) => [contract.componentId, contract])
+  );
+  const currentContracts = new Map(
+    (current.contracts ?? []).map((contract) => [contract.componentId, contract])
+  );
+  const removed = [...previousContracts.values()].filter(
+    (contract) => !currentContracts.has(contract.componentId)
+  );
+  const added = [...currentContracts.values()].filter(
+    (contract) => !previousContracts.has(contract.componentId)
+  );
+
+  for (const contract of removed) {
+    changes.push({
+      kind: 'removed-export',
+      label: 'Removed export',
+      detail: contract.name,
+      before: contract.name,
+    });
+  }
+  for (const contract of added) {
+    changes.push({
+      kind: 'added-export',
+      label: 'Added export',
+      detail: contract.name,
+      after: contract.name,
+    });
+  }
+
+  for (const contract of current.contracts ?? []) {
+    const before = previousContracts.get(contract.componentId);
+    if (!before || JSON.stringify(contract) === JSON.stringify(before)) continue;
+    changes.push({
+      kind: 'component-contract',
+      label: 'Component contract',
+      detail: `${contract.name} props, slots, or variants changed`,
+    });
+  }
+
+  const previousResources = previous.resources ?? [];
+  const currentResources = current.resources ?? [];
+  const previousResourceRevisions = new Map(
+    previousResources.map((resource) => [`${resource.kind}:${resource.id}`, resource.revision])
+  );
+  for (const resource of currentResources) {
+    const key = `${resource.kind}:${resource.id}`;
+    if (previousResourceRevisions.get(key) === resource.revision) continue;
+    const before = previousResources.find(
+      (candidate) => `${candidate.kind}:${candidate.id}` === key
+    );
+    changes.push({
+      kind: resource.kind,
+      label: `${resource.kind[0].toUpperCase()}${resource.kind.slice(1)} resource`,
+      detail: resource.id,
+      before: before?.revision,
+      after: resource.revision,
+    });
+  }
+  const currentResourceKeys = new Set(
+    currentResources.map((resource) => `${resource.kind}:${resource.id}`)
+  );
+  for (const resource of previousResources) {
+    const key = `${resource.kind}:${resource.id}`;
+    if (currentResourceKeys.has(key)) continue;
+    changes.push({
+      kind: resource.kind,
+      label: `Removed ${resource.kind} resource`,
+      detail: resource.id,
+      before: resource.revision,
+    });
+  }
+
+  return {
+    libraryId: current.id,
+    packageName: current.packageName,
+    fromVersion: previous.version,
+    toVersion: current.version,
+    changes,
+    requiresDependencyPlan: previous.version !== current.version,
+  };
 }
 
 /** Attach library metadata without changing the source-derived component DTOs. */
@@ -123,7 +293,7 @@ export function libraryForComponent(
 ): ComponentLibraryMetadata | null {
   const libraries =
     'libraries' in index
-      ? index.libraries
+      ? (index.libraries ?? [])
       : snapshot
         ? discoverComponentLibraries(snapshot, index.components, index.importEdges)
         : [];
@@ -317,4 +487,26 @@ function repositoryField(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return stringField((value as Record<string, unknown>).url);
+}
+
+function componentContract(component: ComponentDescriptor): ComponentLibraryComponentContract {
+  return {
+    componentId: component.id,
+    name: component.name,
+    exportName: component.exportName,
+    definitionFile: normalizeProjectPath(component.definition.file),
+    definitionHash: component.definition.contentHash,
+    props: component.props.map((prop) => ({
+      name: prop.name,
+      required: prop.required,
+      typeText: prop.typeText,
+      choices: prop.choices?.map((choice) => JSON.stringify(choice)) ?? null,
+    })),
+    slots: component.slots.map((slot) => ({
+      name: slot.name,
+      required: slot.required,
+      scoped: slot.scoped,
+    })),
+    variantProps: [...component.variantProps],
+  };
 }

@@ -35,8 +35,12 @@ export function ComponentMutationReviewModal({
     >
       <div className="ss-components-review">
         <p className="ss-components-review__intro">
-          Nothing has been written yet. Review the exact source diff before applying this component
-          placement.
+          Nothing has been written yet. Review the exact source diff before applying this{' '}
+          {preview.plan.warnings?.some(
+            (warning) => warning.code === 'library-fork-detaches-updates'
+          )
+            ? 'library copy.'
+            : 'component placement.'}
         </p>
 
         <div className="ss-components-review__files" aria-busy={busy}>
@@ -64,6 +68,14 @@ export function ComponentMutationReviewModal({
           ))}
         </div>
 
+        {preview.plan.warnings && preview.plan.warnings.length > 0 && (
+          <div className="ss-components-review__warnings" role="note">
+            {preview.plan.warnings.map((warning) => (
+              <p key={warning.code}>{warning.message}</p>
+            ))}
+          </div>
+        )}
+
         <div className="ss-components-review__footer">
           <span className="ss-components-muted">
             {fileCount} {fileCount === 1 ? 'file' : 'files'} · guarded by the current source hash
@@ -78,7 +90,13 @@ export function ComponentMutationReviewModal({
               disabled={busy}
               onClick={() => void onConfirm()}
             >
-              {busy ? 'Applying…' : 'Apply changes'}
+              {busy
+                ? 'Applying…'
+                : preview.plan.warnings?.some(
+                      (warning) => warning.code === 'library-fork-detaches-updates'
+                    )
+                  ? 'Create local copy'
+                  : 'Apply changes'}
             </Button>
           </div>
         </div>

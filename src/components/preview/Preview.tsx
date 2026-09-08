@@ -20,7 +20,6 @@ import {
   useMemo,
   useState,
   useEffect,
-  useLayoutEffect,
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -129,6 +128,8 @@ import type {
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
+import type { ComponentIsolatedRendererCapability } from '../../lib/components/isolated-renderer';
+import { compareComponentLibrary, type LibraryForkInput } from '../../lib/components/libraries';
 import { normalizeRuntimeSourcePath } from '../../lib/components/adapters/react-helpers';
 import { sourceRefFromResolution, type ComponentFocusContext } from '../../lib/components/focus';
 import { usageReportForResolution } from '../../lib/components/usage';
@@ -258,6 +259,8 @@ interface PreviewProps {
   componentsEditMainId?: ComponentId | null;
   /** Persists definition-editing context while Preview is unmounted for Code. */
   onComponentsEditMainChange?: (componentId: ComponentId | null) => void;
+  /** Optional externally-owned renderer; absent keeps Canvas frames metadata-only. */
+  isolatedComponentRenderer?: ComponentIsolatedRendererCapability | null;
 }
 
 /**
@@ -296,17 +299,18 @@ const TREE_PANEL_MAX_WIDTH_PX = 480;
 const TREE_VIEWPORT_RESERVE_PX = 160;
 const TREE_PANEL_DEFAULT_WIDTH_PX = 240;
 const TREE_CODE_DEFAULT_WIDTH_PX = 420;
-const COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX = 275;
-/** The Components panel opens with equal-width catalog and details columns. */
+/** Default width of the Components catalog and details column. */
 const COMPONENTS_PANEL_MIN_WIDTH_PX = TREE_PANEL_DEFAULT_WIDTH_PX;
-const COMPONENTS_PANEL_DEFAULT_WIDTH_PX = COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX;
-const COMPONENTS_PANEL_EXPANDED_WIDTH_PX = COMPONENTS_PANEL_COLUMN_DEFAULT_WIDTH_PX * 2;
 const COMPONENTS_PANEL_MAX_WIDTH_PX = 640;
+const COMPONENTS_PANEL_DEFAULT_WIDTH_PX = 300;
+const COMPONENTS_PANEL_EXPANDED_WIDTH_PX = COMPONENTS_PANEL_DEFAULT_WIDTH_PX * 2;
+const COMPONENTS_PANEL_DETAILS_WIDTH_PX =
+  COMPONENTS_PANEL_EXPANDED_WIDTH_PX - COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
 // The panel's width model changed from a fixed wide split to a compact catalog
 // that expands when details are selected. Keep the obsolete preference from
 // overriding the new compact-open behavior.
-const COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY = 'componentsPanelDockedWidthV2';
-const COMPONENTS_PANEL_FLOATING_SIZE_STORAGE_KEY = 'componentsPanelFloatingSizeV2';
+const COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY = 'componentsPanelDockedWidthV6';
+const COMPONENTS_PANEL_FLOATING_SIZE_STORAGE_KEY = 'componentsPanelFloatingSizeV6';
 const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
 const EDITOR_PANEL_MIN_WIDTH_PX = 220;
 const EDITOR_PANEL_MAX_WIDTH_PX = 560;
@@ -415,6 +419,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onCloseComponentsPanel = () => undefined,
     componentsEditMainId = null,
     onComponentsEditMainChange = () => undefined,
+    isolatedComponentRenderer = null,
   },
   ref
 ) {
@@ -788,11 +793,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     place: placeCatalogComponent,
     editProp: editCatalogProp,
     editSlot: editCatalogSlot,
+    editStructuredSlot: editCatalogStructuredSlot,
     extract: extractCatalogComponent,
     inline: inlineCatalogComponent,
     confirmExtraction: confirmCatalogExtraction,
     cancelExtraction: cancelCatalogExtraction,
     bindSelection: bindCatalogSelection,
+    forkLibraryComponent: forkCatalogComponent,
   } = useComponentCatalog({
     projectPath,
     projectType,
@@ -986,13 +993,31 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   );
 
   const confirmComponentPlacement = useCallback(async () => {
+    const isLibraryFork = pendingComponentMutation?.plan.warnings?.some(
+      (warning) => warning.code === 'library-fork-detaches-updates'
+    );
     const outcome = await confirmComponentMutation();
     if (outcome.status === 'applied') {
-      onToast('Component placement applied.', 'success');
+      onToast(
+        isLibraryFork ? 'Library component fork created.' : 'Component placement applied.',
+        'success'
+      );
     } else if (outcome.status !== 'preview') {
       onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
     }
-  }, [confirmComponentMutation, onToast]);
+  }, [confirmComponentMutation, onToast, pendingComponentMutation]);
+
+  const forkLibraryComponent = useCallback(
+    async (input: Omit<LibraryForkInput, 'newName'>) => {
+      const outcome = await forkCatalogComponent(input);
+      if (outcome.status === 'applied') {
+        onToast('Library component fork created.', 'success');
+      } else if (outcome.status !== 'preview') {
+        onToast(outcome.message, outcome.status === 'failed' ? 'error' : 'info');
+      }
+    },
+    [forkCatalogComponent, onToast]
+  );
 
   const duplicateComponent = useCallback(
     async (input: { componentId: ComponentId; newName: string; destinationFile: string }) => {
@@ -1141,6 +1166,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         componentName: approval.componentName,
         destinationFile: approval.destinationFile,
         approvedPropNames: approval.approvedPropNames,
+        approvedProps: approval.approvedProps,
       });
       if (outcome.status === 'preview') {
         setComponentExtractionProposal(null);
@@ -1223,6 +1249,24 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   const selectedCatalogComponent = componentIndex?.components.find(
     (component) => component.id === selectedComponentId
   );
+  const selectedCatalogLibrary = selectedCatalogComponent
+    ? (componentIndex?.libraries ?? []).find(
+        (library) =>
+          library.ownership === 'library' &&
+          library.componentIds.includes(selectedCatalogComponent.id)
+      )
+    : undefined;
+  const libraryUpdateCount = (componentIndex?.libraries ?? []).filter((library) => {
+    try {
+      const key = `shipstudio.components.library-baseline:${encodeURIComponent(projectPath)}:${encodeURIComponent(library.id)}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return false;
+      const baseline = JSON.parse(raw);
+      return compareComponentLibrary(baseline, library).changes.length > 0;
+    } catch {
+      return false;
+    }
+  }).length;
   const componentsPanelHasDetails = selectedCatalogComponent !== undefined;
   const editingSelectedMain = componentsEditMainId === selectedComponentId;
   const selectedComponentNeedsSetup = selectedCatalogComponent?.props.some(
@@ -1257,6 +1301,38 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     return [
       searchCommand,
       ...extractionCommand,
+      ...(libraryUpdateCount > 0
+        ? [
+            {
+              id: 'components.reviewLibraryUpdates',
+              title: 'Review library updates',
+              icon: <PackageIcon size={14} />,
+              category: 'navigation' as const,
+              when: 'project' as const,
+              keywords: ['library', 'package', 'update', 'dependency', 'contract'],
+              run: () =>
+                document
+                  .querySelector<HTMLElement>('.ss-components-library-updates')
+                  ?.scrollIntoView({ block: 'nearest' }),
+            },
+          ]
+        : []),
+      ...(selectedCatalogLibrary
+        ? [
+            {
+              id: 'components.copyLibraryToProject',
+              title: `Copy ${selectedCatalogComponent.name} to project`,
+              icon: <PackageIcon size={14} />,
+              category: 'action' as const,
+              when: 'project' as const,
+              keywords: ['library', 'fork', 'copy', 'local', 'detach'],
+              run: () =>
+                document
+                  .querySelector<HTMLButtonElement>('.ss-components-library-fork-action')
+                  ?.click(),
+            },
+          ]
+        : []),
       ...(selectedInstance &&
       selectedCatalogComponent.capabilities.extract &&
       selectedCatalogComponent.dialect === 'react'
@@ -1411,6 +1487,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     openComponentSource,
     placeComponent,
     selectedCatalogComponent,
+    selectedCatalogLibrary,
+    libraryUpdateCount,
     selectedComponentNeedsSetup,
     selectedInstance,
     deleteComponent,
@@ -1653,8 +1731,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   });
   const [isComponentsResizing, setIsComponentsResizing] = useState(false);
   const componentsPanelRef = useRef<HTMLDivElement | null>(null);
-  const componentsPanelDetailsBaseWidthRef = useRef<number | null>(null);
-  const componentsPanelWidthManuallyChangedRef = useRef(false);
   const [treePanelWidth, setTreePanelWidth] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem('elementTreeDockedWidth'));
     return Number.isFinite(saved) &&
@@ -1909,49 +1985,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     []
   );
 
-  useLayoutEffect(() => {
-    if (!componentsPanelDocked) {
-      componentsPanelDetailsBaseWidthRef.current = null;
-      componentsPanelWidthManuallyChangedRef.current = false;
-      return;
-    }
-
-    if (!componentsPanelHasDetails) {
-      const baseWidth = componentsPanelDetailsBaseWidthRef.current;
-      if (baseWidth !== null && !componentsPanelWidthManuallyChangedRef.current) {
-        setComponentsPanelWidth(baseWidth);
-      }
-      componentsPanelDetailsBaseWidthRef.current = null;
-      componentsPanelWidthManuallyChangedRef.current = false;
-      return;
-    }
-
-    if (componentsPanelDetailsBaseWidthRef.current !== null || componentsPanelWidth === null) {
-      return;
-    }
-
-    const container = componentsPanelRef.current?.parentElement;
-    const maxWidth = container
-      ? computeMaxDockedPanelWidth(
-          container.clientWidth,
-          COMPONENTS_PANEL_MIN_WIDTH_PX,
-          COMPONENTS_PANEL_MAX_WIDTH_PX
-        )
-      : COMPONENTS_PANEL_MAX_WIDTH_PX;
-    const baseWidth = componentsPanelWidth;
-    const detailsWidth = COMPONENTS_PANEL_EXPANDED_WIDTH_PX - COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
-    const expandedWidth = Math.min(baseWidth + detailsWidth, maxWidth);
-
-    componentsPanelDetailsBaseWidthRef.current = baseWidth;
-    componentsPanelWidthManuallyChangedRef.current = false;
-    setComponentsPanelWidth(expandedWidth);
-  }, [
-    componentsPanelDocked,
-    componentsPanelHasDetails,
-    componentsPanelWidth,
-    computeMaxDockedPanelWidth,
-  ]);
-
   const resizeVariablesPanel = useCallback(
     (clientX: number) => {
       const panel = variablesPanelRef.current;
@@ -2030,12 +2063,18 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         COMPONENTS_PANEL_MAX_WIDTH_PX
       );
       const next = clientX - panel.getBoundingClientRect().left;
-      componentsPanelWidthManuallyChangedRef.current = true;
+      const detailsWidth = componentsPanelHasDetails ? COMPONENTS_PANEL_DETAILS_WIDTH_PX : 0;
       setComponentsPanelWidth(
-        Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, Math.min(next, maxComponentsWidth))
+        Math.max(
+          COMPONENTS_PANEL_MIN_WIDTH_PX,
+          Math.min(
+            next - detailsWidth,
+            Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, maxComponentsWidth - detailsWidth)
+          )
+        )
       );
     },
-    [computeMaxDockedPanelWidth]
+    [componentsPanelHasDetails, computeMaxDockedPanelWidth]
   );
 
   const resizeComponentsPanelBy = useCallback(
@@ -2049,13 +2088,16 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         COMPONENTS_PANEL_MIN_WIDTH_PX,
         COMPONENTS_PANEL_MAX_WIDTH_PX
       );
-      const current = componentsPanelWidth ?? panel.offsetWidth;
-      componentsPanelWidthManuallyChangedRef.current = true;
+      const current = componentsPanelWidth ?? COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
+      const detailsWidth = componentsPanelHasDetails ? COMPONENTS_PANEL_DETAILS_WIDTH_PX : 0;
       setComponentsPanelWidth(
-        Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max))
+        Math.max(
+          COMPONENTS_PANEL_MIN_WIDTH_PX,
+          Math.min(current + delta, Math.max(COMPONENTS_PANEL_MIN_WIDTH_PX, max - detailsWidth))
+        )
       );
     },
-    [componentsPanelWidth, computeMaxDockedPanelWidth]
+    [componentsPanelHasDetails, componentsPanelWidth, computeMaxDockedPanelWidth]
   );
 
   const resizeEditorPanel = useCallback(
@@ -2200,6 +2242,21 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- specific conn properties are listed; conn object changes on every render
   }, [conn.serverReady, conn.baseUrl, conn.currentPage, conn.setIframePath]);
+
+  // Edit main writes are source-authoritative and the catalog watcher may
+  // finish before the development iframe has repainted. Once a new immutable
+  // index revision is published for an active main edit, force the real live
+  // usage to reload. This refresh is intentionally revision-bound; it never
+  // guesses a route or tries to execute a component in Ship Studio.
+  const componentRevisionRef = useRef<string | null>(componentIndex?.revision ?? null);
+  useEffect(() => {
+    const revision = componentIndex?.revision ?? null;
+    const previous = componentRevisionRef.current;
+    componentRevisionRef.current = revision;
+    if (previous && revision && previous !== revision && componentsEditMainId && conn.serverReady) {
+      refresh();
+    }
+  }, [componentIndex?.revision, componentsEditMainId, conn.serverReady, refresh]);
 
   // Imperative reload requests from the connection hook (toolbar refresh on the
   // current page, static-project file changes). Token 0 is the "no reload
@@ -2360,11 +2417,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     (variablesPanelDocked && variablesPanelWidth !== null) ||
     (showTree && elementTreePinned && treePanelWidth !== null) ||
     componentsPanelDocked;
-  const componentsPanelLayoutWidth =
-    componentsPanelWidth ??
-    (componentsPanelHasDetails
-      ? COMPONENTS_PANEL_EXPANDED_WIDTH_PX
-      : COMPONENTS_PANEL_DEFAULT_WIDTH_PX);
+  const componentsPanelBaseWidth = componentsPanelWidth ?? COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
+  const componentsPanelLayoutWidth = componentsPanelHasDetails
+    ? Math.min(
+        componentsPanelBaseWidth + COMPONENTS_PANEL_DETAILS_WIDTH_PX,
+        COMPONENTS_PANEL_MAX_WIDTH_PX
+      )
+    : componentsPanelBaseWidth;
   const hasDockedPanelLayout =
     hasCustomDockedWidth ||
     variablesPanelDocked ||
@@ -2378,13 +2437,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             ? `${variablesPanelWidth}px`
             : 'var(--tree-panel-w)'
           : null,
-        componentsPanelDocked
-          ? componentsPanelWidth !== null
-            ? `${componentsPanelWidth}px`
-            : componentsPanelHasDetails
-              ? `${COMPONENTS_PANEL_EXPANDED_WIDTH_PX}px`
-              : 'var(--components-panel-w)'
-          : null,
+        componentsPanelDocked ? `${componentsPanelLayoutWidth}px` : null,
         showTree && elementTreePinned
           ? treePanelWidth !== null
             ? `${treePanelWidth}px`
@@ -2909,7 +2962,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             placeholderClassName={`ss-tree-panel-dock${
               variablesPanelDocked ? ' ss-tree-panel-dock--after-variables' : ''
             }`}
-            dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${componentsPanelDocked ? (componentsPanelWidth ?? 'default') : 'components-floating'}`}
+            dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${componentsPanelDocked ? componentsPanelLayoutWidth : 'components-floating'}`}
             surfaceClassName="dockable-panel__surface--preview"
             placeholderRef={treePanelRef}
             dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
@@ -2930,6 +2983,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               onComponentFocus={enterTreeComponentFocus}
               onComponentFocusParent={focusParentComponent}
               onComponentExitFocus={exitComponentFocus}
+              availableComponents={componentIndex?.components ?? []}
+              onEditStructuredSlot={(instanceId, input) => {
+                const instance = componentIndex?.instances.find(
+                  (candidate) => candidate.id === instanceId
+                );
+                if (instance) void editCatalogStructuredSlot(instance, input);
+              }}
               projectPath={projectPath}
               selectedSignature={
                 (editorMode === 'css'
@@ -3192,6 +3252,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         >
           <ComponentsPanel
             index={componentIndex}
+            projectPath={projectPath}
             loading={componentsLoading}
             error={componentsError}
             selectedComponentId={selectedComponentId}
@@ -3212,11 +3273,23 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             onDuplicate={duplicateComponent}
             onRename={renameComponent}
             onDelete={deleteComponent}
+            onForkLibrary={forkLibraryComponent}
             onRefresh={() => void refreshComponents()}
+            isolatedRenderer={isolatedComponentRenderer}
             onSelectUsage={selectComponentUsage}
             onEditProp={editComponentProp}
             onEditSlot={(instance, slotName, replacementSource) => {
               void editCatalogSlot(instance, slotName, replacementSource);
+            }}
+            onEditStructuredSlot={(instance, input) => {
+              void editCatalogStructuredSlot(instance, input);
+            }}
+            onEditSlotChildMain={(child) => {
+              const childInstance = componentIndex?.instances.find(
+                (instance) => instance.id === child.instanceId
+              );
+              if (childInstance) selectComponentUsage(childInstance);
+              enterEditMain(child.componentId);
             }}
             onInline={() => {
               void inlineSelectedComponent();

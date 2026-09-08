@@ -2,7 +2,7 @@ import ts from 'typescript';
 import { applyTextEdits, sha256, sourceRefFromUtf16Range, sourceTextForRef } from '../ranges';
 import { staticValueFromExpression, staticValueToJsx } from './static-values';
 import { basenameWithoutExtension, normalizeProjectPath } from './react-helpers';
-import { planStaticSlotEdit } from '../slots';
+import { planStaticSlotEdit, planStructuredSlotEdit } from '../slots';
 import { populateSlotChildren } from '../slots';
 import type {
   AdapterGraph,
@@ -393,7 +393,10 @@ export function parseMarkupFile(
     .map((tag) => {
       const end = tag.closeEnd ?? tag.end;
       const childrenStart = tag.closeStart ?? tag.end;
-      const hasChildren = childrenStart > tag.end;
+      // A paired invocation proves a slot body even when it is empty. Keep a
+      // zero-length range for `<Card></Card>`; a self-closing tag is the only
+      // form that proves no authored slot at all.
+      const hasChildren = !tag.selfClosing && tag.closeStart !== null;
       const localName = config.normalizeTagName?.(tag.tagName) ?? tag.tagName;
       const named = hasChildren
         ? namedSlotSources(file, { start: tag.end, end: childrenStart })
@@ -1159,7 +1162,9 @@ export class MarkupComponentAdapter implements ComponentAdapter {
   }
 
   planSlotEdit(input: EditComponentSlotInputWithContext, index: ComponentIndex): MutationResult {
-    return planStaticSlotEdit(input, index, input.snapshot);
+    return input.operation && input.operation !== 'replace'
+      ? planStructuredSlotEdit(input, index, input.snapshot)
+      : planStaticSlotEdit(input, index, input.snapshot);
   }
 
   validateMutation(input: MutationValidationInput): MutationValidationResult {
@@ -1178,7 +1183,10 @@ export function propDescriptor(
   start: number,
   end: number,
   options: Partial<
-    Pick<ComponentPropDescriptor, 'required' | 'typeText' | 'defaultValue' | 'choices' | 'control'>
+    Pick<
+      ComponentPropDescriptor,
+      'required' | 'typeText' | 'defaultValue' | 'choices' | 'control' | 'description'
+    >
   > = {}
 ): ComponentPropDescriptor {
   const required = options.required ?? false;
@@ -1189,6 +1197,7 @@ export function propDescriptor(
     defaultValue: options.defaultValue ?? null,
     choices: options.choices ?? null,
     control: options.control ?? 'readonly',
+    description: options.description ?? null,
     source: ref(file, start, end),
     diagnostics: [],
   };
@@ -1341,26 +1350,104 @@ export function findTypeMembers(
             .map((part) => ({ kind: 'string' as const, value: part.trim().slice(1, -1) }))
         : null
       : null;
-    const control: ComponentPropDescriptor['control'] = choices
-      ? 'select'
-      : /boolean/i.test(typeText ?? '')
-        ? 'boolean'
-        : /number/i.test(typeText ?? '')
-          ? 'number'
-          : /string/i.test(typeText ?? '')
-            ? 'text'
-            : 'readonly';
+    const explicitControl = markupJsDocControl(match[1], member.index);
+    const control: ComponentPropDescriptor['control'] = markupPropControl(
+      typeText,
+      choices,
+      explicitControl
+    );
     result.push(
       propDescriptor(
         file,
         name,
         bodyStart + member.index,
         bodyStart + member.index + member[0].length,
-        { required: !member[2], typeText, choices, control }
+        {
+          required: !member[2],
+          typeText,
+          choices,
+          control,
+          description: markupJsDocDescription(match[1], member.index),
+        }
       )
     );
   }
   return result;
+}
+
+function markupPropControl(
+  typeText: string | null,
+  choices: StaticValue[] | null,
+  explicitControl: ComponentPropDescriptor['control'] | null
+): ComponentPropDescriptor['control'] {
+  if (choices) return 'select';
+  if (explicitControl) return explicitControl;
+  const semanticControl = markupSemanticControl(typeText);
+  if (semanticControl) return semanticControl;
+  if (/boolean/i.test(typeText ?? '')) return 'boolean';
+  if (/(?:number|bigint)/i.test(typeText ?? '')) return 'number';
+  if (/(?:\[\]|Array<|ReadonlyArray<)/i.test(typeText ?? '')) return 'array';
+  if (/(?:Record<|object|Object|Map<)/.test(typeText ?? '')) return 'object';
+  if (/string/i.test(typeText ?? '')) {
+    if (/null/.test(typeText ?? '')) return 'nullable';
+    return 'text';
+  }
+  if (/null/.test(typeText ?? '')) return 'nullable';
+  return 'readonly';
+}
+
+function markupJsDocControl(
+  body: string,
+  memberIndex: number
+): ComponentPropDescriptor['control'] | null {
+  const leading = body.slice(0, memberIndex);
+  const value = leading.match(/@(?:ship-studio-)?control\s+([\w-]+)\s*$/i)?.[1]?.toLowerCase();
+  if (
+    value === 'text' ||
+    value === 'number' ||
+    value === 'boolean' ||
+    value === 'select' ||
+    value === 'asset' ||
+    value === 'url' ||
+    value === 'rich-text' ||
+    value === 'class' ||
+    value === 'attributes' ||
+    value === 'nullable' ||
+    value === 'array' ||
+    value === 'object'
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function markupSemanticControl(typeText: string | null): ComponentPropDescriptor['control'] | null {
+  if (!typeText) return null;
+  if (/\b(?:Asset|AssetRef|ImageAsset|FileAsset|ImageSource|MediaSource)\b/.test(typeText)) {
+    return 'asset';
+  }
+  if (/\b(?:RichText|RichTextContent|Markdown|MarkdownContent|HTMLContent)\b/.test(typeText)) {
+    return 'rich-text';
+  }
+  if (/\b(?:URL|Url|URI|Uri|Href|Link|UrlValue|HrefValue)\b/.test(typeText)) return 'url';
+  if (/\b(?:ClassName|ClassNames|CSSClass|ClassValue)\b/.test(typeText)) return 'class';
+  if (/\b(?:Attributes|AttributeMap|HTMLAttributes|AriaAttributes)\b/.test(typeText)) {
+    return 'attributes';
+  }
+  return null;
+}
+
+function markupJsDocDescription(body: string, memberIndex: number): string | null {
+  const leading = body.slice(0, memberIndex);
+  const match = leading.match(/\/\*\*([\s\S]*?)\*\/\s*$/);
+  if (!match) return null;
+  const description = match[1]
+    .split('\n')
+    .map((line) => line.replace(/^\s*\* ?/, '').trim())
+    .filter((line) => line && !line.startsWith('@'))
+    .join(' ')
+    .trim();
+  return description || null;
 }
 
 export function findSlots(

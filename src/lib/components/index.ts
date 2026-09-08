@@ -39,6 +39,7 @@ export { previewComponentMutation, REACT_COMPONENT_PLAN_PARSER_TOKEN } from './m
 export { planStructuredSlotEdit, populateSlotChildren } from './slots';
 export {
   discoverComponentLibraries,
+  compareComponentLibrary,
   libraryForComponent,
   planLibraryFork,
   withComponentLibraries,
@@ -47,12 +48,29 @@ export type {
   ComponentIndexWithLibraries,
   ComponentLibraryMetadata,
   ComponentLibraryOwnership,
+  ComponentLibraryChangeKind,
+  ComponentLibraryComponentContract,
+  ComponentLibraryResource,
+  ComponentLibraryResourceKind,
+  ComponentLibraryUpdateChange,
+  ComponentLibraryUpdateDiff,
   LibraryForkInput,
   LibraryForkRefusalCode,
   LibraryForkResult,
 } from './libraries';
 
 export { usageReportForResolution } from './usage';
+export {
+  createComponentIsolatedRenderRequest,
+  createComponentIsolatedRendererCapability,
+  COMPONENT_ISOLATED_RENDERER_PROTOCOL,
+} from './isolated-renderer';
+export type {
+  ComponentIsolatedRendererCapability,
+  ComponentIsolatedRendererHost,
+  ComponentIsolatedRenderRequest,
+  ComponentIsolatedRenderResult,
+} from './isolated-renderer';
 
 export interface BuildComponentIndexOptions {
   projectType?: ProjectType | null;

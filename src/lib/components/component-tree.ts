@@ -305,13 +305,20 @@ export function projectComponentTree(input: ComponentTreeProjectionInput): Compo
       if (rootNodeId !== boundary.primaryRootId) secondaryRoots.add(rootNodeId);
     }
   }
+  const boundaryByInstanceId = new Map(
+    boundaries.map((boundary) => [boundary.instanceId, boundary])
+  );
 
-  const renderChildren = (nodes: readonly NormalizedElement[]): ComponentAwareTreeNode[] => {
+  const renderChildren = (
+    nodes: readonly NormalizedElement[],
+    hiddenInstanceIds: ReadonlySet<string> = new Set()
+  ): ComponentAwareTreeNode[] => {
     const rendered: ComponentAwareTreeNode[] = [];
     for (const node of nodes) {
       if (secondaryRoots.has(node.id)) continue;
       const boundary = boundaryByPrimaryRoot.get(node.id);
       if (boundary) {
+        if (hiddenInstanceIds.has(boundary.instanceId)) continue;
         rendered.push(renderBoundary(boundary));
         continue;
       }
@@ -321,7 +328,7 @@ export function projectComponentTree(input: ComponentTreeProjectionInput): Compo
         tag: node.tag,
         className: node.className,
         text: node.text,
-        children: renderChildren(node.children),
+        children: renderChildren(node.children, hiddenInstanceIds),
       });
     }
     return rendered;
@@ -329,13 +336,64 @@ export function projectComponentTree(input: ComponentTreeProjectionInput): Compo
 
   const renderBoundary = (boundary: IndexedBoundary): ComponentAwareTreeNode => {
     const expanded = focusIds.has(boundary.instanceId);
-    const children = expanded
+    const component = input.index.components.find(
+      (candidate) => candidate.id === boundary.componentId
+    );
+    const instance = input.index.instances.find(
+      (candidate) => candidate.id === boundary.instanceId
+    );
+    const slotChildIds = new Set<string>();
+    const slotNodes = expanded
+      ? (component?.slots ?? []).map((slot) => {
+          const value = instance?.slots.find((candidate) => candidate.name === slot.name);
+          const slotSource =
+            instance?.slotSources?.[slot.name] ??
+            (slot.name === 'default' ? instance?.slotSources?.children : undefined) ??
+            (slot.name === 'children' ? instance?.slotSources?.default : undefined);
+          const sourceAvailable = Boolean(slotSource);
+          const childInstanceIds = sourceAvailable
+            ? (value?.children ?? [])
+                .filter((child) => {
+                  const candidate = input.index.instances.find(
+                    (item) => item.id === child.instanceId
+                  );
+                  return Boolean(
+                    candidate &&
+                    slotSource &&
+                    candidate.invocation.file === slotSource.file &&
+                    candidate.invocation.contentHash === slotSource.contentHash &&
+                    candidate.invocation.start >= slotSource.start &&
+                    candidate.invocation.end <= slotSource.end
+                  );
+                })
+                .map((child) => child.instanceId)
+            : [];
+          childInstanceIds.forEach((instanceId) => slotChildIds.add(instanceId));
+          return {
+            kind: 'slot' as const,
+            key: `${boundary.key}:slot:${slot.name}`,
+            componentId: boundary.componentId,
+            instanceId: boundary.instanceId,
+            slotName: slot.name,
+            required: slot.required,
+            sourceAvailable,
+            childInstanceIds,
+            children: childInstanceIds.flatMap((instanceId) => {
+              const childBoundary = boundaryByInstanceId.get(instanceId);
+              return childBoundary ? [renderBoundary(childBoundary)] : [];
+            }),
+          };
+        })
+      : [];
+    const domChildren = expanded
       ? renderChildren(
           boundary.rootNodeIds.flatMap(
             (rootNodeId) => locations.get(rootNodeId)?.node.children ?? []
-          )
+          ),
+          slotChildIds
         )
       : [];
+    const children = [...slotNodes, ...domChildren];
     return {
       kind: 'component',
       key: boundary.key,

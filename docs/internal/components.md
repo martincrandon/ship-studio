@@ -7,21 +7,80 @@ plugins, or the project's Node runtime while building the catalog.
 
 ## Support matrix
 
-| Dialect | Catalog / graph | Runtime binding | Source writes | Notes |
-| --- | --- | --- | --- | --- |
-| React / Next / React-flavoured Vite | Enabled | Exact React Fiber hints; Next Server Component provenance for a unique stable root | Placement, static exact-instance props, focused definition edits, conservative named-export lifecycle | DOM boundaries are projected only after source/hash validation. |
-| Native Astro | Enabled | Source-anchored only | Placement and static source-usage props | No exact rendered invocation identity or Element Tree boundary. |
-| Vue / Nuxt | Enabled | Source-anchored only | Static source-usage placement/props | `.vue` SFC parsing uses `@vue/compiler-sfc`; route files remain roots. |
-| Svelte / SvelteKit | Enabled | Source-anchored only | Static source-usage placement/props | Supports legacy `export let`, Svelte 5 `$props`, `<slot>`, and snippets at the bounded-source level. |
-| Shopify theme | Enabled | Source-anchored only | Conservative Liquid/JSON placement and static values | Sections, blocks, snippets, schema settings, and JSON section references are distinct kinds. |
-| Native Web Components | Enabled | Source-anchored only | Static HTML observed-attribute edits and placement | A tag enters the catalog only when `customElements.define` is present. |
-| React Native / Expo | Source-only | Opt-in source-hash runtime bridge | Source-only placement/static props; visual writes disabled | JSX source is indexed under a separate dialect; native provenance never enters the web DOM protocol. |
-| Flutter | Analyzer-backed source-only (opt-in) | Opt-in Widget Inspector/VM Service source-hash bridge | Disabled | Dart grammar/package resolution stays with the analyzer; native provenance is a separate integration. |
+| Dialect | Catalog / graph | Runtime binding | Source writes | Library ownership / fork | Notes |
+| --- | --- | --- | --- | --- | --- |
+| React / Next / React-flavoured Vite | Enabled | Exact React Fiber hints; Next Server Component provenance for a unique stable root | Placement, static exact-instance props, focused definition edits, conservative named-export lifecycle | Explicit workspace package exports are read-only in consumers; direct named React exports can be copied through a reviewed local fork | DOM boundaries are projected only after source/hash validation. |
+| Native Astro | Enabled | Source-anchored only | Placement and static source-usage props | Package ownership is read-only; local fork is disabled until an Astro transform proves its dependency closure | No exact rendered invocation identity or Element Tree boundary. |
+| Vue / Nuxt | Enabled | Source-anchored only | Static source-usage placement/props | Package ownership is read-only; local fork is disabled until a Vue transform proves its dependency closure | `.vue` SFC parsing uses `@vue/compiler-sfc`; route files remain roots. |
+| Svelte / SvelteKit | Enabled | Source-anchored only | Static source-usage placement/props | Package ownership is read-only; local fork is disabled until a Svelte transform proves its dependency closure | Supports legacy `export let`, Svelte 5 `$props`, `<slot>`, and snippets at the bounded-source level. |
+| Shopify theme | Enabled | Source-anchored only | Conservative Liquid/JSON placement and static values | Package ownership is read-only; no source fork is claimed | Sections, blocks, snippets, schema settings, and JSON section references are distinct kinds. |
+| Native Web Components | Enabled | Source-anchored only | Static HTML observed-attribute edits and placement | Package ownership is read-only; no source fork is claimed | A tag enters the catalog only when `customElements.define` is present. |
+| React Native / Expo | Source-only | Opt-in source-hash runtime bridge | Source-only placement/static props; visual writes disabled | Package ownership is metadata-only; no source fork is claimed | JSX source is indexed under a separate dialect; native provenance never enters the web DOM protocol. |
+| Flutter | Analyzer-backed source-only (opt-in) | Opt-in Widget Inspector/VM Service source-hash bridge | Disabled | Package ownership is metadata-only; no source fork is claimed | Dart grammar/package resolution stays with the analyzer; native provenance is a separate integration. |
+
+## Component Canvas rendering and QA
+
+The Component Canvas is always safe to open: named presets, explicit static
+props/slots, finite choices, frame presentation metadata, orphan reporting, and
+bounded matrix planning are source-backed UI state. Those features do not imply
+that a frame can be rendered in Ship Studio.
+
+Rendered frames and visual/a11y QA require a host-owned isolated renderer. The
+host must negotiate protocol `1`, use the same opaque project identity, accept
+only a component ID/source revision and explicit static values, and return an
+image data URL plus a pixel fingerprint. The host owns the project runtime in
+its own preview surface; Ship Studio never imports a component module, runs
+framework config, evaluates slot text, or mounts returned project markup in its
+own process. Stale or malformed host responses are discarded.
+
+No current web adapter advertises `isolatedPreview`, so the packaged app keeps
+rendered frames, baseline capture, pixel comparison, and automated a11y
+disabled until a dialect provides that proof. Exact live-usage capture remains
+a separate workflow and is never accepted as a Component Canvas baseline: a
+baseline requires the isolated host's screenshot path and pixel fingerprint
+for the explicit frame. Baselines record the source revision, frame identity,
+threshold, and host fingerprint. Legacy baselines without a fingerprint are
+shown as unavailable and must be recaptured rather than reported as a match.
 
 Capability flags are the contract behind this table. A useful read-only catalog
 does not imply a runtime binding or a write capability. Dynamic values,
 ambiguous source matches, stale hashes, unsupported route boundaries, and
 unresolved imports remain visible as diagnostics and fail closed.
+
+## Code-native shared libraries
+
+The catalog recognizes a library only when a bounded, project-relative
+`package.json` has a literal export that resolves to source already present in
+the immutable snapshot and that source contains an indexed definition. Package
+names alone are never treated as ownership evidence. The panel groups these
+entries under **Library Components** and shows only metadata returned by the
+manifest: package name, version when present, repository when present, and
+validated package root.
+
+Library definitions remain read-only in a consumer project. Source navigation
+is available, while placement, instance edits, main-source editing, lifecycle
+refactors, and slot writes are disabled until the user works in the owning
+source project. A React direct named export with no relative imports may be
+copied to an explicit project-relative destination. The copy is shown in a
+reviewed source diff, uses the normal hash/path/syntax guards, and is detached
+from future library updates. Collisions, export identity changes, unsupported dialects, and
+relative dependency closures fail closed.
+
+When a previously saved library metadata snapshot differs from the current
+snapshot, the panel shows a review containing only known package metadata,
+added/removed exports (export renames are not inferred), parsed component-contract changes, and explicit
+token/asset/font resource changes. Accepting acknowledges the resolved
+metadata; deferring leaves it available for later review. Neither action runs
+a package manager or rewrites a dependency or lockfile. Update application is
+therefore intentionally limited to a reviewed package-manager plan outside the
+component catalog.
+
+Unsupported for this slice: remote registries, package managers other than
+literal workspace/project manifests understood by the bounded resolver,
+wildcard or computed exports, build-output-only packages, barrel/default/alias
+resolution without explicit source evidence, framework-specific transforms
+whose dependency closure is not proven, and automatic dependency or lockfile
+rewrites. These cases remain unowned/read-only rather than being guessed.
 
 ## React / Next.js
 
@@ -71,6 +130,32 @@ generic DOM-to-component converter:
   markup. Slot scopes, Liquid/Vue/Svelte control blocks, dynamic slot names,
   spreads, and stale/no-op ranges are read-only with a diagnostic. Whitespace
   outside the slot body is preserved byte-for-byte.
+- **Structured slot composition is source-only.** Element Tree slot rows and
+  nested child operations are projected from exact, hash-bound `slotSources`
+  ranges. They are not rendered preview nodes, and no drop-zone overlay is
+  exposed until the preview can return a slot-qualified boundary for the same
+  source invocation.
+
+#### Structured slots and live-preview drop zones
+
+The live-preview drop-zone indicator is intentionally disabled. The current
+`ss:tree` bridge payload contains only ephemeral DOM node IDs and bounded
+tag/class/text data. React's optional Fiber stack hint can source/hash-bind a
+component invocation to rendered host node(s), but it carries no slot name or
+slot-body range. `ComponentBoundary` likewise records only component host
+nodes; `projectComponentTree` synthesizes slot rows from source and has no
+slot-to-host boundary to paint or accept a drop. Vue, Svelte, Shopify, and Web
+Components are source-anchored and return no runtime component boundaries.
+
+Mapping a preview drop to a slot without this evidence would invent runtime
+identity, so the UI fails closed rather than displaying an unproven drop zone.
+Enabling it requires a versioned host-protocol extension that returns a
+source/hash-bound, slot-qualified rendered boundary for the active preview
+tree, with stale and ambiguous mappings rejected. Until then, use the Element
+Tree structured controls or the labelled advanced source editor. Shopify's
+`editSlots` capability remains conservative: `content_for "blocks"` is
+runtime-generated and has no exact authored instance slot range, so plans
+refuse with `missing-slot`.
 - **Preview presets** are optional presentation metadata stored under the
   versioned `ship-studio.component-presets.v1` key supplied by the host. A
   preset contains only explicit static props and slot strings plus the component

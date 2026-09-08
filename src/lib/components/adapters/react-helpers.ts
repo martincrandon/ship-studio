@@ -199,7 +199,3 @@ export function jsxRootIdentifier(tag: ts.JsxTagNameExpression): string | null {
 export function isIntrinsicJsxTag(tag: ts.JsxTagNameExpression): boolean {
   return ts.isIdentifier(tag) && /^[a-z]/.test(tag.text);
 }
-
-export function isStaticAssetProp(name: string): boolean {
-  return /^(?:src|href|poster|image|icon|avatar|background|logo|thumbnail)$/i.test(name);
-}

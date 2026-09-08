@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { discoverComponentLibraries, planLibraryFork, withComponentLibraries } from './libraries';
+import {
+  compareComponentLibrary,
+  discoverComponentLibraries,
+  planLibraryFork,
+  withComponentLibraries,
+} from './libraries';
 import { sha256 } from './ranges';
 import type {
   ComponentDescriptor,
@@ -201,5 +206,54 @@ describe('component library discovery', () => {
         next
       )
     ).toMatchObject({ status: 'refused', code: 'unsafe-dependency-closure' });
+  });
+
+  it('reports only explicit package, export, contract, and resource changes', () => {
+    const source = librarySnapshot();
+    const index = withComponentLibraries(libraryIndex(source), source);
+    const previous = index.libraries?.[0];
+    if (!previous) throw new Error('library metadata is missing');
+    const current = {
+      ...previous,
+      version: '2.5.0',
+      contracts: previous.contracts?.map((contract) => ({
+        ...contract,
+        props: [{ name: 'tone', required: false, typeText: "'neutral'", choices: null }],
+      })),
+      resources: [{ kind: 'token' as const, id: 'color.accent', revision: '2' }],
+    };
+    const diff = compareComponentLibrary(previous, current);
+    expect(diff.requiresDependencyPlan).toBe(true);
+    expect(diff.changes.map((change) => change.kind)).toEqual(
+      expect.arrayContaining(['package-metadata', 'component-contract', 'token'])
+    );
+  });
+
+  it('reports same-file export identity changes as removed and added, not an inferred rename', () => {
+    const source = librarySnapshot();
+    const index = withComponentLibraries(libraryIndex(source), source);
+    const previous = index.libraries?.[0];
+    if (!previous) throw new Error('library metadata is missing');
+    const previousContract = previous.contracts?.[0];
+    if (!previousContract) throw new Error('library contract metadata is missing');
+    const currentContract = {
+      ...previousContract,
+      componentId: previousContract.componentId.replace('#Button', '#PrimaryButton'),
+      name: 'PrimaryButton',
+      exportName: 'PrimaryButton',
+    };
+
+    const diff = compareComponentLibrary(previous, {
+      ...previous,
+      contracts: [currentContract],
+    });
+
+    expect(diff.changes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'removed-export', detail: 'Button' }),
+        expect.objectContaining({ kind: 'added-export', detail: 'PrimaryButton' }),
+      ])
+    );
+    expect(diff.changes.map((change) => change.kind)).not.toContain('renamed-export');
   });
 });

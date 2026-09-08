@@ -3,8 +3,8 @@ import type { ProjectType } from '../lib/static-server';
 /**
  * The source catalog has an adapter for each supported web dialect.  The
  * worker is the authority for whether a particular source snapshot contains
- * components; this gate only decides whether the web preview can expose the
- * catalog while that snapshot is being built.  Keeping this list in sync with
+ * components; this gate only decides whether the workspace can expose the
+ * catalog while that snapshot is being built. Keeping this list in sync with
  * the project detector makes non-React adapters reachable without guessing
  * that a Vite project uses a specific UI framework.
  */
@@ -17,6 +17,10 @@ export function useComponentsAvailability(_projectPath: string, projectType: Pro
     projectType === 'vite' ||
     projectType === 'statichtml' ||
     projectType === 'shopifytheme' ||
+    // Mobile projects use this gate for the source-only catalog. The preview
+    // host still keeps placement and runtime actions disabled by capability.
+    projectType === 'reactnative' ||
+    projectType === 'flutter' ||
     projectType === 'generic'
   );
 }

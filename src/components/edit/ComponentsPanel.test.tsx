@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ComponentCapabilities,
   ComponentDescriptor,
@@ -82,7 +82,7 @@ const hero: ComponentDescriptor = {
   id: 'astro:src/components/Hero.astro:default',
   dialect: 'astro',
   kind: 'component',
-  name: 'Hero',
+  name: 'hero-card',
   localName: 'Hero',
   exportName: null,
   description: null,
@@ -146,6 +146,7 @@ const index: ComponentIndex = {
 function panelProps() {
   return {
     index,
+    projectPath: '/tmp/project',
     selectedComponentId: button.id,
     onSelect: vi.fn(),
     onPlace: vi.fn(),
@@ -156,6 +157,10 @@ function panelProps() {
 }
 
 describe('ComponentsPanel', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('tracks catalog interactions without source identifiers', () => {
     const props = panelProps();
     const view = render(<ComponentsPanel {...props} selectedComponentId={null} />);
@@ -225,6 +230,9 @@ describe('ComponentsPanel', () => {
     );
 
     expect(screen.getByTestId('components-panel')).toBeInTheDocument();
+    expect(screen.getByTitle('Button · src/components/Button.tsx')).not.toHaveTextContent(
+      button.definition.file
+    );
     expect(
       container.querySelector('.ss-components-panel__workspace--with-details')
     ).toBeInTheDocument();
@@ -232,14 +240,25 @@ describe('ComponentsPanel', () => {
     const catalogResizeHandle = screen.getByRole('separator', {
       name: 'Resize component list',
     });
-    expect(catalogResizeHandle).toHaveAttribute('aria-valuenow', '275');
+    expect(catalogResizeHandle).toHaveAttribute('aria-valuenow', '300');
     fireEvent.keyDown(catalogResizeHandle, { key: 'ArrowRight' });
-    expect(catalogResizeHandle).toHaveAttribute('aria-valuenow', '285');
+    expect(catalogResizeHandle).toHaveAttribute('aria-valuenow', '310');
     expect(screen.getByPlaceholderText('Search 2 components…')).toBeInTheDocument();
     const refreshButton = screen.getByRole('button', { name: 'Refresh components index' });
     expect(container.querySelector('.ss-components-panel__toolbar')).toContainElement(
       refreshButton
     );
+    const definitionSourceButton = screen.getByTitle('Open src/components/Button.tsx');
+    expect(container.querySelector('.ss-components-details__header')).toContainElement(
+      definitionSourceButton
+    );
+    expect(definitionSourceButton).toHaveTextContent('Button.tsx');
+    expect(definitionSourceButton).not.toHaveTextContent(':4');
+    expect(definitionSourceButton).not.toHaveTextContent('src/components/Button.tsx');
+    expect(container.querySelector('.ss-components-details__actions')).not.toContainElement(
+      definitionSourceButton
+    );
+    expect(screen.queryByRole('button', { name: 'Open source' })).not.toBeInTheDocument();
     expect(screen.getAllByText('src/components')).toHaveLength(2);
     expect(screen.getByRole('heading', { name: 'Button' })).toBeInTheDocument();
     expect(
@@ -249,7 +268,7 @@ describe('ComponentsPanel', () => {
     ).toHaveClass('ss-components-row__type--react');
     expect(
       screen
-        .getByTitle('Hero · src/components/Hero.astro')
+        .getByTitle('Hero Card · src/components/Hero.astro')
         .querySelector('.ss-components-row__type')
     ).toHaveClass('ss-components-row__type--astro');
     expect(screen.getByText('Partial index · 1 diagnostic')).toBeInTheDocument();
@@ -292,6 +311,44 @@ describe('ComponentsPanel', () => {
     expect(screen.getByRole('button', { name: 'Close Components panel' })).toBeInTheDocument();
   });
 
+  it('formats list names for presentation and moves read-only status into details', () => {
+    const props = panelProps();
+    const { rerender } = render(<ComponentsPanel {...props} selectedComponentId={null} />);
+
+    expect(screen.getByTitle('Button · src/components/Button.tsx')).toHaveTextContent('Button');
+    expect(screen.queryByText('Read-only')).not.toBeInTheDocument();
+
+    rerender(<ComponentsPanel {...props} selectedComponentId={hero.id} />);
+
+    expect(screen.getByTestId('component-details')).toHaveTextContent('Read-only');
+    expect(screen.getByTitle('Hero Card · src/components/Hero.astro')).toHaveTextContent(
+      'Hero Card'
+    );
+    expect(screen.getByTitle('Open src/components/Hero.astro')).toHaveTextContent('Hero.astro');
+  });
+
+  it('authors project-scoped property presentation and refreshes the details immediately', () => {
+    const props = panelProps();
+    render(<ComponentsPanel {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Organize' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Label for label' }), {
+      target: { value: 'Button text' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Group for label' }), {
+      target: { value: 'Content' },
+    });
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Order for label' }), {
+      target: { value: '1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save organization' }));
+
+    expect(screen.getByText('Button text')).toBeInTheDocument();
+    expect(
+      localStorage.getItem('shipstudio.component-property-metadata.v1:%2Ftmp%2Fproject')
+    ).toContain('Button text');
+  });
+
   it('opens the reviewed duplicate flow for a capable React definition', () => {
     const props = panelProps();
     const onDuplicate = vi.fn();
@@ -304,7 +361,10 @@ describe('ComponentsPanel', () => {
     };
     render(<ComponentsPanel {...props} index={duplicateIndex} onDuplicate={onDuplicate} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }));
+    const duplicateButton = screen.getByRole('button', { name: 'Duplicate' });
+    expect(duplicateButton).toHaveClass('button--icon-only');
+    expect(duplicateButton).not.toHaveTextContent('Duplicate');
+    fireEvent.click(duplicateButton);
     fireEvent.change(screen.getByRole('textbox', { name: 'New component name' }), {
       target: { value: 'ButtonCopy' },
     });
@@ -329,7 +389,10 @@ describe('ComponentsPanel', () => {
     };
     render(<ComponentsPanel {...props} index={renameIndex} onRename={onRename} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    const renameButton = screen.getByRole('button', { name: 'Rename' });
+    expect(renameButton).toHaveClass('button--icon-only');
+    expect(renameButton).not.toHaveTextContent('Rename');
+    fireEvent.click(renameButton);
     fireEvent.change(screen.getByRole('textbox', { name: 'New component name' }), {
       target: { value: 'ActionButton' },
     });
@@ -353,7 +416,10 @@ describe('ComponentsPanel', () => {
     };
     render(<ComponentsPanel {...props} index={deleteIndex} onDelete={onDelete} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const deleteButton = screen.getByRole('button', { name: 'Delete' });
+    expect(deleteButton).toHaveClass('button--icon-only');
+    expect(deleteButton).not.toHaveTextContent('Delete');
+    fireEvent.click(deleteButton);
     const confirm = screen.getByRole('checkbox', {
       name: 'Confirm deleting the component and all usages',
     });
@@ -517,6 +583,175 @@ describe('ComponentInstanceControls', () => {
     expect(featured).toHaveValue('true');
     fireEvent.change(featured, { target: { value: '' } });
     expect(onEditProp).toHaveBeenCalledWith(usage, 'featured', null);
+  });
+
+  it('parses JSON and nullable placement values without raw asset fallback', () => {
+    const onPlace = vi.fn();
+    const component: ComponentDescriptor = {
+      ...button,
+      props: [
+        button.props[0],
+        {
+          name: 'tags',
+          required: false,
+          typeText: 'string[]',
+          defaultValue: null,
+          choices: null,
+          control: 'array',
+          source: source('src/components/Button.tsx', 8),
+          diagnostics: [],
+        },
+        {
+          name: 'attributes',
+          required: false,
+          typeText: 'Record<string, string>',
+          defaultValue: null,
+          choices: null,
+          control: 'object',
+          source: source('src/components/Button.tsx', 9),
+          diagnostics: [],
+        },
+        {
+          name: 'note',
+          required: false,
+          typeText: 'string | null',
+          defaultValue: null,
+          choices: null,
+          control: 'nullable',
+          source: source('src/components/Button.tsx', 10),
+          diagnostics: [],
+        },
+        {
+          name: 'imageAsset',
+          required: false,
+          typeText: 'AssetRef',
+          defaultValue: null,
+          choices: null,
+          control: 'asset',
+          source: source('src/components/Button.tsx', 11),
+          diagnostics: [],
+        },
+      ],
+    };
+    render(
+      <ComponentsPanel
+        {...panelProps()}
+        projectPath={undefined}
+        index={{ ...index, components: [component, hero] }}
+        selectedComponentId={component.id}
+        onPlace={onPlace}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Set required label' }), {
+      target: { value: 'Ship it' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Set tags' }), {
+      target: { value: '["primary", 2]' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Set attributes' }), {
+      target: { value: '{"data-kind":"cta"}' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Set note nullability' }), {
+      target: { value: 'value' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Set note value' }), {
+      target: { value: 'Optional note' },
+    });
+
+    expect(
+      screen.getByText('Asset values require the source-backed Assets picker.')
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Insert component' }));
+    expect(onPlace).toHaveBeenCalledWith(
+      component.id,
+      {
+        label: { kind: 'string', value: 'Ship it' },
+        tags: {
+          kind: 'array',
+          value: [
+            { kind: 'string', value: 'primary' },
+            { kind: 'number', value: 2 },
+          ],
+        },
+        attributes: {
+          kind: 'object',
+          value: { 'data-kind': { kind: 'string', value: 'cta' } },
+        },
+        note: { kind: 'string', value: 'Optional note' },
+      },
+      'after'
+    );
+  });
+
+  it('blocks placement when a required prop has no safe control', () => {
+    const component: ComponentDescriptor = {
+      ...button,
+      props: [
+        ...button.props,
+        {
+          name: 'renderedBy',
+          required: true,
+          typeText: 'RenderFunction',
+          defaultValue: null,
+          choices: null,
+          control: 'readonly',
+          source: source('src/components/Button.tsx', 12),
+          diagnostics: [],
+        },
+      ],
+    };
+    render(
+      <ComponentsPanel
+        {...panelProps()}
+        index={{ ...index, components: [component, hero] }}
+        selectedComponentId={component.id}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    expect(screen.getByText('This prop type must be authored in source.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Insert component' })).toBeDisabled();
+  });
+
+  it('exposes exact slot children as guarded composition controls', () => {
+    const onEditStructuredSlot = vi.fn();
+    const child = {
+      instanceId: 'badge-instance',
+      componentId: 'badge',
+      name: 'Badge',
+      invocation: source('src/pages/index.tsx', 20),
+    };
+    const usage: ComponentInstance = {
+      ...buttonUsage,
+      slots: [{ name: 'children', value: null, children: [child] }],
+      slotSources: { children: { ...source('src/pages/index.tsx', 12), text: '<Badge />' } },
+    };
+    render(
+      <ComponentInstanceControls
+        instance={usage}
+        component={button}
+        availableComponents={[button]}
+        onEditStructuredSlot={onEditStructuredSlot}
+        onSelectSlotChild={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Badge' }));
+    expect(onEditStructuredSlot).toHaveBeenCalledWith(usage, {
+      slotName: 'children',
+      operation: 'remove',
+      childInstanceId: 'badge-instance',
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Choose component for children slot' }), {
+      target: { value: button.id },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add component' }));
+    expect(onEditStructuredSlot).toHaveBeenCalledWith(usage, {
+      slotName: 'children',
+      operation: 'insert',
+      componentId: button.id,
+    });
   });
 });
 

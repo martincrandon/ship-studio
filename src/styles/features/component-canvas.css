@@ -1,8 +1,8 @@
-/* Explicit component canvas and QA surfaces. Every value is a design token. */
+/* Component review and QA surfaces. Every value is a design token. */
 
 .ss-component-canvas-modal {
-  width: min(94vw, var(--size-icon-gallery-width));
-  max-width: min(94vw, var(--size-icon-gallery-width));
+  width: min(94vw, var(--size-component-review-width));
+  max-width: min(94vw, var(--size-component-review-width));
   max-height: 92vh;
 }
 
@@ -36,6 +36,18 @@
   justify-content: space-between;
 }
 
+.ss-component-canvas__intro > div:first-child {
+  max-width: 54rem;
+}
+
+.ss-component-canvas__intro h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-body-md);
+  font-weight: var(--font-weight-label);
+  text-wrap: balance;
+}
+
 .ss-component-canvas__intro p,
 .ss-component-canvas__intro span,
 .ss-component-canvas__matrix span,
@@ -45,6 +57,11 @@
   margin: 0;
   color: var(--text-muted);
   font-size: var(--font-size-body-sm);
+  text-wrap: pretty;
+}
+
+.ss-component-canvas__intro p {
+  margin-top: var(--spacing-2xs);
 }
 
 .ss-component-canvas__intro p,
@@ -124,6 +141,34 @@
   width: 100%;
   color: var(--text-secondary);
   font-size: var(--font-size-body-sm);
+}
+
+.ss-component-canvas__matrix-renders {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--spacing-xs);
+}
+
+.ss-component-canvas__matrix-render {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs);
+  color: var(--text-muted);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-badge);
+}
+
+.ss-component-canvas__matrix-render img {
+  display: block;
+  width: 100%;
+  max-height: 10rem;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
 }
 
 .ss-component-canvas__frame-tabs {
@@ -292,6 +337,15 @@
   align-items: center;
   justify-content: center;
   transform-origin: center;
+}
+
+.ss-component-canvas-frame__rendered-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-button);
 }
 
 .ss-component-canvas-frame__unavailable {

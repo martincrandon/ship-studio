@@ -2,7 +2,7 @@ import { planInsertComponent, planStaticPropEdit, validateReactMutation } from '
 import { sourceTextForRef } from '../ranges';
 import { planDuplicateComponent } from '../refactors';
 import { planDeleteComponent, planRenameComponent } from '../refactors';
-import { planStaticSlotEdit } from '../slots';
+import { planStaticSlotEdit, planStructuredSlotEdit } from '../slots';
 import { populateSlotChildren } from '../slots';
 import { projectComponentTree } from '../component-tree';
 import { parseReactFile } from './react-parser';
@@ -423,7 +423,9 @@ export class ReactComponentAdapter implements ComponentAdapter {
   }
 
   planSlotEdit(input: EditComponentSlotInputWithContext, index: ComponentIndex): MutationResult {
-    return planStaticSlotEdit(input, index, input.snapshot);
+    return input.operation && input.operation !== 'replace'
+      ? planStructuredSlotEdit(input, index, input.snapshot)
+      : planStaticSlotEdit(input, index, input.snapshot);
   }
 
   planDuplicate(input: DuplicateComponentInputWithContext, index: ComponentIndex): RefactorResult {

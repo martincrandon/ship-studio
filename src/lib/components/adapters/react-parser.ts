@@ -5,7 +5,6 @@ import {
   componentKindForFile,
   isNonPlaceableComponent,
   isPascalCase,
-  isStaticAssetProp,
   jsxRootIdentifier,
   jsxTagText,
   normalizeProjectPath,
@@ -836,12 +835,17 @@ function propDescriptor(
 ): ComponentPropDescriptor {
   const typeText = seed.typeNode?.getText(sourceFile) ?? null;
   const choices = literalChoices(seed.typeNode);
+  const description = jsDocDescription(seed.sourceNode, sourceFile);
+  const explicitControl = sourcePropControl(seed.sourceNode, sourceFile, typeText);
   let control: ComponentPropDescriptor['control'] = 'readonly';
   if (choices) control = 'select';
+  else if (explicitControl) control = explicitControl;
   else if (typeText && /boolean/i.test(typeText)) control = 'boolean';
   else if (typeText && /(?:number|bigint)/i.test(typeText)) control = 'number';
-  else if (typeText && /string/i.test(typeText))
-    control = isStaticAssetProp(seed.name) ? 'asset' : 'text';
+  else if (typeText && /(?:\[\]|Array<|ReadonlyArray<)/i.test(typeText)) control = 'array';
+  else if (typeText && /(?:Record<|object|Object|Map<)/.test(typeText)) control = 'object';
+  else if (typeText && /null/.test(typeText)) control = 'nullable';
+  else if (typeText && /string/i.test(typeText)) control = 'text';
   return {
     name: seed.name,
     required: seed.required && seed.defaultValue === null,
@@ -849,9 +853,59 @@ function propDescriptor(
     defaultValue: seed.defaultValue,
     choices,
     control,
+    description,
     source: sourceRefForNode(file, sourceFile, seed.sourceNode),
     diagnostics: [],
   };
+}
+
+/**
+ * Specialized controls require an explicit source contract. A prop's runtime
+ * name (for example `href` or `className`) is not enough to change its
+ * editing semantics because generic strings are intentionally lossless text.
+ */
+function sourcePropControl(
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  typeText: string | null
+): ComponentPropDescriptor['control'] | null {
+  const leading = sourceFile.text.slice(node.getFullStart(), node.getStart(sourceFile));
+  const tag = leading.match(/@(?:ship-studio-)?control\s+([\w-]+)/i)?.[1]?.toLowerCase();
+  const tagged = explicitControl(tag);
+  if (tagged) return tagged;
+  if (!typeText) return null;
+  if (/\b(?:Asset|AssetRef|ImageAsset|FileAsset|ImageSource|MediaSource)\b/.test(typeText)) {
+    return 'asset';
+  }
+  if (/\b(?:RichText|RichTextContent|Markdown|MarkdownContent|HTMLContent)\b/.test(typeText)) {
+    return 'rich-text';
+  }
+  if (/\b(?:URL|Url|URI|Uri|Href|Link|UrlValue|HrefValue)\b/.test(typeText)) return 'url';
+  if (/\b(?:ClassName|ClassNames|CSSClass|ClassValue)\b/.test(typeText)) return 'class';
+  if (/\b(?:Attributes|AttributeMap|HTMLAttributes|AriaAttributes)\b/.test(typeText)) {
+    return 'attributes';
+  }
+  return null;
+}
+
+function explicitControl(value: string | undefined): ComponentPropDescriptor['control'] | null {
+  if (
+    value === 'text' ||
+    value === 'number' ||
+    value === 'boolean' ||
+    value === 'select' ||
+    value === 'asset' ||
+    value === 'url' ||
+    value === 'rich-text' ||
+    value === 'class' ||
+    value === 'attributes' ||
+    value === 'nullable' ||
+    value === 'array' ||
+    value === 'object'
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function jsDocDescription(node: ts.Node, sourceFile: ts.SourceFile): string | null {
@@ -997,7 +1051,16 @@ function collectChildrenSource(
   file: SourceFileSnapshot,
   sourceFile: ts.SourceFile
 ): import('../types').SourceRef | null {
-  if (!ts.isJsxElement(node) || node.children.length === 0) return null;
+  if (!ts.isJsxElement(node)) return null;
+  // Keep an exact zero-length body for `<Component></Component>`. A self-closing
+  // invocation has no authored slot at all, while an explicit pair proves an
+  // empty children slot that structured composition can safely insert into.
+  if (node.children.length === 0) {
+    return sourceRefForNode(file, sourceFile, {
+      getStart: () => node.openingElement.end,
+      end: node.closingElement.pos,
+    } as ts.Node);
+  }
   const first = node.children[0];
   const last = node.children[node.children.length - 1];
   return sourceRefForNode(file, sourceFile, {

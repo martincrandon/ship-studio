@@ -1,7 +1,6 @@
 import type { ProjectType } from '@/lib/static-server';
 import type {
   ComponentBinding,
-  ComponentIndex,
   ComponentSourceSnapshot,
   SourceFileChange,
   DeleteComponentInput,
@@ -16,6 +15,7 @@ import type {
   RefactorResult,
   SelectionBindingInput,
 } from './types';
+import type { ComponentIndexWithLibraries } from './libraries';
 import {
   COMPONENT_WORKER_PROTOCOL_VERSION,
   type ComponentWorkerRequest,
@@ -69,7 +69,10 @@ export class ComponentWorkerClient {
   }
 
   build(snapshot: ComponentSourceSnapshot, projectType: ProjectType | null, signal?: AbortSignal) {
-    return this.request<ComponentIndex>({ type: 'build', snapshot, projectType }, signal);
+    return this.request<ComponentIndexWithLibraries>(
+      { type: 'build', snapshot, projectType },
+      signal
+    );
   }
 
   update(
@@ -78,7 +81,10 @@ export class ComponentWorkerClient {
     projectType: ProjectType | null,
     signal?: AbortSignal
   ) {
-    return this.request<ComponentIndex>({ type: 'update', snapshot, changes, projectType }, signal);
+    return this.request<ComponentIndexWithLibraries>(
+      { type: 'update', snapshot, changes, projectType },
+      signal
+    );
   }
 
   bind(input: SelectionBindingInput, signal?: AbortSignal) {

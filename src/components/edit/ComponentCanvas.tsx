@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -35,6 +35,11 @@ import {
   type CanvasWidthMode,
   type ComponentCanvasFrame,
 } from '../../lib/components/canvas';
+import {
+  createComponentIsolatedRenderRequest,
+  type ComponentIsolatedRendererCapability,
+  type ComponentIsolatedRenderResult,
+} from '../../lib/components/isolated-renderer';
 import {
   buildComponentQAAgentPayload,
   compareComponentQABaseline,
@@ -74,6 +79,8 @@ export interface ComponentCanvasProps {
   onCaptureFrame?: (frame: ComponentCanvasFrame) => Promise<string | null>;
   /** The host may provide a real axe/runtime bridge when a dialect supports it. */
   onRunAccessibility?: (frame: ComponentCanvasFrame) => Promise<ComponentA11yResult | null>;
+  /** A validated external host; never executes project modules in Ship Studio. */
+  isolatedRenderer?: ComponentIsolatedRendererCapability | null;
   onSendToAgent?: (prompt: string) => void;
   /** Verified options from the preview host; absent means only neutral defaults. */
   breakpointOptions?: readonly CanvasOption[];
@@ -152,7 +159,8 @@ function orphanReason(reason: OrphanedComponentPreviewPreset['reason']): string 
 function frameState(
   frame: ComponentCanvasFrame,
   revision: string,
-  baselines: ComponentQABaseline[]
+  baselines: ComponentQABaseline[],
+  rendered?: ComponentIsolatedRenderResult
 ) {
   const baseline = baselines.find((entry) => entry.frameId === frame.id) ?? null;
   return {
@@ -160,6 +168,9 @@ function frameState(
     diff: compareComponentQABaseline(baseline, {
       frameIdentity: canvasFrameIdentity(frame, revision),
       sourceRevision: revision,
+      currentFingerprint: rendered?.renderFingerprint,
+      currentPixelDifference: rendered?.pixelDifference,
+      currentComparedBaselineFingerprint: rendered?.comparedBaselineFingerprint,
     }),
   };
 }
@@ -169,11 +180,15 @@ function FramePreview({
   frame,
   zoom,
   onOpenSource,
+  rendered,
+  renderError,
 }: {
   component: ComponentDescriptor;
   frame: ComponentCanvasFrame;
   zoom: number;
   onOpenSource: (source: SourceRef) => void;
+  rendered?: ComponentIsolatedRenderResult;
+  renderError?: string;
 }) {
   const width = frame.widthMode === 'fixed' && frame.width ? `${frame.width}px` : undefined;
   return (
@@ -186,22 +201,34 @@ function FramePreview({
         className="ss-component-canvas-frame__preview-inner"
         style={{ width, transform: `scale(${zoom})` }}
       >
-        {component.capabilities.isolatedPreview ? (
+        {rendered ? (
+          <img
+            className="ss-component-canvas-frame__rendered-image"
+            src={rendered.imageDataUrl}
+            alt={`${component.name} · ${frame.name}`}
+            width={rendered.width}
+            height={rendered.height}
+          />
+        ) : component.capabilities.isolatedPreview ? (
           <div className="ss-component-canvas-frame__unavailable">
             <ComponentsIcon size={24} aria-hidden="true" />
-            <strong>Isolated renderer is not connected</strong>
+            <strong>
+              {renderError
+                ? 'Isolated render failed closed'
+                : 'Live component preview is not connected'}
+            </strong>
             <span>
-              This dialect advertises an isolated-preview capability, but the host did not provide a
-              renderer.
+              {renderError ??
+                'This project supports an isolated preview, but its preview connection is not available right now.'}
             </span>
           </div>
         ) : (
           <div className="ss-component-canvas-frame__unavailable">
             <InfoIcon size={24} aria-hidden="true" />
-            <strong>Isolated preview unavailable</strong>
+            <strong>This project has no isolated preview</strong>
             <span>
-              No project module is executed inside Ship Studio. This frame remains safe, explicit
-              metadata until the dialect proves isolated rendering.
+              Ship Studio can save this test case and its QA settings, but it cannot render the
+              component here. Use a live usage to see it in the preview.
             </span>
             <Button
               variant="ghost"
@@ -253,7 +280,7 @@ function FramePropsEditor({
             <label key={prop.name} className="ss-component-canvas-field">
               <span>{prop.name}</span>
               <select
-                aria-label={`Set frame ${prop.name}`}
+                aria-label={`Set test case ${prop.name}`}
                 value={value ? encodedValue(value) : ''}
                 onChange={(event) =>
                   update(prop.name, decodeChoice(event.currentTarget.value, prop.choices ?? []))
@@ -274,7 +301,7 @@ function FramePropsEditor({
             <label key={prop.name} className="ss-component-canvas-field">
               <span>{prop.name}</span>
               <select
-                aria-label={`Set frame ${prop.name}`}
+                aria-label={`Set test case ${prop.name}`}
                 value={value?.kind === 'boolean' ? String(value.value) : ''}
                 onChange={(event) =>
                   update(
@@ -296,7 +323,7 @@ function FramePropsEditor({
           <label key={prop.name} className="ss-component-canvas-field">
             <span>{prop.name}</span>
             <TextField
-              aria-label={`Set frame ${prop.name}`}
+              aria-label={`Set test case ${prop.name}`}
               type={prop.control === 'number' ? 'number' : 'text'}
               value={
                 value?.kind === 'string' || value?.kind === 'number' ? String(value.value) : ''
@@ -324,6 +351,8 @@ function ComponentCanvasFrameCard({
   frameCount,
   zoom,
   baselines,
+  rendered,
+  renderError,
   a11y,
   onFrameChange,
   onMove,
@@ -344,6 +373,8 @@ function ComponentCanvasFrameCard({
   frameCount: number;
   zoom: number;
   baselines: ComponentQABaseline[];
+  rendered?: ComponentIsolatedRenderResult;
+  renderError?: string;
   a11y: ComponentA11yResult | null;
   onFrameChange: (frame: ComponentCanvasFrame) => void;
   onMove: (direction: 'up' | 'down') => void;
@@ -357,7 +388,7 @@ function ComponentCanvasFrameCard({
   breakpointOptions: readonly CanvasOption[];
   localeOptions: readonly CanvasOption[];
 }) {
-  const { baseline, diff } = frameState(frame, index.revision, baselines);
+  const { baseline, diff } = frameState(frame, index.revision, baselines, rendered);
   const currentA11y =
     a11y?.frameId === frame.id && a11y.sourceRevision === index.revision ? a11y : null;
   const updatePresentation = <K extends keyof ComponentCanvasFrame>(
@@ -373,7 +404,7 @@ function ComponentCanvasFrameCard({
       <header className="ss-component-canvas-frame__header">
         <div className="ss-component-canvas-frame__heading">
           <TextField
-            aria-label="Frame name"
+            aria-label="Test case name"
             value={frame.name}
             onChange={(event) => onFrameChange({ ...frame, name: event.currentTarget.value })}
           />
@@ -388,7 +419,7 @@ function ComponentCanvasFrameCard({
             variant="ghost"
             size="compact"
             aria-label={`Move ${frame.name} up`}
-            title="Move frame up"
+            title="Move test case up"
             icon={<ArrowUpIcon size={13} />}
             disabled={frameIndex === 0}
             onClick={() => onMove('up')}
@@ -397,7 +428,7 @@ function ComponentCanvasFrameCard({
             variant="ghost"
             size="compact"
             aria-label={`Move ${frame.name} down`}
-            title="Move frame down"
+            title="Move test case down"
             icon={<ArrowDownIcon size={13} />}
             disabled={frameIndex === frameCount - 1}
             onClick={() => onMove('down')}
@@ -405,8 +436,8 @@ function ComponentCanvasFrameCard({
           <IconButton
             variant="ghost"
             size="compact"
-            aria-label={`Remove ${frame.name}`}
-            title="Remove frame"
+            aria-label={`Remove test case ${frame.name}`}
+            title="Remove test case"
             icon={<TrashIcon size={13} />}
             disabled={frameCount <= 1}
             onClick={onRemove}
@@ -510,12 +541,16 @@ function ComponentCanvasFrameCard({
           </select>
         </label>
       </div>
-      <FramePreview component={component} frame={frame} zoom={zoom} onOpenSource={onOpenSource} />
-      <section
-        className="ss-component-canvas-frame__section"
-        aria-label={`${frame.name} explicit props`}
-      >
-        <h4>Explicit props</h4>
+      <FramePreview
+        component={component}
+        frame={frame}
+        zoom={zoom}
+        onOpenSource={onOpenSource}
+        rendered={rendered}
+        renderError={renderError}
+      />
+      <section className="ss-component-canvas-frame__section" aria-label={`${frame.name} props`}>
+        <h4>Props</h4>
         <FramePropsEditor
           component={component}
           frame={frame}
@@ -524,7 +559,7 @@ function ComponentCanvasFrameCard({
       </section>
       {component.slots.length > 0 && (
         <section className="ss-component-canvas-frame__section" aria-label={`${frame.name} slots`}>
-          <h4>Static slots</h4>
+          <h4>Content slots</h4>
           {component.slots.map((slot) => (
             <label key={slot.name} className="ss-component-canvas-slot">
               <span>
@@ -548,10 +583,10 @@ function ComponentCanvasFrameCard({
       )}
       <section
         className="ss-component-canvas-frame__section ss-component-canvas-frame__qa"
-        aria-label={`${frame.name} QA`}
+        aria-label={`${frame.name} visual and accessibility checks`}
       >
         <div className="ss-component-canvas-frame__section-heading">
-          <h4>QA</h4>
+          <h4>Visual and accessibility checks</h4>
           <span>Threshold {diff.threshold}</span>
         </div>
         <p className="ss-components-muted">{diff.message}</p>
@@ -563,8 +598,8 @@ function ComponentCanvasFrameCard({
             disabled={!onCapture}
             title={
               onCapture
-                ? 'Capture a screenshot from a proven frame host'
-                : 'A proven isolated frame host is required'
+                ? 'Capture a screenshot from the connected preview'
+                : 'An isolated preview connection is required'
             }
             onClick={onCapture}
           >
@@ -577,7 +612,7 @@ function ComponentCanvasFrameCard({
             disabled={!onRunA11y}
             title={
               onRunA11y
-                ? 'Run accessibility checks for this frame'
+                ? 'Run accessibility checks for this test case'
                 : 'Accessibility bridge unavailable for this dialect'
             }
             onClick={onRunA11y}
@@ -585,7 +620,7 @@ function ComponentCanvasFrameCard({
             Run a11y checks
           </Button>
           <Button variant="ghost" size="compact" disabled={!onSendToAgent} onClick={onSendToAgent}>
-            Send failure to agent
+            Send results to agent
           </Button>
         </div>
         {currentA11y ? (
@@ -622,7 +657,7 @@ function ComponentCanvasFrameCard({
           </Button>
           {selectedUsage && onSelectUsage && (
             <Button variant="ghost" size="compact" onClick={() => onSelectUsage(selectedUsage)}>
-              Open a real usage
+              Open live usage
             </Button>
           )}
         </div>
@@ -638,7 +673,7 @@ function ComponentCanvasFrameCard({
 }
 
 /**
- * Explicit, bounded Component Canvas. It is intentionally a presentation and
+ * Explicit, bounded component review. It is intentionally a presentation and
  * review surface: project modules are never imported or executed here.
  */
 export function ComponentCanvas({
@@ -650,11 +685,10 @@ export function ComponentCanvas({
   usages = [],
   onOpenSource,
   onSelectUsage,
-  onCaptureFrame,
-  onRunAccessibility,
   onSendToAgent,
   breakpointOptions = DEFAULT_BREAKPOINT_OPTIONS,
   localeOptions = DEFAULT_LOCALE_OPTIONS,
+  isolatedRenderer,
 }: ComponentCanvasProps) {
   const { showToast } = useOptionalToast();
   const projectKey = index.profile.workspaceRoot || 'unknown-project';
@@ -667,9 +701,106 @@ export function ComponentCanvas({
   const [a11y, setA11y] = useState<Record<string, ComponentA11yResult>>({});
   const [zoom, setZoom] = useState(1);
   const [matrixPlan, setMatrixPlan] = useState<ComponentQAMatrixPlan | null>(null);
+  const [renderedFrames, setRenderedFrames] = useState<
+    Record<string, ComponentIsolatedRenderResult>
+  >({});
+  const [renderErrors, setRenderErrors] = useState<Record<string, string>>({});
+  const renderGenerationRef = useRef(0);
+  const initializedCanvasKeyRef = useRef<string | null>(null);
+  const [matrixRenders, setMatrixRenders] = useState<
+    Array<{
+      breakpoint: string | null;
+      locale: string | null;
+      result?: ComponentIsolatedRenderResult;
+      error?: string;
+    }>
+  >([]);
+  const [matrixRunning, setMatrixRunning] = useState(false);
+
+  const canRenderFrames =
+    Boolean(isolatedRenderer) && component.capabilities.isolatedPreview === true;
+  const renderFrame = useCallback(
+    async (
+      frame: ComponentCanvasFrame,
+      baselineFingerprint?: string
+    ): Promise<ComponentIsolatedRenderResult | null> => {
+      if (!isolatedRenderer || !canRenderFrames) return null;
+      const request = createComponentIsolatedRenderRequest(
+        frame,
+        component,
+        index.revision,
+        isolatedRenderer.projectIdentity,
+        baselineFingerprint
+      );
+      return isolatedRenderer.renderFrame(request);
+    },
+    [canRenderFrames, component, index.revision, isolatedRenderer]
+  );
+
+  // Repaint every explicit frame after a source revision changes. The
+  // generation guard prevents a slow, superseded host response from painting
+  // stale pixels over a newer definition.
+  useEffect(() => {
+    let cancelled = false;
+    if (!isOpen || !canRenderFrames || frames.length === 0) {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setRenderedFrames({});
+        setRenderErrors({});
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    const generation = (renderGenerationRef.current += 1);
+    queueMicrotask(() => {
+      if (cancelled || generation !== renderGenerationRef.current) return;
+      setRenderedFrames({});
+      setRenderErrors({});
+    });
+    void Promise.all(
+      frames.map(async (frame) => {
+        try {
+          const baselineFingerprint = baselines.find(
+            (baseline) => baseline.frameId === frame.id
+          )?.renderFingerprint;
+          return { frame, result: await renderFrame(frame, baselineFingerprint) } as const;
+        } catch (error) {
+          return {
+            frame,
+            error:
+              error instanceof Error ? error.message : 'The isolated renderer refused this frame.',
+          } as const;
+        }
+      })
+    ).then((results) => {
+      if (cancelled || generation !== renderGenerationRef.current) return;
+      const rendered: Record<string, ComponentIsolatedRenderResult> = {};
+      const errors: Record<string, string> = {};
+      for (const result of results) {
+        if ('result' in result && result.result) rendered[result.frame.id] = result.result;
+        else if ('error' in result)
+          errors[result.frame.id] = result.error ?? 'The isolated renderer refused this frame.';
+      }
+      setRenderedFrames(rendered);
+      setRenderErrors(errors);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [baselines, canRenderFrames, frames, index.revision, isOpen, renderFrame]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      initializedCanvasKeyRef.current = null;
+      return;
+    }
+    const canvasKey = `${presetKey}:${component.id}`;
+    // Keep authored frames while Edit main advances the source revision. A
+    // source refresh must repaint those frames, not silently replace them
+    // from an older localStorage snapshot.
+    if (initializedCanvasKeyRef.current === canvasKey) return;
+    initializedCanvasKeyRef.current = canvasKey;
     const reconciled = reconcileComponentPreviewPresets(
       readComponentPreviewPresetStore(localStorage, presetKey),
       index
@@ -734,10 +865,7 @@ export function ComponentCanvas({
       sourceRevision: index.revision,
     });
     if (result.refused) {
-      showToast(
-        `The Component Canvas is capped at ${COMPONENT_CANVAS_MAX_FRAMES} explicit frames.`,
-        'info'
-      );
+      showToast(`Component review is capped at ${COMPONENT_CANVAS_MAX_FRAMES} test cases.`, 'info');
       return;
     }
     setFrames(result.frames);
@@ -745,14 +873,50 @@ export function ComponentCanvas({
   }, [frames, index.revision, selectedFrame, showToast]);
   const saveBaseline = useCallback(
     async (frame: ComponentCanvasFrame) => {
-      if (!onCaptureFrame) return;
-      const screenshotPath = await onCaptureFrame(frame);
-      if (!screenshotPath) return;
+      if (!canRenderFrames || !isolatedRenderer) {
+        showToast(
+          'A proven isolated renderer is required to capture a Component Canvas baseline.',
+          'info'
+        );
+        return;
+      }
+      let rendered = renderedFrames[frame.id];
+      if (!rendered) {
+        try {
+          const fresh = await renderFrame(frame);
+          if (fresh) {
+            rendered = fresh;
+            setRenderedFrames((current) => ({ ...current, [frame.id]: fresh }));
+          }
+        } catch (error) {
+          showToast(
+            error instanceof Error ? error.message : 'The isolated renderer refused this frame.',
+            'error'
+          );
+          return;
+        }
+      }
+      if (
+        !rendered ||
+        rendered.frameId !== frame.id ||
+        rendered.sourceRevision !== index.revision ||
+        !rendered.screenshotPath ||
+        !rendered.renderFingerprint
+      ) {
+        showToast(
+          'The isolated renderer did not return a screenshot path and pixel fingerprint; baseline was not saved.',
+          'info'
+        );
+        return;
+      }
       const next = createComponentQABaseline(
         frame,
-        screenshotPath,
+        rendered.screenshotPath,
         index.revision,
-        canvasFrameIdentity(frame, index.revision)
+        canvasFrameIdentity(frame, index.revision),
+        new Date().toISOString(),
+        undefined,
+        rendered?.renderFingerprint
       );
       setBaselines((current) => {
         const updated = [...current.filter((baseline) => baseline.frameId !== frame.id), next];
@@ -766,13 +930,41 @@ export function ComponentCanvas({
         diff_state: 'baseline-saved',
       });
     },
-    [component.dialect, index.revision, onCaptureFrame, qaKey, showToast]
+    [
+      canRenderFrames,
+      component.dialect,
+      index.revision,
+      isolatedRenderer,
+      qaKey,
+      renderFrame,
+      renderedFrames,
+      showToast,
+    ]
   );
   const runA11y = useCallback(
     async (frame: ComponentCanvasFrame) => {
-      if (!onRunAccessibility) return;
-      const result = await onRunAccessibility(frame);
-      if (!result) return;
+      if (!isolatedRenderer?.runAccessibility || !canRenderFrames) return;
+      let result: ComponentA11yResult;
+      try {
+        result = await isolatedRenderer.runAccessibility(
+          createComponentIsolatedRenderRequest(
+            frame,
+            component,
+            index.revision,
+            isolatedRenderer.projectIdentity
+          )
+        );
+      } catch (error) {
+        showToast(
+          error instanceof Error ? error.message : 'The accessibility host refused this frame.',
+          'error'
+        );
+        return;
+      }
+      if (result.frameId !== frame.id || result.sourceRevision !== index.revision) {
+        showToast('The accessibility result was stale and was discarded.', 'info');
+        return;
+      }
       setA11y((current) => ({ ...current, [frame.id]: result }));
       void trackEvent('component_qa_a11y_checked', {
         dialect: component.dialect,
@@ -780,11 +972,11 @@ export function ComponentCanvas({
           result.findings.length === 0 ? '0' : result.findings.length <= 3 ? '1-3' : '4+',
       });
     },
-    [component.dialect, onRunAccessibility]
+    [canRenderFrames, component, index.revision, isolatedRenderer, showToast]
   );
   const sendToAgent = useCallback(
     (frame: ComponentCanvasFrame) => {
-      const state = frameState(frame, index.revision, baselines);
+      const state = frameState(frame, index.revision, baselines, renderedFrames[frame.id]);
       const payload = buildComponentQAAgentPayload({
         component,
         frame,
@@ -797,7 +989,7 @@ export function ComponentCanvas({
       onSendToAgent?.(payload.prompt);
       void trackEvent('component_qa_agent_handoff', payload.metadata);
     },
-    [a11y, baselines, component, index.revision, onSendToAgent]
+    [a11y, baselines, component, index.revision, onSendToAgent, renderedFrames]
   );
   const runMatrixPlan = useCallback(() => {
     const plan = planComponentQAMatrix({
@@ -805,7 +997,45 @@ export function ComponentCanvas({
       locales: localeOptions.flatMap((option) => (option.value ? [option.value] : [])),
     });
     setMatrixPlan(plan);
+    setMatrixRenders([]);
   }, [breakpointOptions, localeOptions]);
+  const runMatrix = useCallback(async () => {
+    if (!selectedFrame || !canRenderFrames) return;
+    const plan =
+      matrixPlan ??
+      planComponentQAMatrix({
+        breakpoints: breakpointOptions.flatMap((option) => (option.value ? [option.value] : [])),
+        locales: localeOptions.flatMap((option) => (option.value ? [option.value] : [])),
+      });
+    if (plan.refused) {
+      setMatrixPlan(plan);
+      return;
+    }
+    setMatrixPlan(plan);
+    setMatrixRunning(true);
+    setMatrixRenders([]);
+    const results = await Promise.all(
+      plan.cases.map(async (item) => {
+        try {
+          const result = await renderFrame({
+            ...selectedFrame,
+            id: `${selectedFrame.id}:matrix:${item.breakpoint ?? 'default'}:${item.locale ?? 'default'}`,
+            breakpoint: item.breakpoint,
+            locale: item.locale,
+          });
+          return { ...item, result: result ?? undefined };
+        } catch (error) {
+          return {
+            ...item,
+            error:
+              error instanceof Error ? error.message : 'The isolated renderer refused this case.',
+          };
+        }
+      })
+    );
+    setMatrixRenders(results);
+    setMatrixRunning(false);
+  }, [breakpointOptions, canRenderFrames, localeOptions, matrixPlan, renderFrame, selectedFrame]);
   const hasVerifiedMatrixOptions =
     breakpointOptions.some((option) => option.value !== '') ||
     localeOptions.some((option) => option.value !== '');
@@ -816,7 +1046,7 @@ export function ComponentCanvas({
       onClose={onClose}
       title={
         <>
-          <ComponentsIcon size={16} /> Component Canvas · {component.name}
+          <ComponentsIcon size={16} /> Component review · {component.name}
         </>
       }
       className="ss-component-canvas-modal"
@@ -824,17 +1054,22 @@ export function ComponentCanvas({
       <div className="ss-component-canvas" data-testid="component-canvas">
         <div className="ss-component-canvas__intro">
           <div>
-            <p>Explicit named frames for safe, source-backed review.</p>
+            <h3>Review this component in known states</h3>
+            <p>
+              Create named test cases for different props, content, viewport sizes, and locales.
+              Then capture a visual baseline or run accessibility checks when a live preview is
+              connected.
+            </p>
             <span>
-              Frames are capped at {COMPONENT_CANVAS_MAX_FRAMES}; no automatic variant combinations
-              are generated.
+              Test cases are saved locally, capped at {COMPONENT_CANVAS_MAX_FRAMES}, and never
+              generate every possible combination automatically.
             </span>
           </div>
           <div className="ss-component-canvas__toolbar">
             <label>
               <span>Zoom</span>
               <select
-                aria-label="Canvas zoom"
+                aria-label="Review preview zoom"
                 value={zoom}
                 onChange={(event) => setZoom(Number(event.currentTarget.value))}
               >
@@ -850,15 +1085,18 @@ export function ComponentCanvas({
               onClick={addFrameFromSelected}
               disabled={!selectedFrame || frames.length >= COMPONENT_CANVAS_MAX_FRAMES}
             >
-              Add frame
+              Add test case
             </Button>
           </div>
         </div>
         {variants.length > 0 && (
-          <section className="ss-component-canvas__variants" aria-label="Finite variant choices">
+          <section
+            className="ss-component-canvas__variants"
+            aria-label="Variant options found in source"
+          >
             <div>
-              <strong>Finite variant choices</strong>
-              <span>Only parser-proven literal choices are offered.</span>
+              <strong>Variant options found in source</strong>
+              <span>Only literal choices that were found safely are shown.</span>
             </div>
             {variants.map((variant) => (
               <div key={variant.name} className="ss-component-canvas__variant-row">
@@ -867,18 +1105,18 @@ export function ComponentCanvas({
               </div>
             ))}
             <p className="ss-components-muted">
-              Choose values inside each frame. The canvas never builds a Cartesian product
+              Choose values inside each test case. Ship Studio does not create every combination
               automatically.
             </p>
           </section>
         )}
         <div className="ss-component-canvas__matrix">
           <div>
-            <strong>QA matrix</strong>
+            <strong>Test matrix</strong>
             <span>
               {hasVerifiedMatrixOptions
-                ? 'Plan a bounded batch from host-provided breakpoint/locale options.'
-                : 'No verified breakpoint or locale options are available from the host.'}
+                ? 'Plan a small set of checks across the verified viewport and locale options.'
+                : 'The live preview has not provided viewport or locale options.'}
             </span>
           </div>
           <Button
@@ -892,7 +1130,7 @@ export function ComponentCanvas({
                 : 'The host must provide verified options before planning a matrix'
             }
           >
-            Plan verified matrix
+            Plan test matrix
           </Button>
           {matrixPlan && (
             <div className="ss-component-canvas__matrix-result" role="status">
@@ -908,6 +1146,43 @@ export function ComponentCanvas({
                     .join(', ')}
                 </>
               )}
+            </div>
+          )}
+          {matrixPlan && !matrixPlan.refused && (
+            <Button
+              variant="secondary"
+              size="compact"
+              onClick={() => void runMatrix()}
+              disabled={!canRenderFrames || !selectedFrame || matrixRunning}
+              title={
+                canRenderFrames
+                  ? 'Render the selected test case across this bounded matrix'
+                  : 'A proven isolated renderer is required to run matrix cases'
+              }
+            >
+              {matrixRunning ? 'Rendering matrix…' : 'Render test matrix'}
+            </Button>
+          )}
+          {matrixRenders.length > 0 && (
+            <div className="ss-component-canvas__matrix-renders" aria-label="Matrix render results">
+              {matrixRenders.map((entry) => (
+                <div
+                  key={`${entry.breakpoint ?? 'default'}:${entry.locale ?? 'default'}`}
+                  className="ss-component-canvas__matrix-render"
+                >
+                  <span>
+                    {entry.breakpoint ?? 'default'} / {entry.locale ?? 'default'}
+                  </span>
+                  {entry.result ? (
+                    <img
+                      src={entry.result.imageDataUrl}
+                      alt={`Matrix render · ${entry.breakpoint ?? 'default'} · ${entry.locale ?? 'default'}`}
+                    />
+                  ) : (
+                    <small>{entry.error ?? 'No render returned.'}</small>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -948,7 +1223,11 @@ export function ComponentCanvas({
               ))}
           </section>
         )}
-        <div className="ss-component-canvas__frame-tabs" role="tablist" aria-label="Canvas frames">
+        <div
+          className="ss-component-canvas__frame-tabs"
+          role="tablist"
+          aria-label="Saved test cases"
+        >
           {frames.map((frame) => (
             <button
               key={frame.id}
@@ -957,19 +1236,21 @@ export function ComponentCanvas({
               aria-selected={frame.id === selectedFrame?.id}
               onClick={() => setSelectedFrameId(frame.id)}
             >
-              {frame.name || 'Untitled frame'}
+              {frame.name || 'Untitled test case'}
             </button>
           ))}
         </div>
-        <section className="ss-component-canvas__frame-matrix" aria-label="Frames side by side">
+        <section className="ss-component-canvas__frame-matrix" aria-label="Saved test cases">
           {frames.map((frame) => (
             <article key={frame.id} className="ss-component-canvas__matrix-frame">
-              <strong>{frame.name || 'Untitled frame'}</strong>
+              <strong>{frame.name || 'Untitled test case'}</strong>
               <FramePreview
                 component={component}
                 frame={frame}
                 zoom={zoom}
                 onOpenSource={onOpenSource}
+                rendered={renderedFrames[frame.id]}
+                renderError={renderErrors[frame.id]}
               />
             </article>
           ))}
@@ -983,6 +1264,8 @@ export function ComponentCanvas({
             frameCount={frames.length}
             zoom={zoom}
             baselines={baselines}
+            rendered={renderedFrames[selectedFrame.id]}
+            renderError={renderErrors[selectedFrame.id]}
             a11y={a11y[selectedFrame.id] ?? null}
             onFrameChange={updateFrame}
             onMove={(direction) => {
@@ -994,8 +1277,12 @@ export function ComponentCanvas({
               setFrames(next);
               setSelectedFrameId(next[0]?.id ?? null);
             }}
-            onCapture={() => void saveBaseline(selectedFrame)}
-            onRunA11y={() => void runA11y(selectedFrame)}
+            onCapture={canRenderFrames ? () => void saveBaseline(selectedFrame) : undefined}
+            onRunA11y={
+              canRenderFrames && isolatedRenderer?.runAccessibility
+                ? () => void runA11y(selectedFrame)
+                : undefined
+            }
             onSendToAgent={onSendToAgent ? () => sendToAgent(selectedFrame) : undefined}
             onOpenSource={onOpenSource}
             usages={usages}

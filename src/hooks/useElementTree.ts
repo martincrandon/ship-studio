@@ -86,7 +86,18 @@ export interface ElementTreeNode {
 }
 
 /** A tree projection may replace validated component boundaries with virtual rows. */
-export type ComponentAwareTreeNode = ElementTreeNode | ComponentTreeNode;
+export interface ComponentSlotTreeNode {
+  kind: 'slot';
+  key: string;
+  componentId: ComponentId;
+  instanceId: ComponentInstanceId;
+  slotName: string;
+  required: boolean;
+  sourceAvailable: boolean;
+  childInstanceIds: ComponentInstanceId[];
+  children: ComponentAwareTreeNode[];
+}
+export type ComponentAwareTreeNode = ElementTreeNode | ComponentTreeNode | ComponentSlotTreeNode;
 
 export interface SelectedComponent {
   key: string;
@@ -226,7 +237,10 @@ function toRawTree(node: ElementTreeNode): RawComponentTreeNode {
     text: node.text,
     idAttr: node.idAttr,
     children: node.children
-      .filter((child): child is ElementTreeNode => child.kind !== 'component')
+      .filter(
+        (child): child is ElementTreeNode =>
+          child.kind !== 'component' && child.kind !== 'slot'
+      )
       .map(toRawTree),
   };
 }
@@ -243,6 +257,19 @@ function projectedNode(node: IndexedComponentAwareTreeNode): ComponentAwareTreeN
       hostNodeIds: [...node.hostNodeIds],
       definition: node.definition,
       invocation: node.invocation,
+      children: node.children.map(projectedNode),
+    };
+  }
+  if (node.kind === 'slot') {
+    return {
+      kind: 'slot',
+      key: node.key,
+      componentId: node.componentId,
+      instanceId: node.instanceId,
+      slotName: node.slotName,
+      required: node.required,
+      sourceAvailable: node.sourceAvailable,
+      childInstanceIds: [...node.childInstanceIds],
       children: node.children.map(projectedNode),
     };
   }
@@ -325,7 +352,7 @@ function collectBoundaryHints(
       }
     }
     for (const child of node.children) {
-      if (child.kind !== 'component') {
+      if (child.kind !== 'component' && child.kind !== 'slot') {
         if (!parentByNodeId.has(child.id)) parentByNodeId.set(child.id, node.id);
         walk(child);
       }

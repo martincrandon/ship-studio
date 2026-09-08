@@ -65,6 +65,192 @@ export function Page({ title }: { title: string }) {
     });
   });
 
+  it('classifies direct selected values and supports reviewed rename decisions', () => {
+    const source = snapshot({
+      'components/Page.tsx': `export function Page({ title, url, image, hidden }: { title: string; url: string; image: string; hidden: boolean }) {
+  return <main><a href={url}><img src={image} alt={title} hidden={hidden} /></a></main>;
+}
+`,
+    });
+    const selection = '<a href={url}><img src={image} alt={title} hidden={hidden} /></a>';
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const proposal = planExtractComponent(
+      {
+        source: selectedSource(source, 'components/Page.tsx', selection),
+        componentName: 'CardLink',
+        destinationFile: 'components/CardLink.tsx',
+      },
+      index,
+      source
+    );
+    expect(proposal).toMatchObject({
+      status: 'needs-approval',
+      proposal: {
+        requiredProps: [
+          { sourceName: 'hidden', kind: 'visibility' },
+          { sourceName: 'image', kind: 'image' },
+          { sourceName: 'title', kind: 'attribute' },
+          { sourceName: 'url', kind: 'link' },
+        ],
+      },
+    });
+
+    const approved = planExtractComponent(
+      {
+        source: selectedSource(source, 'components/Page.tsx', selection),
+        componentName: 'CardLink',
+        destinationFile: 'components/CardLink.tsx',
+        approvedProps: [
+          { sourceName: 'hidden', propName: 'isHidden' },
+          { sourceName: 'image', propName: 'image' },
+          { sourceName: 'title', propName: 'altText' },
+          { sourceName: 'url', propName: 'href' },
+        ],
+      },
+      index,
+      source
+    );
+    expect(approved.status).toBe('planned');
+    if (approved.status === 'planned') {
+      const created = approved.plan.operations?.find((operation) => operation.kind === 'create');
+      expect(created?.kind).toBe('create');
+      if (created?.kind === 'create') {
+        expect(created.contents).toContain('isHidden: boolean');
+        expect(created.contents).toContain(
+          '{ isHidden: hidden, image, altText: title, href: url }'
+        );
+      }
+    }
+    expect(
+      planExtractComponent(
+        {
+          source: selectedSource(source, 'components/Page.tsx', selection),
+          componentName: 'CardLink',
+          destinationFile: 'components/CardLink.tsx',
+          approvedProps: [],
+        },
+        index,
+        source
+      )
+    ).toMatchObject({ status: 'refused', code: 'missing-prop-approval' });
+  });
+
+  it('offers optional static literal suggestions and preserves rejected literals', () => {
+    const source = snapshot({
+      'components/Page.tsx': `export function Page() {
+  return <main><a href="/docs"><img src="/hero.png" alt="Hero" hidden /><p>Hello</p></a></main>;
+}
+`,
+    });
+    const selection = '<a href="/docs"><img src="/hero.png" alt="Hero" hidden /><p>Hello</p></a>';
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const selected = selectedSource(source, 'components/Page.tsx', selection);
+    const proposal = planExtractComponent(
+      {
+        source: selected,
+        componentName: 'HeroLink',
+        destinationFile: 'components/HeroLink.tsx',
+      },
+      index,
+      source
+    );
+    expect(proposal).toMatchObject({
+      status: 'needs-approval',
+      proposal: {
+        proposedPropNames: [],
+        suggestedProps: [
+          { kind: 'link', displayName: 'href', required: false },
+          { kind: 'image', displayName: 'src', required: false },
+          { kind: 'attribute', displayName: 'alt', required: false },
+          { kind: 'visibility', displayName: 'hidden', required: false },
+          { kind: 'text', displayName: 'Text', required: false },
+        ],
+      },
+    });
+    if (proposal.status !== 'needs-approval') return;
+    const href = proposal.proposal.suggestedProps?.find(
+      (suggestion) => suggestion.displayName === 'href'
+    );
+    expect(href).toBeDefined();
+    const accepted = planExtractComponent(
+      {
+        source: selected,
+        componentName: 'HeroLink',
+        destinationFile: 'components/HeroLink.tsx',
+        approvedProps: href ? [{ sourceName: href.sourceName, propName: 'url' }] : [],
+      },
+      index,
+      source
+    );
+    expect(accepted.status).toBe('planned');
+    if (accepted.status === 'planned') {
+      const created = accepted.plan.operations?.find((operation) => operation.kind === 'create');
+      const edited = accepted.plan.operations?.find((operation) => operation.kind === 'edit');
+      expect(created?.kind).toBe('create');
+      expect(edited?.kind).toBe('edit');
+      if (created?.kind === 'create') {
+        expect(created.contents).toContain('<a href={url}>');
+        expect(created.contents).toContain('<img src="/hero.png" alt="Hero" hidden />');
+        expect(created.contents).toContain('<p>Hello</p>');
+      }
+      if (edited?.kind === 'edit') {
+        expect(edited.edits.some((edit) => edit.text === '<HeroLink url="/docs" />')).toBe(true);
+      }
+    }
+    const rejected = planExtractComponent(
+      {
+        source: selected,
+        componentName: 'HeroLink',
+        destinationFile: 'components/HeroLink.tsx',
+        approvedProps: [],
+      },
+      index,
+      source
+    );
+    expect(rejected.status).toBe('planned');
+    if (rejected.status === 'planned') {
+      const created = rejected.plan.operations?.find((operation) => operation.kind === 'create');
+      if (created?.kind === 'create') expect(created.contents).toContain('href="/docs"');
+    }
+  });
+
+  it('infers numeric and non-visibility boolean literal types and refuses null literals', () => {
+    const source = snapshot({
+      'components/Page.tsx': `export function Page() {
+  return <main><div data-count={3} data-enabled={true} data-null={null}>Copy</div></main>;
+}
+`,
+    });
+    const selection = '<div data-count={3} data-enabled={true} data-null={null}>Copy</div>';
+    const index = buildComponentIndex(source, { projectType: 'nextjs' });
+    const result = planExtractComponent(
+      {
+        source: selectedSource(source, 'components/Page.tsx', selection),
+        componentName: 'LiteralValues',
+        destinationFile: 'components/LiteralValues.tsx',
+      },
+      index,
+      source
+    );
+    expect(result).toMatchObject({
+      status: 'needs-approval',
+      proposal: {
+        suggestedProps: [
+          { displayName: 'data-count', typeText: 'number' },
+          { displayName: 'data-enabled', typeText: 'boolean' },
+          { displayName: 'Text', typeText: 'string' },
+        ],
+      },
+    });
+    if (result.status === 'needs-approval') {
+      expect(
+        result.proposal.suggestedProps?.some((suggestion) =>
+          suggestion.sourceText?.includes('null')
+        )
+      ).toBe(false);
+    }
+  });
+
   it('plans a lossless create plus replacement import and invocation after approval', () => {
     const source = snapshot({
       'components/Badge.tsx': 'export function Badge() { return <span>Badge</span>; }\n',

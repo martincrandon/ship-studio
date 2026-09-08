@@ -2,25 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { useComponentsAvailability } from './useComponentsAvailability';
 
 describe('useComponentsAvailability', () => {
-  it('exposes the catalog for every supported web project detector result', () => {
-    const availabilityForProject = useComponentsAvailability;
-    for (const projectType of [
-      'nextjs',
-      'sveltekit',
-      'astro',
-      'nuxt',
-      'vite',
-      'statichtml',
-      'shopifytheme',
-      'generic',
-    ] as const) {
-      expect(availabilityForProject('/project', projectType)).toBe(true);
-    }
+  it('keeps every supported source dialect reachable through the workspace gate', () => {
+    expect(useComponentsAvailability('/projects/next', 'nextjs')).toBe(true);
+    expect(useComponentsAvailability('/projects/astro', 'astro')).toBe(true);
+    expect(useComponentsAvailability('/projects/nuxt', 'nuxt')).toBe(true);
+    expect(useComponentsAvailability('/projects/svelte', 'sveltekit')).toBe(true);
+    expect(useComponentsAvailability('/projects/shopify', 'shopifytheme')).toBe(true);
+    expect(useComponentsAvailability('/projects/web', 'statichtml')).toBe(true);
+    expect(useComponentsAvailability('/projects/web', 'generic')).toBe(true);
+    expect(useComponentsAvailability('/projects/native', 'reactnative')).toBe(true);
+    expect(useComponentsAvailability('/projects/native', 'flutter')).toBe(true);
   });
 
-  it('keeps native and unresolved projects out of the web catalog gate', () => {
-    expect(useComponentsAvailability('/project', 'reactnative')).toBe(false);
-    expect(useComponentsAvailability('/project', 'flutter')).toBe(false);
-    expect(useComponentsAvailability('/project', 'unknown')).toBe(false);
+  it('fails closed for unknown projects', () => {
+    expect(useComponentsAvailability('/projects/unknown', 'unknown')).toBe(false);
   });
 });
