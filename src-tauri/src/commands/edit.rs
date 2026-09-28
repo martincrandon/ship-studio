@@ -19,6 +19,7 @@
 //! available; otherwise it resolves to `Multi` — editable as a group (write all)
 //! or one at a time — so the resolver never guesses a single wrong edit target.
 
+use crate::commands::components::content_hash;
 use crate::commands::projects::detect_project_type;
 use crate::errors::CommandError;
 use crate::types::ProjectType;
@@ -1686,9 +1687,29 @@ pub enum TextResolution {
         text: String,
         /// How the underlying element was reached: "unique" | "tag" | "ancestor".
         confidence: String,
+        /// Exact UTF-8 byte range and complete-file hash. These are omitted
+        /// only for synthetic unit-test occurrences; focused writes require
+        /// all three values.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_start: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_end: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        source_hash: Option<String>,
     },
     /// The text isn't a plain editable string (dynamic, mixed, or ambiguous element).
     ReadOnly { reason: String },
+}
+
+/// Exact text span supplied by a focused component surface. The complete-file
+/// hash and byte range are checked at action time so a stale child can never
+/// be redirected through the project-wide text index.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExactTextTarget {
+    pub expected_hash: String,
+    pub expected_start: usize,
+    pub expected_end: usize,
 }
 
 /// A located static text run between an opening tag's `>` and its `</`. The run may
@@ -1987,6 +2008,10 @@ struct TextOccurrence {
     column: usize,
     /// Lowercased enclosing tag name.
     tag: String,
+    /// Exact source span/hash when indexed from a real file.
+    source_start: Option<usize>,
+    source_end: Option<usize>,
+    source_hash: Option<String>,
 }
 
 /// Replace every tag in `s` (`<br>`, `<strong>`, `</a>`, …) with a single space,
@@ -2170,6 +2195,9 @@ fn index_text_occurrences(root: &Path) -> Vec<TextOccurrence> {
                 line: span.line,
                 column: span.column,
                 tag: span.tag,
+                source_start: Some(span.value_start),
+                source_end: Some(span.value_end),
+                source_hash: Some(content_hash(src.as_bytes())),
             });
         }
     }
@@ -2192,6 +2220,9 @@ fn resolved_text(o: &TextOccurrence, confidence: &str) -> TextResolution {
         column: o.column,
         text: o.value.clone(),
         confidence: confidence.to_string(),
+        source_start: o.source_start,
+        source_end: o.source_end,
+        source_hash: o.source_hash.clone(),
     }
 }
 
@@ -2291,6 +2322,9 @@ pub fn resolve_text_source(
                         column: ts.column,
                         text: ts.value,
                         confidence,
+                        source_start: Some(ts.value_start),
+                        source_end: Some(ts.value_end),
+                        source_hash: Some(content_hash(src.as_bytes())),
                     });
                 }
             }
@@ -2350,6 +2384,7 @@ pub fn apply_text_edit(
     column: usize,
     old_text: String,
     new_text: String,
+    source_target: Option<ExactTextTarget>,
 ) -> Result<(), CommandError> {
     if has_illegal_markup(&new_text) {
         return Err(CommandError::Validation {
@@ -2374,6 +2409,31 @@ pub fn apply_text_edit(
 
     let src = std::fs::read_to_string(&abs)
         .map_err(|e| classify_fs_error("open this file to edit it", &abs, &e))?;
+    if let Some(ref target) = source_target {
+        if target.expected_hash.is_empty() || target.expected_start >= target.expected_end {
+            return Err(CommandError::Validation {
+                field: "sourceTarget".into(),
+                reason: "the focused text target must include a non-empty range and hash".into(),
+            });
+        }
+        if content_hash(src.as_bytes()) != target.expected_hash {
+            return Err(CommandError::Validation {
+                field: "sourceTarget.expectedHash".into(),
+                reason: "the focused component source changed; refresh and reselect the child"
+                    .into(),
+            });
+        }
+        if target.expected_end > src.len()
+            || !src.is_char_boundary(target.expected_start)
+            || !src.is_char_boundary(target.expected_end)
+            || src[target.expected_start..target.expected_end] != old_text
+        {
+            return Err(CommandError::Validation {
+                field: "sourceTarget".into(),
+                reason: "the focused text range no longer matches the selected child".into(),
+            });
+        }
+    }
     let span = find_text_spans(&src)
         .into_iter()
         .find(|s| s.line == line && s.column == column && s.value == old_text)
@@ -2381,6 +2441,14 @@ pub fn apply_text_edit(
             field: "old_text".into(),
             reason: "source no longer matches — reselect the element".into(),
         })?;
+    if let Some(ref target) = source_target {
+        if span.value_start != target.expected_start || span.value_end != target.expected_end {
+            return Err(CommandError::Validation {
+                field: "sourceTarget".into(),
+                reason: "the focused text range does not cover the selected child".into(),
+            });
+        }
+    }
 
     let mut updated = String::with_capacity(src.len() + new_text.len());
     updated.push_str(&src[..span.value_start]);
@@ -3443,6 +3511,18 @@ pub struct ElementHtml {
     pub file: String,
     pub line: usize,
     pub html: String,
+    /// Exact UTF-8 byte range and complete-file hash. Focused component
+    /// actions use this proof to stay inside the selected definition.
+    #[serde(rename = "sourceStart")]
+    pub source_start: usize,
+    #[serde(rename = "sourceEnd")]
+    pub source_end: usize,
+    #[serde(rename = "sourceHash")]
+    pub source_hash: String,
+    #[serde(rename = "sourceLine")]
+    pub source_line: usize,
+    #[serde(rename = "sourceColumn")]
+    pub source_column: usize,
     /// Present when the element's class string resolves to several identical
     /// source spots whose markup is byte-identical: every candidate location.
     /// Edits write to all of them by default; a `location` argument targets one.
@@ -3715,6 +3795,11 @@ pub fn resolve_element_html(
         file: first.file.clone(),
         line: first.line,
         html: first.src[first.start..first.end].to_string(),
+        source_start: first.start,
+        source_end: first.end,
+        source_hash: content_hash(first.src.as_bytes()),
+        source_line: line_col(&first.src, first.start).0,
+        source_column: line_col(&first.src, first.start).1,
         locations,
     })
 }
@@ -4884,6 +4969,9 @@ const items = [];
             line,
             column: 1,
             tag: tag.into(),
+            source_start: None,
+            source_end: None,
+            source_hash: None,
         }
     }
 

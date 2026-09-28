@@ -24,7 +24,7 @@
  * wins and becomes their `lastSignature` via the ss:select round-trip).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ElementSignature } from '../lib/edit';
 import {
   deleteElement,
@@ -36,12 +36,18 @@ import {
   type ElementKind,
   type InsertPosition,
 } from '../lib/edit-structure';
-import { resolveElementHtml } from '../lib/edit-html';
+import { resolveElementHtml, type ElementHtml } from '../lib/edit-html';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { validateFocusedSourceTarget, type ComponentFocusContext } from '../lib/components/focus';
 import type { SourceRef } from '../lib/components/types';
+import {
+  boundInspectionMessage,
+  createInspectionTransport,
+  type InspectionSurfaceTransport,
+} from '../lib/components/inspection-transport';
+import type { EditableSurfaceTarget, SourceEditGuard } from '../lib/components/editable-surface';
 
 export interface SelectionRect {
   top: number;
@@ -75,14 +81,39 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
   );
 }
 
+function boundedSelectionRect(value: unknown): SelectionRect | null {
+  if (!value || typeof value !== 'object') return null;
+  const rect = value as Record<string, unknown>;
+  const values = ['top', 'left', 'width', 'height'].map((key) => rect[key]);
+  if (
+    values.some(
+      (item) => typeof item !== 'number' || !Number.isFinite(item) || Math.abs(item) > 10_000_000
+    )
+  ) {
+    return null;
+  }
+  return {
+    top: values[0] as number,
+    left: values[1] as number,
+    width: Math.max(0, values[2] as number),
+    height: Math.max(0, values[3] as number),
+  };
+}
+
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Optional authenticated component-frame surface. Undefined keeps legacy Preview behavior. */
+  surfaceTarget?: EditableSurfaceTarget | null;
   projectPath: string;
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
+  /** Component-frame writes stay disabled until the owning inspector confirms Edit main. */
+  writeEnabled?: boolean;
   onToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
   /** Revision-bound definition context for focused structural writes. */
   componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
+  /** Generic definition-bound guard for negotiated component frames. */
+  sourceEditGuard?: SourceEditGuard;
 }
 
 /** How long after a write the iframe `load` handler still replays the reselect. */
@@ -153,11 +184,25 @@ export function isExpectedStructuralRefusal(message: string): boolean {
 
 export function useElementStructure({
   iframeRef,
+  surfaceTarget,
   projectPath,
   enabled,
+  writeEnabled,
   onToast,
   componentFocusRef,
+  sourceEditGuard,
 }: Params) {
+  const transport = useMemo<InspectionSurfaceTransport>(
+    () => createInspectionTransport({ iframeRef, surfaceTarget }),
+    [iframeRef, surfaceTarget]
+  );
+  const surfaceActive = enabled && transport.active;
+  // Legacy Preview preserves its existing enabled behavior. A negotiated
+  // component frame is inspectable by default but remains read-only until its
+  // owner explicitly confirms the first mutating action.
+  const mutationsEnabled = surfaceTarget
+    ? writeEnabled === true && !!sourceEditGuard
+    : writeEnabled !== false;
   const [selection, setSelection] = useState<StructureSelection | null>(null);
   // Inline text editing is in progress — the toolbar hides so it can't cover
   // the contenteditable or the formatting bubble.
@@ -180,33 +225,44 @@ export function useElementStructure({
   >(null);
   const busyRef = useRef(false);
   // The new element's expected signature, replayed until the reload lands.
-  const pendingReselectRef = useRef<{ sig: ElementSignature; at: number } | null>(null);
+  const pendingReselectRef = useRef<
+    { sig: ElementSignature; at: number; revision: string } | null
+  >(null);
   const reselectTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Action queued behind an ss:selectNode round-trip (tree context menu).
-  const pendingActionRef = useRef<{ nodeId: number; run: () => void } | null>(null);
+  const pendingActionRef = useRef<{ nodeId: number; revision: string; run: () => void } | null>(null);
+  const transportRevisionRef = useRef(transport.revisionKey);
+  transportRevisionRef.current = transport.revisionKey;
 
-  const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
-  );
+  const post = useCallback((msg: unknown) => transport.post(msg), [transport]);
 
   /** Resolve the selected rendered element to an exact source span inside the
    * focused component definition. Ambiguous or unproven targets are refused. */
   const resolveFocusedSourceTarget = useCallback(
-    async (sel: StructureSelection): Promise<ExactSourceTarget | undefined> => {
+    async (
+      sel: StructureSelection,
+      requireWritable = true
+    ): Promise<ExactSourceTarget | undefined> => {
       const context = componentFocusRef?.current;
-      if (!context) return undefined;
+      // A negotiated frame is a definition-only surface. It must never fall
+      // through to the project-wide class resolver, and it has no honest page
+      // invocation/focus context to fabricate.
+      if (!context && !surfaceTarget) {
+        return undefined;
+      }
+      if (surfaceTarget && !sourceEditGuard) {
+        throw new Error(
+          'The component source boundary is unavailable. Refresh the frame before editing it.'
+        );
+      }
+      if (surfaceTarget && requireWritable && writeEnabled !== true) {
+        throw new Error('Component editing is not confirmed. Confirm Edit main before changing it.');
+      }
       const first = await resolveElementHtml(projectPath, sel.signature);
-      const locations = first.locations?.length
-        ? first.locations
-        : [{ file: first.file, line: first.line, column: first.sourceColumn ?? 1 }];
       let lastDiagnostic =
         'The focused component source target is no longer valid. Refresh and reselect the child.';
-      for (const location of locations) {
-        const anchor =
-          location.file === first.file && location.line === first.line
-            ? first
-            : await resolveElementHtml(projectPath, sel.signature, location);
+      const validCandidates: ExactSourceTarget[] = [];
+      const checkCandidate = (anchor: ElementHtml, fallbackColumn: number) => {
         if (
           anchor.sourceStart === undefined ||
           anchor.sourceEnd === undefined ||
@@ -214,62 +270,104 @@ export function useElementStructure({
         ) {
           lastDiagnostic =
             'The focused component source target has no exact range. Refresh and reselect the child.';
-          continue;
+          return;
         }
         const source: SourceRef = {
           file: anchor.file,
           start: anchor.sourceStart,
           end: anchor.sourceEnd,
           line: anchor.sourceLine ?? anchor.line,
-          column: anchor.sourceColumn ?? location.column,
+          column: anchor.sourceColumn ?? fallbackColumn,
           contentHash: anchor.sourceHash,
         };
-        const validation = validateFocusedSourceTarget(context, source);
-        if (validation.status === 'valid') {
-          return {
-            file: source.file,
-            start: source.start,
-            end: source.end,
-            expectedHash: source.contentHash,
+        const validation = surfaceTarget
+          ? sourceEditGuard?.(source)
+          : context
+            ? validateFocusedSourceTarget(context, source)
+            : null;
+        if (validation?.status === 'valid' && validation.source) {
+          const guardedSource = validation.source;
+          validCandidates.push({
+            file: guardedSource.file,
+            start: guardedSource.start,
+            end: guardedSource.end,
+            expectedHash: guardedSource.contentHash,
             expectedHtml: anchor.html,
-          };
+          });
+          return;
         }
-        lastDiagnostic = validation.diagnostic?.message ?? lastDiagnostic;
+        if (validation?.status === 'refused') {
+          const diagnostic =
+            'reason' in validation
+              ? validation.reason
+              : (validation.diagnostic?.message ?? null);
+          if (diagnostic) lastDiagnostic = diagnostic;
+        }
+      };
+
+      // A resolver result without `locations` is already the unique exact
+      // element result. Do not re-resolve it using sourceColumn: that column
+      // identifies the opening tag, while the class-anchor column can differ.
+      if (first.locations?.length) {
+        // Explicit locations are the only case where another resolver call is
+        // warranted. Validate every candidate and refuse if more than one is
+        // inside the focused definition instead of choosing the first.
+        for (const location of first.locations) {
+          try {
+            const anchor = await resolveElementHtml(projectPath, sel.signature, location);
+            checkCandidate(anchor, location.column);
+          } catch {
+            lastDiagnostic =
+              'The focused component source target is no longer valid. Refresh and reselect the child.';
+          }
+        }
+      } else {
+        checkCandidate(first, first.sourceColumn ?? 1);
+      }
+
+      if (validCandidates.length === 1) return validCandidates[0];
+      if (validCandidates.length > 1) {
+        throw new Error(
+          'The selected element maps to several exact source ranges inside the component definition. Select a more specific child.'
+        );
       }
       throw new Error(lastDiagnostic);
     },
-    [componentFocusRef, projectPath]
+    [componentFocusRef, projectPath, sourceEditGuard, surfaceTarget, writeEnabled]
   );
 
   // The preview's initialization shim captures keys before the page can
   // consume them, but only while structural editing is enabled. Re-send the
   // flag after every iframe load because a navigation creates a fresh frame.
   useEffect(() => {
-    const sendShortcutState = () => post({ type: 'ss:setElementStructureShortcuts', enabled });
+    const sendShortcutState = () => {
+      if (surfaceActive)
+        post({ type: 'ss:setElementStructureShortcuts', enabled: mutationsEnabled && enabled });
+    };
     sendShortcutState();
     const iframe = iframeRef.current;
     iframe?.addEventListener('load', sendShortcutState);
     return () => iframe?.removeEventListener('load', sendShortcutState);
-  }, [enabled, iframeRef, post]);
+  }, [enabled, iframeRef, mutationsEnabled, post, surfaceActive]);
 
   // Drop all transient state when edit mode closes.
   useEffect(() => {
-    if (enabled) return;
+    if (surfaceActive) return;
     setSelection(null);
     setTextEditing(false);
     pendingReselectRef.current = null;
     pendingActionRef.current = null;
     reselectTimersRef.current.forEach(clearTimeout);
     reselectTimersRef.current = [];
-  }, [enabled]);
+  }, [surfaceActive]);
   useEffect(() => () => reselectTimersRef.current.forEach(clearTimeout), []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!surfaceActive) return;
     const handler = (e: MessageEvent) => {
-      // SECURITY: only trust messages from the actual preview iframe — a forged
-      // message from other embedded content must not drive source writes.
-      if (e.source !== iframeRef.current?.contentWindow) return;
+      // SECURITY: component frames additionally require exact origin and the
+      // negotiated v2 identity envelope; legacy Preview keeps source-only parity.
+      if (!transport.accepts(e)) return;
       const d = e.data as {
         type?: string;
         signature?: ElementSignature;
@@ -286,21 +384,46 @@ export function useElementStructure({
       ) {
         const action = shortcutActionsRef.current?.[d.key];
         if (action) action();
-      } else if (d.type === 'ss:select' && d.signature) {
+      } else if (d.type === 'ss:select') {
+        const bounded = boundInspectionMessage(e.data);
+        if (!bounded || bounded.type !== 'ss:select' || !bounded.signature) return;
+        // The legacy bridge occasionally attached a node id to the signature
+        // object. Keep that compatibility field narrow without treating the
+        // whole untrusted payload as an indexable record.
+        const legacySignature = d.signature as (ElementSignature & { nodeId?: unknown }) | undefined;
+        const legacySignatureRect = boundedSelectionRect(legacySignature?.rect);
+        const legacyNodeId = legacySignature?.nodeId;
+        const legacySignatureNodeId =
+          typeof legacyNodeId === 'number' &&
+          Number.isSafeInteger(legacyNodeId) &&
+          legacyNodeId >= 0
+            ? legacyNodeId
+            : null;
+        const signature = {
+          ...bounded.signature,
+          ...(legacySignatureRect ? { rect: legacySignatureRect } : {}),
+          ...(legacySignatureNodeId !== null ? { nodeId: legacySignatureNodeId } : {}),
+        } as ElementSignature;
         setSelection({
-          signature: d.signature,
-          rect: d.signature.rect ?? null,
-          count: d.count ?? 1,
-          nodeId: d.nodeId ?? null,
+          signature,
+          rect: bounded.rect ?? legacySignatureRect,
+          count: bounded.count ?? 1,
+          nodeId: bounded.nodeId,
         });
         const queued = pendingActionRef.current;
-        if (queued && queued.nodeId === d.nodeId) {
+        if (
+          queued &&
+          queued.nodeId === bounded.nodeId &&
+          queued.revision === transportRevisionRef.current
+        ) {
           pendingActionRef.current = null;
           // Run after this state lands so the action reads the fresh selection.
           setTimeout(queued.run, 0);
         }
-      } else if (d.type === 'ss:selRect' && d.rect) {
-        setSelection((prev) => (prev ? { ...prev, rect: d.rect ?? null } : prev));
+      } else if (d.type === 'ss:selRect') {
+        const bounded = boundInspectionMessage(e.data);
+        if (!bounded || bounded.type !== 'ss:selRect' || !bounded.rect) return;
+        setSelection((prev) => (prev ? { ...prev, rect: bounded.rect } : prev));
       } else if (d.type === 'ss:textBegin') {
         setTextEditing(true);
       } else if (d.type === 'ss:textCommit' || d.type === 'ss:textCancel') {
@@ -309,43 +432,82 @@ export function useElementStructure({
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [enabled, iframeRef]);
+  }, [iframeRef, surfaceActive, transport]);
 
   // After a structural write the reload is WANTED (no suppression); replay the
   // reselect once the fresh document loads. Delayed past the styling editors'
   // own load-replay (~60ms) of the OLD signature so the new element wins.
   useEffect(() => {
-    if (!enabled) return;
+    if (!surfaceActive) return;
     const iframe = iframeRef.current;
-    const onLoad = () => {
-      const pending = pendingReselectRef.current;
-      if (!pending || Date.now() - pending.at > RESELECT_WINDOW_MS) return;
-      setTimeout(() => post({ type: 'ss:reselect', signature: pending.sig }), 200);
-    };
+      const onLoad = () => {
+        const pending = pendingReselectRef.current;
+        if (!pending || Date.now() - pending.at > RESELECT_WINDOW_MS) return;
+        const revision = pending.revision;
+        setTimeout(() => {
+          if (transportRevisionRef.current !== revision) return;
+          post({ type: 'ss:reselect', signature: pending.sig });
+        }, 200);
+      };
     iframe?.addEventListener('load', onLoad);
     return () => iframe?.removeEventListener('load', onLoad);
-  }, [enabled, iframeRef, post]);
+  }, [iframeRef, post, surfaceActive]);
+
+  // A target switch is a hard inspection boundary. Clear any queued action or
+  // reselect before a different frame can satisfy it.
+  useEffect(() => {
+    setSelection(null);
+    setTextEditing(false);
+    pendingReselectRef.current = null;
+    pendingActionRef.current = null;
+    reselectTimersRef.current.forEach(clearTimeout);
+    reselectTimersRef.current = [];
+  }, [transport.revisionKey]);
+
+  // Do not leave a negotiated frame's editing bridge alive when its target is
+  // replaced or the hook unmounts. The cleanup closes over the old transport,
+  // so A is deactivated before B can receive any new command.
+  useEffect(() => {
+    if (!surfaceTarget || !transport.active) return;
+    return () => {
+      transport.post({ type: 'ss:treeOff' });
+      transport.post({ type: 'ss:deactivate' });
+    };
+  }, [surfaceTarget, transport]);
 
   /** Snap the selection onto the new element once the reload/HMR lands. Timed
    *  replays cover HMR-without-full-reload (React Fast Refresh). */
   const scheduleReselect = useCallback(
-    (sig: ElementSignature) => {
-      pendingReselectRef.current = { sig, at: Date.now() };
+    (sig: ElementSignature, revision: string) => {
+      if (transportRevisionRef.current !== revision) {
+        throw new Error('The renderer surface changed. Reselect the element and try again.');
+      }
+      pendingReselectRef.current = { sig, at: Date.now(), revision };
       reselectTimersRef.current.forEach(clearTimeout);
       reselectTimersRef.current = [500, 1500].map((ms) =>
-        setTimeout(() => post({ type: 'ss:reselect', signature: sig }), ms)
+        setTimeout(() => {
+          if (transportRevisionRef.current !== revision) return;
+          post({ type: 'ss:reselect', signature: sig });
+        }, ms)
       );
     },
     [post]
   );
 
+  const assertCurrentRevision = useCallback((revision: string) => {
+    if (transportRevisionRef.current !== revision) {
+      throw new Error('The renderer surface changed. Reselect the element and try again.');
+    }
+  }, []);
+
   const runAction = useCallback(
-    async (action: () => Promise<void>) => {
-      if (busyRef.current) return;
+    async (action: (revision: string) => Promise<void>) => {
+      if (!surfaceActive || busyRef.current) return;
+      const actionRevision = transportRevisionRef.current;
       busyRef.current = true;
       setBusy(true);
       try {
-        await action();
+        await action(actionRevision);
       } catch (err) {
         const message = formatCommandError(asCommandError(err));
         // Wording and reportability are decided separately: a failure can
@@ -373,18 +535,21 @@ export function useElementStructure({
         setBusy(false);
       }
     },
-    [onToast]
+    [onToast, surfaceActive]
   );
 
   const insert = useCallback(
     (position: InsertPosition, kind: ElementKind) =>
-      runAction(async () => {
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, true);
+        assertCurrentRevision(actionRevision);
         const inserted = sourceTarget
           ? await insertElement(projectPath, sel.signature, position, kind, sourceTarget)
           : await insertElement(projectPath, sel.signature, position, kind);
+        assertCurrentRevision(actionRevision);
         const meta = ELEMENT_KINDS.find((k) => k.kind === kind);
         scheduleReselect({
           className: inserted.className,
@@ -395,47 +560,68 @@ export function useElementStructure({
             position === 'inside'
               ? [sel.signature.className, ...sel.signature.ancestorClasses].filter(Boolean)
               : sel.signature.ancestorClasses,
-        });
+        }, actionRevision);
         void trackEvent('visual_edit_saved', { kind: 'insert' });
         onToast?.(`Added ${meta?.label ?? kind}`, 'success');
       }),
-    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
+    [
+      assertCurrentRevision,
+      projectPath,
+      resolveFocusedSourceTarget,
+      runAction,
+      scheduleReselect,
+      onToast,
+    ]
   );
 
   const duplicate = useCallback(
     () =>
-      runAction(async () => {
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         if (!sel) return;
-        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, true);
+        assertCurrentRevision(actionRevision);
         const inserted = sourceTarget
           ? await duplicateElement(projectPath, sel.signature, sourceTarget)
           : await duplicateElement(projectPath, sel.signature);
+        assertCurrentRevision(actionRevision);
         scheduleReselect({
           className: inserted.className,
           tagName: inserted.tagName,
           text: sel.signature.text,
           ancestorClasses: sel.signature.ancestorClasses,
-        });
+        }, actionRevision);
         void trackEvent('visual_edit_saved', { kind: 'duplicate' });
         onToast?.('Element duplicated', 'success');
       }),
-    [projectPath, resolveFocusedSourceTarget, runAction, scheduleReselect, onToast]
+    [
+      assertCurrentRevision,
+      projectPath,
+      resolveFocusedSourceTarget,
+      runAction,
+      scheduleReselect,
+      onToast,
+    ]
   );
 
   const remove = useCallback(
     () =>
-      runAction(async () => {
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         if (!sel) return;
         // Resolve at action time so the drift baseline is fresh.
-        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, true);
+        assertCurrentRevision(actionRevision);
         if (sourceTarget) {
           await deleteElement(projectPath, sel.signature, sourceTarget.expectedHtml, sourceTarget);
         } else {
           const anchor = await resolveElementHtml(projectPath, sel.signature);
+          assertCurrentRevision(actionRevision);
           await deleteElement(projectPath, sel.signature, anchor.html);
         }
+        assertCurrentRevision(actionRevision);
         setSelection(null);
         void trackEvent('visual_edit_saved', { kind: 'delete' });
         onToast?.(
@@ -443,15 +629,21 @@ export function useElementStructure({
           'success'
         );
       }),
-    [projectPath, resolveFocusedSourceTarget, runAction, onToast]
+    [assertCurrentRevision, projectPath, resolveFocusedSourceTarget, runAction, onToast]
   );
 
   const copy = useCallback(
     () =>
-      runAction(async () => {
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         if (!sel || sel.nodeId == null) return;
-        const { html } = await resolveElementHtml(projectPath, sel.signature);
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, false);
+        assertCurrentRevision(actionRevision);
+        const { html } = sourceTarget
+          ? { html: sourceTarget.expectedHtml }
+          : await resolveElementHtml(projectPath, sel.signature);
+        assertCurrentRevision(actionRevision);
         updateClipboard({
           html,
           sourceClassName: sel.signature.className,
@@ -460,23 +652,34 @@ export function useElementStructure({
         });
         onToast?.('Element copied', 'success');
       }),
-    [projectPath, runAction, updateClipboard, onToast]
+    [
+      assertCurrentRevision,
+      projectPath,
+      resolveFocusedSourceTarget,
+      runAction,
+      updateClipboard,
+      onToast,
+    ]
   );
 
   const cut = useCallback(
     () =>
-      runAction(async () => {
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         if (!sel || sel.nodeId == null) return;
-        const sourceTarget = await resolveFocusedSourceTarget(sel);
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, true);
+        assertCurrentRevision(actionRevision);
         const anchor = sourceTarget
           ? { html: sourceTarget.expectedHtml }
           : await resolveElementHtml(projectPath, sel.signature);
+        assertCurrentRevision(actionRevision);
         if (sourceTarget) {
           await deleteElement(projectPath, sel.signature, anchor.html, sourceTarget);
         } else {
           await deleteElement(projectPath, sel.signature, anchor.html);
         }
+        assertCurrentRevision(actionRevision);
         updateClipboard({
           html: anchor.html,
           sourceClassName: sel.signature.className,
@@ -486,37 +689,52 @@ export function useElementStructure({
         setSelection(null);
         onToast?.('Element cut', 'success');
       }),
-    [projectPath, resolveFocusedSourceTarget, runAction, updateClipboard, onToast]
+    [assertCurrentRevision, projectPath, resolveFocusedSourceTarget, runAction, updateClipboard, onToast]
   );
 
   const paste = useCallback(
     () =>
-      runAction(async () => {
-        if (componentFocusRef?.current) {
-          throw new Error(
-            'Focused component paste is unavailable until the source target can be proven exactly.'
-          );
-        }
+      runAction(async (actionRevision) => {
         const sel = selectionRef.current;
         const currentClipboard = clipboardRef.current;
         if (!sel || !currentClipboard) return;
-        const inserted = await pasteElement(
-          projectPath,
-          sel.signature,
-          currentClipboard.html,
-          currentClipboard.sourceClassName
-        );
+        assertCurrentRevision(actionRevision);
+        const sourceTarget = await resolveFocusedSourceTarget(sel, true);
+        assertCurrentRevision(actionRevision);
+        const inserted = sourceTarget
+          ? await pasteElement(
+              projectPath,
+              sel.signature,
+              currentClipboard.html,
+              currentClipboard.sourceClassName,
+              sourceTarget
+            )
+          : await pasteElement(
+              projectPath,
+              sel.signature,
+              currentClipboard.html,
+              currentClipboard.sourceClassName
+            );
+        assertCurrentRevision(actionRevision);
         scheduleReselect({
           className: inserted.className,
           tagName: inserted.tagName,
           ancestorClasses: [sel.signature.className, ...sel.signature.ancestorClasses].filter(
             Boolean
           ),
-        });
+        }, actionRevision);
         if (currentClipboard.mode === 'cut') updateClipboard(null);
         onToast?.('Element pasted', 'success');
       }),
-    [componentFocusRef, projectPath, runAction, scheduleReselect, updateClipboard, onToast]
+    [
+      assertCurrentRevision,
+      projectPath,
+      resolveFocusedSourceTarget,
+      runAction,
+      scheduleReselect,
+      updateClipboard,
+      onToast,
+    ]
   );
 
   shortcutActionsRef.current = {
@@ -531,7 +749,7 @@ export function useElementStructure({
   // cross-origin iframe. Handle the same shortcuts in both documents, while
   // leaving native text-entry and inline editing alone.
   useEffect(() => {
-    if (!enabled) return;
+    if (!surfaceActive) return;
     const runShortcut = (event: Event, shortcutKey: ElementShortcutKey) => {
       if (
         event.defaultPrevented ||
@@ -584,7 +802,7 @@ export function useElementStructure({
       document.removeEventListener('cut', handleClipboard, true);
       document.removeEventListener('paste', handleClipboard, true);
     };
-  }, [enabled]);
+  }, [surfaceActive]);
 
   /** Select a tree node, then run `action` once its ss:select lands — the tree
    *  context menu can act on rows that aren't the current selection. */
@@ -595,14 +813,18 @@ export function useElementStructure({
         action();
         return;
       }
-      pendingActionRef.current = { nodeId, run: action };
+      pendingActionRef.current = {
+        nodeId,
+        revision: transportRevisionRef.current,
+        run: action,
+      };
       post({ type: 'ss:selectNode', id: nodeId });
       // Don't let a missed round-trip (node vanished) fire on a later selection.
       setTimeout(() => {
         if (pendingActionRef.current?.nodeId === nodeId) pendingActionRef.current = null;
       }, 2000);
     },
-    [post]
+    [post, surfaceActive]
   );
 
   return {

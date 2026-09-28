@@ -40,6 +40,8 @@ import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
 import { useWorkspacePanelCommands } from '../../commands/useWorkspacePanelCommands';
+import { useCommands } from '../../commands/useCommands';
+import { buildComponentsWorkspaceCommands } from '../../commands/componentsWorkspaceCommands';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
 import { useComponentsAvailability } from '../../hooks/useComponentsAvailability';
@@ -50,6 +52,10 @@ import { type ProjectType } from '../../lib/static-server';
 import { useShopifyTheme } from '../../hooks/useShopifyTheme';
 import { isMac } from '../../lib/setup';
 import { kbd } from '../../lib/shortcuts';
+import {
+  isCanvasEditableTarget,
+  isComponentsWorkspaceTarget,
+} from '../../lib/components/canvas-input';
 import type { TerminalTab } from '../../hooks/useTerminalManagement';
 import type { TerminalHandle } from '../terminal/Terminal';
 import type { Toast, ToastType } from '../../hooks/useToasts';
@@ -63,7 +69,12 @@ import type { PluginThemeData } from '../../contexts/PluginContext';
 import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
 import { useModal } from '../../contexts/ModalContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
-import { defaultWorkspaceTab, workspacePreviewCapabilities } from './workspaceViewState';
+import {
+  defaultWorkspaceTab,
+  workspacePreviewCapabilities,
+  type ComponentsNavigation,
+  type WorkspaceTab,
+} from './workspaceViewState';
 import '../../styles/features/notifications.css';
 
 // ---------------------------------------------------------------------------
@@ -187,8 +198,10 @@ interface LayoutProps {
   setShowHealthLogs: (show: boolean) => void;
   isPreviewHidden: boolean;
   setIsPreviewHidden: (hidden: boolean) => void;
-  workspaceTab: 'preview' | 'code' | 'branches' | 'prs';
-  setWorkspaceTab: (tab: 'preview' | 'code' | 'branches' | 'prs') => void;
+  workspaceTab: WorkspaceTab;
+  setWorkspaceTab: (tab: WorkspaceTab) => void;
+  componentsNavigation: ComponentsNavigation;
+  navigateToComponents: (navigation: ComponentsNavigation) => void;
 }
 
 interface PluginStateProps {
@@ -533,6 +546,8 @@ export const WorkspaceView = memo(function WorkspaceView({
     setIsPreviewHidden,
     workspaceTab,
     setWorkspaceTab,
+    componentsNavigation,
+    navigateToComponents,
   } = layout;
 
   // Jump-to-code: when set, the Code tab opens this file and highlights the line.
@@ -753,64 +768,64 @@ export const WorkspaceView = memo(function WorkspaceView({
   const closeElementTree = useCallback(() => {
     setElementTreeVisible(false);
   }, [setElementTreeVisible]);
-  const elementTreeAvailable =
-    workspaceTab === 'preview' && !isPreviewHidden && elementTreePreviewAvailable;
+  const panelHostAvailable =
+    !isPreviewHidden && (workspaceTab === 'preview' || workspaceTab === 'components');
+  const elementTreeAvailable = panelHostAvailable && elementTreePreviewAvailable;
   const elementTreePanelVisible = elementTreeAvailable && elementTreeVisible;
+  const openPanelHost = useCallback(() => {
+    setIsPreviewHidden(false);
+    if (workspaceTab !== 'preview' && workspaceTab !== 'components') setWorkspaceTab('preview');
+    void handleStartDevServer();
+  }, [handleStartDevServer, setIsPreviewHidden, setWorkspaceTab, workspaceTab]);
   const [variablesPanelVisible, setVariablesPanelVisible] = useState(false);
   const [variablesPanelPinned, , toggleVariablesPanelPinned] = useLocalStorageFlag(
     'variablesPanelPinned',
     false
   );
-  const variablesPanelOpen =
-    isWebProject && workspaceTab === 'preview' && !isPreviewHidden && variablesPanelVisible;
+  const variablesPanelOpen = isWebProject && panelHostAvailable && variablesPanelVisible;
   useEffect(() => {
     setVariablesPanelVisible(false);
   }, [currentProject.path]);
   const toggleVariablesPanel = useCallback(() => {
     const shouldOpen = !variablesPanelOpen;
     setVariablesPanelVisible(shouldOpen);
-    if (shouldOpen) {
-      setIsPreviewHidden(false);
-      setWorkspaceTab('preview');
-      void handleStartDevServer();
-    }
-  }, [handleStartDevServer, setIsPreviewHidden, setWorkspaceTab, variablesPanelOpen]);
+    if (shouldOpen) openPanelHost();
+  }, [openPanelHost, setVariablesPanelVisible, variablesPanelOpen]);
   const nativeComponentsAvailable = useComponentsAvailability(currentProject.path, projectType);
   const componentsPanelAvailable = isWebProject && nativeComponentsAvailable;
-  const [componentsPanelVisible, setComponentsPanelVisible] = useState(false);
-  const [componentsPanelPinned, setComponentsPanelPinned] = useState(
-    () => localStorage.getItem('componentsPanelPinned') === '1'
+  const [componentsPanelVisible, setComponentsPanelVisible] = useLocalStorageFlag(
+    'componentsPanelVisible',
+    false
+  );
+  const [componentsPanelPinned, , toggleComponentsPanelPinned] = useLocalStorageFlag(
+    'componentsPanelPinned',
+    false
   );
   const [componentsEditMainId, setComponentsEditMainId] = useState<string | null>(null);
   const componentsPanelOpen =
-    componentsPanelAvailable &&
-    workspaceTab === 'preview' &&
-    !isPreviewHidden &&
-    componentsPanelVisible;
+    componentsPanelAvailable && panelHostAvailable && componentsPanelVisible;
   useEffect(() => {
-    setComponentsPanelVisible(false);
+    if (workspaceTab !== 'components' || !isWebProject) return;
+    void handleStartDevServer();
+  }, [handleStartDevServer, isWebProject, workspaceTab]);
+  useEffect(() => {
     setComponentsEditMainId(null);
   }, [currentProject.path]);
   const toggleComponentsPanel = useCallback(() => {
     const shouldOpen = !componentsPanelOpen;
     setComponentsPanelVisible(shouldOpen);
     if (!shouldOpen) setComponentsEditMainId(null);
-    if (shouldOpen) {
-      setIsPreviewHidden(false);
-      setWorkspaceTab('preview');
-      void handleStartDevServer();
-    }
-  }, [componentsPanelOpen, handleStartDevServer, setIsPreviewHidden, setWorkspaceTab]);
+    if (shouldOpen) openPanelHost();
+  }, [componentsPanelOpen, openPanelHost, setComponentsPanelVisible]);
+
+  useCommands(
+    () => buildComponentsWorkspaceCommands(navigateToComponents),
+    [navigateToComponents]
+  );
   const closeComponentsPanel = useCallback(() => {
     setComponentsPanelVisible(false);
     setComponentsEditMainId(null);
-  }, []);
-  const toggleComponentsPanelPinned = useCallback(() => {
-    setComponentsPanelPinned((pinned) => {
-      localStorage.setItem('componentsPanelPinned', pinned ? '0' : '1');
-      return !pinned;
-    });
-  }, []);
+  }, [setComponentsPanelVisible]);
   const toggleAgentPanel = useCallback(() => {
     if (!isAgentPanelHidden) {
       setIsPreviewHidden(false);
@@ -908,10 +923,8 @@ export const WorkspaceView = memo(function WorkspaceView({
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key !== 'z' && e.key !== 'Z') return;
       const target = (e.target as HTMLElement | null) ?? null;
-      const tag = target?.tagName;
-      const isTextField =
-        tag === 'INPUT' || tag === 'TEXTAREA' || (target?.isContentEditable ?? false);
-      if (isTextField) return;
+      if (isCanvasEditableTarget(target)) return;
+      if (isComponentsWorkspaceTarget(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.shiftKey) {
@@ -1309,6 +1322,8 @@ export const WorkspaceView = memo(function WorkspaceView({
                       previewRef={previewRef}
                       workspaceTab={workspaceTab}
                       setWorkspaceTab={setWorkspaceTab}
+                      componentsNavigation={componentsNavigation}
+                      onNavigateToComponents={navigateToComponents}
                       hasPreview={hasPreview}
                       projectTypeResolved={projectTypeResolved}
                       previewConnectionEnabled={knownDevServerPort !== null}
@@ -1347,16 +1362,16 @@ export const WorkspaceView = memo(function WorkspaceView({
                       redoTitle={redoTitle}
                       undoSnapshot={undoSnapshot}
                       redoSnapshot={redoSnapshot}
-                      elementTreeVisible={elementTreeVisible}
+                      elementTreeVisible={elementTreePanelVisible}
                       elementTreePinned={elementTreePinned}
                       toggleElementTreePinned={toggleElementTreePinned}
                       closeElementTree={closeElementTree}
                       setElementTreePreviewAvailable={setElementTreePreviewAvailable}
-                      variablesPanelVisible={variablesPanelVisible}
+                      variablesPanelVisible={variablesPanelOpen}
                       variablesPanelPinned={variablesPanelPinned}
                       toggleVariablesPanelPinned={toggleVariablesPanelPinned}
                       closeVariablesPanel={() => setVariablesPanelVisible(false)}
-                      componentsPanelVisible={componentsPanelVisible}
+                      componentsPanelVisible={componentsPanelOpen}
                       componentsPanelPinned={componentsPanelPinned}
                       toggleComponentsPanelPinned={toggleComponentsPanelPinned}
                       closeComponentsPanel={closeComponentsPanel}

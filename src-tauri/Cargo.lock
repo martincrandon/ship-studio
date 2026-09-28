@@ -4576,6 +4576,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "which",
+ "windows-sys 0.61.2",
  "zip 2.4.2",
 ]
 
@@ -6930,8 +6931,6 @@ dependencies = [
 [[package]]
 name = "xcap"
 version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "161f900a1f2e909bae226f27dfb626d73af12f3441ca77b418efc5a851fba232"
 dependencies = [
  "dbus",
  "image",

@@ -183,6 +183,72 @@ export function Page() {
     });
   });
 
+  it('keeps wrapper prop optionality and resolves private/context JSX helpers', () => {
+    const source = snapshot([
+      file(
+        'src/Controls.tsx',
+        `import { createContext, forwardRef } from 'react';
+
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  requiredLabel: string;
+}
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, requiredLabel, style, ...rest },
+  ref
+) {
+  return <input ref={ref} style={style} aria-label={label ?? requiredLabel} {...rest} />;
+});
+
+interface TextProps { weight?: number; }
+export const Text = forwardRef<HTMLSpanElement, TextProps>(function Text({ weight }, ref) {
+  return <span ref={ref} style={{ fontWeight: weight }} />;
+});
+
+const LocalContext = createContext(null);
+function PrivateIcon() { return <span data-icon="private" />; }
+export function Page() {
+  return <LocalContext.Provider value={null}><PrivateIcon /><Input /><Text /></LocalContext.Provider>;
+}
+`
+      ),
+    ]);
+
+    const index = buildComponentIndex(source, { projectType: 'vite' });
+    const input = index.components.find((component) => component.name === 'Input');
+    const text = index.components.find((component) => component.name === 'Text');
+
+    expect(input?.capabilities.place).toBe(true);
+    expect(input?.props.find((prop) => prop.name === 'label')).toMatchObject({ required: false });
+    expect(input?.props.find((prop) => prop.name === 'requiredLabel')).toMatchObject({
+      required: true,
+    });
+    expect(text?.capabilities.place).toBe(true);
+    expect(text?.props.find((prop) => prop.name === 'weight')).toMatchObject({ required: false });
+    expect(index.diagnostics).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'react-unresolved-usage' })])
+    );
+    expect(index.instances.some((instance) => instance.componentId === input?.id)).toBe(true);
+    expect(index.instances.some((instance) => instance.componentId === text?.id)).toBe(true);
+  });
+
+  it('records renderer safety facts for export conflicts and dynamic imports', () => {
+    const index = buildComponentIndex(
+      snapshot([
+        file(
+          'src/Unsafe.tsx',
+          `export function Unsafe() { return <div />; }
+export default Unsafe;
+const load = import('./Deferred');
+`
+        ),
+      ]),
+      { projectType: 'nextjs' }
+    );
+    const unsafe = index.components.find((component) => component.localName === 'Unsafe');
+    expect(unsafe?.rendererSafety).toEqual({ ambiguousExport: true, dynamicImport: true });
+  });
+
   it('records stable intrinsic roots for Next Server Component provenance', () => {
     const source = snapshot([
       file(

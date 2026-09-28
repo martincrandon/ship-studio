@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { sha256 } from './ranges';
 import {
   COMPONENT_PRESET_VERSION,
+  createComponentPreviewPreset,
+  deleteComponentPreviewPreset,
+  duplicateComponentPreviewPreset,
   parseComponentPreviewPresetStore,
   reconcileComponentPreviewPresets,
+  renameComponentPreviewPreset,
   writeComponentPreviewPresetStore,
   type ComponentPreviewPresetStore,
 } from './presets';
@@ -97,5 +101,34 @@ describe('component preview presets', () => {
       { version: COMPONENT_PRESET_VERSION, presets: [preset('saved')] }
     );
     expect(JSON.parse(value)).toMatchObject({ version: 1, presets: [preset('saved')] });
+  });
+
+  it('supports presentation-only preset lifecycle operations', () => {
+    const store: ComponentPreviewPresetStore = {
+      version: COMPONENT_PRESET_VERSION,
+      presets: [preset('saved')],
+    };
+    const renamed = renameComponentPreviewPreset(store, 'saved', 'Renamed');
+    expect(renamed.presets[0]?.name).toBe('Renamed');
+    const duplicated = duplicateComponentPreviewPreset(renamed, 'saved');
+    expect(duplicated.preset?.id).not.toBe('saved');
+    expect(duplicated.store.presets).toHaveLength(2);
+    expect(deleteComponentPreviewPreset(duplicated.store, duplicated.preset!.id).presets).toEqual([
+      renamed.presets[0],
+    ]);
+  });
+
+  it('creates an empty explicit preset without copying source defaults', () => {
+    const component = index().components[0]!;
+    const created = createComponentPreviewPreset(component, 'preset-index');
+    expect(created).toMatchObject({
+      version: COMPONENT_PRESET_VERSION,
+      componentId: component.id,
+      dialect: component.dialect,
+      props: {},
+      slots: {},
+      sourceRevision: 'preset-index',
+    });
+    expect(created.id).toMatch(/^preset-/);
   });
 });

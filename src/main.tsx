@@ -191,6 +191,10 @@ const OS_SKIP_SELECTOR = [
   '.inbox-list',
   '.workflow-row-activity',
   '.inbox-detail-pane',
+  // Components workspace controls are a flex action row. OverlayScrollbars
+  // relocates their buttons into a viewport after mount, which breaks the
+  // row's direct-child spacing and causes the controls to jump vertically.
+  '.components-workspace__toolbar-actions--canvas',
 ].join(', ');
 
 function initScrollbars() {

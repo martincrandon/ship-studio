@@ -32,6 +32,8 @@ interface Props {
   /** The selected element's current className string. */
   elementClass: string;
   editTarget: EditTarget;
+  /** Inspection-only surfaces keep the target picker visible but inert. */
+  disabled?: boolean;
   /** False when the project has no writable Tailwind entry stylesheet — creating
    *  a class isn't possible, so the create affordance is disabled with a hint. */
   canCreate?: boolean;
@@ -59,6 +61,7 @@ export function ClassBar({
   customClasses,
   elementClass,
   editTarget,
+  disabled = false,
   canCreate: canCreateClasses = true,
   onEditElement,
   onEditClass,
@@ -162,6 +165,7 @@ export function ClassBar({
 
   // Apply/unapply keep the menu open; serialize so a burst can't race.
   const toggle = useCallback(async (fn: () => void | Promise<void>) => {
+    if (disabled) return;
     setBusy(true);
     try {
       await fn();
@@ -173,14 +177,14 @@ export function ClassBar({
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [disabled]);
 
   const createEnabled = canCreate && hasUtilities && canCreateClasses;
 
   // Run a row's primary action (used by both click and Enter).
   const activate = useCallback(
     (row: Row | undefined) => {
-      if (!row) return;
+      if (!row || disabled) return;
       switch (row.kind) {
         case 'element':
           onEditElement();
@@ -212,6 +216,7 @@ export function ClassBar({
       busy,
       createEnabled,
       trimmed,
+      disabled,
     ]
   );
 
@@ -254,6 +259,7 @@ export function ClassBar({
       <PropertyField
         ref={triggerRef}
         variant="select"
+        disabled={disabled}
         className={`ss-enum__trigger ss-classedit__trigger${activeName ? ' is-class' : ''}`}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -283,6 +289,7 @@ export function ClassBar({
                 className="ss-classedit__search"
                 placeholder="Search or create a class…"
                 value={query}
+                disabled={disabled}
                 spellCheck={false}
                 autoFocus
                 onChange={(e) => setQuery(e.target.value)}
@@ -331,7 +338,7 @@ export function ClassBar({
                       id={`ce-applied-${c.name}`}
                       aria-selected={isActive}
                       className="ss-classedit__pick"
-                      disabled={!c.editable}
+                      disabled={disabled || !c.editable}
                       title={
                         c.editable
                           ? `Edit .${c.name} — updates every element using it`
@@ -352,7 +359,7 @@ export function ClassBar({
                     <button
                       type="button"
                       className="ss-classedit__x"
-                      disabled={busy}
+                      disabled={disabled || busy}
                       title={`Remove .${c.name} from this element`}
                       aria-label={`Remove .${c.name} from this element`}
                       onClick={() => void toggle(() => onUnapply(c.name))}
@@ -376,7 +383,7 @@ export function ClassBar({
                     id={`ce-avail-${c.name}`}
                     aria-selected={false}
                     className={`ss-classedit__item ss-classedit__item--add${isHi ? ' is-hi' : ''}`}
-                    disabled={busy}
+                    disabled={disabled || busy}
                     title={`Apply .${c.name} to this element`}
                     onMouseEnter={() =>
                       setActive(rows.findIndex((r) => r.id === `ce-avail-${c.name}`))
@@ -403,7 +410,7 @@ export function ClassBar({
                 id="ce-create"
                 aria-selected={false}
                 className={`ss-classedit__createrow${rows[active]?.id === 'ce-create' ? ' is-hi' : ''}`}
-                disabled={!createEnabled}
+                disabled={disabled || !createEnabled}
                 title={
                   !canCreateClasses
                     ? 'No Tailwind stylesheet found in this project to add the class to'

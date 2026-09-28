@@ -93,6 +93,17 @@ import {
   validateFocusedSourceTarget,
   type ComponentFocusContext,
 } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
+import {
+  isLegacyEditableSurfaceTarget,
+  isNegotiatedEditableSurfaceTarget,
+  type EditableSurfaceTarget,
+} from '../lib/components/editable-surface';
+import {
+  boundInspectionMessage,
+  createInspectionTransport,
+  type InspectionSurfaceTransport,
+} from '../lib/components/inspection-transport';
 
 /**
  * What the style controls currently edit:
@@ -122,7 +133,15 @@ function focusedTargetError(
 } | null {
   const context = contextRef?.current;
   if (!context) return null;
-  const validation = validateFocusedSourceTarget(context, sourceRefFromResolution(resolution));
+  // A missing resolver range is a refusal, never evidence that the focused
+  // definition itself is the target. Do not invoke the guard with null.
+  const source = sourceRefFromResolution(resolution);
+  if (!source) {
+    throw new Error(
+      'The focused component source target is no longer valid. Refresh and re-enter focus.'
+    );
+  }
+  const validation = validateFocusedSourceTarget(context, source);
   if (validation.status === 'refused' || !validation.source) {
     throw new Error(
       validation.diagnostic?.message ??
@@ -237,9 +256,19 @@ function replaceCssVariableInClass(className: string, variableName: string, valu
 
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Optional negotiated target for a framework-hosted component frame. */
+  surfaceTarget?: EditableSurfaceTarget | null;
   projectPath: string;
   /** Feature availability (e.g. Next.js project + server ready). */
   enabled: boolean;
+  /** Optional workspace-owned edit-mode state shared with another surface. */
+  editMode?: boolean;
+  /** Receives edit-mode changes when `editMode` is controlled. */
+  onEditModeChange?: (enabled: boolean) => void;
+  /** Enables selection/data inspection without granting editor write mode. */
+  inspectionEnabled?: boolean;
+  /** Component-frame writes stay disabled until the owning inspector confirms. */
+  writeEnabled?: boolean;
   /** The breakpoint layer edits target (Base = unprefixed). Drives the variant
    *  prefix on written tokens and the min-width of the live-preview rule. */
   activeBreakpoint: Breakpoint;
@@ -250,7 +279,13 @@ interface Params {
   componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
   /** Index-backed UsageScope data; null keeps the legacy backend fallback alive. */
   getIndexedUsage?: (resolution: Resolution) => UsageReport | null;
+  /** Optional revision-bound guard used by framework-hosted component frames. */
+  sourceEditGuard?: (
+    source: SourceRef | null
+  ) => { status: 'valid'; source?: SourceRef } | { status: 'refused'; reason: string };
 }
+
+export type SourceEditGuard = NonNullable<Params['sourceEditGuard']>;
 
 export interface Selection {
   signature: ElementSignature;
@@ -263,24 +298,51 @@ export interface Selection {
 
 export function useVisualEditor({
   iframeRef,
+  surfaceTarget,
   projectPath,
   enabled,
+  editMode: controlledEditMode,
+  onEditModeChange,
+  inspectionEnabled,
+  writeEnabled = true,
   activeBreakpoint,
   breakpoints,
   onToast,
   componentFocusRef,
   getIndexedUsage,
+  sourceEditGuard,
 }: Params) {
   // User intent; the *effective* mode below also requires the feature be enabled,
   // so it flips off automatically when the server restarts (no reset effect).
-  const [editModeOn, setEditModeOn] = useState(false);
+  const [internalEditModeOn, setInternalEditModeOn] = useState(false);
+  const editModeOn = controlledEditMode ?? internalEditModeOn;
   const editMode = enabled && editModeOn;
+  const transport = useMemo<InspectionSurfaceTransport>(
+    () => createInspectionTransport({ iframeRef, surfaceTarget }),
+    [iframeRef, surfaceTarget]
+  );
+  const inspectionActive = (inspectionEnabled ?? enabled) && transport.active;
+  const negotiatedSurface = !!surfaceTarget && isNegotiatedEditableSurfaceTarget(surfaceTarget);
+  const legacySurface =
+    surfaceTarget === undefined ||
+    (!!surfaceTarget && isLegacyEditableSurfaceTarget(surfaceTarget));
+  const mutationsEnabled = legacySurface
+    ? writeEnabled !== false
+    : negotiatedSurface
+      ? writeEnabled === true && surfaceTarget?.capabilities.editing === true
+      : false;
+  // A negotiated frame's identity is an async-operation boundary. Resolver
+  // results from a previous frame/session must never be allowed to repopulate
+  // the current inspector after a target switch.
+  const surfaceRevision = transport.revisionKey;
+  const surfaceRevisionRef = useRef(surfaceRevision);
+  surfaceRevisionRef.current = surfaceRevision;
 
   // ── Analytics: edit-mode session tracking ────────────────────────────────
   // Mirror edit-mode intent into a ref so `toggleEditMode` reads the current
   // direction without going stale, plus per-session timing and a saved-edit
   // counter that's reported when the session ends (`visual_edit_stopped`).
-  const editModeOnRef = useRef(false);
+  const editModeOnRef = useRef(editModeOn);
   useEffect(() => {
     editModeOnRef.current = editModeOn;
   }, [editModeOn]);
@@ -385,27 +447,109 @@ export function useVisualEditor({
     setEditTargetState(t);
   }, []);
 
+  // A negotiated surface identity is an async-operation boundary. Clear the
+  // old selection and source baselines before the replacement frame can report
+  // anything; delayed resolver results are rejected by the token checks below.
+  useEffect(() => {
+    usageTokenRef.current += 1;
+    selectedSigRef.current = null;
+    setSelection(null);
+    setUsage(null);
+    setLiveClass('');
+    setImageTarget(null);
+    setEditTarget({ kind: 'element' });
+    setMultiTarget('all');
+  }, [surfaceRevision, setEditTarget, setImageTarget, setLiveClass, setMultiTarget]);
+
   // The project's custom classes (refreshed on edit-mode entry and after writes).
   const [customClasses, setCustomClasses] = useState<CustomClass[]>([]);
 
-  const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
-  );
+  const post = useCallback((msg: unknown) => transport.post(msg), [transport]);
+
+  /**
+   * A component-frame preview is still a mutation of untrusted renderer DOM.
+   * Re-resolve the selected child at the moment of every preview mutation and
+   * require the caller's definition guard to accept that fresh range. The
+   * selection and negotiated surface are both captured so a late resolver
+   * result cannot mutate a replacement frame or a newly selected child.
+   */
+  const proveNegotiatedMutationTarget = useCallback(async (): Promise<void> => {
+    if (!negotiatedSurface) return;
+    if (!mutationsEnabled) {
+      throw new Error('Component editing is not confirmed. Confirm Edit main before changing it.');
+    }
+    if (!sourceEditGuard) {
+      throw new Error(
+        'The component source boundary is unavailable. Refresh the frame before editing it.'
+      );
+    }
+    const signature = selectedSigRef.current;
+    if (!signature) throw new Error('Select an element before changing its component styles.');
+    const selectionToken = usageTokenRef.current;
+    const revision = surfaceRevisionRef.current;
+    const resolution = await resolveClassnameSource(projectPath, signature);
+    if (
+      usageTokenRef.current !== selectionToken ||
+      surfaceRevisionRef.current !== revision ||
+      selectedSigRef.current !== signature
+    ) {
+      throw new Error('The renderer selection changed. Reselect the element and try again.');
+    }
+    const source = sourceRefFromResolution(resolution);
+    if (!source) {
+      throw new Error(
+        'The selected component child has no exact source range. Refresh and reselect it.'
+      );
+    }
+    const guarded = sourceEditGuard(source);
+    if (guarded.status === 'refused') throw new Error(guarded.reason);
+    if (!guarded.source) {
+      throw new Error(
+        'The selected component child has no exact source range. Refresh and reselect it.'
+      );
+    }
+  }, [mutationsEnabled, negotiatedSurface, projectPath, sourceEditGuard]);
 
   // Route a live-preview mutation by edit target: an element edit sets the
   // selected element's class attribute; a class edit injects decls scoped to the
   // class selector (every instance), leaving element markup untouched.
   const postMutate = useCallback(
-    (merged: string, rules: PreviewRule[]) => {
-      const target = editTargetRef.current;
-      if (target.kind === 'class') {
-        post({ type: 'ss:mutateClass', selector: `.${target.name}`, rules });
-      } else {
-        post({ type: 'ss:mutate', className: merged, rules });
-      }
+    (merged: string, rules: PreviewRule[]): boolean | Promise<boolean> => {
+      if (!mutationsEnabled) return false;
+      const send = () => {
+        const target = editTargetRef.current;
+        if (target.kind === 'class') {
+          post({ type: 'ss:mutateClass', selector: `.${target.name}`, rules });
+        } else {
+          post({ type: 'ss:mutate', className: merged, rules });
+        }
+        return true;
+      };
+      if (!negotiatedSurface) return send();
+      return proveNegotiatedMutationTarget()
+        .then(send)
+        .catch((error) => {
+          onToast?.(formatCommandError(asCommandError(error)), 'error');
+          return false;
+        });
     },
-    [post]
+    [mutationsEnabled, negotiatedSurface, onToast, post, proveNegotiatedMutationTarget]
+  );
+
+  /** Apply local live-editor state only after a negotiated preview is proven. */
+  const applyLiveMutation = useCallback(
+    (merged: string, rules: PreviewRule[], apply: () => void): boolean | Promise<boolean> => {
+      const result = postMutate(merged, rules);
+      if (result instanceof Promise) {
+        return result.then((ok) => {
+          if (ok) apply();
+          return ok;
+        });
+      }
+      apply();
+      return result;
+    },
+    [postMutate]
   );
 
   /** Reconcile a variable deletion that already rewrote source. The backend
@@ -413,6 +557,7 @@ export function useVisualEditor({
    * held in the live editor state until the preview reloads. */
   const reconcileDeletedVariable = useCallback(
     (name: string, value: string) => {
+      if (!mutationsEnabled) return;
       const next = replaceCssVariableInClass(currentClassRef.current, name, value);
       if (next === currentClassRef.current) return;
 
@@ -444,7 +589,7 @@ export function useVisualEditor({
       postMutate(next, []);
       post({ type: 'ss:commit' });
     },
-    [post, postMutate, setEditTarget, setLiveClass]
+    [mutationsEnabled, post, postMutate, setEditTarget, setLiveClass]
   );
 
   // Point the controls at the selected element's own className (the default).
@@ -458,49 +603,37 @@ export function useVisualEditor({
   // `@apply` list so every control reflects the class's current styles.
   const editClass = useCallback(
     (name: string, tokens: string[]) => {
+      if (negotiatedSurface) {
+        onToast?.(
+          'Shared class editing is unavailable in a component frame. Select the element itself.',
+          'info'
+        );
+        return;
+      }
       if (focusedEditBlocked(componentFocusRef, onToast)) return;
       const joined = tokens.join(' ');
       setEditTarget({ kind: 'class', name, baseline: joined });
       setLiveClass(joined);
       post({ type: 'ss:clearClassPreview' });
     },
-    [componentFocusRef, onToast, post, setEditTarget, setLiveClass]
+    [componentFocusRef, negotiatedSurface, onToast, post, setEditTarget, setLiveClass]
   );
 
   // Activate/deactivate the in-iframe selection layer (external-system sync), and
   // keep it active across HMR reloads (each reload resets the script to inert).
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (editMode) {
+    if (inspectionActive) {
       post({ type: 'ss:activate' });
       const reactivate = () => post({ type: 'ss:activate' });
       iframe?.addEventListener('load', reactivate);
       return () => iframe?.removeEventListener('load', reactivate);
     }
     post({ type: 'ss:deactivate' });
-  }, [editMode, post, iframeRef]);
+  }, [inspectionActive, post, iframeRef]);
 
-  // Resolve clicked elements + handle inline text-edit commits from the iframe.
-  useEffect(() => {
-    if (!editMode) return;
-    const handler = (e: MessageEvent) => {
-      // SECURITY: only trust messages from the actual preview iframe. The iframe
-      // hosts untrusted project content; a forged `ss:textCommit` from another
-      // frame would otherwise write to the user's source files.
-      if (e.source !== iframeRef.current?.contentWindow) return;
-      const d = e.data as {
-        type?: string;
-        signature?: ElementSignature;
-        count?: number;
-        leafText?: boolean;
-      } | null;
-      if (!d) return;
-
-      // Text-edit messages (ss:textBlocked / ss:textCommit) are handled by the
-      // shared useTextEditing hook, not here.
-      if (d.type !== 'ss:select' || !d.signature) return;
-      const sig = d.signature;
-      const instanceCount = d.count ?? 1;
+  const selectElement = useCallback(
+    (sig: ElementSignature, instanceCount = 1) => {
       selectedSigRef.current = sig;
       setSelection({ signature: sig, resolution: null, instanceCount });
       setLiveClass(sig.className);
@@ -511,15 +644,25 @@ export function useVisualEditor({
       setUsage(null);
       setImageTarget(null);
       const usageToken = ++usageTokenRef.current;
+      const selectionRevision = surfaceRevisionRef.current;
       void (async () => {
         try {
           const resolution = await resolveClassnameSource(projectPath, sig);
+          if (
+            usageTokenRef.current !== usageToken ||
+            surfaceRevisionRef.current !== selectionRevision
+          )
+            return;
           setSelection({ signature: sig, resolution, instanceCount });
           // Prefer the immutable component index for scope. The old command stays
           // as a rollout fallback for projects/targets outside that index.
           const indexedUsage = getIndexedUsage?.(resolution);
           if (indexedUsage) {
-            if (usageTokenRef.current === usageToken) setUsage(indexedUsage);
+            if (
+              usageTokenRef.current === usageToken &&
+              surfaceRevisionRef.current === selectionRevision
+            )
+              setUsage(indexedUsage);
           } else if (resolution.status === 'resolved') {
             try {
               const report = await findComponentUsage(
@@ -527,12 +670,21 @@ export function useVisualEditor({
                 resolution.file,
                 resolution.line
               );
-              if (usageTokenRef.current === usageToken) setUsage(report);
+              if (
+                usageTokenRef.current === usageToken &&
+                surfaceRevisionRef.current === selectionRevision
+              )
+                setUsage(report);
             } catch {
               /* scope hint is optional */
             }
           }
         } catch (err) {
+          if (
+            usageTokenRef.current !== usageToken ||
+            surfaceRevisionRef.current !== selectionRevision
+          )
+            return;
           logger.error('[VisualEditor] resolve failed', {
             error: formatCommandError(asCommandError(err)),
           });
@@ -554,12 +706,24 @@ export function useVisualEditor({
           try {
             const imgRes = await resolveImageSource(projectPath, sig);
             // Ignore if the selection changed underneath us.
-            if (usageTokenRef.current === usageToken) setImageTarget(imgRes);
+            if (
+              usageTokenRef.current === usageToken &&
+              surfaceRevisionRef.current === selectionRevision
+            )
+              setImageTarget(imgRes);
           } catch (err) {
+            if (
+              usageTokenRef.current !== usageToken ||
+              surfaceRevisionRef.current !== selectionRevision
+            )
+              return;
             logger.error('[VisualEditor] image resolve failed', {
               error: formatCommandError(asCommandError(err)),
             });
-            if (usageTokenRef.current === usageToken)
+            if (
+              usageTokenRef.current === usageToken &&
+              surfaceRevisionRef.current === selectionRevision
+            )
               setImageTarget({
                 status: 'read_only',
                 reason: 'Could not resolve this image to source.',
@@ -567,21 +731,34 @@ export function useVisualEditor({
           }
         })();
       }
+    },
+    [
+      getIndexedUsage,
+      onToast,
+      post,
+      projectPath,
+      setEditTarget,
+      setImageTarget,
+      setLiveClass,
+      setMultiTarget,
+    ]
+  );
+
+  // Resolve clicked elements + handle inline text-edit commits from the iframe.
+  useEffect(() => {
+    if (!inspectionActive) return;
+    const handler = (e: MessageEvent) => {
+      // SECURITY: only trust messages from the actual preview iframe. The iframe
+      // hosts untrusted project content; a forged `ss:textCommit` from another
+      // frame would otherwise write to the user's source files.
+      if (!transport.accepts(e)) return;
+      const d = boundInspectionMessage(e.data);
+      if (!d || d.type !== 'ss:select' || !d.signature) return;
+      selectElement(d.signature, d.count ?? 1);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [
-    editMode,
-    projectPath,
-    onToast,
-    post,
-    iframeRef,
-    setLiveClass,
-    setMultiTarget,
-    setImageTarget,
-    setEditTarget,
-    getIndexedUsage,
-  ]);
+  }, [inspectionActive, selectElement, transport]);
 
   // Load the project's custom classes when edit mode opens; refresh helper lets
   // writes (create/update/delete) push the fresh list back.
@@ -607,7 +784,7 @@ export function useVisualEditor({
   const tailwindSetupRef = useRef<TailwindSetup | null>(null);
 
   useEffect(() => {
-    if (!editMode) return;
+    if (!inspectionActive) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: load custom classes + entry-CSS check on edit-mode open
     void refreshCustomClasses();
     void detectTailwindSetup(projectPath)
@@ -621,7 +798,7 @@ export function useVisualEditor({
         setTailwindSetup(null);
         setClassEntryReady(false);
       });
-  }, [editMode, projectPath, refreshCustomClasses]);
+  }, [inspectionActive, projectPath, refreshCustomClasses]);
 
   /**
    * Merge a Tailwind token into the live class at the active breakpoint and
@@ -636,6 +813,7 @@ export function useVisualEditor({
    */
   const applyToken = useCallback(
     (token: string, style?: Record<string, string>) => {
+      if (!mutationsEnabled) return;
       const setup = tailwindSetupRef.current;
       const version: TailwindVersion = setup?.version ?? 'v4';
       const utilityPrefix = setup?.utilityPrefix ?? undefined;
@@ -662,11 +840,10 @@ export function useVisualEditor({
           ? markImportant(prefixed, version)
           : prefixed;
       const merged = twMerge(current, withVariant(activeBreakpoint.prefix, bare));
-      setLiveClass(merged);
       const rules: PreviewRule[] = style ? [{ minPx: activeBreakpoint.minPx, decls: style }] : [];
-      postMutate(merged, rules);
+      return applyLiveMutation(merged, rules, () => setLiveClass(merged));
     },
-    [postMutate, setLiveClass, activeBreakpoint, known]
+    [mutationsEnabled, applyLiveMutation, setLiveClass, activeBreakpoint, known]
   );
 
   /** Set one side of a box (padding/margin) at the active breakpoint to a scale
@@ -674,6 +851,7 @@ export function useVisualEditor({
    *  (so unset sides fall through to the real, already-compiled base CSS). */
   const setBoxSide = useCallback(
     (type: BoxType, side: Side, value: SpacingValue) => {
+      if (!mutationsEnabled) return;
       const setup = tailwindSetupRef.current;
       const version: TailwindVersion = setup?.version ?? 'v4';
       const utilityPrefix = setup?.utilityPrefix ?? undefined;
@@ -698,16 +876,17 @@ export function useVisualEditor({
         boxSideUtilityResetSpec(type, side, utilityPrefix).match
       );
       const merged = twMerge(current, withVariant(activeBreakpoint.prefix, token));
-      setLiveClass(merged);
       const scoped = tokensForVariant(merged, activeBreakpoint.prefix, known);
       const decls: Record<string, string> = {};
       for (const s of ['top', 'right', 'bottom', 'left'] as Side[]) {
         const v = boxSide(scoped, type, s, { ...valueOptions, utilityPrefix });
         if (v) decls[`${type}-${s}`] = spacingCss(v, valueOptions);
       }
-      postMutate(merged, [{ minPx: activeBreakpoint.minPx, decls }]);
+      return applyLiveMutation(merged, [{ minPx: activeBreakpoint.minPx, decls }], () =>
+        setLiveClass(merged)
+      );
     },
-    [postMutate, setLiveClass, activeBreakpoint, known]
+    [mutationsEnabled, applyLiveMutation, setLiveClass, activeBreakpoint, known]
   );
 
   /** Set one position offset at the active breakpoint. Like the spacing box,
@@ -715,6 +894,7 @@ export function useVisualEditor({
    *  a side-specific utility is being edited. */
   const setPositionSide = useCallback(
     (side: Side, value: SpacingValue) => {
+      if (!mutationsEnabled) return;
       const setup = tailwindSetupRef.current;
       const version: TailwindVersion = setup?.version ?? 'v4';
       const utilityPrefix = setup?.utilityPrefix ?? undefined;
@@ -739,7 +919,6 @@ export function useVisualEditor({
         positionSideUtilityResetSpec(side, utilityPrefix).match
       );
       const merged = twMerge(current, withVariant(activeBreakpoint.prefix, token));
-      setLiveClass(merged);
       const scoped = tokensForVariant(merged, activeBreakpoint.prefix, known);
       const positionOptions = {
         ...valueOptions,
@@ -752,9 +931,11 @@ export function useVisualEditor({
         const v = positionSide(scoped, s, positionOptions);
         if (v) decls[s] = spacingCss(v, positionOptions);
       }
-      postMutate(merged, [{ minPx: activeBreakpoint.minPx, decls }]);
+      return applyLiveMutation(merged, [{ minPx: activeBreakpoint.minPx, decls }], () =>
+        setLiveClass(merged)
+      );
     },
-    [postMutate, setLiveClass, activeBreakpoint, known]
+    [mutationsEnabled, applyLiveMutation, setLiveClass, activeBreakpoint, known]
   );
 
   /** Step a spacing utility (padding/margin/gap) by `step` units (default 1) at the
@@ -778,7 +959,7 @@ export function useVisualEditor({
         dir * step,
         kind === 'margin'
       );
-      applyToken(spacingTokenFor(ctrl.prefix, next, valueOptions), {
+      return applyToken(spacingTokenFor(ctrl.prefix, next, valueOptions), {
         [ctrl.css]: spacingCss(next, valueOptions),
       });
     },
@@ -790,14 +971,16 @@ export function useVisualEditor({
    *  state. The class change is dirty, so Save (or auto-save) persists the removal. */
   const reset = useCallback(
     (spec: ResetSpec) => {
+      if (!mutationsEnabled) return;
       const merged = removeAtLayer(currentClassRef.current, activeBreakpoint, known, spec.match);
       if (merged === currentClassRef.current) return; // nothing to remove
-      setLiveClass(merged);
       const decls: Record<string, string | null> = {};
       for (const p of spec.cssProps) decls[p] = null;
-      postMutate(merged, [{ minPx: activeBreakpoint.minPx, decls }]);
+      return applyLiveMutation(merged, [{ minPx: activeBreakpoint.minPx, decls }], () =>
+        setLiveClass(merged)
+      );
     },
-    [postMutate, setLiveClass, activeBreakpoint, known]
+    [mutationsEnabled, applyLiveMutation, setLiveClass, activeBreakpoint, known]
   );
 
   /** Write `next` over `prev` at the element's resolved source location(s).
@@ -815,6 +998,44 @@ export function useVisualEditor({
    *
    *  Returns the resolution the write actually landed on, so callers advance
    *  their drift baseline to where the element really is now. */
+  const guardSourceEdit = useCallback(
+    (source: SourceRef | null): SourceRef | null => {
+      if (surfaceTarget === null) {
+        throw new Error('No live renderer surface is selected. Reselect the component frame.');
+      }
+      if (negotiatedSurface) {
+        if (!mutationsEnabled) {
+          throw new Error(
+            'Component editing is not confirmed. Confirm Edit main before changing it.'
+          );
+        }
+        if (!source) {
+          throw new Error(
+            'The selected component child has no exact source range. Refresh and reselect it.'
+          );
+        }
+        if (!sourceEditGuard) {
+          throw new Error(
+            'The component source boundary is unavailable. Refresh the frame before editing it.'
+          );
+        }
+        const guarded = sourceEditGuard(source);
+        if (guarded.status === 'refused' || !guarded.source) {
+          throw new Error(
+            guarded.status === 'refused'
+              ? guarded.reason
+              : 'The selected component child has no exact source range. Refresh and reselect it.'
+          );
+        }
+        return guarded.source;
+      }
+      const result = sourceEditGuard?.(source);
+      if (result?.status === 'refused') throw new Error(result.reason);
+      return result?.status === 'valid' ? (result.source ?? source) : source;
+    },
+    [mutationsEnabled, negotiatedSurface, sourceEditGuard, surfaceTarget]
+  );
+
   const writeClassToSource = useCallback(
     async (
       sig: ElementSignature,
@@ -822,8 +1043,25 @@ export function useVisualEditor({
       prev: string,
       next: string
     ): Promise<WritableResolution> => {
-      const focused = focusedTargetError(componentFocusRef, res);
+      if (!mutationsEnabled) {
+        throw new Error(
+          'Component editing is not confirmed. Confirm Edit main before changing it.'
+        );
+      }
+      const writeRevision = surfaceRevisionRef.current;
+      const writeSelectionToken = usageTokenRef.current;
+      const assertWriteRevision = () => {
+        if (surfaceRevisionRef.current !== writeRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        if (usageTokenRef.current !== writeSelectionToken) {
+          throw new Error('The renderer selection changed. Reselect the element and try again.');
+        }
+      };
       const write = async (r: WritableResolution, oldClass: string) => {
+        assertWriteRevision();
+        const guardedSource = guardSourceEdit(sourceRefFromResolution(r));
+        const focused = focusedTargetError(componentFocusRef, r);
         if (r.status === 'resolved') {
           await applyClassnameEdit(
             projectPath,
@@ -837,8 +1075,15 @@ export function useVisualEditor({
                   expectedStart: focused.source.start,
                   expectedEnd: focused.source.end,
                 }
-              : undefined
+              : guardedSource
+                ? {
+                    expectedHash: guardedSource.contentHash,
+                    expectedStart: guardedSource.start,
+                    expectedEnd: guardedSource.end,
+                  }
+                : undefined
           );
+          assertWriteRevision();
         } else {
           if (focused) {
             throw new Error(
@@ -849,17 +1094,40 @@ export function useVisualEditor({
           const mt = multiTargetRef.current;
           const edits = mt === 'all' ? r.locations : r.locations.filter((_, i) => i === mt);
           await applyClassnameEditMulti(projectPath, edits, oldClass, next);
+          assertWriteRevision();
         }
       };
       try {
-        await write(res, prev);
-        return res;
+        // A negotiated frame may have selected a perfectly valid child a few
+        // renders ago, but that proof is not authority for a new write. Resolve
+        // again immediately before touching source and use its current class
+        // baseline, while retaining the same frame/revision guard.
+        const currentResolution = negotiatedSurface
+          ? await resolveClassnameSource(projectPath, sig)
+          : res;
+        assertWriteRevision();
+        if (currentResolution.status !== 'resolved' && currentResolution.status !== 'multi') {
+          throw new Error(
+            'The selected component child has no exact source range. Refresh and reselect it.'
+          );
+        }
+        if (negotiatedSurface && currentResolution.status !== 'resolved') {
+          throw new Error(
+            'The selected component child has no exact source range. Refresh and reselect it.'
+          );
+        }
+        const currentBaseline =
+          negotiatedSurface && currentResolution.status === 'resolved'
+            ? currentResolution.class_name
+            : prev;
+        await write(currentResolution, currentBaseline);
+        return currentResolution;
       } catch (err) {
         const cmdErr = asCommandError(err);
         if (!(cmdErr.type === 'Validation' && cmdErr.field === 'old_class')) throw err;
         const fresh = await resolveClassnameSource(projectPath, sig);
+        assertWriteRevision();
         if (fresh.status !== 'resolved' && fresh.status !== 'multi') throw err;
-        if (focused) focusedTargetError(componentFocusRef, fresh);
         // The multi-location pick ('all' by default) was made against the
         // locations resolved at SELECTION time. If the re-resolve now finds MORE
         // of them, the drift added instances the user never saw in the picker —
@@ -881,7 +1149,7 @@ export function useVisualEditor({
         return fresh;
       }
     },
-    [componentFocusRef, projectPath]
+    [componentFocusRef, guardSourceEdit, mutationsEnabled, negotiatedSurface, projectPath]
   );
 
   /** Persist the current live class to source. `silent` suppresses the success
@@ -889,18 +1157,33 @@ export function useVisualEditor({
    *  errors still surface). */
   const commit = useCallback(
     async (opts?: { silent?: boolean }) => {
+      if (!mutationsEnabled) return;
+      const commitRevision = surfaceRevisionRef.current;
+      const assertCommitRevision = () => {
+        if (surfaceRevisionRef.current !== commitRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+      };
       // Class edit: persist the @apply list to the entry CSS (updates every
       // instance). No element markup changes, so the element-baseline dance below
       // doesn't apply. Suppress the reload our own save triggers (avoids a flash).
       const target = editTargetRef.current;
       if (target.kind === 'class') {
+        if (negotiatedSurface) {
+          onToast?.(
+            'Shared class editing is unavailable in a component frame. Select the element itself.',
+            'info'
+          );
+          return;
+        }
         if (focusedEditBlocked(componentFocusRef, onToast)) return;
         const next = currentClassRef.current.trim();
         if (next === target.baseline.trim()) return; // unchanged
         const tokens = next.split(/\s+/).filter(Boolean);
-        post({ type: 'ss:suppressReload' });
         try {
+          post({ type: 'ss:suppressReload' });
           const list = await updateCustomClass(projectPath, target.name, tokens);
+          assertCommitRevision();
           setCustomClasses(list);
           recordCommit('custom_class', { op: 'edit' });
           // Advance the baseline so consecutive edits (and auto-save) keep working.
@@ -933,13 +1216,18 @@ export function useVisualEditor({
       // against a stale old-value would silently no-op at the backend.
       const prev = selectedSigRef.current?.className ?? res.class_name;
       if (next === prev) return; // nothing changed
-      // Arm the reload-suppression window BEFORE writing: Astro's full-reload fires
-      // the instant the file changes, which can beat the post-write ss:commit. Setting
-      // it here means the reload our own save triggers is reliably swallowed (so the
-      // live preview doesn't briefly revert), while agent edits still reload.
-      post({ type: 'ss:suppressReload' });
       try {
+        // Prove the selected child before changing renderer state. The source write
+        // performs the same fresh proof again, but suppression itself must not be
+        // sent when the negotiated selection has already gone stale.
+        if (negotiatedSurface) await proveNegotiatedMutationTarget();
+        // Arm the reload-suppression window BEFORE writing: Astro's full-reload fires
+        // the instant the file changes, which can beat the post-write ss:commit. Setting
+        // it here means the reload our own save triggers is reliably swallowed (so the
+        // live preview doesn't briefly revert), while agent edits still reload.
+        post({ type: 'ss:suppressReload' });
         const landed = await writeClassToSource(sel.signature, res, prev, next);
+        assertCommitRevision();
         // Advance the drift baseline so consecutive edits keep working. Keep
         // selectedSigRef in lockstep — the structural gestures use it as the live
         // source-className baseline, so it must reflect saved style edits too.
@@ -969,6 +1257,10 @@ export function useVisualEditor({
       setEditTarget,
       recordCommit,
       writeClassToSource,
+      guardSourceEdit,
+      mutationsEnabled,
+      negotiatedSurface,
+      proveNegotiatedMutationTarget,
     ]
   );
 
@@ -977,6 +1269,7 @@ export function useVisualEditor({
    *  unapply / extract gestures. No-op (returns false) on an unresolved element. */
   const writeElementClass = useCallback(
     async (next: string): Promise<boolean> => {
+      if (!mutationsEnabled) return false;
       const sel = selection;
       const res = sel?.resolution;
       if (!res || (res.status !== 'resolved' && res.status !== 'multi')) {
@@ -988,6 +1281,7 @@ export function useVisualEditor({
       // React re-renders each still writes against the right old value.
       const prev = selectedSigRef.current?.className ?? res.class_name;
       if (next === prev) return true;
+      if (negotiatedSurface) await proveNegotiatedMutationTarget();
       post({ type: 'ss:suppressReload' });
       const landed = await writeClassToSource(sel.signature, res, prev, next);
       // Keep BOTH the selection signature (drives the class-bar chips) and the
@@ -1001,7 +1295,16 @@ export function useVisualEditor({
       post({ type: 'ss:commit' });
       return true;
     },
-    [selection, onToast, post, setLiveClass, writeClassToSource]
+    [
+      mutationsEnabled,
+      negotiatedSurface,
+      onToast,
+      post,
+      proveNegotiatedMutationTarget,
+      selection,
+      setLiveClass,
+      writeClassToSource,
+    ]
   );
 
   /** Add the FIRST class to a class-less element (a `no_class` resolution): the
@@ -1011,13 +1314,21 @@ export function useVisualEditor({
    *  re-resolve so the panel transitions from the no-class state to full controls. */
   const addFirstClass = useCallback(
     async (name: string) => {
+      if (!mutationsEnabled) return;
       if (focusedEditBlocked(componentFocusRef, onToast)) return;
+      if (negotiatedSurface) {
+        onToast?.(
+          'This component child has no exact source range for adding a first class. Reselect it after the renderer refreshes.',
+          'info'
+        );
+        return;
+      }
       const sig = selectedSigRef.current;
       const n = name.trim().replace(/^\./, '');
       if (!sig || !n) return;
       // Arm reload suppression before writing (same reasoning as a class commit).
-      post({ type: 'ss:suppressReload' });
       try {
+        post({ type: 'ss:suppressReload' });
         await insertClassAttr(projectPath, sig, n);
         const nextSig = { ...sig, className: n };
         selectedSigRef.current = nextSig;
@@ -1042,7 +1353,17 @@ export function useVisualEditor({
         onToast?.(message, refusal ? 'info' : 'error');
       }
     },
-    [componentFocusRef, projectPath, post, setLiveClass, onToast, recordCommit]
+    [
+      componentFocusRef,
+      guardSourceEdit,
+      mutationsEnabled,
+      negotiatedSurface,
+      projectPath,
+      post,
+      setLiveClass,
+      onToast,
+      recordCommit,
+    ]
   );
 
   /** The selected element's current className — read from the live class in
@@ -1101,6 +1422,14 @@ export function useVisualEditor({
    *  element briefly shows unstyled until HMR compiles the new rule's `@apply`.) */
   const createClassFromStyles = useCallback(
     async (name: string) => {
+      if (!mutationsEnabled) return;
+      if (negotiatedSurface) {
+        onToast?.(
+          'Creating shared classes is unavailable in a component frame. Select the element itself.',
+          'info'
+        );
+        return;
+      }
       if (focusedEditBlocked(componentFocusRef, onToast)) return;
       const elTokens = currentElementClass().split(/\s+/).filter(Boolean);
       const classNames = new Set(customClasses.map((c) => c.name));
@@ -1139,6 +1468,8 @@ export function useVisualEditor({
       writeElementClass,
       editClass,
       componentFocusRef,
+      mutationsEnabled,
+      negotiatedSurface,
       onToast,
       recordCommit,
     ]
@@ -1156,6 +1487,11 @@ export function useVisualEditor({
    */
   const replaceImage = useCallback(
     async (newSrc: string) => {
+      if (!mutationsEnabled) {
+        throw new Error(
+          'Component editing is not confirmed. Confirm Edit main before changing it.'
+        );
+      }
       if (focusedEditBlocked(componentFocusRef, onToast)) {
         throw new Error('Component focus requires an exact child source target.');
       }
@@ -1165,9 +1501,39 @@ export function useVisualEditor({
         throw new Error('no image target');
       }
       if (newSrc === target.src) return; // already this asset — nothing to write
+      const imageRevision = surfaceRevisionRef.current;
+      const imageSelectionToken = usageTokenRef.current;
+      const imageSignature = selectedSigRef.current;
+      const assertImageSelection = () => {
+        if (
+          usageTokenRef.current !== imageSelectionToken ||
+          surfaceRevisionRef.current !== imageRevision ||
+          selectedSigRef.current !== imageSignature
+        ) {
+          throw new Error('The renderer selection changed. Reselect the element and try again.');
+        }
+      };
       // Arm reload suppression before writing (same reasoning as a class commit).
-      post({ type: 'ss:suppressReload' });
       try {
+        // Image resolution has no range of its own. For a negotiated component
+        // frame, freshly resolve the selected child and use that exact proof as
+        // the mutation boundary; a null guard would permanently (and correctly)
+        // refuse every image write.
+        let guardedSource: SourceRef | null = null;
+        if (surfaceTarget) {
+          const signature = imageSignature;
+          if (!signature) throw new Error('Reselect the image before replacing it.');
+          const resolution = await resolveClassnameSource(projectPath, signature);
+          assertImageSelection();
+          guardedSource = guardSourceEdit(sourceRefFromResolution(resolution));
+          if (!guardedSource) {
+            throw new Error(
+              'The selected component child has no exact source range. Refresh and reselect it.'
+            );
+          }
+        }
+        assertImageSelection();
+        post({ type: 'ss:suppressReload' });
         await applySrcEdit(
           projectPath,
           target.file,
@@ -1176,6 +1542,7 @@ export function useVisualEditor({
           target.src,
           newSrc
         );
+        assertImageSelection();
         // Advance the drift baseline so consecutive replacements keep working.
         target.src = newSrc;
         setImageResolution((prev) =>
@@ -1193,7 +1560,16 @@ export function useVisualEditor({
         throw err;
       }
     },
-    [componentFocusRef, projectPath, onToast, post, recordCommit]
+    [
+      componentFocusRef,
+      guardSourceEdit,
+      mutationsEnabled,
+      projectPath,
+      onToast,
+      post,
+      recordCommit,
+      surfaceTarget,
+    ]
   );
 
   // Auto-save: debounce a silent commit after edits settle. Re-running on every
@@ -1215,6 +1591,21 @@ export function useVisualEditor({
     return () => window.clearTimeout(id);
   }, [autoSave, currentClass, selection, editTarget, commit]);
 
+  const clearEditState = useCallback(() => {
+    setSelection(null);
+    setLiveClass('');
+    setImageTarget(null);
+    setEditTarget({ kind: 'element' });
+    selectedSigRef.current = null;
+  }, [setEditTarget, setImageTarget, setLiveClass]);
+
+  const previousEditModeOnRef = useRef(editModeOn);
+  useEffect(() => {
+    const previous = previousEditModeOnRef.current;
+    previousEditModeOnRef.current = editModeOn;
+    if (previous && !editModeOn) clearEditState();
+  }, [clearEditState, editModeOn]);
+
   const toggleEditMode = useCallback(() => {
     // Fire lifecycle analytics from the user's toggle intent (read via ref so the
     // direction is never stale), outside the state updater so it runs exactly once.
@@ -1233,23 +1624,15 @@ export function useVisualEditor({
       });
       editStartedAtRef.current = null;
     }
-    setEditModeOn((prev) => {
-      // Turning off: clear the current selection (event-handler context, so
-      // these state updates batch without a cascading-render effect).
-      if (prev) {
-        setSelection(null);
-        setLiveClass('');
-        setImageTarget(null);
-        setEditTarget({ kind: 'element' });
-        selectedSigRef.current = null;
-      }
-      return !prev;
-    });
-  }, [setLiveClass, setImageTarget, setEditTarget]);
+    if (controlledEditMode !== undefined) onEditModeChange?.(turningOn);
+    else setInternalEditModeOn(turningOn);
+  }, [controlledEditMode, onEditModeChange]);
 
   return {
     editMode,
     toggleEditMode,
+    /** Select a renderer-proven element without accepting an unvalidated window message. */
+    selectElement,
     selection,
     currentClass,
     usage,

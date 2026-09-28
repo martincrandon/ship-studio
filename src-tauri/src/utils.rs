@@ -2,6 +2,8 @@
 //!
 //! This module contains shared utility functions used across the Ship Studio backend.
 
+use std::io;
+use std::path::Path;
 use std::process::Command;
 use std::sync::{LazyLock, Mutex, RwLock};
 use std::time::Instant;
@@ -17,6 +19,86 @@ pub fn create_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     cmd
+}
+
+/// Atomically replace `destination` with a staged file at `source`.
+///
+/// Unix `rename` replaces an existing file atomically. Windows' standard
+/// `MoveFileEx`/`std::fs::rename` path does not have that overwrite behavior,
+/// so an existing destination is replaced with `ReplaceFileW` instead. If the
+/// destination is absent, the ordinary same-directory rename is retained. No
+/// delete-then-rename fallback is used: a failed replacement leaves either the
+/// old destination or the staged source available for recovery.
+///
+/// Callers must validate both paths immediately before invoking this helper;
+/// this function deliberately only provides the platform replacement
+/// primitive and does not follow or inspect project-specific path policies.
+pub fn atomic_replace(source: &Path, destination: &Path) -> io::Result<()> {
+    #[cfg(not(windows))]
+    {
+        std::fs::rename(source, destination)
+    }
+
+    #[cfg(windows)]
+    {
+        atomic_replace_windows(source, destination)
+    }
+}
+
+#[cfg(windows)]
+fn atomic_replace_windows(source: &Path, destination: &Path) -> io::Result<()> {
+    // A same-directory rename is the best path when the destination does not
+    // exist, and it also avoids an unnecessary Win32 call for first writes.
+    match std::fs::rename(source, destination) {
+        Ok(()) => return Ok(()),
+        Err(rename_error) => {
+            // Only attempt ReplaceFileW when the destination exists. Keeping
+            // the original error for an absent destination preserves useful
+            // errors such as a locked source or missing parent directory.
+            if std::fs::symlink_metadata(destination).is_err() {
+                return Err(rename_error);
+            }
+        }
+    }
+
+    use std::iter::once;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr;
+    use windows_sys::Win32::Storage::FileSystem::ReplaceFileW;
+
+    let source_w: Vec<u16> = source.as_os_str().encode_wide().chain(once(0)).collect();
+    let destination_w: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(once(0))
+        .collect();
+
+    // SAFETY: both UTF-16 buffers are NUL-terminated and remain alive for the
+    // duration of the call. The optional backup/reserved pointers are null as
+    // permitted by ReplaceFileW's contract.
+    let replaced = unsafe {
+        ReplaceFileW(
+            destination_w.as_ptr(),
+            source_w.as_ptr(),
+            ptr::null(),
+            0,
+            ptr::null(),
+            ptr::null(),
+        )
+    };
+    if replaced != 0 {
+        return Ok(());
+    }
+
+    let replace_error = io::Error::last_os_error();
+    // The destination may have disappeared after the metadata check. Retry
+    // the non-overwriting rename in that narrow race; never remove anything
+    // to force the replacement through.
+    if replace_error.kind() == io::ErrorKind::NotFound {
+        std::fs::rename(source, destination)
+    } else {
+        Err(replace_error)
+    }
 }
 
 /// Returns the platform-specific PATH separator (`:` for Unix, `;` for Windows)
@@ -1674,6 +1756,49 @@ fn format_relative_time_from_now(timestamp_ms: u64, now_ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod atomic_replace_tests {
+        use super::*;
+
+        #[test]
+        fn replaces_existing_file_and_consumes_staged_file() {
+            let temp = tempfile::TempDir::new().unwrap();
+            let source = temp.path().join("project.json.tmp");
+            let destination = temp.path().join("project.json");
+            std::fs::write(&source, "new").unwrap();
+            std::fs::write(&destination, "old").unwrap();
+
+            atomic_replace(&source, &destination).unwrap();
+
+            assert_eq!(std::fs::read_to_string(&destination).unwrap(), "new");
+            assert!(!source.exists());
+        }
+
+        #[test]
+        fn failed_replace_does_not_delete_destination_or_staged_file() {
+            let temp = tempfile::TempDir::new().unwrap();
+            let source = temp.path().join("project.json.tmp");
+            let destination = temp.path().join("destination");
+            std::fs::write(&source, "new").unwrap();
+            std::fs::create_dir(&destination).unwrap();
+
+            assert!(atomic_replace(&source, &destination).is_err());
+            assert_eq!(std::fs::read_to_string(&source).unwrap(), "new");
+            assert!(destination.is_dir());
+        }
+
+        #[cfg(windows)]
+        #[test]
+        fn windows_replacement_keeps_destination_atomic_when_source_is_invalid() {
+            let temp = tempfile::TempDir::new().unwrap();
+            let source = temp.path().join("missing.tmp");
+            let destination = temp.path().join("project.json");
+            std::fs::write(&destination, "old").unwrap();
+
+            assert!(atomic_replace(&source, &destination).is_err());
+            assert_eq!(std::fs::read_to_string(&destination).unwrap(), "old");
+        }
+    }
 
     mod environment_classifiers {
         use super::*;

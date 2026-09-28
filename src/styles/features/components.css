@@ -409,9 +409,13 @@
   gap: var(--spacing-xs);
 }
 
-.ss-components-row__type {
+.ss-components-type-tag {
   --components-type-color: var(--text-muted);
 
+  display: inline-flex;
+  align-self: flex-start;
+  margin-block: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
   padding: var(--spacing-2xs) var(--spacing-xs);
   color: var(--components-type-color);
   background: color-mix(in srgb, var(--components-type-color) 15%, transparent);
@@ -420,35 +424,35 @@
   white-space: nowrap;
 }
 
-.ss-components-row__type--react {
+.ss-components-type-tag--react {
   --components-type-color: var(--color-blue-400);
 }
 
-.ss-components-row__type--react-native {
+.ss-components-type-tag--react-native {
   --components-type-color: var(--color-purple-400);
 }
 
-.ss-components-row__type--astro {
+.ss-components-type-tag--astro {
   --components-type-color: var(--color-orange-400);
 }
 
-.ss-components-row__type--vue {
+.ss-components-type-tag--vue {
   --components-type-color: var(--color-green-400);
 }
 
-.ss-components-row__type--svelte {
+.ss-components-type-tag--svelte {
   --components-type-color: var(--color-red-400);
 }
 
-.ss-components-row__type--shopify {
+.ss-components-type-tag--shopify {
   --components-type-color: var(--color-green-300);
 }
 
-.ss-components-row__type--web-component {
+.ss-components-type-tag--web-component {
   --components-type-color: var(--color-pink-400);
 }
 
-.ss-components-row__type--flutter {
+.ss-components-type-tag--flutter {
   --components-type-color: var(--color-blue-500);
 }
 

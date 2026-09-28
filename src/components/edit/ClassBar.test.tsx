@@ -124,4 +124,13 @@ describe('ClassBar', () => {
     fireEvent.change(search(), { target: { value: 'fresh-name' } });
     expect(screen.getByRole('option', { name: /create class .*fresh-name/i })).toBeDisabled();
   });
+
+  it('keeps the target picker inert on read-only surfaces', () => {
+    const props = renderBar({ disabled: true });
+    const trigger = screen.getByRole('button', { name: /this element/i });
+    expect(trigger).toBeDisabled();
+    fireEvent.click(trigger);
+    expect(screen.queryByPlaceholderText(/search or create a class/i)).not.toBeInTheDocument();
+    expect(props.onEditElement).not.toHaveBeenCalled();
+  });
 });

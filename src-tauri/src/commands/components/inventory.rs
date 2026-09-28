@@ -43,13 +43,29 @@ const IGNORED_DIRECTORIES: &[&str] = &[
     ".shipstudio",
     "build",
     "coverage",
+    "demo",
+    "demos",
     "dist",
+    "example",
+    "examples",
     "generated",
     "node_modules",
     "out",
     "output",
+    "playground",
+    "playgrounds",
+    "scripts",
+    "storybook",
+    "storybook-static",
+    "test",
+    "tests",
     "target",
     "vendor",
+    "fixture",
+    "fixtures",
+    "__fixtures__",
+    "__mocks__",
+    "__tests__",
 ];
 
 const STATIC_MANIFEST_NAMES: &[&str] = &[
@@ -342,6 +358,10 @@ fn collect_source_files(
         };
         let path = entry.path();
         if path == workspace || !is_source_file(path) {
+            continue;
+        }
+        let project_relative = path.strip_prefix(project_root).unwrap_or(path);
+        if is_renderer_generated_source_path(project_relative) {
             continue;
         }
 
@@ -739,6 +759,12 @@ pub(crate) fn validate_relative_source_path(relative: &str) -> Result<(), Comman
             format!("source path '{relative}' is inside an ignored or generated directory"),
         ));
     }
+    if is_renderer_generated_source_path(path) {
+        return Err(validation(
+            "relativePaths",
+            format!("source path '{relative}' belongs to Ship Studio's temporary renderer"),
+        ));
+    }
     if !is_source_file(path) && !is_static_manifest_file(path) {
         return Err(validation(
             "relativePaths",
@@ -763,6 +789,7 @@ fn is_source_file(path: &Path) -> bool {
     if file_name.ends_with(".d.ts")
         || file_name.ends_with(".d.mts")
         || file_name.ends_with(".d.cts")
+        || is_test_or_fixture_file(&file_name)
     {
         return false;
     }
@@ -788,6 +815,17 @@ fn is_source_file(path: &Path) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+/// Test and Storybook files are source-shaped, but they are not application
+/// component definitions. Including them makes the catalog parse assertions,
+/// test doubles, and story-only exports as if they were production components.
+/// Keep this filename rule separate from the directory filter so a package can
+/// still expose legitimate sources from its normal `src` tree.
+fn is_test_or_fixture_file(file_name: &str) -> bool {
+    [".test.", ".spec.", ".stories.", ".story."]
+        .iter()
+        .any(|marker| file_name.contains(marker))
 }
 
 fn is_static_manifest_file(path: &Path) -> bool {
@@ -820,7 +858,25 @@ pub(crate) fn is_relevant_watch_path(path: &Path, workspace: &Path) -> bool {
     }) {
         return false;
     }
+    if is_renderer_generated_source_path(relative) {
+        return false;
+    }
     is_source_file(path) || path.extension().is_none()
+}
+
+/// Generated Next routes live inside the user's source tree so the project
+/// dev server can execute them, but they are renderer infrastructure rather
+/// than project components. Exclude both App Router directories and Pages
+/// Router files from inventory, guarded batch reads, and watcher refreshes.
+fn is_renderer_generated_source_path(path: &Path) -> bool {
+    path.components().any(|component| {
+        let Component::Normal(part) = component else {
+            return false;
+        };
+        part.to_str().is_some_and(|name| {
+            name.starts_with("shipstudio_renderer_") || name == "__shipstudio_renderer_shell.tsx"
+        })
+    })
 }
 
 fn is_ignored_directory(path: &Path, workspace: &Path) -> bool {
@@ -997,7 +1053,17 @@ mod tests {
     #[test]
     fn skips_ignored_and_generated_directories() {
         let temp = TempDir::new().unwrap();
-        for directory in ["node_modules/pkg", "dist", ".next", ".git", ".shipstudio"] {
+        for directory in [
+            "node_modules/pkg",
+            "dist",
+            ".next",
+            ".git",
+            ".shipstudio",
+            "scripts/fixtures/component-renderer/vite-react/src/components",
+            "src/test/fixtures",
+            "packages/ui/tests",
+            "packages/ui/examples",
+        ] {
             write(
                 temp.path(),
                 &format!("{directory}/ignored.ts"),
@@ -1005,10 +1071,71 @@ mod tests {
             );
         }
         write(temp.path(), "src/kept.ts", "export const Good = 1;");
+        write(
+            temp.path(),
+            "src/components/Story.stories.tsx",
+            "export const Story = 1;",
+        );
+        write(
+            temp.path(),
+            "packages/ui/src/Card.tsx",
+            "export const Card = 1;",
+        );
 
         let snapshot = snapshot_for_root_with_limits(temp.path(), limits()).unwrap();
-        assert_eq!(snapshot.files.len(), 1);
-        assert_eq!(snapshot.files[0].file, "src/kept.ts");
+        assert_eq!(
+            snapshot
+                .files
+                .iter()
+                .map(|file| file.file.as_str())
+                .collect::<Vec<_>>(),
+            vec!["packages/ui/src/Card.tsx", "src/kept.ts"]
+        );
+        assert!(!snapshot.partial);
+        assert!(snapshot.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn excludes_test_spec_and_story_files_but_keeps_package_sources() {
+        let temp = TempDir::new().unwrap();
+        write(
+            temp.path(),
+            "src/components/Button.tsx",
+            "export const Button = 1;",
+        );
+        write(
+            temp.path(),
+            "src/components/Button.test.tsx",
+            "export const TestDouble = 1;",
+        );
+        write(
+            temp.path(),
+            "packages/ui/src/Select.tsx",
+            "export const Select = 1;",
+        );
+        write(
+            temp.path(),
+            "packages/ui/src/Select.spec.tsx",
+            "export const SpecOnly = 1;",
+        );
+        write(
+            temp.path(),
+            "packages/ui/src/Select.stories.tsx",
+            "export const StoryOnly = 1;",
+        );
+
+        let snapshot = snapshot_for_root_with_limits(temp.path(), limits()).unwrap();
+        let files = snapshot
+            .files
+            .iter()
+            .map(|file| file.file.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            files,
+            vec!["packages/ui/src/Select.tsx", "src/components/Button.tsx"]
+        );
+        assert!(!snapshot.partial);
+        assert!(snapshot.diagnostics.is_empty());
     }
 
     #[test]
@@ -1098,6 +1225,11 @@ mod tests {
             "export const Page = 1;",
         );
         write(temp.path(), "apps/web/package.json", r#"{"name":"web"}"#);
+        write(
+            temp.path(),
+            "scripts/fixtures/component-renderer/vite-react/package.json",
+            r#"{"name":"fixture-renderer"}"#,
+        );
         let metadata_dir = temp.path().join(".shipstudio");
         fs::create_dir_all(&metadata_dir).unwrap();
         fs::write(
@@ -1119,6 +1251,9 @@ mod tests {
             .files
             .iter()
             .any(|file| file.file == "packages/ui/package.json"));
+        assert!(!snapshot.files.iter().any(|file| {
+            file.file == "scripts/fixtures/component-renderer/vite-react/package.json"
+        }));
         assert!(!snapshot
             .files
             .iter()

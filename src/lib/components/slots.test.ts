@@ -452,7 +452,9 @@ let items = [];
     )!;
     const badge = index.components.find((item) => item.name === 'Badge')!;
     const other = index.components.find((item) => item.name === 'Other')!;
-    const panelChild = panel.slots[0]?.children?.find((child) => child.componentId === badge.id)!;
+    const panelChild = (panel.slots[0]?.children ?? []).find(
+      (child) => child.componentId === badge.id
+    )!;
 
     expect(card.capabilities.editSlots).toBe(true);
     expect(card.slots).toEqual(
@@ -548,17 +550,16 @@ let items = [];
     ).toMatchObject({ status: 'refused', code: 'unsupported' });
     const stale = {
       ...index,
-      instances: index.instances.map((item) =>
-        item.id === panel.id
-          ? {
-              ...item,
-              slotSources: {
-                ...item.slotSources,
-                default: { ...item.slotSources?.default!, contentHash: 'stale' },
-              },
-            }
-          : item
-      ),
+      instances: index.instances.map((item) => {
+        if (item.id !== panel.id || !item.slotSources?.default) return item;
+        return {
+          ...item,
+          slotSources: {
+            ...item.slotSources,
+            default: { ...item.slotSources.default, contentHash: 'stale' },
+          },
+        };
+      }),
     };
     expect(
       planStaticSlotEdit(
@@ -633,17 +634,16 @@ const title = 'dynamic';
 
     const staleIndex = {
       ...index,
-      instances: index.instances.map((candidate) =>
-        candidate.id === defaultCard.id
-          ? {
-              ...candidate,
-              slotSources: {
-                ...candidate.slotSources,
-                default: { ...candidate.slotSources?.default!, contentHash: 'stale' },
-              },
-            }
-          : candidate
-      ),
+      instances: index.instances.map((candidate) => {
+        if (candidate.id !== defaultCard.id || !candidate.slotSources?.default) return candidate;
+        return {
+          ...candidate,
+          slotSources: {
+            ...candidate.slotSources,
+            default: { ...candidate.slotSources.default, contentHash: 'stale' },
+          },
+        };
+      }),
     };
     expect(
       planStaticSlotEdit(
@@ -703,7 +703,9 @@ const items = [];
     const dynamic = index.instances.find(
       (item) => item.componentId === card.id && item.invocation.file === 'src/DynamicPage.vue'
     )!;
-    const panelChild = nested.slots[0]?.children?.find((child) => child.instanceId === panel.id)!;
+    const panelChild = (nested.slots[0]?.children ?? []).find(
+      (child) => child.instanceId === panel.id
+    )!;
     const other = index.components.find((item) => item.name === 'Other')!;
 
     expect(card.capabilities.editSlots).toBe(true);
@@ -799,17 +801,16 @@ const items = [];
     ).toMatchObject({ status: 'refused', code: 'unsupported' });
     const stale = {
       ...index,
-      instances: index.instances.map((item) =>
-        item.id === nested.id
-          ? {
-              ...item,
-              slotSources: {
-                ...item.slotSources,
-                default: { ...item.slotSources?.default!, contentHash: 'stale' },
-              },
-            }
-          : item
-      ),
+      instances: index.instances.map((item) => {
+        if (item.id !== nested.id || !item.slotSources?.default) return item;
+        return {
+          ...item,
+          slotSources: {
+            ...item.slotSources,
+            default: { ...item.slotSources.default, contentHash: 'stale' },
+          },
+        };
+      }),
     };
     expect(
       planStaticSlotEdit(
@@ -914,7 +915,9 @@ customElements.define('x-card', class extends HTMLElement {});
     )!;
     const named = pageCards.find((item) => item.slots[0]?.name === 'title')!;
     const dynamic = pageCards.find((item) => item.slots[0]?.sourceText?.includes('<script>'))!;
-    const panelChild = nested.slots[0]?.children?.find((child) => child.instanceId === panel.id)!;
+    const panelChild = (nested.slots[0]?.children ?? []).find(
+      (child) => child.instanceId === panel.id
+    )!;
 
     expect(card.capabilities.editSlots).toBe(true);
     expect(card.slots).toEqual(
@@ -1016,17 +1019,16 @@ customElements.define('x-card', class extends HTMLElement {});
     ).toMatchObject({ status: 'refused', code: 'unsupported' });
     const stale = {
       ...index,
-      instances: index.instances.map((item) =>
-        item.id === nested.id
-          ? {
-              ...item,
-              slotSources: {
-                ...item.slotSources,
-                default: { ...item.slotSources?.default!, contentHash: 'stale' },
-              },
-            }
-          : item
-      ),
+      instances: index.instances.map((item) => {
+        if (item.id !== nested.id || !item.slotSources?.default) return item;
+        return {
+          ...item,
+          slotSources: {
+            ...item.slotSources,
+            default: { ...item.slotSources.default, contentHash: 'stale' },
+          },
+        };
+      }),
     };
     expect(
       planStaticSlotEdit(

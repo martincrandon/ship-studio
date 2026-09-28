@@ -13,6 +13,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { asCommandError } from './errors';
+import type { SourceRef } from './components/types';
 
 /** One declaration of a matched rule, as the iframe cascade walker reports it. */
 export interface CascadeDecl {
@@ -53,7 +54,17 @@ export interface MatchedRule {
 /** Where a matched rule lives in source (mirrors the Rust `RuleLocation`,
  *  `#[serde(tag = "status", rename_all = "snake_case")]`). */
 export type RuleLocation =
-  | { status: 'resolved'; file: string; line: number; inner_text: string }
+  | {
+      status: 'resolved';
+      file: string;
+      line: number;
+      inner_text: string;
+      /** Exact UTF-8 byte range and complete-file hash, when returned by the
+       * backend. Older/legacy callers may omit this provenance. */
+      source_start?: number;
+      source_end?: number;
+      source_hash?: string;
+    }
   | { status: 'multiple'; files: string[] }
   | { status: 'not_found' };
 
@@ -81,6 +92,8 @@ export interface CascadeRow {
   /** The rule's position in the cascade walk — lets the iframe pin THE rule to live-preview
    *  or delete even when the same selector occurs in several rules (base + `@layer`, …). */
   sourceOrder?: number;
+  /** The served stylesheet URL used to disambiguate duplicate selectors. */
+  href?: string | null;
   mediaText: string | null;
   mediaMinPx: number | null;
   inactiveMedia: boolean;
@@ -96,6 +109,9 @@ export interface CascadeRow {
   file?: string;
   line?: number;
   innerText?: string;
+  /** Exact authored-rule provenance returned by the CSS locator. Focused
+   * component writes refuse rows without this proof. */
+  sourceRef?: SourceRef;
   /** Candidate source files when the selector maps to more than one rule. */
   sourceFiles?: string[];
   /** Why a rule is read-only, surfaced in the UI. */
@@ -115,6 +131,39 @@ export function locateCssRules(
   matched: MatchedRuleQuery[]
 ): Promise<RuleLocation[]> {
   return invoke<RuleLocation[]>('locate_css_rules', { projectPath, matched });
+}
+
+/** Convert a resolved CSS locator result into the exact source proof used by
+ * focused component editing. Returning null for missing/invalid metadata keeps
+ * old Preview rows usable while making component-frame writes fail closed. */
+export function sourceRefFromRuleLocation(location: RuleLocation): SourceRef | null {
+  if (
+    location.status !== 'resolved' ||
+    typeof location.source_start !== 'number' ||
+    typeof location.source_end !== 'number' ||
+    !Number.isInteger(location.source_start) ||
+    !Number.isInteger(location.source_end) ||
+    location.source_start < 0 ||
+    location.source_end <= location.source_start ||
+    typeof location.source_hash !== 'string' ||
+    location.source_hash.length === 0 ||
+    typeof location.file !== 'string' ||
+    location.file.length === 0 ||
+    !Number.isInteger(location.line) ||
+    location.line < 1
+  ) {
+    return null;
+  }
+  return {
+    file: location.file,
+    start: location.source_start,
+    end: location.source_end,
+    line: location.line,
+    // The locator reports the selector line; column is diagnostic-only and is
+    // not consulted when proving the source boundary.
+    column: 1,
+    contentHash: location.source_hash,
+  };
 }
 
 /** Write an edited rule body back to source, drift-guarded against `oldInner`. */
@@ -434,6 +483,7 @@ export function mergeCascade(
       declarations: m.declarations,
       specificity: m.specificity,
       sourceOrder: m.sourceOrder,
+      href: m.href,
       mediaText: m.mediaText,
       mediaMinPx: m.mediaMinPx,
       inactiveMedia: m.inactiveMedia,
@@ -463,6 +513,7 @@ export function mergeCascade(
       file: loc.file,
       line: loc.line,
       innerText: loc.inner_text,
+      sourceRef: sourceRefFromRuleLocation(loc) ?? undefined,
     };
   });
 }

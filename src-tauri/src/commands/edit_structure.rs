@@ -651,6 +651,7 @@ pub fn paste_element(
     signature: ElementSignature,
     html: String,
     source_class_name: String,
+    source_target: Option<ExactSourceTarget>,
 ) -> Result<InsertedElement, CommandError> {
     let snippet = html.trim();
     if !snippet.starts_with('<') {
@@ -673,7 +674,13 @@ pub fn paste_element(
         ));
     }
 
-    let (file, abs, src, _line, start, end) = locate_element(&project_path, signature)?;
+    // A component frame supplies an exact definition-bound target. Once that
+    // path is requested, a failed exact lookup must remain a hard refusal —
+    // never broaden it to the project-wide class resolver.
+    let (file, abs, src, _line, start, end) = match source_target {
+        Some(target) => locate_exact_element(&project_path, target)?,
+        None => locate_element(&project_path, signature)?,
+    };
     let root = validate_project_path(&project_path)?;
     let token = generate_class(&root, &tag);
     let copy = append_class_token(
@@ -955,5 +962,40 @@ mod tests {
     fn span_tag_reads_anchor_tag() {
         assert_eq!(span_tag("<Body class=\"x\">", 0), "body");
         assert_eq!(span_tag("<my-el class=\"x\">", 0), "my-el");
+    }
+
+    #[test]
+    fn exact_source_target_rejects_traversal_and_empty_ranges_before_resolution() {
+        let traversal = locate_exact_element(
+            "/not-a-project",
+            ExactSourceTarget {
+                file: "../outside.tsx".into(),
+                start: 1,
+                end: 2,
+                expected_hash: "hash".into(),
+                expected_html: "<p />".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            traversal,
+            CommandError::Validation { field, .. } if field == "sourceTarget.file"
+        ));
+
+        let empty = locate_exact_element(
+            "/not-a-project",
+            ExactSourceTarget {
+                file: "Card.tsx".into(),
+                start: 8,
+                end: 8,
+                expected_hash: "hash".into(),
+                expected_html: "<p />".into(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            empty,
+            CommandError::Validation { field, .. } if field == "sourceTarget"
+        ));
     }
 }

@@ -357,7 +357,7 @@ fn save_removed_projects_config(config: &RemovedProjectsConfig) -> Result<(), St
     std::fs::write(&temp_path, contents)
         .map_err(|e| format!("Failed to write removed projects config: {e}"))?;
 
-    std::fs::rename(&temp_path, &config_path).map_err(|e| {
+    crate::utils::atomic_replace(&temp_path, &config_path).map_err(|e| {
         let _ = std::fs::remove_file(&temp_path);
         format!("Failed to replace removed projects config: {e}")
     })

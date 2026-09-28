@@ -101,6 +101,8 @@
    filled surface for ordinary toggles, so keep this override local to these
    panel controls. */
 .preview-toolbar-control-group .preview-edit-control.button--secondary[aria-pressed='true'],
+.components-workspace__toolbar-actions--canvas
+  .preview-edit-control.button--secondary[aria-pressed='true'],
 .preview-toolbar-control-group .preview-inspect-control.button--secondary[aria-pressed='true'] {
   background: var(--surface-panel);
   color: var(--button-text-default);
@@ -109,6 +111,8 @@
 
 .preview-toolbar
   .preview-toolbar-control-group
+  .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
+.components-workspace__toolbar-actions--canvas
   .preview-edit-control.button--secondary[aria-pressed='true']:hover:not(:disabled),
 .preview-toolbar
   .preview-toolbar-control-group

@@ -30,6 +30,11 @@ import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { isExpectedStructuralRefusal } from './useElementStructure';
+import {
+  postToEditableSurface,
+  type SourceEditGuard,
+  type EditableSurfaceTarget,
+} from '../lib/components/editable-surface';
 
 function toastText(err: unknown): string {
   return formatCommandError(asCommandError(err));
@@ -103,6 +108,8 @@ function parseAttributes(html: string): ElementAttr[] {
 
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  surfaceTarget?: EditableSurfaceTarget | null;
+  sourceEditGuard?: SourceEditGuard;
   projectPath: string;
   enabled: boolean;
   signature: ElementSignature | null;
@@ -111,6 +118,8 @@ interface Params {
 
 export function useElementSettings({
   iframeRef,
+  surfaceTarget = null,
+  sourceEditGuard,
   projectPath,
   enabled,
   signature,
@@ -130,9 +139,19 @@ export function useElementSettings({
   const tag = signature?.tagName ?? '';
 
   const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
+    (msg: unknown) => {
+      if (surfaceTarget) {
+        postToEditableSurface(surfaceTarget, msg);
+        return;
+      }
+      iframeRef.current?.contentWindow?.postMessage(msg, '*');
+    },
+    [iframeRef, surfaceTarget]
   );
+  const guardSourceEdit = useCallback(() => {
+    const result = sourceEditGuard?.(null);
+    if (result?.status === 'refused') throw new Error(result.reason);
+  }, [sourceEditGuard]);
 
   // Seed classes from the signature; resolve the element's markup for attributes.
   useEffect(() => {
@@ -180,6 +199,7 @@ export function useElementSettings({
       if (newHtml == null || newHtml === oldHtml) return;
       setBusy(true);
       try {
+        guardSourceEdit();
         await applyElementHtml(projectPath, sig, oldHtml, newHtml);
         htmlRef.current = newHtml;
         setAttributes(parseAttributes(newHtml));
@@ -190,7 +210,7 @@ export function useElementSettings({
         setBusy(false);
       }
     },
-    [projectPath, onToast]
+    [guardSourceEdit, projectPath, onToast]
   );
 
   /** Rename an attribute's key (remove old + add new in ONE source write so it never
@@ -210,6 +230,7 @@ export function useElementSettings({
       if (newHtml == null || newHtml === oldHtml) return;
       setBusy(true);
       try {
+        guardSourceEdit();
         await applyElementHtml(projectPath, sig, oldHtml, newHtml);
         htmlRef.current = newHtml;
         setAttributes(parseAttributes(newHtml));
@@ -220,7 +241,7 @@ export function useElementSettings({
         setBusy(false);
       }
     },
-    [projectPath, onToast]
+    [guardSourceEdit, projectPath, onToast]
   );
 
   /** Rewrite the element's `class` attribute in source (and live in the preview). */
@@ -238,6 +259,7 @@ export function useElementSettings({
       }
       const prev = res.class_name;
       if (nextClass === prev) return true;
+      guardSourceEdit();
       post({ type: 'ss:suppressReload' });
       if (res.status === 'resolved') {
         await applyClassnameEdit(projectPath, res.file, res.line, prev, nextClass);
@@ -254,7 +276,7 @@ export function useElementSettings({
       post({ type: 'ss:reselect', signature: nextSig });
       return true;
     },
-    [projectPath, onToast, post]
+    [guardSourceEdit, projectPath, onToast, post]
   );
 
   /** Add the FIRST class to an element that has none: there's no class literal in
@@ -265,6 +287,7 @@ export function useElementSettings({
     async (name: string): Promise<boolean> => {
       const sig = sigRef.current;
       if (!sig) return false;
+      guardSourceEdit();
       post({ type: 'ss:suppressReload' });
       await insertClassAttr(projectPath, sig, name);
       sigRef.current = { ...sig, className: name };
@@ -273,7 +296,7 @@ export function useElementSettings({
       post({ type: 'ss:reselect', signature: sigRef.current });
       return true;
     },
-    [projectPath, post]
+    [guardSourceEdit, projectPath, post]
   );
 
   const addClass = useCallback(

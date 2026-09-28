@@ -36,23 +36,10 @@ pub async fn set_custom_dev_command(
     command: Option<String>,
 ) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.custom_dev_command = command;
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.custom_dev_command = command;
+        Ok(())
+    })
 }
 
 /// Gets whether this project is forced to serve as a static site, overriding
@@ -82,23 +69,10 @@ pub async fn get_force_static_serve(project_path: String) -> Result<bool, Comman
 #[tracing::instrument(fields(project = %project_path))]
 pub async fn set_force_static_serve(project_path: String, force: bool) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.force_static_serve = if force { Some(true) } else { None };
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.force_static_serve = if force { Some(true) } else { None };
+        Ok(())
+    })
 }
 
 /// Gets the dev server port for a project (returns None if not configured, meaning use default 3000)
@@ -129,23 +103,10 @@ pub async fn set_dev_server_port(project_path: String, port: u16) -> Result<(), 
     }
 
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.dev_server_port = Some(port);
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.dev_server_port = Some(port);
+        Ok(())
+    })
 }
 
 /// Gets the active workspace subpath for a monorepo project, or None if the
@@ -199,23 +160,10 @@ pub async fn set_workspace_subpath(
         }
     }
 
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.workspace_subpath = subpath;
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.workspace_subpath = subpath;
+        Ok(())
+    })
 }
 
 /// Result of checking whether a project's npm/pnpm/yarn dependencies are installed.

@@ -281,6 +281,16 @@ pub enum RuleLocation {
         line: usize,
         /// Verbatim source between the rule's braces.
         inner_text: String,
+        /// Exact UTF-8 byte range of the authored rule in `file`.
+        ///
+        /// Focused component editing uses this provenance to prove that the
+        /// stylesheet rule itself belongs to the selected component definition;
+        /// the declaration body alone is not sufficient authority for a write.
+        source_start: usize,
+        source_end: usize,
+        /// Hash of the complete stylesheet snapshot used for this location.
+        /// A focused write must reject the location when the stylesheet changed.
+        source_hash: String,
     },
     /// The selector resolves to more than one source rule — read-only (we never
     /// guess which one the browser painted).
@@ -613,6 +623,10 @@ fn locate_rule(sheets: &[SheetIndex], q: &MatchedRuleQuery) -> RuleLocation {
         file: rel.to_string(),
         line: rule.selector_line,
         inner_text: content[rule.block_inner_start..rule.block_inner_end].to_string(),
+        source_start: rule.selector_start,
+        // `block_inner_end` points at the closing brace's byte offset.
+        source_end: rule.block_inner_end + 1,
+        source_hash: crate::commands::components::content_hash(content.as_bytes()),
     };
 
     let mut hits: Vec<(&str, &str, &RuleSpan)> = Vec::new();

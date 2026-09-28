@@ -53,6 +53,7 @@ import {
   classifyApplyTokens,
   listCustomClasses,
 } from '../lib/customClasses';
+import type { EditableSurfaceTarget } from '../lib/components/editable-surface';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -84,6 +85,59 @@ function setup() {
     })
   );
   return { ...hook, iframeRef, onToast };
+}
+
+function setupControlledEditMode(active: boolean) {
+  const iframeRef = fakeIframeRef();
+  const onToast = vi.fn();
+  const onEditModeChange = vi.fn();
+  const hook = renderHook(
+    ({ active: controlledActive }) =>
+      useVisualEditor({
+        iframeRef,
+        projectPath: '/proj',
+        enabled: true,
+        editMode: controlledActive,
+        onEditModeChange,
+        activeBreakpoint: BASE_BREAKPOINT,
+        breakpoints: BREAKPOINTS,
+        onToast,
+      }),
+    { initialProps: { active } }
+  );
+  return { ...hook, onEditModeChange };
+}
+
+function setupNegotiatedSurface() {
+  const iframeRef = fakeIframeRef();
+  const contentWindow = iframeRef.current!.contentWindow!;
+  const surfaceTarget: EditableSurfaceTarget = {
+    contentWindow,
+    exactOrigin: 'http://127.0.0.1:4312',
+    surfaceId: 'component-frame',
+    sessionId: 'session-1',
+    capabilityToken: 'capability-token',
+    generation: 3,
+    frameId: 'frame-1',
+    componentId: 'react:Card',
+    componentRevision: 'revision-1',
+    capabilities: { liveFrame: true, snapshots: true, accessibility: true, editing: true },
+  };
+  const onToast = vi.fn();
+  const sourceEditGuard = vi.fn((source) => ({ status: 'valid' as const, source }));
+  const hook = renderHook(() =>
+    useVisualEditor({
+      iframeRef,
+      surfaceTarget,
+      projectPath: '/proj',
+      enabled: true,
+      activeBreakpoint: BASE_BREAKPOINT,
+      breakpoints: BREAKPOINTS,
+      onToast,
+      sourceEditGuard,
+    })
+  );
+  return { ...hook, iframeRef, surfaceTarget, onToast, sourceEditGuard };
 }
 
 /** Flush pending microtasks (e.g. the async resolve) under act. */
@@ -139,6 +193,9 @@ beforeEach(() => {
         line: 1,
         column: 1,
         class_name: sig.className, // a fresh selection is clean (live == source)
+        source_start: 10,
+        source_end: 20,
+        source_hash: 'hash',
         confidence: 'unique',
       })
   );
@@ -151,12 +208,30 @@ afterEach(() => {
 });
 
 describe('useVisualEditor auto-save', () => {
+  it('follows workspace-owned edit mode and reports toggle intent', () => {
+    const hook = setupControlledEditMode(false);
+
+    expect(hook.result.current.editMode).toBe(false);
+
+    act(() => hook.result.current.toggleEditMode());
+    expect(hook.onEditModeChange).toHaveBeenCalledWith(true);
+    expect(hook.result.current.editMode).toBe(false);
+
+    act(() => hook.rerender({ active: true }));
+    expect(hook.result.current.editMode).toBe(true);
+
+    act(() => hook.result.current.toggleEditMode());
+    expect(hook.onEditModeChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('does NOT save automatically when auto-save is off', async () => {
     const { result, iframeRef } = setup();
     act(() => result.current.toggleEditMode());
     await select('p-3', iframeRef.current!.contentWindow!);
 
-    act(() => result.current.applyEnum('p-8', { padding: '2rem' }));
+    await act(async () => {
+      await result.current.applyEnum('p-8', { padding: '2rem' });
+    });
     await advance(2000);
     expect(applyClassnameEdit).not.toHaveBeenCalled();
   });
@@ -199,6 +274,86 @@ describe('useVisualEditor auto-save', () => {
     expect(localStorage.getItem('ss:visualEditor:autoSave')).toBe('1');
     act(() => result.current.toggleAutoSave());
     expect(localStorage.getItem('ss:visualEditor:autoSave')).toBe('0');
+  });
+});
+
+describe('useVisualEditor negotiated component surface', () => {
+  it('uses the exact origin and identity envelope, and rejects stale selections', async () => {
+    const { result, iframeRef, surfaceTarget } = setupNegotiatedSurface();
+    const contentWindow = iframeRef.current!.contentWindow!;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the postMessage mock
+    const post = contentWindow.postMessage as Fn;
+
+    act(() => result.current.toggleEditMode());
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: 'ss:activate',
+        protocolVersion: 2,
+        sessionId: 'session-1',
+        capabilityToken: 'capability-token',
+        generation: 3,
+        frameId: 'frame-1',
+        componentId: 'react:Card',
+      }),
+      surfaceTarget.exactOrigin
+    );
+
+    const message = {
+      type: 'ss:select',
+      signature: { className: 'p-3', tagName: 'div', ancestorClasses: [] },
+      count: 1,
+      protocolVersion: 2,
+      sessionId: 'session-1',
+      capabilityToken: 'capability-token',
+      generation: 3,
+      frameId: 'frame-1',
+      componentId: 'react:Card',
+    };
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: contentWindow,
+          origin: 'http://127.0.0.1:4313',
+          data: message,
+        })
+      );
+      await Promise.resolve();
+    });
+    expect(result.current.selection).toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: contentWindow,
+          origin: surfaceTarget.exactOrigin,
+          data: { ...message, generation: 4 },
+        })
+      );
+      await Promise.resolve();
+    });
+    expect(result.current.selection).toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: contentWindow,
+          origin: surfaceTarget.exactOrigin,
+          data: message,
+        })
+      );
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(result.current.selection?.signature.className).toBe('p-3');
+    await act(async () => {
+      await result.current.applyEnum('p-8', { padding: '2rem' });
+    });
+    expect(post).toHaveBeenLastCalledWith(
+      expect.objectContaining({ type: 'ss:mutate', className: 'p-8' }),
+      surfaceTarget.exactOrigin
+    );
   });
 });
 

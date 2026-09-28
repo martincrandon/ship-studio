@@ -12,7 +12,7 @@ use crate::utils::validate_project_path;
 use std::collections::HashSet;
 use tracing::debug;
 
-use super::{get_ahead_behind, load_project_metadata, save_project_metadata};
+use super::{get_ahead_behind, load_project_metadata, update_project_metadata};
 
 /// One discovered branch and where its ref lives (local vs remote-only).
 struct RawBranch {
@@ -402,8 +402,10 @@ pub async fn set_default_base_branch(
     branch: Option<String>,
 ) -> Result<(), CommandError> {
     let validated_path = validate_project_path(&project_path)?;
-    let mut metadata = load_project_metadata(&validated_path);
-    metadata.default_base_branch = branch.filter(|b| !b.trim().is_empty());
-    save_project_metadata(&validated_path, &metadata)?;
+    update_project_metadata(&validated_path, |metadata| {
+        metadata.default_base_branch = branch.filter(|b| !b.trim().is_empty());
+        Ok(())
+    })
+    .map_err(CommandError::from)?;
     Ok(())
 }

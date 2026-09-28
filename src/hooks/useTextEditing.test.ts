@@ -29,6 +29,7 @@ vi.mock('../lib/logger', () => ({
 
 import { useTextEditing } from './useTextEditing';
 import type { ComponentFocusContext } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 import { resolveTextSource, applyTextEdit } from '../lib/edit';
 import { logger } from '../lib/logger';
 
@@ -40,11 +41,26 @@ function fakeIframeRef() {
   } as unknown as React.RefObject<HTMLIFrameElement | null>;
 }
 
-function setup(enabled = true, componentFocusRef?: React.RefObject<ComponentFocusContext | null>) {
+function setup(
+  enabled = true,
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>,
+  surfaceTarget?: Parameters<typeof useTextEditing>[0]['surfaceTarget'],
+  sourceEditGuard?: Parameters<typeof useTextEditing>[0]['sourceEditGuard'],
+  writeEnabled?: boolean
+) {
   const iframeRef = fakeIframeRef();
   const onToast = vi.fn();
   const hook = renderHook(() =>
-    useTextEditing({ iframeRef, projectPath: '/proj', enabled, onToast, componentFocusRef })
+    useTextEditing({
+      iframeRef,
+      projectPath: '/proj',
+      enabled,
+      onToast,
+      componentFocusRef,
+      surfaceTarget,
+      sourceEditGuard,
+      writeEnabled,
+    })
   );
   return { ...hook, iframeRef, onToast };
 }
@@ -57,12 +73,42 @@ function posts(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
 }
 
 /** Dispatch a window message as if from the given source, then flush microtasks. */
-async function dispatch(data: unknown, source: MessageEventSource) {
+async function dispatch(data: unknown, source: MessageEventSource, origin = '') {
   await act(async () => {
-    window.dispatchEvent(new MessageEvent('message', { source, data }));
+    window.dispatchEvent(new MessageEvent('message', { source, origin, data }));
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function negotiatedMessage(
+  data: Record<string, unknown>,
+  target: ReturnType<typeof negotiatedTarget>
+) {
+  return {
+    ...data,
+    protocolVersion: 2,
+    sessionId: target.sessionId,
+    capabilityToken: target.capabilityToken,
+    generation: target.generation,
+    frameId: target.frameId,
+    componentId: target.componentId,
+  };
+}
+
+function negotiatedTarget(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
+  return {
+    contentWindow: iframeRef.current!.contentWindow,
+    exactOrigin: 'http://127.0.0.1:4312',
+    surfaceId: 'component-frame:1',
+    sessionId: 'session-1',
+    capabilityToken: 'capability-1',
+    generation: 2,
+    frameId: 'frame-1',
+    componentId: FOCUS_CONTEXT.componentId,
+    componentRevision: FOCUS_CONTEXT.indexRevision,
+    capabilities: { liveFrame: true, snapshots: true, accessibility: true, editing: true },
+  } as const;
 }
 
 const SIG = { className: 'lead', tagName: 'p', ancestorClasses: [] };
@@ -143,7 +189,9 @@ describe('useTextEditing', () => {
       iframeRef.current!.contentWindow!
     );
     expect(resolveTextSource).not.toHaveBeenCalled();
-    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textInfo', editable: false });
+    expect(posts(iframeRef)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'ss:textInfo', editable: false })])
+    );
   });
 
   it('passes the exact text range and file hash for a focused child edit', async () => {
@@ -162,7 +210,9 @@ describe('useTextEditing', () => {
     const src = iframeRef.current!.contentWindow!;
 
     await dispatch({ type: 'ss:select', signature: SIG, leafText: true }, src);
-    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textInfo', editable: true });
+    expect(posts(iframeRef)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'ss:textInfo', editable: true })])
+    );
 
     await dispatch({ type: 'ss:textCommit', text: 'Focused copy' }, src);
     expect(applyTextEdit).toHaveBeenCalledWith(
@@ -209,6 +259,106 @@ describe('useTextEditing', () => {
     await dispatch({ type: 'ss:textCommit', text: 'Old copy' }, src);
     expect(applyTextEdit).not.toHaveBeenCalled();
     expect(posts(iframeRef)).toContainEqual({ type: 'ss:commit' });
+  });
+
+  it('rejects forged or wrong-origin component-frame text commits', async () => {
+    (resolveTextSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'src/pages/index.astro',
+      line: 7,
+      column: 3,
+      text: 'Old copy',
+      source_start: 40,
+      source_end: 48,
+      source_hash: 'text-hash',
+    });
+    const iframeRef = fakeIframeRef();
+    const target = negotiatedTarget(iframeRef);
+    const onToast = vi.fn();
+    const sourceEditGuard = vi.fn((source: SourceRef | null) =>
+      source
+        ? { status: 'valid' as const, source }
+        : { status: 'refused' as const, reason: 'missing source' }
+    );
+    const hook = renderHook(() =>
+      useTextEditing({
+        iframeRef,
+        projectPath: '/proj',
+        enabled: true,
+        onToast,
+        surfaceTarget: target,
+        sourceEditGuard,
+        writeEnabled: true,
+      })
+    );
+    const src = iframeRef.current!.contentWindow!;
+    await dispatch(
+      negotiatedMessage({ type: 'ss:select', signature: SIG, leafText: true }, target),
+      src,
+      target.exactOrigin
+    );
+    await dispatch({ type: 'ss:textCommit', text: 'forged' }, src, 'https://evil.test');
+    expect(applyTextEdit).not.toHaveBeenCalled();
+    await dispatch(
+      negotiatedMessage({ type: 'ss:textCommit', text: 'Focused copy' }, target),
+      src,
+      target.exactOrigin
+    );
+    expect(applyTextEdit).toHaveBeenCalledTimes(1);
+    hook.unmount();
+  });
+
+  it('keeps a component-frame text target read-only until the write gate is enabled', async () => {
+    (resolveTextSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'src/pages/index.astro',
+      line: 7,
+      column: 3,
+      text: 'Old copy',
+      source_start: 40,
+      source_end: 48,
+      source_hash: 'text-hash',
+    });
+    const iframeRef = fakeIframeRef();
+    const target = negotiatedTarget(iframeRef);
+    const sourceEditGuard = vi.fn((source: SourceRef | null) =>
+      source
+        ? { status: 'valid' as const, source }
+        : { status: 'refused' as const, reason: 'missing source' }
+    );
+    let writeEnabled = false;
+    const hook = renderHook(() =>
+      useTextEditing({
+        iframeRef,
+        projectPath: '/proj',
+        enabled: true,
+        surfaceTarget: target,
+        sourceEditGuard,
+        writeEnabled,
+      })
+    );
+    const src = iframeRef.current!.contentWindow!;
+    await dispatch(
+      negotiatedMessage({ type: 'ss:select', signature: SIG, leafText: true }, target),
+      src,
+      target.exactOrigin
+    );
+    expect(posts(iframeRef)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'ss:textInfo', editable: false })])
+    );
+    await dispatch(
+      negotiatedMessage({ type: 'ss:textCommit', text: 'blocked copy' }, target),
+      src,
+      target.exactOrigin
+    );
+    expect(applyTextEdit).not.toHaveBeenCalled();
+
+    writeEnabled = true;
+    await hook.rerender();
+    expect(posts(iframeRef)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'ss:textInfo', editable: true })])
+    );
+    hook.unmount();
   });
 
   describe('stale-save recovery (issue #557)', () => {

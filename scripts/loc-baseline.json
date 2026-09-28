@@ -1,4 +1,30 @@
 {
   "schemaVersion": 1,
-  "files": []
+  "files": [
+    {
+      "path": "src/components/workspace/WorkspaceView.tsx",
+      "baselineLines": 1532,
+      "limit": 1500
+    },
+    {
+      "path": "src/App.tsx",
+      "baselineLines": 1422,
+      "limit": 1334
+    },
+    {
+      "path": "src/components/dashboard/ProjectList.tsx",
+      "baselineLines": 922,
+      "limit": 900
+    },
+    {
+      "path": "src/styles/features/workspace/sidebar.css",
+      "baselineLines": 1350,
+      "limit": 1300
+    },
+    {
+      "path": "src/styles/features/components.css",
+      "baselineLines": 1358,
+      "limit": 1200
+    }
+  ]
 }

@@ -46,14 +46,27 @@ export function parseReactFile(
   const diagnostics = parseDiagnosticsForSourceFile(sourceFile, file);
   const imports = collectImports(sourceFile, file);
   const { candidates, exportNames, reExports } = collectComponentCandidates(sourceFile, file);
-  const components = candidates
-    .filter((candidate) => candidate.exportName !== null || candidate.isDefault)
-    .map((candidate) => createDefinition(candidate, sourceFile, file));
+  const dynamicImport = containsDynamicImport(sourceFile);
+  const definitions = candidates.map((candidate) => {
+    const definition = createDefinition(candidate, sourceFile, file);
+    const rendererSafety = {
+      ...(candidate.exportNames.size > 1 ? { ambiguousExport: true } : {}),
+      ...(dynamicImport ? { dynamicImport: true } : {}),
+    };
+    if (Object.keys(rendererSafety).length > 0) {
+      definition.descriptor.rendererSafety = rendererSafety;
+    }
+    return definition;
+  });
+  const components = definitions.filter(
+    (definition) => definition.exportName !== null || definition.isDefault
+  );
   const usages = collectUsages(sourceFile, file, candidates);
   return {
     snapshot: file,
     sourceFile,
     components,
+    internalComponents: definitions,
     imports,
     usages,
     exports: exportNames,
@@ -62,9 +75,23 @@ export function parseReactFile(
   };
 }
 
+function containsDynamicImport(sourceFile: ts.SourceFile): boolean {
+  let found = false;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
+}
+
 interface Candidate {
   localName: string;
   exportName: string | null;
+  exportNames: Set<string>;
   declaration: ts.Node;
   initializer?: ts.Expression;
   isDefault: boolean;
@@ -91,6 +118,7 @@ function collectComponentCandidates(
     const existing = byLocal.get(candidate.localName);
     if (existing) {
       if (candidate.exportName && !existing.exportName) existing.exportName = candidate.exportName;
+      for (const exportName of candidate.exportNames) existing.exportNames.add(exportName);
       existing.isDefault ||= candidate.isDefault;
       return existing;
     }
@@ -111,6 +139,9 @@ function collectComponentCandidates(
           localName: statement.name.text,
           exportName:
             exported === 'default' ? 'default' : exported === 'named' ? statement.name.text : null,
+          exportNames: new Set(
+            exported === 'default' ? ['default'] : exported === 'named' ? [statement.name.text] : []
+          ),
           declaration: statement,
           isDefault: exported === 'default',
         });
@@ -126,6 +157,9 @@ function collectComponentCandidates(
           localName: statement.name.text,
           exportName:
             exported === 'default' ? 'default' : exported === 'named' ? statement.name.text : null,
+          exportNames: new Set(
+            exported === 'default' ? ['default'] : exported === 'named' ? [statement.name.text] : []
+          ),
           declaration: statement,
           isDefault: exported === 'default',
         });
@@ -144,6 +178,7 @@ function collectComponentCandidates(
         add({
           localName: declaration.name.text,
           exportName: exported === 'named' ? declaration.name.text : null,
+          exportNames: new Set(exported === 'named' ? [declaration.name.text] : []),
           declaration,
           initializer: declaration.initializer,
           isDefault: false,
@@ -154,6 +189,7 @@ function collectComponentCandidates(
         const candidate = byLocal.get(statement.expression.text);
         if (candidate) {
           candidate.exportName = 'default';
+          candidate.exportNames.add('default');
           candidate.isDefault = true;
         } else if (isPascalCase(statement.expression.text)) {
           exportNames.set('default', statement.expression.text);
@@ -167,6 +203,7 @@ function collectComponentCandidates(
         add({
           localName,
           exportName: 'default',
+          exportNames: new Set(['default']),
           declaration: statement.expression,
           initializer: statement.expression,
           isDefault: true,
@@ -176,6 +213,7 @@ function collectComponentCandidates(
         add({
           localName,
           exportName: 'default',
+          exportNames: new Set(['default']),
           declaration: statement.expression,
           initializer: statement.expression,
           isDefault: true,
@@ -196,6 +234,7 @@ function collectComponentCandidates(
       const candidate = byLocal.get(statement.expression.text);
       if (candidate) {
         candidate.exportName = 'default';
+        candidate.exportNames.add('default');
         candidate.isDefault = true;
         exportNames.set('default', candidate.localName);
       }
@@ -208,6 +247,7 @@ function collectComponentCandidates(
           if (candidate) {
             const exportedName = element.name.text;
             candidate.exportName = exportedName;
+            candidate.exportNames.add(exportedName);
             candidate.isDefault ||= exportedName === 'default';
             exportNames.set(exportedName, localName);
           }
@@ -216,7 +256,9 @@ function collectComponentCandidates(
     }
   }
   for (const candidate of candidates) {
-    if (candidate.exportName) exportNames.set(candidate.exportName, candidate.localName);
+    for (const exportName of candidate.exportNames) {
+      exportNames.set(exportName, candidate.localName);
+    }
   }
   return { candidates, exportNames, reExports };
 }
@@ -556,6 +598,13 @@ function extractProps(
   file: SourceFileSnapshot
 ): ComponentPropDescriptor[] {
   const declarations: PropSeed[] = [];
+  // `forwardRef<Element, Props>(...)` carries the real props contract on the
+  // wrapper, while the inner callback commonly destructures an untyped
+  // parameter. Reading only that callback makes every destructured prop look
+  // required and loses the optionality that drives catalog-only rendering.
+  const wrapperType = wrapperPropsType(candidate, sourceFile);
+  const wrapperTypeKnown = !!wrapperType && canResolvePropsType(wrapperType, sourceFile);
+  if (wrapperType) declarations.push(...propSeedsFromType(wrapperType, sourceFile));
   const functionLike = getFunctionLike(candidate);
   if (functionLike) {
     const parameter = functionLike.parameters[0];
@@ -569,10 +618,21 @@ function extractProps(
           const name = bindingElementName(element);
           if (!name) continue;
           const typeNode = parameter.type && findPropertyType(parameter.type, name, sourceFile);
+          const contractSeed = wrapperType
+            ? propSeedsFromType(wrapperType, sourceFile).find((seed) => seed.name === name)
+            : undefined;
           declarations.push({
             name,
-            required: !element.initializer,
-            typeNode,
+            // A destructuring pattern does not encode whether the source
+            // contract marks a property optional. When the wrapper supplies a
+            // known contract, never turn inherited/omitted fields into false
+            // required props merely because they lack a local type node.
+            required: contractSeed
+              ? contractSeed.required && !element.initializer
+              : wrapperTypeKnown
+                ? false
+                : !element.initializer,
+            typeNode: typeNode ?? contractSeed?.typeNode,
             defaultValue: element.initializer
               ? staticValueFromExpression(element.initializer)
               : null,
@@ -667,6 +727,30 @@ function parameterTypeFromVariable(
   return type.typeArguments?.[0];
 }
 
+function wrapperPropsType(
+  candidate: Candidate,
+  sourceFile: ts.SourceFile
+): ts.TypeNode | undefined {
+  if (!ts.isVariableDeclaration(candidate.declaration) || !candidate.initializer) return undefined;
+  let expression: ts.Expression = candidate.initializer;
+  while (ts.isCallExpression(expression)) {
+    const callee = expression.expression.getText(sourceFile).split('.').pop();
+    if (callee === 'forwardRef' && expression.typeArguments?.[1]) {
+      return expression.typeArguments[1];
+    }
+    if (callee === 'memo' && expression.typeArguments?.[0]) {
+      const type = expression.typeArguments[0];
+      // `memo<Props>` is useful, while `memo<typeof Component>` is not a
+      // props contract and will be rejected by canResolvePropsType below.
+      if (canResolvePropsType(type, sourceFile)) return type;
+    }
+    const inner = expression.arguments[0];
+    if (!inner || !ts.isCallExpression(inner)) break;
+    expression = inner;
+  }
+  return undefined;
+}
+
 function propSeedsFromType(type: ts.TypeNode, sourceFile: ts.SourceFile): PropSeed[] {
   const unwrapped = unwrapType(type);
   if (ts.isTypeLiteralNode(unwrapped)) {
@@ -749,6 +833,8 @@ function bindingElementName(element: ts.BindingElement): string | null {
 }
 
 function hasKnownPropsContract(candidate: Candidate, sourceFile: ts.SourceFile): boolean {
+  const wrapperType = wrapperPropsType(candidate, sourceFile);
+  if (wrapperType && canResolvePropsType(wrapperType, sourceFile)) return true;
   const functionLike = getFunctionLike(candidate);
   if (functionLike) {
     const parameter = functionLike.parameters[0];
@@ -796,9 +882,23 @@ function canResolvePropsType(
   if (!declaration || seen.has(declaration)) return false;
   seen.add(declaration);
   if (ts.isInterfaceDeclaration(declaration)) {
-    return !declaration.heritageClauses?.length;
+    return (
+      !declaration.heritageClauses?.length ||
+      declaration.heritageClauses.every((clause) =>
+        clause.types.every((type) => isKnownReactBaseType(type.expression))
+      )
+    );
   }
   return canResolvePropsType(declaration.type, sourceFile, seen);
+}
+
+function isKnownReactBaseType(expression: ts.Expression): boolean {
+  const text = expression.getText();
+  const name = text.split('.').pop() ?? text;
+  return (
+    text.startsWith('React.') ||
+    /(?:HTMLAttributes|AriaAttributes|DOMAttributes|CSSProperties|RefAttributes)$/.test(name)
+  );
 }
 
 function propertyName(name: ts.PropertyName): string | null {

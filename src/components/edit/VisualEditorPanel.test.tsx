@@ -38,7 +38,8 @@ function renderPanel(
   onSetSide = vi.fn(),
   onReset = vi.fn(),
   editTarget: import('../../hooks/useVisualEditor').EditTarget = { kind: 'element' },
-  onSetPositionSide = vi.fn()
+  onSetPositionSide = vi.fn(),
+  embedded = false
 ) {
   return render(
     <VisualEditorPanel
@@ -69,7 +70,26 @@ function renderPanel(
       usage={null}
       onCommit={vi.fn()}
       onClose={vi.fn()}
+      embedded={embedded}
     />
+  );
+}
+
+function renderEmbeddedPanel(selection: Selection) {
+  return renderPanel(
+    selection,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    true
   );
 }
 
@@ -87,6 +107,15 @@ const multiSelection: Selection = {
 };
 
 describe('VisualEditorPanel', () => {
+  it('uses an embedded flow layout without the preview pinned surface', () => {
+    renderEmbeddedPanel(resolvedSelection);
+
+    const panel = screen.getByTestId('visual-editor-panel');
+    expect(panel).toHaveClass('ss-edit-panel--embedded');
+    expect(panel).not.toHaveClass('ss-edit-panel--pinned');
+    expect(panel).not.toHaveStyle({ position: 'fixed' });
+  });
+
   it('renders every control for a resolved element', () => {
     renderPanel(resolvedSelection);
     // Source line
@@ -1204,5 +1233,26 @@ describe('VisualEditorPanel', () => {
       await Promise.resolve();
     });
     expect(onAddFirstClass).toHaveBeenCalledWith('flex gap-4');
+  });
+
+  it('keeps the add-class state inert when the panel is read-only', () => {
+    const onAddFirstClass = vi.fn();
+    render(
+      <VisualEditorPanel
+        {...mk()}
+        selection={noClassSelection}
+        currentClass=""
+        readOnly
+        readOnlyReason="Confirm Edit main before changing this component."
+        onAddFirstClass={onAddFirstClass}
+      />
+    );
+
+    const input = screen.getByLabelText('First class name');
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add class' })).toBeDisabled();
+    fireEvent.change(input, { target: { value: 'hero-title' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add class' }));
+    expect(onAddFirstClass).not.toHaveBeenCalled();
   });
 });

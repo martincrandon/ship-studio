@@ -106,46 +106,20 @@ async fn save_health_result(
     category: &ScriptCategory,
     result: &HealthCheckResult,
 ) -> Result<(), CommandError> {
-    let metadata_path = project_path.join(".shipstudio").join("project.json");
-
-    // Read existing metadata or create default
-    let mut metadata = if metadata_path.exists() {
-        let contents = std::fs::read_to_string(&metadata_path)
-            .map_err(|e| format!("Failed to read metadata: {e}"))?;
-        serde_json::from_str::<ProjectMetadata>(&contents).unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    // Initialize health status if needed
-    if metadata.health.is_none() {
-        metadata.health = Some(HealthCheckStatus::default());
-    }
-
-    // Update the appropriate category
-    if let Some(health) = &mut metadata.health {
-        match category {
-            ScriptCategory::Test => health.test = Some(result.clone()),
-            ScriptCategory::Lint => health.lint = Some(result.clone()),
-            ScriptCategory::Typecheck => health.typecheck = Some(result.clone()),
-            ScriptCategory::Format => health.format = Some(result.clone()),
+    crate::commands::projects::update_project_metadata(project_path, |metadata| {
+        if metadata.health.is_none() {
+            metadata.health = Some(HealthCheckStatus::default());
         }
-    }
-
-    // Ensure .shipstudio directory exists
-    let shipstudio_dir = project_path.join(".shipstudio");
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir)
-            .map_err(|e| format!("Failed to create .shipstudio directory: {e}"))?;
-    }
-
-    // Write updated metadata
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write metadata: {e}"))?;
-
-    Ok(())
+        if let Some(health) = &mut metadata.health {
+            match category {
+                ScriptCategory::Test => health.test = Some(result.clone()),
+                ScriptCategory::Lint => health.lint = Some(result.clone()),
+                ScriptCategory::Typecheck => health.typecheck = Some(result.clone()),
+                ScriptCategory::Format => health.format = Some(result.clone()),
+            }
+        }
+        Ok(())
+    })
 }
 
 /// Get stored health check status from project metadata
@@ -181,18 +155,8 @@ pub async fn clear_health_status(project_path: String) -> Result<(), CommandErro
         return Ok(());
     }
 
-    let contents = std::fs::read_to_string(&metadata_path)
-        .map_err(|e| format!("Failed to read metadata: {e}"))?;
-
-    let mut metadata: ProjectMetadata =
-        serde_json::from_str(&contents).map_err(|e| format!("Failed to parse metadata: {e}"))?;
-
-    metadata.health = None;
-
-    let contents = serde_json::to_string_pretty(&metadata)
-        .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
-    std::fs::write(&metadata_path, contents)
-        .map_err(|e| format!("Failed to write metadata: {e}"))?;
-
-    Ok(())
+    crate::commands::projects::update_project_metadata(&validated_path, |metadata| {
+        metadata.health = None;
+        Ok(())
+    })
 }

@@ -167,6 +167,17 @@ pub struct TerminalState {
     pub active_tab_index: usize,
 }
 
+/// Project-scoped permission for the Components renderer. The version is part
+/// of the record so a renderer contract change always returns to consent.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentRendererConsent {
+    #[serde(alias = "integration_version")]
+    pub integration_version: String,
+    #[serde(alias = "approved_at")]
+    pub approved_at: u64,
+}
+
 /// Project metadata stored in .shipstudio/project.json
 #[derive(Serialize, Deserialize)]
 pub struct ProjectMetadata {
@@ -250,6 +261,16 @@ pub struct ProjectMetadata {
     /// created outside Ship Studio fall back to a `git merge-base` heuristic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub branch_lineage: Option<std::collections::HashMap<String, String>>,
+    /// Versioned Components workspace layout. Stored as JSON so future canvas
+    /// versions can be preserved by older Ship Studio builds through `extra`-
+    /// compatible metadata handling without touching project source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub component_canvas: Option<serde_json::Value>,
+    /// Explicit user approval for the framework-native Components renderer.
+    /// This is deliberately separate from renderer files: file existence is
+    /// never evidence of consent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub component_renderer_consent: Option<ComponentRendererConsent>,
     /// Keys this app version doesn't know about, preserved verbatim across
     /// read-modify-write cycles — an older build must never silently drop
     /// fields written by a newer one.
@@ -284,6 +305,8 @@ impl Default for ProjectMetadata {
             account_id: None,
             default_base_branch: None,
             branch_lineage: None,
+            component_canvas: None,
+            component_renderer_consent: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -953,7 +976,20 @@ pub struct CompactModePreferences {
 
 #[cfg(test)]
 mod metadata_tests {
-    use super::ProjectMetadata;
+    use super::{ComponentRendererConsent, ProjectMetadata};
+
+    #[test]
+    fn renderer_consent_uses_ipc_names_and_reads_legacy_storage_names() {
+        let consent: ComponentRendererConsent =
+            serde_json::from_str(r#"{"integration_version":"next-host-v1","approved_at":123}"#)
+                .unwrap();
+        assert_eq!(consent.integration_version, "next-host-v1");
+        assert_eq!(consent.approved_at, 123);
+
+        let serialized = serde_json::to_string(&consent).unwrap();
+        assert!(serialized.contains("\"integrationVersion\""));
+        assert!(serialized.contains("\"approvedAt\""));
+    }
 
     #[test]
     fn force_static_serve_is_omitted_when_unset() {

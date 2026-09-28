@@ -9,28 +9,17 @@ use crate::errors::CommandError;
 use crate::types::{Account, ProjectMetadata, TerminalState};
 use crate::utils::validate_project_path;
 
+const COMPONENT_CANVAS_MAX_BYTES: usize = 512 * 1024;
+
 /// Marks a project as opened by updating its last_opened timestamp
 #[tauri::command]
 #[tracing::instrument(fields(project = %project_path))]
 pub async fn mark_project_opened(project_path: String) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    metadata.last_opened = Some(now);
 
     // IMPORTANT: opening a project must NEVER change its Workspace. A project is
     // tagged with its Workspace at creation/import time (see the frontend
@@ -44,7 +33,10 @@ pub async fn mark_project_opened(project_path: String) -> Result<(), CommandErro
 
     // classify_fs_error routing: TCC/access-denied/read-only failures
     // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.last_opened = Some(now);
+        Ok(())
+    })
 }
 
 /// Gets the branch prefix username preference (defaults to true if not set)
@@ -74,23 +66,10 @@ pub async fn set_branch_prefix_preference(
     prefix: bool,
 ) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.branch_prefix_username = Some(prefix);
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.branch_prefix_username = Some(prefix);
+        Ok(())
+    })
 }
 
 /// Gets whether the main branch warning banner should be hidden for this project
@@ -120,23 +99,10 @@ pub async fn set_hide_main_branch_warning(
     hidden: bool,
 ) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.hide_main_branch_warning = Some(hidden);
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.hide_main_branch_warning = Some(hidden);
+        Ok(())
+    })
 }
 
 /// Gets the auto-accept mode preference for a project
@@ -164,23 +130,10 @@ pub async fn get_auto_accept_mode(project_path: String) -> Result<bool, CommandE
 #[tracing::instrument(fields(project = %project_path))]
 pub async fn set_auto_accept_mode(project_path: String, enabled: bool) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.auto_accept_mode = Some(enabled);
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.auto_accept_mode = Some(enabled);
+        Ok(())
+    })
 }
 
 /// Gets the saved terminal tab state for a project
@@ -213,23 +166,65 @@ pub async fn set_terminal_state(
     state: TerminalState,
 ) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.terminal_state = Some(state);
+        Ok(())
+    })
+}
 
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
+/// Reads the project-scoped Components canvas document. The frontend owns the
+/// versioned schema; Rust only provides the approved project-settings storage
+/// boundary and enforces a bounded payload.
+#[tauri::command]
+#[tracing::instrument(fields(project = %project_path))]
+pub async fn get_component_canvas_document(
+    project_path: String,
+) -> Result<Option<serde_json::Value>, CommandError> {
+    let project = validate_project_path(&project_path)?;
+    let metadata_path = project.join(".shipstudio").join("project.json");
+    if !metadata_path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(&metadata_path).map_err(|e| {
+        crate::utils::classify_fs_error("read component canvas settings", &metadata_path, &e)
+    })?;
+    let metadata: ProjectMetadata = serde_json::from_str(&contents)
+        .map_err(|e| format!("Failed to parse project metadata: {e}"))?;
+    if let Some(document) = metadata.component_canvas.as_ref() {
+        validate_component_canvas_payload(document)?;
+    }
+    Ok(metadata.component_canvas)
+}
 
-    metadata.terminal_state = Some(state);
+fn validate_component_canvas_payload(document: &serde_json::Value) -> Result<(), CommandError> {
+    let encoded = serde_json::to_vec(document)
+        .map_err(|e| format!("Failed to serialize component canvas settings: {e}"))?;
+    if encoded.len() > COMPONENT_CANVAS_MAX_BYTES {
+        return Err(CommandError::expected(
+            "Component canvas settings exceed the 512 KiB safety limit.",
+        ));
+    }
+    Ok(())
+}
 
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+/// Persists only the bounded Components canvas document in the existing
+/// project metadata file. Component layout never writes project source.
+#[tauri::command]
+#[tracing::instrument(skip(document), fields(project = %project_path))]
+pub async fn set_component_canvas_document(
+    project_path: String,
+    document: serde_json::Value,
+) -> Result<(), CommandError> {
+    let project = validate_project_path(&project_path)?;
+    let encoded = serde_json::to_vec(&document)
+        .map_err(|e| format!("Failed to serialize component canvas settings: {e}"))?;
+    if encoded.len() > COMPONENT_CANVAS_MAX_BYTES {
+        return Err("Component canvas settings exceed the 512 KiB safety limit.".into());
+    }
+    super::metadata::update_project_metadata(&project, |metadata| {
+        metadata.component_canvas = Some(document);
+        Ok(())
+    })
 }
 
 /// Reassigns a project to a different Workspace (Account) by updating
@@ -319,27 +314,14 @@ fn write_project_account_id(
     project: &std::path::Path,
     account_id: &str,
 ) -> Result<(), CommandError> {
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.account_id = if account_id == DEFAULT_ACCOUNT_ID {
-        None
-    } else {
-        Some(account_id.to_string())
-    };
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    super::metadata::save_project_metadata(&project, &metadata)
+    super::metadata::update_project_metadata(project, |metadata| {
+        metadata.account_id = if account_id == DEFAULT_ACCOUNT_ID {
+            None
+        } else {
+            Some(account_id.to_string())
+        };
+        Ok(())
+    })
 }
 
 /// The Workspace (Account) a project effectively belongs to, given the set of
@@ -441,5 +423,31 @@ mod effective_account_tests {
             DEFAULT_ACCOUNT_ID
         );
         assert_eq!(effective_account_id_in(None, &accounts), DEFAULT_ACCOUNT_ID);
+    }
+}
+
+#[cfg(test)]
+mod component_canvas_tests {
+    use super::*;
+
+    #[test]
+    fn read_guard_accepts_bounded_payloads() {
+        let document = serde_json::json!({ "nodes": [] });
+
+        assert!(validate_component_canvas_payload(&document).is_ok());
+    }
+
+    #[test]
+    fn read_guard_rejects_oversized_payloads_as_expected_errors() {
+        let document = serde_json::json!({
+            "payload": "x".repeat(COMPONENT_CANVAS_MAX_BYTES)
+        });
+
+        let error = validate_component_canvas_payload(&document).expect_err("payload is oversized");
+        assert!(matches!(
+            error,
+            CommandError::Expected { message }
+                if message == "Component canvas settings exceed the 512 KiB safety limit."
+        ));
     }
 }

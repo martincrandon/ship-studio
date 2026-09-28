@@ -210,15 +210,17 @@ function DynamicTextHelp({
 function NoClassState({
   tag,
   onAddClass,
+  disabled = false,
 }: {
   tag: string;
   onAddClass: (name: string) => void | Promise<void>;
+  disabled?: boolean;
 }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const trimmed = name.trim().replace(/^\./, '');
   const submit = async () => {
-    if (!trimmed || busy) return;
+    if (disabled || !trimmed || busy) return;
     setBusy(true);
     try {
       await onAddClass(trimmed);
@@ -238,12 +240,18 @@ function NoClassState({
         placeholder="e.g. hero-title or flex gap-4"
         aria-label="First class name"
         spellCheck={false}
+        disabled={disabled}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') void submit();
         }}
       />
-      <Button variant="primary" block disabled={!trimmed || busy} onClick={() => void submit()}>
+      <Button
+        variant="primary"
+        block
+        disabled={disabled || !trimmed || busy}
+        onClick={() => void submit()}
+      >
         {busy ? 'Adding…' : 'Add class'}
       </Button>
     </div>
@@ -294,6 +302,10 @@ interface Props {
   imageResolution?: ImageResolution | null;
   /** Write a new src to source and swap the preview (immediate save). */
   onReplaceImage: (webPath: string) => Promise<void>;
+  /** Render the resolved controls without granting any mutation affordances. */
+  readOnly?: boolean;
+  /** Why the controls are currently read-only (source/capability/confirmation). */
+  readOnlyReason?: string;
   /** Bumps each time a double-click hits dynamic text — pulses the hand-off block
    *  so the user's eye is drawn to the panel after their click did nothing. */
   textBlockedNonce?: number;
@@ -348,6 +360,11 @@ interface Props {
   /** Docked as a sidebar column inside the preview container instead of
    *  floating over the canvas. Positioning comes from the container's grid. */
   pinned?: boolean;
+  /** Embedded in another inspector panel (for example Components > Style).
+   *  This keeps the editor in normal flow instead of absolute-filling its host. */
+  embedded?: boolean;
+  /** Render only the editor content when a shared EditPanelShell owns the chrome. */
+  chrome?: boolean;
   onTogglePin?: () => void;
 }
 
@@ -373,6 +390,8 @@ export function VisualEditorPanel({
   textResolution,
   imageResolution,
   onReplaceImage,
+  readOnly = false,
+  readOnlyReason,
   textBlockedNonce,
   breakpoints,
   activeBreakpoint,
@@ -401,6 +420,8 @@ export function VisualEditorPanel({
   onCommit,
   onClose,
   pinned = false,
+  embedded = false,
+  chrome = true,
   onTogglePin,
 }: Props) {
   const resolution = selection?.resolution ?? null;
@@ -535,11 +556,13 @@ export function VisualEditorPanel({
   return (
     <div
       ref={rootRef}
-      className={`ss-edit-panel${pinned ? ' ss-edit-panel--pinned' : ''}`}
+      className={`${chrome ? 'ss-edit-panel' : 'ss-edit-panel__content'}${
+        pinned ? ' ss-edit-panel--pinned' : ''
+      }${embedded ? ' ss-edit-panel--embedded' : ''}`}
       data-testid="visual-editor-panel"
       style={
         // Pinned positioning is entirely CSS (the container's grid column).
-        pinned
+        !chrome || pinned || embedded
           ? undefined
           : {
               position: 'fixed',
@@ -552,36 +575,41 @@ export function VisualEditorPanel({
             }
       }
     >
-      <div
-        className="ss-edit-panel__header"
-        onPointerDown={pinned ? undefined : onHeaderPointerDown}
-        onPointerMove={pinned ? undefined : onHeaderPointerMove}
-        onPointerUp={pinned ? undefined : onHeaderPointerUp}
-      >
-        <span className="ss-edit-panel__title">Edit</span>
-        <span className="ss-edit-panel__header-actions">
-          {onTogglePin && (
-            <ToggleButton
+      {chrome && (
+        <div
+          className="ss-edit-panel__header"
+          onPointerDown={pinned || embedded ? undefined : onHeaderPointerDown}
+          onPointerMove={pinned || embedded ? undefined : onHeaderPointerMove}
+          onPointerUp={pinned || embedded ? undefined : onHeaderPointerUp}
+        >
+          <div className="panel-heading-pair">
+            <span className="panel-heading-pair-title">Edit</span>
+            <span className="panel-heading-pair-meta">Visual Editor</span>
+          </div>
+          <span className="ss-edit-panel__header-actions">
+            {onTogglePin && (
+              <ToggleButton
+                variant="ghost"
+                size="compact"
+                className="button--icon-only panel-pin-toggle"
+                onClick={onTogglePin}
+                title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
+                aria-label={pinned ? 'Unpin Edit panel' : 'Pin Edit panel to the window'}
+                pressed={pinned}
+                leftIcon={<PinIcon size={13} />}
+              />
+            )}
+            <IconButton
               variant="ghost"
               size="compact"
-              className="button--icon-only panel-pin-toggle"
-              onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
-              aria-label={pinned ? 'Unpin Edit panel' : 'Pin Edit panel to the window'}
-              pressed={pinned}
-              leftIcon={<PinIcon size={13} />}
+              onClick={onClose}
+              title="Close Edit panel"
+              aria-label="Close Edit panel"
+              icon={<CloseIcon size={14} />}
             />
-          )}
-          <IconButton
-            variant="ghost"
-            size="compact"
-            onClick={onClose}
-            title="Close Edit panel"
-            aria-label="Close Edit panel"
-            icon={<CloseIcon size={14} />}
-          />
-        </span>
-      </div>
+          </span>
+        </div>
+      )}
 
       {/* Sticky context bar: always shows WHICH breakpoint and WHICH target you're
           editing, while the controls below scroll. */}
@@ -630,6 +658,7 @@ export function VisualEditorPanel({
               editTarget.kind === 'element' ? currentClass : (selection?.signature.className ?? '')
             }
             editTarget={editTarget}
+            disabled={readOnly}
             canCreate={canCreateClass}
             onEditElement={onEditElement}
             onEditClass={onEditClass}
@@ -655,7 +684,11 @@ export function VisualEditorPanel({
             attribute to source) instead of a dead-end banner. Classless images
             skip it — the Image section already carries their state. */}
         {resolution?.status === 'no_class' && selection && !isImage && onAddFirstClass && (
-          <NoClassState tag={selection.signature.tagName} onAddClass={onAddFirstClass} />
+          <NoClassState
+            tag={selection.signature.tagName}
+            onAddClass={onAddFirstClass}
+            disabled={readOnly}
+          />
         )}
 
         {/* For a classless image the class resolver's "not a static string" verdict is
@@ -673,11 +706,19 @@ export function VisualEditorPanel({
             resolution={imageResolution ?? null}
             projectPath={projectPath}
             onReplace={onReplaceImage}
+            disabled={readOnly}
           />
         )}
 
+        {readOnly && selection && readOnlyReason && (
+          <p className="ss-edit-panel__readonly" role="status">
+            {readOnlyReason}
+          </p>
+        )}
+
         {controlsVisible && (
-          <>
+          <fieldset disabled={readOnly} className="ss-edit-panel__readonly-fieldset">
+            <>
             {resolution?.status === 'resolved' && (
               <div className="ss-edit-panel__source-context">
                 <div className="ss-edit-panel__source">
@@ -756,7 +797,8 @@ export function VisualEditorPanel({
                 {currentClass}
               </div>
             </PropSection>
-          </>
+            </>
+          </fieldset>
         )}
 
         <p className="ss-edit-panel__beta">
@@ -776,7 +818,8 @@ export function VisualEditorPanel({
       </div>
 
       {controlsVisible && (
-        <div className="ss-edit-panel__footer">
+        <fieldset disabled={readOnly} className="ss-edit-panel__readonly-fieldset">
+          <div className="ss-edit-panel__footer">
           <button
             type="button"
             role="switch"
@@ -800,7 +843,8 @@ export function VisualEditorPanel({
           ) : (
             <StatusBadge saving={false} />
           )}
-        </div>
+          </div>
+        </fieldset>
       )}
     </div>
   );

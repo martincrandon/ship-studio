@@ -1,4 +1,5 @@
-import type { ComponentIndex, StaticValue } from './types';
+import type { ComponentDescriptor, ComponentIndex, StaticValue } from './types';
+import { sha256 } from './ranges';
 
 /** Bump only when the persisted presentation schema changes incompatibly. */
 export const COMPONENT_PRESET_VERSION = 1 as const;
@@ -29,6 +30,24 @@ export interface ComponentPreviewPreset {
 export interface ComponentPreviewPresetStore {
   version: typeof COMPONENT_PRESET_VERSION;
   presets: ComponentPreviewPreset[];
+}
+
+/** Creates an empty explicit test case without inferring source defaults. */
+export function createComponentPreviewPreset(
+  component: Pick<ComponentDescriptor, 'id' | 'dialect' | 'name'>,
+  sourceRevision?: string
+): ComponentPreviewPreset {
+  const opaqueId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+  return {
+    id: `preset-${sha256(`${component.id}:${opaqueId}`).slice(0, 24)}`,
+    version: COMPONENT_PRESET_VERSION,
+    componentId: component.id,
+    dialect: component.dialect,
+    name: `${component.name} test`,
+    props: {},
+    slots: {},
+    sourceRevision,
+  };
 }
 
 export interface OrphanedComponentPreviewPreset {
@@ -165,6 +184,47 @@ export function writeComponentPreviewPresetStore(
 ): void {
   const normalized = parseComponentPreviewPresetStore(store);
   storage.setItem(key, JSON.stringify(normalized));
+}
+
+/** Preset lifecycle is presentation data; it never edits a component definition. */
+export function renameComponentPreviewPreset(
+  store: ComponentPreviewPresetStore,
+  presetId: string,
+  name: string
+): ComponentPreviewPresetStore {
+  const trimmed = name.trim().slice(0, 128);
+  if (!trimmed) return store;
+  return {
+    ...store,
+    presets: store.presets.map((preset) =>
+      preset.id === presetId ? { ...preset, name: trimmed } : preset
+    ),
+  };
+}
+
+export function duplicateComponentPreviewPreset(
+  store: ComponentPreviewPresetStore,
+  presetId: string,
+  name?: string
+): { store: ComponentPreviewPresetStore; preset: ComponentPreviewPreset | null } {
+  const source = store.presets.find((preset) => preset.id === presetId);
+  if (!source) return { store, preset: null };
+  const duplicate: ComponentPreviewPreset = {
+    ...source,
+    id: `preset-${sha256(`${source.id}:${Date.now()}:${Math.random()}`).slice(0, 24)}`,
+    name: (name?.trim() || `${source.name} copy`).slice(0, 128),
+    props: { ...source.props },
+    slots: { ...source.slots },
+    presentation: source.presentation ? { ...source.presentation } : undefined,
+  };
+  return { store: { ...store, presets: [...store.presets, duplicate] }, preset: duplicate };
+}
+
+export function deleteComponentPreviewPreset(
+  store: ComponentPreviewPresetStore,
+  presetId: string
+): ComponentPreviewPresetStore {
+  return { ...store, presets: store.presets.filter((preset) => preset.id !== presetId) };
 }
 
 /**

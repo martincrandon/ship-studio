@@ -24,7 +24,7 @@ const FETCH_THROTTLE: Duration = Duration::from_secs(30);
 
 use super::{
     get_ahead_behind_batch, get_current_branch_sync, git_has_any_changes, load_project_metadata,
-    save_project_metadata,
+    update_project_metadata,
 };
 
 /// Failure message for a non-zero `git branch -a` exit. Git can die with a
@@ -275,9 +275,6 @@ pub async fn switch_branch(
     let current_branch = get_current_branch_sync(&validated_path).unwrap_or_default();
     info!(from_branch = %current_branch, to_branch = %branch_name, auto_stash, "Switching branch");
 
-    // Load project metadata to check for existing stash info
-    let mut metadata = load_project_metadata(&validated_path);
-
     // Check for uncommitted changes
     let has_changes = git_has_any_changes(&validated_path)?;
 
@@ -305,11 +302,14 @@ pub async fn switch_branch(
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0);
 
-                metadata.stash_info = Some(crate::types::StashInfo {
-                    from_branch: current_branch.clone(),
-                    stashed_at: now,
+                let update = update_project_metadata(&validated_path, |metadata| {
+                    metadata.stash_info = Some(crate::types::StashInfo {
+                        from_branch: current_branch.clone(),
+                        stashed_at: now,
+                    });
+                    Ok(())
                 });
-                if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+                if let Err(e) = update {
                     warn!("Failed to save stash metadata: {}", e);
                 }
             }
@@ -368,9 +368,10 @@ pub async fn switch_branch(
                 warn!("Failed to restore stash after checkout failure: {}", e);
             }
 
-            // Clear stash info since we popped it
-            metadata.stash_info = None;
-            if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+            if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+                metadata.stash_info = None;
+                Ok(())
+            }) {
                 warn!("Failed to save project metadata after stash pop: {}", e);
             }
         }
@@ -421,7 +422,7 @@ pub async fn switch_branch(
 
     // Checkout succeeded - check if we should auto-apply a stash
     // Reload metadata in case it was updated
-    metadata = load_project_metadata(&validated_path);
+    let metadata = load_project_metadata(&validated_path);
 
     if let Some(ref stash_info) = metadata.stash_info {
         // If we're switching back to the branch where we stashed from, offer to apply
@@ -434,9 +435,10 @@ pub async fn switch_branch(
             if let Ok(output) = pop_output {
                 if output.status.success() {
                     stash_applied = true;
-                    // Clear stash info
-                    metadata.stash_info = None;
-                    if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+                    if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+                        metadata.stash_info = None;
+                        Ok(())
+                    }) {
                         warn!("Failed to save project metadata after stash apply: {}", e);
                     }
                 } else {
@@ -632,12 +634,13 @@ pub async fn create_branch(
 
     // Record where this branch was cut from so the branch-graph visual can draw
     // its fork lineage.
-    let mut metadata = load_project_metadata(&validated_path);
-    metadata
-        .branch_lineage
-        .get_or_insert_with(std::collections::HashMap::new)
-        .insert(branch_name.clone(), base_name);
-    if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+    if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+        metadata
+            .branch_lineage
+            .get_or_insert_with(std::collections::HashMap::new)
+            .insert(branch_name.clone(), base_name);
+        Ok(())
+    }) {
         warn!(error = %e, "Failed to persist branch lineage");
     }
 
@@ -875,13 +878,16 @@ pub async fn delete_branch(
     // forever across a project's life. Entries whose *base* was this branch
     // stay: their child branches still exist and the graph falls back to
     // merge-base inference for them.
-    let mut metadata = load_project_metadata(&validated_path);
-    if let Some(lineage) = metadata.branch_lineage.as_mut() {
-        if lineage.remove(&branch_name).is_some() {
-            if let Err(e) = save_project_metadata(&validated_path, &metadata) {
-                warn!(error = %e, "Failed to prune branch lineage after delete");
+    if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+        if let Some(lineage) = metadata.branch_lineage.as_mut() {
+            lineage.remove(&branch_name);
+            if lineage.is_empty() {
+                metadata.branch_lineage = None;
             }
         }
+        Ok(())
+    }) {
+        warn!(error = %e, "Failed to prune branch lineage after delete");
     }
 
     // Invalidate caches so next list_branches gets fresh data

@@ -11,7 +11,7 @@
   --surface-selected: var(--color-gray-750);
   --surface-recessed: var(--color-gray-950);
   --surface-terminal-input: var(--color-gray-750);
-  --surface-canvas: var(--color-white);
+  --surface-canvas: var(--surface-app);
   --surface-warning: rgba(232, 154, 28, 0.15);
 
   --text-white: var(--color-white);

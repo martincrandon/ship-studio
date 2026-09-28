@@ -79,6 +79,12 @@ interface Props {
    *  Variables, or Animate. Uncontrolled (local state) when omitted. */
   scope?: Scope;
   onScopeChange?: (scope: Scope) => void;
+  /** Render cascade data without granting any source mutation affordances. */
+  readOnly?: boolean;
+  /** Why the cascade controls are currently read-only. */
+  readOnlyReason?: string;
+  /** Render only the cascade content when a shared EditPanelShell owns chrome. */
+  chrome?: boolean;
 }
 
 export function CssCascadePanel({
@@ -104,6 +110,9 @@ export function CssCascadePanel({
   onTogglePin,
   scope: controlledScope,
   onScopeChange,
+  readOnly = false,
+  readOnlyReason,
+  chrome = true,
 }: Props) {
   const [localScope, setLocalScope] = useState<Scope>('style');
   const scope = controlledScope ?? localScope;
@@ -197,7 +206,7 @@ export function CssCascadePanel({
     const collapsed = collapsedRules.has(collapseKey);
     const onToggleCollapse = () => toggleCollapsed(collapseKey);
     const mediaText = insideMedia ? null : row.mediaText;
-    if (row.editable && bodies[key]) {
+    if (row.editable && bodies[key] && !readOnly) {
       return (
         <CascadeRuleCard
           key={key}
@@ -247,7 +256,7 @@ export function CssCascadePanel({
         supports={row.supports}
         inactive={insideMedia ? false : row.inactiveMedia}
         overridden={row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())}
-        readonlyReason={row.readonlyReason}
+        readonlyReason={readOnlyReason ?? row.readonlyReason}
         decls={row.declarations.map((d) => ({
           prop: d.prop,
           value: d.value,
@@ -259,36 +268,42 @@ export function CssCascadePanel({
 
   return (
     <div
-      className={`ss-edit-panel ss-cascade-panel ss-cascade-panel--dockable${
+      className={`${chrome ? 'ss-edit-panel' : 'ss-edit-panel__content'} ss-cascade-panel ss-cascade-panel--dockable${
         pinned ? ' ss-edit-panel--pinned' : ''
       }`}
       data-testid="css-cascade-panel"
+      aria-readonly={readOnly || undefined}
     >
-      <div className="ss-edit-panel__header" data-dockable-drag-handle>
-        <span className="ss-edit-panel__title">CSS</span>
-        <span className="ss-edit-panel__header-actions">
-          {onTogglePin && (
-            <ToggleButton
+      {chrome && (
+        <div className="ss-edit-panel__header" data-dockable-drag-handle>
+          <div className="panel-heading-pair">
+            <span className="panel-heading-pair-title">Edit</span>
+            <span className="panel-heading-pair-meta">CSS</span>
+          </div>
+          <span className="ss-edit-panel__header-actions">
+            {onTogglePin && (
+              <ToggleButton
+                variant="ghost"
+                size="compact"
+                className="button--icon-only panel-pin-toggle"
+                onClick={onTogglePin}
+                title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
+                aria-label={pinned ? 'Unpin Edit panel' : 'Pin Edit panel to the window'}
+                pressed={pinned}
+                leftIcon={<PinIcon size={13} />}
+              />
+            )}
+            <IconButton
               variant="ghost"
               size="compact"
-              className="button--icon-only panel-pin-toggle"
-              onClick={onTogglePin}
-              title={pinned ? 'Unpin — float over the preview' : 'Pin to the window'}
-              aria-label={pinned ? 'Unpin CSS panel' : 'Pin CSS panel to the window'}
-              pressed={pinned}
-              leftIcon={<PinIcon size={13} />}
+              onClick={onClose}
+              title="Close Edit panel"
+              aria-label="Close Edit panel"
+              icon={<CloseIcon size={14} />}
             />
-          )}
-          <IconButton
-            variant="ghost"
-            size="compact"
-            onClick={onClose}
-            title="Close CSS panel"
-            aria-label="Close CSS panel"
-            icon={<CloseIcon size={14} />}
-          />
-        </span>
-      </div>
+          </span>
+        </div>
+      )}
 
       <div className="ss-edit-panel__body">
         <Tabs value={scope} mode="navigation" onValueChange={(next) => setScope(next as Scope)}>
@@ -300,21 +315,27 @@ export function CssCascadePanel({
         </Tabs>
 
         <div className="ss-cascade-content">
-          {scope === 'animations' ? (
-            <CssAnimationsPanel
-              animations={animationsState.animations}
-              loading={animationsState.loading}
-              selectorSuggestions={selectorSuggestions}
-              variables={variables}
-              onChangeBody={animationsState.setBody}
-              onDelete={(s) => void animationsState.remove(s)}
-              onCreate={(n) => void animationsState.create(n)}
-              onRename={(s, n) => void animationsState.rename(s, n)}
-            />
-          ) : !selection ? (
-            <p className="ss-cascade-empty">Click an element to see the CSS that styles it.</p>
-          ) : (
-            <>
+          {readOnly && readOnlyReason && (
+            <p className="ss-edit-panel__readonly" role="status" data-testid="css-cascade-readonly-reason">
+              {readOnlyReason}
+            </p>
+          )}
+          <fieldset disabled={readOnly} className="ss-edit-panel__readonly-fieldset">
+            {scope === 'animations' ? (
+              <CssAnimationsPanel
+                animations={animationsState.animations}
+                loading={animationsState.loading}
+                selectorSuggestions={selectorSuggestions}
+                variables={variables}
+                onChangeBody={animationsState.setBody}
+                onDelete={(s) => void animationsState.remove(s)}
+                onCreate={(n) => void animationsState.create(n)}
+                onRename={(s, n) => void animationsState.rename(s, n)}
+              />
+            ) : !selection ? (
+              <p className="ss-cascade-empty">Click an element to see the CSS that styles it.</p>
+            ) : (
+              <>
               <div className="ss-cascade-target">
                 <code className="ss-cascade-chip" data-tone="tag">
                   {selection.signature.tagName}
@@ -482,8 +503,9 @@ export function CssCascadePanel({
                   )}
                 </>
               )}
-            </>
-          )}
+              </>
+            )}
+          </fieldset>
         </div>
       </div>
     </div>

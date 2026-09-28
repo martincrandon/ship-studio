@@ -190,6 +190,11 @@ export const educationContent: Record<string, EducationItem> = {
     description:
       'Your dev server is running, but the page failed to render inside the embedded preview. Auth middleware is a common cause: development keys (like Clerk dev instances) redirect through a sign-in handshake that embedded previews block, so the page loops until it gives up. Scope the middleware to protected routes or use production keys — the site usually still works in a normal browser.',
   },
+  'components-workspace': {
+    title: 'Components Workspace',
+    description:
+      'Browse source-backed components on a persistent canvas. Focus, arrange, and save explicit presets without changing your code. Next projects can review and confirm an isolated renderer host; unsupported or unaccepted frameworks stay catalog-only with a specific reason.',
+  },
   breakpoints: {
     title: 'Device Sizes',
     description:

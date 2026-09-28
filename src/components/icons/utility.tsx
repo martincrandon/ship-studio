@@ -18,10 +18,11 @@ import UndoSvg from '../../assets/icons/undo.svg?react';
 import RedoSvg from '../../assets/icons/redo.svg?react';
 import LayersSvg from '../../assets/icons/layers.svg?react';
 import TemplateSvg from '../../assets/icons/template.svg?react';
+import StopSvg from '../../assets/icons/stop.svg?react';
 import GenericAgentSvg from '../../assets/icons/old-icons/generic-agent.svg?react';
 import CollaboratorsSvg from '../../assets/icons/old-icons/collaborators.svg?react';
 import PackageSvg from '../../assets/icons/old-icons/package.svg?react';
-import PlaySvg from '../../assets/icons/old-icons/play.svg?react';
+import PlaySvg from '../../assets/icons/play.svg?react';
 import PauseSvg from '../../assets/icons/old-icons/pause.svg?react';
 import SkipNextSvg from '../../assets/icons/old-icons/skip-next.svg?react';
 import SkipPreviousSvg from '../../assets/icons/old-icons/skip-previous.svg?react';
@@ -183,6 +184,13 @@ export const TemplateIcon = createIcon(TemplateSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const StopIcon = createIcon(StopSvg, {
+  name: 'StopIcon',
+  source: 'icons/stop.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const GenericAgentIcon = createIcon(GenericAgentSvg, {
   name: 'GenericAgentIcon',
   source: 'icons/old-icons/generic-agent.svg',
@@ -203,9 +211,10 @@ export const PackageIcon = createIcon(PackageSvg, {
 });
 export const PlayIcon = createIcon(PlaySvg, {
   name: 'PlayIcon',
-  source: 'icons/old-icons/play.svg',
+  source: 'icons/play.svg',
   kind: 'ui',
-  defaultSize: 12,
+  defaultSize: 16,
+  strokeWidth: '1px',
 });
 export const PauseIcon = createIcon(PauseSvg, {
   name: 'PauseIcon',

@@ -30,7 +30,7 @@ import {
   rulesToLocate,
   rowKey,
   isStaleCssRuleError,
-  type MatchedRule,
+  sourceRefFromRuleLocation,
   type RuleLocation,
   type CascadeRow,
 } from '../lib/cssCascade';
@@ -40,11 +40,22 @@ import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import {
+  isSourceRefInside,
   sourceRefFromResolution,
   validateFocusedSourceTarget,
   type ComponentFocusContext,
 } from '../lib/components/focus';
 import type { SourceRef } from '../lib/components/types';
+import {
+  boundInspectionMessage,
+  createInspectionTransport,
+  type InspectionSurfaceTransport,
+} from '../lib/components/inspection-transport';
+import {
+  isLegacyEditableSurfaceTarget,
+  isNegotiatedEditableSurfaceTarget,
+  type EditableSurfaceTarget,
+} from '../lib/components/editable-surface';
 
 function toastText(err: unknown): string {
   return formatCommandError(asCommandError(err));
@@ -86,26 +97,64 @@ export interface CascadeSelection {
 
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Optional negotiated target for a framework-hosted component frame. */
+  surfaceTarget?: EditableSurfaceTarget | null;
   projectPath: string;
   enabled: boolean;
+  /** Optional workspace-owned edit-mode state shared with another surface. */
+  editMode?: boolean;
+  /** Receives edit-mode changes when `editMode` is controlled. */
+  onEditModeChange?: (enabled: boolean) => void;
+  /** Loads the cascade model without granting edit-mode mutations. */
+  inspectionEnabled?: boolean;
+  /** Component-frame writes stay disabled until Edit main is confirmed. */
+  writeEnabled?: boolean;
   /** The project bundles CSS Modules (Next.js) — unmapped module-hashed selectors
    *  get a CSS-Modules explanation instead of the generic read-only reason. */
   cssModulesHint?: boolean;
   onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   /** Revision-bound component definition context, when focus is active. */
   componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
+  /** Optional revision-bound guard used by framework-hosted component frames. */
+  sourceEditGuard?: (
+    source: SourceRef | null
+  ) => { status: 'valid'; source?: SourceRef } | { status: 'refused'; reason: string };
+  /** Exact definition boundary for a virtual component frame. */
+  sourceBoundary?: SourceRef | null;
 }
 
 export function useCssCascadeEditor({
   iframeRef,
+  surfaceTarget,
   projectPath,
   enabled,
+  editMode: controlledEditMode,
+  onEditModeChange,
   cssModulesHint = false,
   onToast,
   componentFocusRef,
+  sourceEditGuard,
+  sourceBoundary = null,
+  inspectionEnabled,
+  writeEnabled,
 }: Params) {
-  const [editModeOn, setEditModeOn] = useState(false);
+  const [internalEditModeOn, setInternalEditModeOn] = useState(false);
+  const editModeOn = controlledEditMode ?? internalEditModeOn;
   const editMode = enabled && editModeOn;
+  const transport = useMemo<InspectionSurfaceTransport>(
+    () => createInspectionTransport({ iframeRef, surfaceTarget }),
+    [iframeRef, surfaceTarget]
+  );
+  const inspectionActive = (inspectionEnabled ?? enabled) && transport.active;
+  const negotiatedSurface = !!surfaceTarget && isNegotiatedEditableSurfaceTarget(surfaceTarget);
+  const legacySurface =
+    surfaceTarget === undefined ||
+    (!!surfaceTarget && isLegacyEditableSurfaceTarget(surfaceTarget));
+  const mutationsEnabled = legacySurface
+    ? writeEnabled !== false
+    : negotiatedSurface
+      ? writeEnabled === true && surfaceTarget?.capabilities.editing === true
+      : false;
 
   const [selection, setSelection] = useState<CascadeSelection | null>(null);
   const [rows, setRows] = useState<CascadeRow[]>([]);
@@ -131,6 +180,9 @@ export function useCssCascadeEditor({
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const selTokenRef = useRef(0);
+  const surfaceRevision = transport.revisionKey;
+  const surfaceRevisionRef = useRef(surfaceRevision);
+  surfaceRevisionRef.current = surfaceRevision;
   // The last selected element's signature — replayed after an HMR reload so the
   // panel re-reads the element's current source (instant sync after edits).
   const lastSignatureRef = useRef<ElementSignature | null>(null);
@@ -151,7 +203,7 @@ export function useCssCascadeEditor({
   // each rebuild remounted the draft card, destroying any open "+ Add" menu / edit state
   // ("+ Add doesn't work" on NEW cards). Reset only on a genuine element change.
   const draftIndexRef = useRef<Map<string, number>>(new Map());
-  const editModeOnRef = useRef(false);
+  const editModeOnRef = useRef(editModeOn);
   useEffect(() => {
     editModeOnRef.current = editModeOn;
   }, [editModeOn]);
@@ -164,37 +216,138 @@ export function useCssCascadeEditor({
   const rowByKeyRef = useRef(rowByKey);
   rowByKeyRef.current = rowByKey;
 
-  const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
-  );
+  const post = useCallback((msg: unknown) => transport.post(msg), [transport]);
 
   /** Re-prove the selected child immediately before a focused CSS write. */
   const ensureFocusedSelection = useCallback(async (): Promise<SourceRef | null> => {
     const context = componentFocusRef?.current;
-    if (!context) return null;
+    if (!context && !negotiatedSurface) return null;
+    if (negotiatedSurface && !sourceEditGuard) {
+      throw new Error(
+        'The component source boundary is unavailable. Refresh the frame before editing it.'
+      );
+    }
     const signature = lastSignatureRef.current;
     if (!signature) throw new Error('Select a child element before editing the focused component.');
+    const selectionToken = selTokenRef.current;
+    const selectionRevision = surfaceRevisionRef.current;
     const resolution = await resolveClassnameSource(projectPath, signature);
-    const validation = validateFocusedSourceTarget(context, sourceRefFromResolution(resolution));
-    if (validation.status === 'refused' || !validation.source) {
+    if (
+      selTokenRef.current !== selectionToken ||
+      surfaceRevisionRef.current !== selectionRevision ||
+      lastSignatureRef.current !== signature
+    ) {
+      throw new Error('The renderer selection changed. Reselect the element and try again.');
+    }
+    const resolvedSource = sourceRefFromResolution(resolution);
+    if (!resolvedSource) {
       throw new Error(
-        validation.diagnostic?.message ??
+        'The selected component child has no exact source range. Refresh and reselect it.'
+      );
+    }
+    const validation = negotiatedSurface
+      ? sourceEditGuard?.(resolvedSource)
+      : context
+        ? validateFocusedSourceTarget(context, resolvedSource)
+        : null;
+    if (!validation) {
+      throw new Error(
+        'The focused component source target is no longer valid. Refresh and re-enter focus.'
+      );
+    }
+    if (validation.status === 'refused' || !validation.source) {
+      const reason =
+        validation.status === 'refused' && 'diagnostic' in validation
+          ? validation.diagnostic?.message
+          : validation.status === 'refused' && 'reason' in validation
+            ? validation.reason
+            : undefined;
+      throw new Error(
+        reason ??
           'The focused component source target is no longer valid. Refresh and re-enter focus.'
       );
     }
     setFocusedSource(validation.source);
     return validation.source;
-  }, [componentFocusRef, projectPath]);
+  }, [componentFocusRef, negotiatedSurface, projectPath, sourceEditGuard]);
 
   const blockFocusedRuleStructure = useCallback((): boolean => {
-    if (!componentFocusRef?.current) return false;
+    if (!componentFocusRef?.current && !negotiatedSurface) return false;
     onToast(
       'Focused component editing only changes the proven child style body. Exit focus to change CSS rule structure.',
       'error'
     );
     return true;
-  }, [componentFocusRef, onToast]);
+  }, [componentFocusRef, negotiatedSurface, onToast]);
+
+  /** Resolve and validate the selected child immediately before a source write. */
+  const ensureWriteSource = useCallback(async (): Promise<SourceRef | null> => {
+    if (!mutationsEnabled) {
+      throw new Error('Component editing is not confirmed. Confirm Edit main before changing it.');
+    }
+    return ensureFocusedSelection();
+  }, [ensureFocusedSelection, mutationsEnabled]);
+
+  /** Re-prove the actual stylesheet rule immediately before a focused CSS
+   * write. The selected element's class source is not authority for the rule
+   * body: a global stylesheet can style that element while living outside its
+   * component definition. Resolve the rule again, require the exact source
+   * metadata captured for the row, then run the same component-boundary guard
+   * against that stylesheet range. Legacy Preview rows intentionally skip this
+   * extra proof and retain their existing project-wide CSS behavior. */
+  const ensureCssRuleSource = useCallback(
+    async (row: CascadeRow): Promise<SourceRef | null> => {
+      const childSource = await ensureWriteSource();
+      const focusedSurface = negotiatedSurface || !!componentFocusRef?.current;
+      if (!focusedSurface) return childSource;
+
+      const expected = row.sourceRef;
+      if (!expected || !row.file || !row.selector) {
+        throw new Error(
+          'The selected stylesheet rule has no exact source range inside this component. Refresh and reselect it.'
+        );
+      }
+
+      const [location] = await locateCssRules(projectPath, [
+        {
+          selector: row.selector,
+          mediaText: row.mediaText,
+          href: row.href ?? null,
+          layer: row.layer,
+          container: row.container,
+          supports: row.supports,
+        },
+      ]);
+      const actual = location ? sourceRefFromRuleLocation(location) : null;
+      if (
+        !actual ||
+        location?.status !== 'resolved' ||
+        actual.file !== expected.file ||
+        actual.start !== expected.start ||
+        actual.end !== expected.end ||
+        actual.contentHash !== expected.contentHash
+      ) {
+        throw new Error(
+          'The selected stylesheet rule changed or is ambiguous. Refresh and reselect the element before editing it.'
+        );
+      }
+
+      const validation = negotiatedSurface
+        ? sourceEditGuard?.(actual)
+        : componentFocusRef?.current
+          ? validateFocusedSourceTarget(componentFocusRef.current, actual)
+          : null;
+      if (!validation || validation.status === 'refused' || !validation.source) {
+        throw new Error(
+          validation && validation.status === 'refused' && 'reason' in validation
+            ? validation.reason
+            : 'The selected stylesheet rule is outside this component definition. The edit was not applied.'
+        );
+      }
+      return validation.source;
+    },
+    [componentFocusRef, ensureWriteSource, negotiatedSurface, projectPath, sourceEditGuard]
+  );
 
   const clearTimers = useCallback(() => {
     Object.values(previewTimers.current).forEach(clearTimeout);
@@ -206,7 +359,7 @@ export function useCssCascadeEditor({
   // Activate the in-iframe selection layer in CASCADE mode while editing; re-arm on HMR.
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (editMode) {
+    if (inspectionActive) {
       post({ type: 'ss:activate', cascade: true });
       // After an HMR reload, re-arm the layer AND replay the last selection so the
       // panel re-reads the element's current source (instant read after edits).
@@ -219,13 +372,13 @@ export function useCssCascadeEditor({
       return () => iframe?.removeEventListener('load', reactivate);
     }
     post({ type: 'ss:deactivate' });
-  }, [editMode, post, iframeRef]);
+  }, [inspectionActive, post, iframeRef]);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
   // Project class names + CSS variables for autocomplete.
   useEffect(() => {
-    if (!editMode) return;
+    if (!inspectionActive) return;
     let cancelled = false;
     void listCssClasses(projectPath)
       .then((cs) => !cancelled && setClassSuggestions(cs))
@@ -239,19 +392,14 @@ export function useCssCascadeEditor({
     return () => {
       cancelled = true;
     };
-  }, [editMode, projectPath]);
+  }, [inspectionActive, projectPath]);
 
   // Receive the clicked element's signature + its cascade; build the card models.
   useEffect(() => {
-    if (!editMode) return;
+    if (!inspectionActive) return;
     const handler = (e: MessageEvent) => {
-      if (e.source !== iframeRef.current?.contentWindow) return;
-      const d = e.data as {
-        type?: string;
-        signature?: ElementSignature;
-        count?: number;
-        rules?: MatchedRule[];
-      } | null;
+      if (!transport.accepts(e)) return;
+      const d = boundInspectionMessage(e.data);
       if (!d) return;
 
       if (d.type === 'ss:select' && d.signature) {
@@ -291,10 +439,16 @@ export function useCssCascadeEditor({
         }
         setLoading(true);
         const token = selTokenRef.current;
+        const selectionRevision = surfaceRevisionRef.current;
         if (componentFocusRef?.current) {
           void resolveClassnameSource(projectPath, d.signature)
             .then((resolution) => {
-              if (selTokenRef.current !== token || !componentFocusRef.current) return;
+              if (
+                selTokenRef.current !== token ||
+                surfaceRevisionRef.current !== selectionRevision ||
+                !componentFocusRef.current
+              )
+                return;
               const validation = validateFocusedSourceTarget(
                 componentFocusRef.current,
                 sourceRefFromResolution(resolution)
@@ -309,6 +463,7 @@ export function useCssCascadeEditor({
       if (d.type === 'ss:cascade' && Array.isArray(d.rules)) {
         const matched = d.rules;
         const token = selTokenRef.current;
+        const selectionRevision = surfaceRevisionRef.current;
         void (async () => {
           try {
             const toLocate = rulesToLocate(matched);
@@ -320,7 +475,8 @@ export function useCssCascadeEditor({
               : [];
             const locByIndex = new Map<number, RuleLocation>();
             toLocate.forEach((x, k) => locByIndex.set(x.index, locations[k]));
-            if (selTokenRef.current !== token) return;
+            if (selTokenRef.current !== token || surfaceRevisionRef.current !== selectionRevision)
+              return;
             const merged = mergeCascade(matched, locByIndex, { cssModulesHint });
 
             const nextBodies: Record<string, RuleBody> = {};
@@ -365,6 +521,22 @@ export function useCssCascadeEditor({
             }
             const finalRows = [...extraRows, ...merged];
 
+            // CSS cascade rows carry exact file/hash/range provenance when the
+            // locator can prove it. For a virtual component frame, expose a
+            // source proof only for a row inside the selected definition and
+            // accepted by the authenticated surface guard. Global or
+            // out-of-boundary stylesheet matches remain inspection-only.
+            if (sourceBoundary && sourceEditGuard) {
+              const proven = finalRows.find((row) => {
+                const source = row.sourceRef;
+                if (!source || !isSourceRefInside(sourceBoundary, source)) return false;
+                return sourceEditGuard(source).status === 'valid';
+              });
+              setFocusedSource(proven?.sourceRef ?? null);
+            } else if (!componentFocusRef?.current) {
+              setFocusedSource(null);
+            }
+
             // Draft cards: the element's own selectors (classes, then tag) with no base
             // rule yet — empty editable cards placed in cascade order. They aren't
             // written to source until the first property is saved (see saveRule).
@@ -379,7 +551,11 @@ export function useCssCascadeEditor({
                   targetFile = undefined;
                 }
               }
-              if (targetFile && selTokenRef.current === token) {
+              if (
+                targetFile &&
+                selTokenRef.current === token &&
+                surfaceRevisionRef.current === selectionRevision
+              ) {
                 const sigClasses = sig.className.split(/\s+/).filter(Boolean);
                 const candidates = [
                   ...new Set([...sigClasses.map((c) => `.${c}`), sig.tagName].filter(Boolean)),
@@ -431,12 +607,13 @@ export function useCssCascadeEditor({
             logger.error('[CssCascade] locate failed', {
               error: formatCommandError(asCommandError(err)),
             });
-            if (selTokenRef.current === token) {
+            if (selTokenRef.current === token && surfaceRevisionRef.current === selectionRevision) {
               setRows(mergeCascade(matched, new Map(), { cssModulesHint }));
               onToast(toastText(err), 'error');
             }
           } finally {
-            if (selTokenRef.current === token) setLoading(false);
+            if (selTokenRef.current === token && surfaceRevisionRef.current === selectionRevision)
+              setLoading(false);
           }
         })();
       }
@@ -445,38 +622,72 @@ export function useCssCascadeEditor({
     return () => window.removeEventListener('message', handler);
   }, [
     componentFocusRef,
-    editMode,
+    inspectionActive,
     projectPath,
     post,
-    iframeRef,
+    transport,
     onToast,
     clearTimers,
     cssModulesHint,
+    sourceBoundary,
+    sourceEditGuard,
   ]);
+
+  // A negotiated frame/session/revision is an inspection boundary. Clear
+  // selection and optimistic CSS cards before a new surface can populate them;
+  // delayed locate results are rejected by the same token/revision checks.
+  useEffect(() => {
+    selTokenRef.current += 1;
+    clearTimers();
+    lastSignatureRef.current = null;
+    createdRowsRef.current = new Map();
+    draftIndexRef.current = new Map();
+    setSelection(null);
+    setFocusedSource(null);
+    setRows([]);
+    setBodies({});
+    bodiesRef.current = {};
+    baselineInner.current = {};
+    setOverridden({});
+    setSavingKeys(new Set());
+  }, [clearTimers, surfaceRevision]);
 
   /** Live-preview a rule's current body in place (in-iframe CSSOM). */
   const previewRule = useCallback(
-    (key: string) => {
+    async (key: string) => {
+      if (!mutationsEnabled) return;
       const row = rowByKeyRef.current.get(key);
       const body = bodiesRef.current[key];
       if (!row || !row.editable || row.selector == null || !body) return;
-      post({
-        type: 'ss:previewRuleText',
-        ruleKey: key,
-        selector: row.selector,
-        mediaText: row.mediaText,
-        // Pin the exact rule by cascade position so a duplicate selector (base + @layer)
-        // previews the one the panel is showing, not the first textual match.
-        order: row.sourceOrder,
-        cssText: `${row.selector} {${serializeRuleBody(body)}}`,
-      });
+      const previewRevision = surfaceRevisionRef.current;
+      try {
+        // A preview mutation needs the same fresh child proof as its eventual
+        // source write. It must never be used as a shortcut around the resolver.
+        await ensureCssRuleSource(row);
+        if (surfaceRevisionRef.current !== previewRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({
+          type: 'ss:previewRuleText',
+          ruleKey: key,
+          selector: row.selector,
+          mediaText: row.mediaText,
+          // Pin the exact rule by cascade position so a duplicate selector (base + @layer)
+          // previews the one the panel is showing, not the first textual match.
+          order: row.sourceOrder,
+          cssText: `${row.selector} {${serializeRuleBody(body)}}`,
+        });
+      } catch (err) {
+        onToast(toastText(err), 'error');
+      }
     },
-    [post]
+    [ensureCssRuleSource, mutationsEnabled, onToast, post]
   );
 
   /** Persist a rule's current body to source (drift-guarded), then bake the preview. */
   const saveRule = useCallback(
     async (key: string) => {
+      if (!mutationsEnabled) return;
       const row = rowByKeyRef.current.get(key);
       const body = bodiesRef.current[key];
       if (!row || !row.editable || row.file == null || row.selector == null || !body) return;
@@ -484,9 +695,16 @@ export function useCssCascadeEditor({
       const newInner = serializeRuleBody(body);
       if (oldInner === undefined || newInner === oldInner) return;
       setSavingKeys((prev) => new Set(prev).add(key));
-      post({ type: 'ss:suppressReload' });
+      const writeRevision = surfaceRevisionRef.current;
+      const assertWriteRevision = () => {
+        if (surfaceRevisionRef.current !== writeRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+      };
       try {
-        await ensureFocusedSelection();
+        await ensureCssRuleSource(row);
+        assertWriteRevision();
+        post({ type: 'ss:suppressReload' });
         if (componentFocusRef?.current && draftKeysRef.current.has(key)) {
           throw new Error(
             'Focused component editing cannot create a guessed stylesheet rule. Select an existing child style.'
@@ -500,6 +718,7 @@ export function useCssCascadeEditor({
           } catch (err) {
             if (!formatCommandError(asCommandError(err)).includes('already exists')) throw err;
           }
+          assertWriteRevision();
           draftKeysRef.current.delete(key);
         }
         await applyCssRuleText(
@@ -510,6 +729,7 @@ export function useCssCascadeEditor({
           oldInner,
           newInner
         );
+        assertWriteRevision();
         baselineInner.current[key] = newInner; // new drift baseline
         post({ type: 'ss:commitRulePreview', ruleKey: key });
         void trackEvent('visual_edit_saved', { kind: 'style', mode: 'css-code' });
@@ -520,13 +740,22 @@ export function useCssCascadeEditor({
         // issue #584). Both are recoverable: re-locate the rule in the current
         // source and retry ONCE so editing stays "instant" instead of hitting
         // a drift wall and dropping the edit.
-        if (isStaleCssRuleError(err) && !componentFocusRef?.current) {
+        if (isStaleCssRuleError(err) && !componentFocusRef?.current && !negotiatedSurface) {
           try {
             const locs = await locateCssRules(projectPath, [
-              { selector: row.selector, mediaText: row.mediaText, href: null },
+              {
+                selector: row.selector,
+                mediaText: row.mediaText,
+                href: row.href ?? null,
+                layer: row.layer,
+                container: row.container,
+                supports: row.supports,
+              },
             ]);
             const loc = locs[0];
             if (loc && loc.status === 'resolved') {
+              await ensureCssRuleSource(row);
+              assertWriteRevision();
               await applyCssRuleText(
                 projectPath,
                 // The re-located rule may live in a different file than the
@@ -537,6 +766,7 @@ export function useCssCascadeEditor({
                 loc.inner_text,
                 newInner
               );
+              assertWriteRevision();
               baselineInner.current[key] = newInner;
               post({ type: 'ss:commitRulePreview', ruleKey: key });
               return;
@@ -566,19 +796,33 @@ export function useCssCascadeEditor({
         });
       }
     },
-    [componentFocusRef, ensureFocusedSelection, projectPath, onToast, post]
+    [
+      componentFocusRef,
+      ensureCssRuleSource,
+      mutationsEnabled,
+      negotiatedSurface,
+      projectPath,
+      onToast,
+      post,
+    ]
   );
 
   /** Delete a whole rule from source, drop its card, and remove it live. */
   const deleteRule = useCallback(
     async (key: string) => {
+      if (!mutationsEnabled) return;
       if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       if (!row || !row.editable || row.file == null || row.selector == null) return;
       clearTimeout(previewTimers.current[key]);
       clearTimeout(saveTimers.current[key]);
-      post({ type: 'ss:suppressReload' });
+      const actionRevision = surfaceRevisionRef.current;
       try {
+        await ensureCssRuleSource(row);
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({ type: 'ss:suppressReload' });
         await deleteCssRule(
           projectPath,
           row.file,
@@ -586,6 +830,9 @@ export function useCssCascadeEditor({
           row.mediaText,
           baselineInner.current[key] ?? ''
         );
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
         post({ type: 'ss:clearRulePreview', ruleKey: key });
         post({
           type: 'ss:deleteRulePreview',
@@ -609,7 +856,7 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [blockFocusedRuleStructure, projectPath, onToast, post]
+    [blockFocusedRuleStructure, ensureCssRuleSource, mutationsEnabled, projectPath, onToast, post]
   );
 
   /** Wrap a top-level rule in an at-rule (the `@` above the selector). For `@media`
@@ -617,11 +864,17 @@ export function useCssCascadeEditor({
    *  recompiles the moved rule. */
   const wrapRule = useCallback(
     async (key: string, atPrelude: string) => {
+      if (!mutationsEnabled) return;
       if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       if (!row || !row.editable || row.file == null || row.selector == null) return;
-      post({ type: 'ss:suppressReload' });
+      const actionRevision = surfaceRevisionRef.current;
       try {
+        await ensureCssRuleSource(row);
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({ type: 'ss:suppressReload' });
         await wrapCssRule(
           projectPath,
           row.file,
@@ -630,6 +883,9 @@ export function useCssCascadeEditor({
           atPrelude,
           baselineInner.current[key] ?? ''
         );
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
         const m = atPrelude.trim();
         const cond = m.toLowerCase().startsWith('@media') ? m.slice('@media'.length).trim() : null;
         if (cond)
@@ -643,16 +899,18 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [blockFocusedRuleStructure, projectPath, onToast, post]
+    [blockFocusedRuleStructure, ensureCssRuleSource, mutationsEnabled, projectPath, onToast, post]
   );
 
   /** Create a brand-new rule for `selector` and add it as an editable card you can
    *  style immediately (optimistic — the real cascade refreshes on HMR/reselect). */
   const addSelector = useCallback(
     async (input: string, fixedAtPrelude?: string) => {
+      if (!mutationsEnabled) return;
       if (blockFocusedRuleStructure()) return;
       const raw = input.trim();
       if (!raw) return;
+      const actionRevision = surfaceRevisionRef.current;
 
       // The smart selector field composes `[@condition] [selector]`. Split it: a
       // condition (`@media (…)`, `@container (…)`, `@supports (…)`) creates a CONDITIONAL
@@ -761,10 +1019,17 @@ export function useCssCascadeEditor({
         setOverridden((prev) => ({ ...prev, [key]: new Map() }));
       };
 
-      post({ type: 'ss:suppressReload' });
       const token = selTokenRef.current;
       try {
+        await ensureWriteSource();
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({ type: 'ss:suppressReload' });
         await createCssRule(projectPath, targetFile, sel, atPrelude);
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
         // Re-locate the just-written rule and pin it with the EXACT source body, so the
         // drift baseline matches and the first edit never trips the drift guard. This is
         // critical for conditional (`@media`) rules: their wrapped indentation differs
@@ -816,7 +1081,7 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [blockFocusedRuleStructure, projectPath, onToast, post]
+    [blockFocusedRuleStructure, ensureWriteSource, mutationsEnabled, projectPath, onToast, post]
   );
 
   /** Change a rule's selector to anything (complex selectors included). Re-keys the
@@ -824,6 +1089,7 @@ export function useCssCascadeEditor({
    *  matches the element. */
   const renameSelector = useCallback(
     async (key: string, newSelector: string) => {
+      if (!mutationsEnabled) return;
       if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       const ns = newSelector.trim();
@@ -833,8 +1099,13 @@ export function useCssCascadeEditor({
       // it would fire against a dead key and silently drop the edit.
       clearTimeout(previewTimers.current[key]);
       clearTimeout(saveTimers.current[key]);
-      post({ type: 'ss:suppressReload' });
+      const actionRevision = surfaceRevisionRef.current;
       try {
+        await ensureWriteSource();
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({ type: 'ss:suppressReload' });
         await renameCssSelector(
           projectPath,
           row.file,
@@ -843,6 +1114,9 @@ export function useCssCascadeEditor({
           baselineInner.current[key] ?? '',
           ns
         );
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
         const newRow: CascadeRow = { ...row, selector: ns };
         const newKey = rowKey(newRow);
         // Move the per-rule state to the new key.
@@ -882,13 +1156,22 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [blockFocusedRuleStructure, projectPath, onToast, post, saveRule]
+    [
+      blockFocusedRuleStructure,
+      ensureWriteSource,
+      mutationsEnabled,
+      projectPath,
+      onToast,
+      post,
+      saveRule,
+    ]
   );
 
   /** Change the `@media` condition wrapping a rule. Re-keys on the new media; HMR
    *  refreshes the (shared) wrapper's sibling rules. */
   const renameAtRule = useCallback(
     async (key: string, newMedia: string) => {
+      if (!mutationsEnabled) return;
       if (blockFocusedRuleStructure()) return;
       const row = rowByKeyRef.current.get(key);
       const nm = newMedia.trim();
@@ -898,8 +1181,13 @@ export function useCssCascadeEditor({
       // Cancel any in-flight debounced preview/save on the OLD key (re-keyed below).
       clearTimeout(previewTimers.current[key]);
       clearTimeout(saveTimers.current[key]);
-      post({ type: 'ss:suppressReload' });
+      const actionRevision = surfaceRevisionRef.current;
       try {
+        await ensureWriteSource();
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
+        post({ type: 'ss:suppressReload' });
         await renameCssAtRule(
           projectPath,
           row.file,
@@ -908,6 +1196,9 @@ export function useCssCascadeEditor({
           baselineInner.current[key] ?? '',
           nm
         );
+        if (surfaceRevisionRef.current !== actionRevision) {
+          throw new Error('The renderer surface changed. Reselect the element and try again.');
+        }
         const minMatch = /min-width\s*:\s*([\d.]+)px/i.exec(nm);
         const nextMediaMinPx = minMatch ? Math.round(parseFloat(minMatch[1])) : null;
         const oldMedia = row.mediaText;
@@ -991,12 +1282,21 @@ export function useCssCascadeEditor({
         onToast(toastText(err), 'error');
       }
     },
-    [blockFocusedRuleStructure, projectPath, onToast, post, saveRule]
+    [
+      blockFocusedRuleStructure,
+      ensureWriteSource,
+      mutationsEnabled,
+      projectPath,
+      onToast,
+      post,
+      saveRule,
+    ]
   );
 
   /** Update one card's body model → debounced live preview + auto-save. */
   const setBody = useCallback(
     (key: string, body: RuleBody) => {
+      if (!mutationsEnabled) return;
       bodiesRef.current = { ...bodiesRef.current, [key]: body };
       setBodies((prev) => ({ ...prev, [key]: body }));
       clearTimeout(previewTimers.current[key]);
@@ -1004,8 +1304,28 @@ export function useCssCascadeEditor({
       clearTimeout(saveTimers.current[key]);
       saveTimers.current[key] = setTimeout(() => void saveRule(key), SAVE_DEBOUNCE_MS);
     },
-    [previewRule, saveRule]
+    [mutationsEnabled, previewRule, saveRule]
   );
+
+  const clearEditState = useCallback(() => {
+    clearTimers();
+    lastSignatureRef.current = null;
+    setSelection(null);
+    setFocusedSource(null);
+    setRows([]);
+    setBodies({});
+    bodiesRef.current = {};
+    baselineInner.current = {};
+    setOverridden({});
+    setSavingKeys(new Set());
+  }, [clearTimers]);
+
+  const previousEditModeOnRef = useRef(editModeOn);
+  useEffect(() => {
+    const previous = previousEditModeOnRef.current;
+    previousEditModeOnRef.current = editModeOn;
+    if (previous && !editModeOn) clearEditState();
+  }, [clearEditState, editModeOn]);
 
   const toggleEditMode = useCallback(() => {
     const turningOn = !editModeOnRef.current;
@@ -1013,24 +1333,9 @@ export function useCssCascadeEditor({
     void trackEvent(turningOn ? 'visual_edit_started' : 'visual_edit_stopped', {
       mode: 'css-code',
     });
-    if (!turningOn) {
-      clearTimers();
-      lastSignatureRef.current = null;
-    }
-    setEditModeOn((prev) => {
-      if (prev) {
-        setSelection(null);
-        setFocusedSource(null);
-        setRows([]);
-        setBodies({});
-        bodiesRef.current = {};
-        baselineInner.current = {};
-        setOverridden({});
-        setSavingKeys(new Set());
-      }
-      return !prev;
-    });
-  }, [clearTimers]);
+    if (controlledEditMode !== undefined) onEditModeChange?.(turningOn);
+    else setInternalEditModeOn(turningOn);
+  }, [controlledEditMode, onEditModeChange]);
 
   // `@keyframes` names defined in the project — suggested as `animation` values.
   const animationSuggestions = useMemo(

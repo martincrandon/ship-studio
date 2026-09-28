@@ -113,6 +113,13 @@ export interface ParsedComponentFile {
   snapshot: SourceFileSnapshot;
   sourceFile: ts.SourceFile;
   components: ParsedComponentDefinition[];
+  /**
+   * Same-file definitions that are useful for resolving JSX usages but are
+   * intentionally not published in the catalog (for example private helper
+   * components). Adapters may omit this when their dialect has no such
+   * distinction.
+   */
+  internalComponents?: ParsedComponentDefinition[];
   imports: RawImportEdge[];
   usages: RawJsxUsage[];
   exports: Map<string, string>;

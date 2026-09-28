@@ -22,6 +22,13 @@ interface Size {
   height: number;
 }
 
+export interface DockablePanelSurfaceRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 interface DockablePanelProps {
   children: ReactNode;
   docked: boolean;
@@ -43,6 +50,8 @@ interface DockablePanelProps {
   resizable?: boolean;
   /** Optional layer override for a docked, body-portaled surface. */
   dockedZIndex?: CSSProperties['zIndex'];
+  /** Reports the rendered surface bounds when the panel is visible. */
+  onSurfaceRectChange?: (rect: DockablePanelSurfaceRect | null) => void;
 }
 
 const VIEWPORT_GUTTER = 8;
@@ -119,6 +128,7 @@ export function DockablePanel({
   placeholderRef,
   resizable = true,
   dockedZIndex,
+  onSurfaceRectChange,
 }: DockablePanelProps) {
   const internalPlaceholderRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -469,6 +479,47 @@ export function DockablePanel({
   const surfaceStyle: CSSProperties = docked
     ? { ...dockStyle, zIndex: dockedZIndex ?? 'var(--z-dropdown)' }
     : floatingStyle;
+
+  useLayoutEffect(() => {
+    if (!onSurfaceRectChange) return;
+    const surface = surfaceRef.current;
+    if (!surface || !visible) {
+      onSurfaceRectChange(null);
+      return;
+    }
+
+    const report = () => {
+      const rect = surface.getBoundingClientRect();
+      onSurfaceRectChange({
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(surface);
+    window.addEventListener('resize', report);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', report);
+      onSurfaceRectChange(null);
+    };
+  }, [
+    dockStyle?.height,
+    dockStyle?.left,
+    dockStyle?.top,
+    dockStyle?.width,
+    docked,
+    onSurfaceRectChange,
+    position.left,
+    position.top,
+    renderedFloatingSize.height,
+    renderedFloatingSize.width,
+    visible,
+  ]);
 
   return (
     <>

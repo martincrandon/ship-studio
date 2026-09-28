@@ -206,7 +206,7 @@ pub fn write_app_state(state: &AppState) -> Result<(), crate::errors::CommandErr
     let tmp_path = path.with_extension("json.tmp");
     std::fs::write(&tmp_path, &json)
         .map_err(|e| crate::utils::classify_fs_error("write the app state file", &tmp_path, &e))?;
-    std::fs::rename(&tmp_path, &path)
+    crate::utils::atomic_replace(&tmp_path, &path)
         .map_err(|e| crate::utils::classify_fs_error("persist the app state file", &path, &e))
 }
 

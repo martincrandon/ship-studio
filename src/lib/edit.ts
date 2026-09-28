@@ -179,7 +179,7 @@ export function applyTextEdit(
     column,
     oldText,
     newText,
-    ...(options ?? {}),
+    ...(options ? { sourceTarget: options } : {}),
   });
 }
 

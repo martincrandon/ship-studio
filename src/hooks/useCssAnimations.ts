@@ -25,6 +25,7 @@ import { isKeyframesSelector } from '../lib/cssStructures';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import type { SourceEditGuard } from '../lib/components/editable-surface';
 
 function toastText(err: unknown): string {
   return formatCommandError(asCommandError(err));
@@ -53,9 +54,10 @@ interface Params {
   projectPath: string;
   enabled: boolean;
   onToast: (message: string, type?: 'success' | 'error') => void;
+  sourceEditGuard?: SourceEditGuard;
 }
 
-export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
+export function useCssAnimations({ projectPath, enabled, onToast, sourceEditGuard }: Params) {
   const [animations, setAnimations] = useState<AnimationRow[]>([]);
   const [loading, setLoading] = useState(false);
   const baselineRef = useRef<Record<string, string>>({});
@@ -107,6 +109,11 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
     return () => Object.values(timers).forEach(clearTimeout);
   }, []);
 
+  const guardSourceEdit = useCallback(() => {
+    const result = sourceEditGuard?.(null);
+    if (result?.status === 'refused') throw new Error(result.reason);
+  }, [sourceEditGuard]);
+
   const saveAnimation = useCallback(
     async (selector: string) => {
       const body = bodiesRef.current[selector];
@@ -116,6 +123,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
       const newInner = serializeRuleBody(body);
       if (newInner === oldInner) return;
       try {
+        guardSourceEdit();
         await applyCssRuleText(projectPath, file, selector, null, oldInner, newInner);
         baselineRef.current[selector] = newInner;
         void trackEvent('visual_edit_saved', { kind: 'keyframes', mode: 'css-code' });
@@ -126,7 +134,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast]
+    [guardSourceEdit, projectPath, onToast]
   );
 
   /** Update one animation's body model → debounced auto-save. */
@@ -163,6 +171,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         return;
       }
       try {
+        guardSourceEdit();
         await createCssRule(projectPath, file, selector);
         const body: RuleBody = { items: [] };
         baselineRef.current[selector] = '\n';
@@ -177,7 +186,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, animations, onToast]
+    [animations, guardSourceEdit, projectPath, onToast]
   );
 
   /** Rename an animation (`@keyframes apply` → `@keyframes fade`). References on
@@ -196,6 +205,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         return;
       }
       try {
+        guardSourceEdit();
         await renameCssSelector(projectPath, file, oldSelector, null, oldInner, newSelector);
         // Re-key the per-animation refs onto the new selector.
         baselineRef.current[newSelector] = oldInner;
@@ -216,7 +226,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, animations, onToast]
+    [animations, guardSourceEdit, projectPath, onToast]
   );
 
   const remove = useCallback(
@@ -225,6 +235,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
       if (!file) return;
       clearTimeout(saveTimers.current[selector]);
       try {
+        guardSourceEdit();
         await deleteCssRule(projectPath, file, selector, null, baselineRef.current[selector] ?? '');
         setAnimations((prev) => prev.filter((a) => a.selector !== selector));
         delete bodiesRef.current[selector];
@@ -237,7 +248,7 @@ export function useCssAnimations({ projectPath, enabled, onToast }: Params) {
         onToast(toastText(err), 'error');
       }
     },
-    [projectPath, onToast]
+    [guardSourceEdit, projectPath, onToast]
   );
 
   return { animations, loading, setBody, create, rename, remove, reload };

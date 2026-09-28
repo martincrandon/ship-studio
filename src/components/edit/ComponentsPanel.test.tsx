@@ -161,6 +161,14 @@ describe('ComponentsPanel', () => {
     localStorage.clear();
   });
 
+  it('routes Review component to the typed workspace destination', () => {
+    const onOpenCanvas = vi.fn();
+    render(<ComponentsPanel {...panelProps()} onOpenCanvas={onOpenCanvas} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review component' }));
+    expect(onOpenCanvas).toHaveBeenCalledWith(button.id);
+  });
+
   it('tracks catalog interactions without source identifiers', () => {
     const props = panelProps();
     const view = render(<ComponentsPanel {...props} selectedComponentId={null} />);
@@ -209,6 +217,24 @@ describe('ComponentsPanel', () => {
 
     rerender(<ComponentsPanel {...props} selectedComponentId={null} />);
     expect(screen.queryByTestId('component-details')).not.toBeInTheDocument();
+  });
+
+  it('focuses the clicked component in the canvas workspace', () => {
+    const props = panelProps();
+    const onOpenCanvas = vi.fn();
+    render(
+      <ComponentsPanel
+        {...props}
+        componentsCanvasView
+        onOpenCanvas={onOpenCanvas}
+        selectedComponentId={button.id}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('Button · src/components/Button.tsx'));
+
+    expect(props.onSelect).toHaveBeenCalledWith(button.id);
+    expect(onOpenCanvas).toHaveBeenCalledWith(button.id);
   });
 
   it('renders grouped definitions, search, details, usages, and source actions', () => {
@@ -261,16 +287,11 @@ describe('ComponentsPanel', () => {
     expect(screen.queryByRole('button', { name: 'Open source' })).not.toBeInTheDocument();
     expect(screen.getAllByText('src/components')).toHaveLength(2);
     expect(screen.getByRole('heading', { name: 'Button' })).toBeInTheDocument();
-    expect(
-      screen
-        .getByTitle('Button · src/components/Button.tsx')
-        .querySelector('.ss-components-row__type')
-    ).toHaveClass('ss-components-row__type--react');
-    expect(
-      screen
-        .getByTitle('Hero Card · src/components/Hero.astro')
-        .querySelector('.ss-components-row__type')
-    ).toHaveClass('ss-components-row__type--astro');
+    expect(container.querySelectorAll('.ss-components-type-tag--react')).toHaveLength(1);
+    expect(container.querySelectorAll('.ss-components-type-tag--astro')).toHaveLength(1);
+    expect(container.querySelectorAll('.ss-components-row__type')).toHaveLength(0);
+    expect(container.querySelectorAll('.ss-components-group__kind')).toHaveLength(2);
+    expect(container.querySelector('.ss-components-group__kind')).toHaveTextContent('component');
     expect(screen.getByText('Partial index · 1 diagnostic')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Pin Components panel to the window' }));
     expect(onTogglePin).toHaveBeenCalledOnce();
@@ -309,6 +330,34 @@ describe('ComponentsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /src\/pages\/index\.tsx:12/ }));
     expect(props.onSelectUsage).toHaveBeenCalledWith(buttonUsage);
     expect(screen.getByRole('button', { name: 'Close Components panel' })).toBeInTheDocument();
+  });
+
+  it('renders one dialect tag above each dialect group of components', () => {
+    const secondReactComponent: ComponentDescriptor = {
+      ...button,
+      id: 'react:src/layout/Card.tsx:Card',
+      name: 'Card',
+      localName: 'Card',
+      exportName: 'Card',
+      definition: source('src/layout/Card.tsx', 2),
+      usageCount: 1,
+    };
+    const { container } = render(
+      <ComponentsPanel
+        {...panelProps()}
+        index={{ ...index, components: [button, secondReactComponent, hero] }}
+        selectedComponentId={null}
+      />
+    );
+
+    const typeSections = [...container.querySelectorAll('.ss-components-type-section')];
+    expect(typeSections).toHaveLength(2);
+    expect(typeSections[0]).toHaveClass('ss-components-type-section');
+    expect(typeSections[0].querySelector('.ss-components-type-tag--react')).toBeInTheDocument();
+    expect(typeSections[0]).toHaveTextContent('Button');
+    expect(typeSections[0]).toHaveTextContent('Card');
+    expect(typeSections[1].querySelector('.ss-components-type-tag--astro')).toBeInTheDocument();
+    expect(typeSections[1]).toHaveTextContent('Hero Card');
   });
 
   it('formats list names for presentation and moves read-only status into details', () => {

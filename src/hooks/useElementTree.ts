@@ -19,6 +19,15 @@ import { createReactAdapter } from '../lib/components/adapters/react';
 import { projectComponentTree } from '../lib/components/component-tree';
 import { normalizeRuntimeSourcePath } from '../lib/components/adapters/react-helpers';
 import { collectNextServerComponentBoundaries } from '../lib/components/adapters/next-server-provenance';
+import {
+  boundInspectionMessage,
+  createInspectionTransport,
+  type InspectionSurfaceTransport,
+  type InspectionSignature,
+  type InspectionWireNode,
+} from '../lib/components/inspection-transport';
+import type { EditableSurfaceTarget } from '../lib/components/editable-surface';
+import type { ElementSignature } from '../lib/edit';
 import type {
   ComponentBoundary,
   ComponentBoundaryHint,
@@ -116,19 +125,15 @@ export interface SelectionRect {
   height: number;
 }
 
-interface WireNode {
-  i: number;
-  t: string;
-  c: string;
-  x: string;
-  k: WireNode[];
-  /** Authored HTML id, when present. */
-  a?: string;
-  /** Bounded React owner-chain hints; the preview never treats these as authority. */
-  o?: WireOwnerHint[];
-  /** The current host fiber key, when React exposes one in development mode. */
-  r?: string | null;
+/** Selection parity payload shared by the Elements panel and component canvas. */
+export interface ElementTreeSelection {
+  id: number | null;
+  signature: ElementSignature | null;
+  rect: SelectionRect | null;
+  count: number;
 }
+
+type WireNode = InspectionWireNode;
 
 interface WireOwnerHint {
   renderer?: unknown;
@@ -141,7 +146,24 @@ interface WireOwnerHint {
 
 const RUNTIME_HINT_CAP = 8;
 const RUNTIME_STRING_CAP = 240;
+const MAX_CANCELLED_SELECTION_REQUESTS = 16;
 const reactRuntimeAdapter = createReactAdapter();
+
+function createSelectionRequestId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `selection-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
+function rememberCancelledSelectionRequest(requests: Set<string>, requestId: string): void {
+  requests.add(requestId);
+  while (requests.size > MAX_CANCELLED_SELECTION_REQUESTS) {
+    const oldest = requests.values().next().value;
+    if (typeof oldest !== 'string') return;
+    requests.delete(oldest);
+  }
+}
 
 function boundedString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value.slice(0, RUNTIME_STRING_CAP) : null;
@@ -168,8 +190,45 @@ function mapSelectionRect(value: unknown): SelectionRect | null {
   };
 }
 
+function mapInspectionSignature(
+  signature: InspectionSignature | undefined
+): ElementSignature | null {
+  if (!signature) return null;
+  return {
+    tagName: signature.tagName,
+    className: signature.className,
+    ancestorClasses: [...signature.ancestorClasses],
+    ...(signature.text ? { text: signature.text } : {}),
+    ...(signature.sourceFile ? { sourceFile: signature.sourceFile } : {}),
+    ...(signature.sourceLine !== undefined ? { sourceLine: signature.sourceLine } : {}),
+    ...(signature.sourceColumn !== undefined ? { sourceColumn: signature.sourceColumn } : {}),
+    ...(signature.domPath ? { domPath: signature.domPath } : {}),
+  };
+}
+
 function sameNodeIds(left: readonly number[], right: readonly number[]): boolean {
   return left.length === right.length && left.every((id) => right.includes(id));
+}
+
+/**
+ * Stable identity for an authenticated element selection. The renderer may
+ * acknowledge a tree `ss:reselect` with another `ss:select`; that acknowledgement
+ * must not look like a new user selection to the workspace owner. Include the
+ * bounded DOM/source identity rather than object identity so a new wire payload
+ * for the same element can be recognised across the two message handlers.
+ */
+function selectionIdentity(id: number | null, signature: ElementSignature | null): string {
+  return JSON.stringify([
+    id,
+    signature?.tagName ?? null,
+    signature?.className ?? null,
+    signature?.ancestorClasses ?? [],
+    signature?.text ?? null,
+    signature?.sourceFile ?? null,
+    signature?.sourceLine ?? null,
+    signature?.sourceColumn ?? null,
+    signature?.domPath ?? null,
+  ]);
 }
 
 function mapOwnerHint(hint: WireOwnerHint): RuntimeOwnerHint | null {
@@ -212,12 +271,18 @@ interface UseElementTreeParams {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   /** Fetch + track the tree only while the navigator is visible. */
   enabled: boolean;
+  /** Explicit negotiated frame surface; null means Components has no frame. */
+  surfaceTarget?: EditableSurfaceTarget | null;
+  /** Optional owner supplied by a workspace-level Elements panel. */
+  inspectionTransport?: InspectionSurfaceTransport | null;
   /** Current source index used to validate runtime owner hints. */
   componentIndex?: ComponentIndex | null;
   /** Absolute project path used to normalize development source URLs. */
   projectPath?: string;
   /** Revision-bound focus state; only exact boundaries can expand. */
   componentFocus?: ComponentFocusSession | null;
+  /** Notifies an owning component inspector of direct/tree descendant selection. */
+  onSelectionChange?: (selection: ElementTreeSelection | null) => void;
 }
 
 function sourceHashForFile(index: ComponentIndex, file: string): string | null {
@@ -238,8 +303,7 @@ function toRawTree(node: ElementTreeNode): RawComponentTreeNode {
     idAttr: node.idAttr,
     children: node.children
       .filter(
-        (child): child is ElementTreeNode =>
-          child.kind !== 'component' && child.kind !== 'slot'
+        (child): child is ElementTreeNode => child.kind !== 'component' && child.kind !== 'slot'
       )
       .map(toRawTree),
   };
@@ -392,17 +456,37 @@ function componentSelectionColor(): string {
 export function useElementTree({
   iframeRef,
   enabled,
+  surfaceTarget,
+  inspectionTransport = null,
   componentIndex = null,
   projectPath = '.',
   componentFocus = null,
+  onSelectionChange,
 }: UseElementTreeParams) {
+  const transport = useMemo(
+    () =>
+      inspectionTransport ??
+      createInspectionTransport({
+        iframeRef,
+        surfaceTarget,
+      }),
+    [iframeRef, inspectionTransport, surfaceTarget]
+  );
+  const surfaceActive = enabled && transport.active;
   const [tree, setTree] = useState<ElementTreeNode | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [affectedIds, setAffectedIds] = useState<number[]>([]);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   /** A request is out and the iframe hasn't answered with a snapshot yet. */
-  const [awaitingTree, setAwaitingTree] = useState(enabled);
+  const [awaitingTree, setAwaitingTree] = useState(surfaceActive);
+  // A tree/selection message is an authenticated proof that this negotiated
+  // surface is inspectable. Keep the proof keyed to the current transport so
+  // a response from a previous frame can never make a replacement frame look
+  // ready.
+  const [inspectionReadyRevisionKey, setInspectionReadyRevisionKey] = useState<string | null>(
+    null
+  );
   // Re-opening the navigator always refetches — the page has moved on since the
   // snapshot we're holding. Adjusted during render rather than in an effect so the
   // first request goes out in the same commit the panel becomes visible.
@@ -410,8 +494,16 @@ export function useElementTree({
   if (wasEnabled !== enabled) {
     setWasEnabled(enabled);
     if (enabled) {
+      setTree(null);
+      setTruncated(false);
+      setSelectedId(null);
+      setAffectedIds([]);
       setAwaitingTree(true);
       setHoveredId(null);
+      setInspectionReadyRevisionKey(null);
+    } else {
+      setAwaitingTree(false);
+      setInspectionReadyRevisionKey(null);
     }
   }
   const [selectionKind, setSelectionKind] = useState<'element' | 'component'>('element');
@@ -420,12 +512,48 @@ export function useElementTree({
   const [componentFocusCandidateId, setComponentFocusCandidateId] = useState<number | null>(null);
   const [hoverCandidateSeen, setHoverCandidateSeen] = useState(false);
   const [hoverCandidateNodeId, setHoverCandidateNodeId] = useState<number | null>(null);
+  const [boundSurfaceRevisionKey, setBoundSurfaceRevisionKey] = useState(transport.revisionKey);
+  // A tree-row click needs one selection callback even though it pre-seeds the
+  // selected node id before the renderer acknowledges it. After that first
+  // callback, an identical renderer acknowledgement (notably CSS `reselect`)
+  // is suppressed so it cannot feed a reselect loop through the workspace.
+  const pendingTreeSelectionRef = useRef<{ nodeId: number; requestId: string } | null>(null);
+  // A renderer acknowledgement may arrive after a newer canvas selection. Keep
+  // the superseded request ids long enough to discard those late acknowledgements
+  // without suppressing a genuine selection that happens to use the old node id.
+  const cancelledTreeSelectionRequestsRef = useRef(new Set<string>());
+  const lastPublishedSelectionRef = useRef<string | null>(null);
+  if (boundSurfaceRevisionKey !== transport.revisionKey) {
+    // Clear during the first render after a frame/session switch; an old tree
+    // must never flash while the replacement surface is negotiating.
+    setBoundSurfaceRevisionKey(transport.revisionKey);
+    setTree(null);
+    setTruncated(false);
+    setSelectedId(null);
+    setAffectedIds([]);
+    setHoveredId(null);
+    setSelectionKind('element');
+    setSelectedComponent(null);
+    setSelectionRect(null);
+    setComponentFocusCandidateId(null);
+    setHoverCandidateSeen(false);
+    setHoverCandidateNodeId(null);
+    setAwaitingTree(surfaceActive);
+    setInspectionReadyRevisionKey(null);
+  }
   const projectionRef = useRef<ReturnType<typeof projectComponentTree> | null>(null);
 
-  const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
-  );
+  useEffect(() => {
+    // A frame/session/revision switch is an inspection boundary even when the
+    // replacement target is already present. Clear the owner synchronously
+    // before the new surface can report its first selection.
+    pendingTreeSelectionRef.current = null;
+    cancelledTreeSelectionRequestsRef.current.clear();
+    lastPublishedSelectionRef.current = null;
+    onSelectionChange?.(null);
+  }, [onSelectionChange, transport.revisionKey]);
+
+  const post = useCallback((msg: unknown) => transport.post(msg), [transport]);
 
   /** Ask for a snapshot: the poll below owns the actual posting, so a request that
    *  goes unanswered is retried on one schedule instead of several. */
@@ -445,44 +573,30 @@ export function useElementTree({
     {
       intervalMs: 500,
       maxIntervalMs: 4000,
-      enabled: enabled && awaitingTree,
+      enabled: surfaceActive && awaitingTree,
       name: 'elementTree',
     }
   );
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!surfaceActive) return;
+
+    // A negotiated component surface is inspectable before it is writable.
+    // Activation owns only the selection/hover layer; editor hooks retain the
+    // separate capability and Edit-main write gate.
+    if (surfaceTarget) post({ type: 'ss:activate' });
 
     const onMessage = (e: MessageEvent) => {
       // SECURITY: only trust messages from the actual preview iframe (untrusted
       // project content runs inside it).
-      if (e.source !== iframeRef.current?.contentWindow) return;
-      const d = e.data as
-        | {
-            type?: string;
-            tree?: WireNode;
-            truncated?: boolean;
-            nodeId?: number | null;
-            affectedNodeIds?: number[];
-            selectionKind?: 'element' | 'component';
-            rect?: unknown;
-            focusCandidateNodeId?: unknown;
-            hoverCandidateNodeId?: unknown;
-            component?: {
-              key?: unknown;
-              componentId?: unknown;
-              instanceId?: unknown;
-              name?: unknown;
-              confidence?: unknown;
-              hostNodeIds?: unknown;
-            };
-          }
-        | undefined;
-      if (!d || typeof d.type !== 'string') return;
+      if (!transport.accepts(e)) return;
+      const d = boundInspectionMessage(e.data);
+      if (!d) return;
       if (d.type === 'ss:tree' && d.tree) {
         setAwaitingTree(false);
+        setInspectionReadyRevisionKey(transport.revisionKey);
         setTree(mapNode(d.tree));
-        setTruncated(!!d.truncated);
+        setTruncated(d.truncated);
       } else if (d.type === 'ss:treeDirty') {
         requestTree();
       } else if (d.type === 'ss:hover') {
@@ -492,22 +606,60 @@ export function useElementTree({
         setSelectionRect(rect);
         setSelectedComponent((current) => (current ? { ...current, rect } : current));
       } else if (d.type === 'ss:select') {
-        setSelectedId(typeof d.nodeId === 'number' ? d.nodeId : null);
+        // This is accepted only after the transport has authenticated the
+        // current origin/session/token/generation/frame/component envelope.
+        // A valid selection is therefore enough to recover inspection when a
+        // host-ready event was missed, while stale/hostile messages are still
+        // rejected by transport.accepts above.
+        const selectionRequestId = d.selectionRequestId;
+        const cancelledRequests = cancelledTreeSelectionRequestsRef.current;
+        // Generated component frames echo the request id on a tree-row ack.
+        // If a newer canvas/tree selection superseded that request, discard the
+        // late ack before it can alter the current selection or trigger a
+        // workspace-to-renderer handoff. The id is consumed exactly once.
+        if (selectionRequestId && cancelledRequests.has(selectionRequestId)) {
+          cancelledRequests.delete(selectionRequestId);
+          return;
+        }
+        setInspectionReadyRevisionKey(transport.revisionKey);
+        setSelectedId(d.nodeId);
         const rect = mapSelectionRect(d.rect);
         setSelectionRect(rect);
-        setAffectedIds(
-          Array.isArray(d.affectedNodeIds)
-            ? d.affectedNodeIds.filter(
-                (id): id is number => typeof id === 'number' && Number.isInteger(id) && id >= 0
-              )
-            : []
-        );
+        setAffectedIds(d.affectedNodeIds);
+        const signature = mapInspectionSignature(d.signature);
+        const selectionKey = selectionIdentity(d.nodeId, signature);
+        const pendingTreeSelection = pendingTreeSelectionRef.current;
+        const isExpectedTreeSelection =
+          !!pendingTreeSelection &&
+          selectionRequestId === pendingTreeSelection.requestId &&
+          d.nodeId === pendingTreeSelection.nodeId;
+        if (isExpectedTreeSelection) {
+          pendingTreeSelectionRef.current = null;
+        } else if (pendingTreeSelection) {
+          // A current-surface selection without this request's id is a genuine
+          // canvas/renderer event, so it wins. Any later ack for the abandoned
+          // tree request is ignored by the cancelled-request set above.
+          rememberCancelledSelectionRequest(cancelledRequests, pendingTreeSelection.requestId);
+          pendingTreeSelectionRef.current = null;
+        }
+        // A missing signature is still useful for the Elements panel's visual
+        // selection, but cannot participate in duplicate suppression because it
+        // carries no element identity for the style/editor handoff.
+        if (
+          !signature ||
+          isExpectedTreeSelection ||
+          lastPublishedSelectionRef.current !== selectionKey
+        ) {
+          if (signature) lastPublishedSelectionRef.current = selectionKey;
+          onSelectionChange?.({
+            id: d.nodeId,
+            signature,
+            rect,
+            count: d.count ?? 1,
+          });
+        }
         const component = d.component;
-        const hostNodeIds = Array.isArray(component?.hostNodeIds)
-          ? component.hostNodeIds.filter(
-              (id): id is number => typeof id === 'number' && Number.isInteger(id) && id >= 0
-            )
-          : [];
+        const hostNodeIds = component?.hostNodeIds ?? [];
         const boundary =
           d.selectionKind === 'component' && typeof component?.key === 'string'
             ? projectionRef.current?.boundaries.find(
@@ -566,17 +718,27 @@ export function useElementTree({
 
     return () => {
       post({ type: 'ss:treeOff' });
+      if (surfaceTarget) post({ type: 'ss:deactivate' });
       window.removeEventListener('message', onMessage);
       iframe?.removeEventListener('load', onLoad);
     };
-  }, [enabled, post, requestTree, iframeRef]);
+  }, [iframeRef, onSelectionChange, post, requestTree, surfaceActive, surfaceTarget, transport]);
 
   const selectNode = useCallback(
     (id: number) => {
+      const requestId = createSelectionRequestId();
+      const pending = pendingTreeSelectionRef.current;
+      if (pending) {
+        rememberCancelledSelectionRequest(
+          cancelledTreeSelectionRequestsRef.current,
+          pending.requestId
+        );
+      }
+      pendingTreeSelectionRef.current = { nodeId: id, requestId };
       setSelectionKind('element');
       setSelectedComponent(null);
       setSelectedId(id);
-      post({ type: 'ss:selectNode', id });
+      post({ type: 'ss:selectNode', id, selectionRequestId: requestId });
     },
     [post]
   );
@@ -712,6 +874,11 @@ export function useElementTree({
     });
   }, [enabled, post, projectedSelectedComponent]);
 
+  // Stale data is kept while disabled (cheap) but never exposed. A surface key
+  // mismatch is similarly hidden synchronously before the replacement snapshot.
+  const surfaceVisible = surfaceActive && boundSurfaceRevisionKey === transport.revisionKey;
+  const inspectionReady =
+    surfaceVisible && inspectionReadyRevisionKey === transport.revisionKey;
   const effectiveSelectedComponent = selectedComponent ?? projectedSelectedComponent;
   const componentFocusCandidate = useMemo(() => {
     if (componentFocusCandidateId == null || !projection) return null;
@@ -728,24 +895,33 @@ export function useElementTree({
     return boundary ? componentNodeFromBoundary(boundary) : null;
   }, [hoverCandidateNodeId, hoverCandidateSeen, projection]);
 
+  // Keep the projected tree's identity tied to the snapshot/projection. The
+  // workspace publishes this value through a parent-owned Elements-panel
+  // model; rebuilding it on every render makes that publication look like a
+  // new model and can feed a state-update loop during launch.
+  const projectedComponentTree = useMemo(
+    () => (surfaceVisible && projection?.tree ? projectedNode(projection.tree) : null),
+    [projection, surfaceVisible]
+  );
+
   useEffect(() => {
     if (!enabled || !hoverCandidateSeen) return;
     hoverComponent(hoveredComponent);
   }, [enabled, hoverCandidateSeen, hoveredComponent, hoverComponent]);
 
-  // Stale data is kept while disabled (cheap) but never exposed.
   return {
-    tree: enabled ? tree : null,
-    componentTree: enabled && projection?.tree ? projectedNode(projection.tree) : null,
-    componentTreeDiagnostics: enabled && projection ? projection.diagnostics : [],
-    componentBoundaries: enabled && projection ? projection.boundaries : [],
-    truncated,
-    selectedId: enabled ? selectedId : null,
-    affectedIds: enabled ? affectedIds : [],
-    hoveredId: enabled ? hoveredId : null,
-    selectionKind: enabled && effectiveSelectedComponent ? 'component' : 'element',
-    selectedComponent: enabled ? effectiveSelectedComponent : null,
-    componentFocusCandidate: enabled ? componentFocusCandidate : null,
+    tree: surfaceVisible ? tree : null,
+    componentTree: projectedComponentTree,
+    componentTreeDiagnostics: surfaceVisible && projection ? projection.diagnostics : [],
+    componentBoundaries: surfaceVisible && projection ? projection.boundaries : [],
+    truncated: surfaceVisible ? truncated : false,
+    selectedId: surfaceVisible ? selectedId : null,
+    affectedIds: surfaceVisible ? affectedIds : [],
+    hoveredId: surfaceVisible ? hoveredId : null,
+    inspectionReady,
+    selectionKind: surfaceVisible && effectiveSelectedComponent ? 'component' : 'element',
+    selectedComponent: surfaceVisible ? effectiveSelectedComponent : null,
+    componentFocusCandidate: surfaceVisible ? componentFocusCandidate : null,
     selectNode,
     hoverNode,
     selectComponent,

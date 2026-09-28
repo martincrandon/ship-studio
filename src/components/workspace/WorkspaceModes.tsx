@@ -1,4 +1,4 @@
-import { CodeIcon, EyeIcon, EyeOffIcon } from '@/components/icons';
+import { CodeIcon, ComponentsIcon, EyeIcon, EyeOffIcon } from '@/components/icons';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { workspaceModeValue, type WorkspaceTab } from './workspaceViewState';
 
@@ -68,6 +68,15 @@ export function WorkspaceModes({
           aria-label="Focus"
         >
           <span className="workspace-mode-label">Focus</span>
+        </TabsTab>
+        <TabsTab
+          value="components"
+          className="workspace-tab"
+          leftIcon={<ComponentsIcon size={14} />}
+          title="Components workspace"
+          aria-label="Components"
+        >
+          <span className="workspace-mode-label">Components</span>
         </TabsTab>
         <TabsTab
           value="code"

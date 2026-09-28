@@ -41,4 +41,11 @@ describe('WorkspaceModes', () => {
     fireEvent.click(screen.getByRole('tab', { name: /code/i }));
     expect(props.onSelectPreview).not.toHaveBeenCalled();
   });
+
+  it('makes the Components workspace a durable navigation destination', () => {
+    const props = renderModes();
+    fireEvent.click(screen.getByRole('tab', { name: /components/i }));
+    expect(props.setWorkspaceTab).toHaveBeenCalledWith('components');
+    expect(props.setIsPreviewHidden).toHaveBeenCalledWith(false);
+  });
 });

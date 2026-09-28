@@ -7,6 +7,7 @@ import {
   PushIcon,
   WarningIcon,
 } from '@/components/icons';
+import type { WorkspaceTab } from '../components/workspace/workspaceViewState';
 
 /**
  * Workspace-scoped palette commands (Branches, PR flows).
@@ -22,7 +23,7 @@ export interface UseWorkspaceCommandsParams {
   currentBranch: string | null;
   hasUncommittedChanges: boolean;
   hasConflicts: boolean;
-  setWorkspaceTab: (tab: 'preview' | 'code' | 'branches' | 'prs') => void;
+  setWorkspaceTab: (tab: WorkspaceTab) => void;
   setShowSubmitReview: (branch: string | null) => void;
   handleResolveConflicts: () => void | Promise<void>;
   /** Opens the header Push dropdown */

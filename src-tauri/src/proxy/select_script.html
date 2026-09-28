@@ -47,7 +47,7 @@ var pvRuleLoc={},cascadeMode=false;
    restore from txtOrigHtml on cancel. txtPending holds a committed React clone kept
    visible (showing the NEW text) until HMR updates the real element, then swapped —
    so there's no original→new flash. */
-var txtEditing=false,txtEl=null,txtRealEl=null,txtOrig='',txtOrigHtml='',txtPrevCss='',txtCloned=false,txtEditable=true,txtPending=null,txtRevertEl=null,txtRevertHtml='';
+var txtEditing=false,txtEl=null,txtRealEl=null,txtOrig='',txtOrigHtml='',txtPrevVisibility='',txtCloned=false,txtEditable=true,txtPending=null,txtRevertEl=null,txtRevertHtml='';
 
 /* Cap on the text we report for content-search resolution — generous enough for real
    headings/paragraphs; longer text falls back to class-anchored resolution. */
@@ -505,7 +505,7 @@ function finalizePending(){
   try{if(p.observer)p.observer.disconnect();}catch(e){}
   if(p.timer)clearTimeout(p.timer);
   if(p.clone&&p.clone.parentNode)p.clone.parentNode.removeChild(p.clone);
-  if(p.real)p.real.style.cssText=p.prevCss;
+  if(p.real)p.real.style.visibility=p.prevVisibility;
   placeSet(); // re-snap the selection box to the now-restored real element
 }
 
@@ -531,7 +531,7 @@ function startText(el,x,y){
     if(cs.transform&&cs.transform!=='none')clone.style.transform=cs.transform;
     ensureNoAnimStyle();
     document.body.appendChild(clone);
-    txtPrevCss=el.style.cssText;el.style.visibility='hidden';
+    txtPrevVisibility=el.style.visibility;el.style.visibility='hidden';
     txtOrigHtml='';target=clone;
   }else{
 
@@ -560,7 +560,7 @@ function startText(el,x,y){
    doesn't re-enter. */
 function endText(commit){
   if(!txtEditing||!txtEl)return;
-  var target=txtEl,real=txtRealEl,orig=txtOrig,cloned=txtCloned,prevCss=txtPrevCss,origHtml=txtOrigHtml;
+  var target=txtEl,real=txtRealEl,orig=txtOrig,cloned=txtCloned,prevVisibility=txtPrevVisibility,origHtml=txtOrigHtml;
   txtEditing=false;txtEl=null;txtRealEl=null;
   hideFmtBar();
   var nv=serializeInner(target).trim();
@@ -571,7 +571,7 @@ function endText(commit){
     if(!changed){
       // nothing to save — drop clone, show original (same content, no flash)
       if(target.parentNode)target.parentNode.removeChild(target);
-      if(real)real.style.cssText=prevCss;
+      if(real)real.style.visibility=prevVisibility;
       window.parent.postMessage({type:'ss:textCancel'},'*');
     }else{
 
@@ -579,7 +579,7 @@ function endText(commit){
          the original, then swap on the next frame (so React's update has painted) —
          no original→new flash. Fall back on a timer. */
       target.style.pointerEvents='none';
-      var p={clone:target,real:real,prevCss:prevCss,nv:nv,observer:null,timer:null};
+      var p={clone:target,real:real,prevVisibility:prevVisibility,nv:nv,observer:null,timer:null};
       txtPending=p;
 
       /* Swap only once the real element ACTUALLY shows the new text (HMR applied our

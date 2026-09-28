@@ -4,6 +4,7 @@ import { createComponentCanvasFrame } from './canvas';
 import {
   buildComponentQAAgentPayload,
   compareComponentQABaseline,
+  componentSnapshotKey,
   COMPONENT_QA_MAX_MATRIX_CASES,
   createComponentQABaseline,
   planComponentQAMatrix,
@@ -106,6 +107,45 @@ describe('component QA model', () => {
         currentComparedBaselineFingerprint: 'pixels-1',
       }).state
     ).toBe('changed');
+  });
+
+  it('refuses a baseline when renderer or presentation inputs changed', () => {
+    const frame = createComponentCanvasFrame(component, 'revision-1');
+    const snapshotKey = componentSnapshotKey({
+      componentRevision: 'revision-1',
+      presetFingerprint: 'frame',
+      width: frame.width,
+      height: frame.height,
+      background: frame.background,
+      locale: frame.locale,
+      rendererVersion: 'next-1',
+    });
+    const baseline = createComponentQABaseline(
+      frame,
+      '/tmp/card.png',
+      'revision-1',
+      'frame',
+      undefined,
+      0.1,
+      'pixels-1',
+      'next-1'
+    );
+    expect(baseline.snapshotKey).toBe(snapshotKey);
+    expect(
+      compareComponentQABaseline(baseline, {
+        frameIdentity: 'frame',
+        sourceRevision: 'revision-1',
+        snapshotKey: componentSnapshotKey({
+          componentRevision: 'revision-1',
+          presetFingerprint: 'frame',
+          width: frame.width,
+          height: frame.height,
+          background: 'black',
+          locale: frame.locale,
+          rendererVersion: 'next-1',
+        }),
+      }).state
+    ).toBe('stale');
   });
 
   it('ignores an unbound pixel difference and falls back to the exact fingerprint', () => {

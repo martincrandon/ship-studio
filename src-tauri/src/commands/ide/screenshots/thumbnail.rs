@@ -620,25 +620,11 @@ pub async fn upload_project_thumbnail(
     })?;
 
     // Mark the metadata so capture_project_thumbnail no-ops next time.
-    // Reads-then-writes the whole file rather than calling the
-    // sibling tauri command directly so we stay synchronous on disk.
-    let metadata_path = shipstudio_dir.join("project.json");
-    let mut metadata: ProjectMetadata = if metadata_path.exists() {
-        let contents = std::fs::read_to_string(&metadata_path).map_err(|e| {
-            crate::utils::classify_fs_error("read project metadata", &metadata_path, &e)
-        })?;
-        let mut existing: ProjectMetadata = serde_json::from_str(&contents)
-            .map_err(|e| format!("Failed to parse project metadata: {e}"))?;
-        existing.migrate();
-        existing
-    } else {
-        ProjectMetadata::default()
-    };
-    metadata.custom_thumbnail = Some(true);
-    metadata.schema_version = PROJECT_METADATA_SCHEMA_VERSION;
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    crate::commands::projects::save_project_metadata(&project, &metadata)?;
+    crate::commands::projects::update_project_metadata(&project, |metadata| {
+        metadata.custom_thumbnail = Some(true);
+        metadata.schema_version = PROJECT_METADATA_SCHEMA_VERSION;
+        Ok(())
+    })?;
 
     let bytes = std::fs::read(&thumbnail_path).map_err(|e| {
         crate::utils::classify_fs_error("read this project's thumbnail", &thumbnail_path, &e)

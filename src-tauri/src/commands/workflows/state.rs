@@ -188,7 +188,7 @@ pub fn save_state(state: &WorkflowsState) -> Result<(), CommandError> {
     let temp_path = path.with_file_name(format!(".{file_name}.tmp"));
     std::fs::write(&temp_path, contents)
         .map_err(|e| crate::utils::classify_fs_error("save workflows state", &temp_path, &e))?;
-    std::fs::rename(&temp_path, &path).map_err(|e| {
+    crate::utils::atomic_replace(&temp_path, &path).map_err(|e| {
         let _ = std::fs::remove_file(&temp_path);
         crate::utils::classify_fs_error("save workflows state", &path, &e)
     })

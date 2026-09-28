@@ -200,7 +200,9 @@ function accessibilityResultIsSafe(
         isNonEmptyString(finding.message) &&
         finding.message.length <= 4096 &&
         (finding.helpUrl === undefined ||
-          (typeof finding.helpUrl === 'string' && finding.helpUrl.length <= 2048))
+          (typeof finding.helpUrl === 'string' && finding.helpUrl.length <= 2048)) &&
+        (finding.elementRef === undefined ||
+          (typeof finding.elementRef === 'string' && finding.elementRef.length <= 512))
     )
   );
 }

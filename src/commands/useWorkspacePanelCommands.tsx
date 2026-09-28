@@ -93,7 +93,7 @@ export function useWorkspacePanelCommands({
         run: toggleComponentsPanelPinned,
       },
       {
-        id: 'components.open',
+        id: 'components.togglePanel',
         title: componentsPanelOpen ? 'Hide Components panel' : 'Show Components panel',
         icon: <ComponentsIcon size={14} />,
         category: 'action',

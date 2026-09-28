@@ -25,9 +25,6 @@ import type {
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
-import type { ComponentCanvasFrame as CanvasFrame } from '../../lib/components/canvas';
-import type { ComponentA11yResult } from '../../lib/components/qa';
-import type { ComponentIsolatedRendererCapability } from '../../lib/components/isolated-renderer';
 import {
   compareComponentLibrary,
   type ComponentIndexWithLibraries,
@@ -44,7 +41,6 @@ import { SearchField } from '../primitives/SearchField';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tooltip } from '../primitives/Tooltip';
 import { ComponentDetails } from './ComponentDetails';
-import { ComponentCanvas } from './ComponentCanvas';
 import {
   ComponentInstanceControls,
   type ComponentInstanceControlsProps,
@@ -60,6 +56,7 @@ import {
   type ComponentPresentationMetadata,
   type ComponentPropertyPresentationStore,
 } from '../../lib/components/property-metadata';
+import { presentedComponentName } from '../../lib/components/component-name';
 
 export interface ComponentsPanelProps {
   index: ComponentIndexWithLibraries | null;
@@ -69,6 +66,8 @@ export interface ComponentsPanelProps {
   error?: string | null;
   selectedComponentId: ComponentId | null;
   onSelect: (componentId: ComponentId | null) => void;
+  /** When true, clicking a catalog row navigates to that component's canvas focus view. */
+  componentsCanvasView?: boolean;
   onPlace: (
     componentId: ComponentId,
     props?: Record<string, StaticValue>,
@@ -76,13 +75,8 @@ export interface ComponentsPanelProps {
   ) => void;
   placementAvailable?: boolean;
   onOpenSource: (source: SourceRef) => void;
-  /** Opens the source-backed, explicit Component Canvas. */
-  onOpenCanvas?: () => void;
-  /** Optional host integrations; absent means the corresponding QA action is disabled. */
-  onCaptureCanvasFrame?: (frame: CanvasFrame) => Promise<string | null>;
-  onRunCanvasAccessibility?: (frame: CanvasFrame) => Promise<ComponentA11yResult | null>;
-  isolatedRenderer?: ComponentIsolatedRendererCapability | null;
-  onSendCanvasToAgent?: (prompt: string) => void;
+  /** Navigates to the first-class Components workspace. */
+  onOpenCanvas?: (componentId: ComponentId) => void;
   onDuplicate?: (input: Omit<DuplicateComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onRename?: (input: Omit<RenameComponentInput, 'kind' | 'snapshot'>) => void | Promise<void>;
   onDelete?: (input: { componentId: ComponentId; removeAllUsages: true }) => void | Promise<void>;
@@ -116,6 +110,12 @@ interface ComponentGroup {
   kind: ComponentDescriptor['kind'];
   dialect: ComponentDescriptor['dialect'];
   components: ComponentDescriptor[];
+}
+
+interface ComponentTypeSection {
+  key: string;
+  dialect: ComponentDescriptor['dialect'];
+  groups: ComponentGroup[];
 }
 
 interface CatalogSection {
@@ -161,17 +161,6 @@ function dialectLabel(dialect: ComponentDescriptor['dialect']) {
   return dialect.charAt(0).toUpperCase() + dialect.slice(1);
 }
 
-function presentedComponentName(name: string) {
-  return name
-    .trim()
-    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
-}
-
 function diagnosticText(diagnostic: unknown) {
   if (typeof diagnostic === 'string') return diagnostic;
   if (!diagnostic || typeof diagnostic !== 'object') return 'Index diagnostics are available.';
@@ -212,6 +201,30 @@ function groupComponents(components: ComponentDescriptor[]) {
   return [...groups.values()].sort((a, b) =>
     `${a.dialect}/${a.folder}/${a.kind}`.localeCompare(`${b.dialect}/${b.folder}/${b.kind}`)
   );
+}
+
+function groupComponentsByDialect(
+  components: ComponentDescriptor[],
+  preferredDialect?: ComponentDescriptor['dialect'] | null
+): ComponentTypeSection[] {
+  const sections = new Map<ComponentDescriptor['dialect'], ComponentTypeSection>();
+  for (const group of groupComponents(components)) {
+    const section = sections.get(group.dialect);
+    if (section) section.groups.push(group);
+    else {
+      sections.set(group.dialect, {
+        key: group.dialect,
+        dialect: group.dialect,
+        groups: [group],
+      });
+    }
+  }
+
+  return [...sections.values()].sort((a, b) => {
+    if (preferredDialect === a.dialect) return -1;
+    if (preferredDialect === b.dialect) return 1;
+    return dialectLabel(a.dialect).localeCompare(dialectLabel(b.dialect));
+  });
 }
 
 function libraryMetaLabel(library: ComponentLibraryMetadata) {
@@ -342,10 +355,12 @@ function ComponentRow({
   component,
   selected,
   onSelect,
+  navigateToCanvas,
 }: {
   component: ComponentDescriptor;
   selected: boolean;
   onSelect: (componentId: ComponentId | null) => void;
+  navigateToCanvas: boolean;
 }) {
   const presentedName = presentedComponentName(component.name);
 
@@ -353,7 +368,7 @@ function ComponentRow({
     <button
       type="button"
       className={`ss-components-row${selected ? ' is-selected' : ''}`}
-      onClick={() => onSelect(selected ? null : component.id)}
+      onClick={() => onSelect(navigateToCanvas || !selected ? component.id : null)}
       aria-pressed={selected}
       title={`${presentedName} · ${component.definition.file}`}
     >
@@ -365,9 +380,6 @@ function ComponentRow({
       </span>
       <span className="ss-components-row__status">
         <StatusBadge component={component} />
-        <span className={`ss-components-row__type ss-components-row__type--${component.dialect}`}>
-          {dialectLabel(component.dialect)}
-        </span>
         <span className="ss-components-row__count tabular-nums">{component.usageCount}</span>
       </span>
     </button>
@@ -380,12 +392,14 @@ function Group({
   selectedComponentId,
   onToggle,
   onSelect,
+  navigateToCanvas,
 }: {
   group: ComponentGroup;
   collapsed: boolean;
   selectedComponentId: ComponentId | null;
   onToggle: () => void;
   onSelect: (componentId: ComponentId | null) => void;
+  navigateToCanvas: boolean;
 }) {
   return (
     <section className="ss-components-group" aria-labelledby={`components-group-${group.key}`}>
@@ -403,9 +417,7 @@ function Group({
         />
         <FolderOpenIcon size={14} aria-hidden="true" />
         <span className="ss-components-group__name">{group.folder}</span>
-        <span className="ss-components-group__kind">
-          {dialectLabel(group.dialect)} · {kindLabel(group.kind)}
-        </span>
+        <span className="ss-components-group__kind">{kindLabel(group.kind)}</span>
         <span className="ss-components-group__count tabular-nums">{group.components.length}</span>
       </button>
       {!collapsed && (
@@ -416,6 +428,7 @@ function Group({
               component={component}
               selected={component.id === selectedComponentId}
               onSelect={onSelect}
+              navigateToCanvas={navigateToCanvas}
             />
           ))}
         </div>
@@ -621,14 +634,11 @@ export function ComponentsPanel({
   error = null,
   selectedComponentId,
   onSelect,
+  componentsCanvasView = false,
   onPlace,
   placementAvailable = true,
   onOpenSource,
   onOpenCanvas,
-  onCaptureCanvasFrame,
-  onRunCanvasAccessibility,
-  isolatedRenderer,
-  onSendCanvasToAgent,
   onDuplicate,
   onRename,
   onDelete,
@@ -652,7 +662,6 @@ export function ComponentsPanel({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [catalogWidth, setCatalogWidth] = useState(readCatalogWidth);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
-  const [canvasOpen, setCanvasOpen] = useState(false);
   const [libraryForkOpen, setLibraryForkOpen] = useState(false);
   const [libraryBaselineVersion, setLibraryBaselineVersion] = useState(0);
   const [deferredLibraryIds, setDeferredLibraryIds] = useState<Set<string>>(new Set());
@@ -670,6 +679,7 @@ export function ComponentsPanel({
     );
   useEffect(() => {
     // Project switches must never leak presentation metadata across projects.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPropertyPresentationStore(
       readComponentPropertyPresentationStore(
         typeof localStorage === 'undefined' ? null : localStorage,
@@ -710,23 +720,20 @@ export function ComponentsPanel({
         ),
       }
     : null;
-  const savePropertyPresentation = useCallback(
-    (metadata: ComponentPresentationMetadata) => {
-      if (!selectedSource) return;
-      const next = upsertComponentPropertyPresentation(
-        propertyPresentationStore,
-        selectedSource,
-        metadata
-      );
-      writeComponentPropertyPresentationStore(
-        typeof localStorage === 'undefined' ? null : localStorage,
-        projectPath ?? '',
-        next
-      );
-      setPropertyPresentationStore(next);
-    },
-    [projectPath, propertyPresentationStore, selectedSource]
-  );
+  const savePropertyPresentation = (metadata: ComponentPresentationMetadata) => {
+    if (!selectedSource) return;
+    const next = upsertComponentPropertyPresentation(
+      propertyPresentationStore,
+      selectedSource,
+      metadata
+    );
+    writeComponentPropertyPresentationStore(
+      typeof localStorage === 'undefined' ? null : localStorage,
+      projectPath ?? '',
+      next
+    );
+    setPropertyPresentationStore(next);
+  };
   const selectedLibrary = selected
     ? (libraries.find(
         (library) => library.ownership === 'library' && library.componentIds.includes(selected.id)
@@ -771,10 +778,10 @@ export function ComponentsPanel({
       ? ((index?.instances ?? []).find((instance) => instance.id === selectedBinding.instanceId) ??
         null)
       : null;
-  const openCanvas = useCallback(() => {
-    setCanvasOpen(true);
-    onOpenCanvas?.();
-  }, [onOpenCanvas]);
+  const openCanvas = useCallback(
+    (componentId: ComponentId) => onOpenCanvas?.(componentId),
+    [onOpenCanvas]
+  );
   const partialDiagnostics = index?.diagnostics ?? [];
   const indexIsPartial = index?.partial ?? false;
   const editMainForSelected = selected && !selectedLibraryReadOnly ? editMain : undefined;
@@ -830,6 +837,7 @@ export function ComponentsPanel({
   const handleSelectComponent = useCallback(
     (componentId: ComponentId | null) => {
       onSelect(componentId);
+      if (componentId && componentsCanvasView) openCanvas(componentId);
       if (!componentId || !index) return;
       const component = index.components.find((item) => item.id === componentId);
       if (!component) return;
@@ -845,7 +853,7 @@ export function ComponentsPanel({
         has_place: component.capabilities.place,
       });
     },
-    [index, onSelect]
+    [componentsCanvasView, index, onSelect, openCanvas]
   );
 
   const handleSelectUsage = useCallback(
@@ -1050,7 +1058,10 @@ export function ComponentsPanel({
                   />
                 ) : (
                   sections.map((section) => {
-                    const groups = groupComponents(section.components);
+                    const typeSections = groupComponentsByDialect(
+                      section.components,
+                      section.key === 'project' ? index.profile.primaryDialect : undefined
+                    );
                     return (
                       <section key={section.key} className="ss-components-catalog-section">
                         <header className="ss-components-catalog-section__header">
@@ -1070,26 +1081,41 @@ export function ComponentsPanel({
                             Update available · review above
                           </span>
                         )}
-                        {groups.map((group) => {
-                          const groupKey = `${section.key}:${group.key}`;
-                          return (
-                            <Group
-                              key={groupKey}
-                              group={{ ...group, key: groupKey }}
-                              collapsed={collapsedGroups.has(groupKey)}
-                              selectedComponentId={selectedComponentId}
-                              onToggle={() =>
-                                setCollapsedGroups((current) => {
-                                  const next = new Set(current);
-                                  if (next.has(groupKey)) next.delete(groupKey);
-                                  else next.add(groupKey);
-                                  return next;
-                                })
-                              }
-                              onSelect={handleSelectComponent}
-                            />
-                          );
-                        })}
+                        {typeSections.map((typeSection) => (
+                          <section
+                            key={`${section.key}:${typeSection.key}`}
+                            className="ss-components-catalog-section ss-components-type-section"
+                            aria-labelledby={`components-type-${section.key}-${typeSection.key}`}
+                          >
+                            <span
+                              id={`components-type-${section.key}-${typeSection.key}`}
+                              className={`ss-components-type-tag ss-components-type-tag--${typeSection.dialect}`}
+                            >
+                              {dialectLabel(typeSection.dialect)}
+                            </span>
+                            {typeSection.groups.map((group) => {
+                              const groupKey = `${section.key}:${group.key}`;
+                              return (
+                                <Group
+                                  key={groupKey}
+                                  group={{ ...group, key: groupKey }}
+                                  collapsed={collapsedGroups.has(groupKey)}
+                                  selectedComponentId={selectedComponentId}
+                                  onToggle={() =>
+                                    setCollapsedGroups((current) => {
+                                      const next = new Set(current);
+                                      if (next.has(groupKey)) next.delete(groupKey);
+                                      else next.add(groupKey);
+                                      return next;
+                                    })
+                                  }
+                                  onSelect={handleSelectComponent}
+                                  navigateToCanvas={componentsCanvasView}
+                                />
+                              );
+                            })}
+                          </section>
+                        ))}
                       </section>
                     );
                   })
@@ -1144,7 +1170,7 @@ export function ComponentsPanel({
                     onRename={selectedLibraryReadOnly ? undefined : onRename}
                     onDelete={selectedLibraryReadOnly ? undefined : onDelete}
                     onSelectUsage={handleSelectUsage}
-                    onOpenCanvas={openCanvas}
+                    onOpenCanvas={() => openCanvas(selected.id)}
                   />
                   {selectedBinding?.confidence === 'exact' && (
                     <ComponentInstanceControls
@@ -1195,22 +1221,6 @@ export function ComponentsPanel({
           </div>
         )}
       </div>
-      {selected && index && (
-        <ComponentCanvas
-          component={selected}
-          index={index}
-          isOpen={canvasOpen}
-          onClose={() => setCanvasOpen(false)}
-          initialInstance={selectedInstance}
-          usages={usages}
-          onOpenSource={onOpenSource}
-          onSelectUsage={onSelectUsage}
-          onCaptureFrame={onCaptureCanvasFrame}
-          onRunAccessibility={onRunCanvasAccessibility}
-          isolatedRenderer={isolatedRenderer}
-          onSendToAgent={onSendCanvasToAgent}
-        />
-      )}
       {selected && selectedLibrary && onForkLibrary && (
         <ComponentLibraryForkModal
           component={selected}

@@ -118,13 +118,15 @@ export function pasteElement(
   projectPath: string,
   signature: ElementSignature,
   html: string,
-  sourceClassName: string
+  sourceClassName: string,
+  sourceTarget?: ExactSourceTarget
 ): Promise<InsertedElement> {
   return invoke<InsertedElement>('paste_element', {
     projectPath,
     signature,
     html,
     sourceClassName,
+    sourceTarget,
   });
 }
 

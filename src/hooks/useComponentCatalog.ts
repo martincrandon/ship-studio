@@ -930,6 +930,7 @@ export function useComponentCatalog({
 
   const forkLibraryComponent = useCallback(
     async (input: Omit<LibraryForkInput, 'newName'>): Promise<ComponentMutationOutcome> => {
+      await Promise.resolve();
       const currentIndex = indexRef.current;
       const snapshot = snapshotRef.current;
       if (!currentIndex || !snapshot) {

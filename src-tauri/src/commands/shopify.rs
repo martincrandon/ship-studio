@@ -125,23 +125,10 @@ pub async fn set_shopify_store(
     }
 
     let project = validate_project_path(&project_path)?;
-    let shipstudio_dir = project.join(".shipstudio");
-    let metadata_path = shipstudio_dir.join("project.json");
-
-    let mut metadata = if metadata_path.exists() {
-        std::fs::read_to_string(&metadata_path)
-            .ok()
-            .and_then(|contents| serde_json::from_str::<ProjectMetadata>(&contents).ok())
-            .unwrap_or_default()
-    } else {
-        ProjectMetadata::default()
-    };
-
-    metadata.shopify_store = store;
-
-    // classify_fs_error routing: TCC/access-denied/read-only failures
-    // classify Expected instead of paging telemetry (issue #625).
-    crate::commands::projects::save_project_metadata(&project, &metadata)
+    crate::commands::projects::update_project_metadata(&project, |metadata| {
+        metadata.shopify_store = store;
+        Ok(())
+    })
 }
 
 #[cfg(test)]

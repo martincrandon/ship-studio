@@ -144,6 +144,122 @@
   padding: var(--spacing-xs);
 }
 
+/* Optional focus and truncation messages can become implicit grid items and
+   create extra columns; keep the Components list and element tree in one flow. */
+.ss-tree-panel .ss-tree-panel__body--with-top-content {
+  display: flex;
+  flex-direction: column;
+  --ss-tree-panel-top-content-size: 35%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.ss-tree-panel__top-content {
+  display: flex;
+  flex: 0 1 var(--ss-tree-panel-top-content-size);
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--size-control-standard);
+  overflow: hidden;
+  border-bottom: none;
+}
+
+/* Components Canvas starts content-sized. Once the user drags the divider,
+   the resized modifier switches the section back to the explicit percentage
+   basis below so the user's choice is preserved. */
+.ss-tree-panel__body--top-content-auto > .ss-tree-panel__top-content {
+  flex: 0 0 auto;
+}
+
+.ss-tree-panel__body--top-content-auto .ss-tree-panel__top-content-body {
+  flex: 0 0 auto;
+}
+
+.ss-tree-panel__body--top-content-auto .ss-tree-panel__top-content-body > * {
+  flex: 0 0 auto;
+  height: auto;
+}
+
+.ss-tree-panel__body--top-content-auto .canvas-layers-panel__tree {
+  flex: 0 0 auto;
+  max-height: calc((var(--size-control-standard) * 8) + (var(--spacing-xs) * 2));
+}
+
+.ss-tree-panel__body--top-content-auto .canvas-layers-panel__rows {
+  flex: 0 0 auto;
+}
+
+.ss-tree-panel__body--top-content-resized > .ss-tree-panel__top-content {
+  flex: 0 1 var(--ss-tree-panel-top-content-size);
+}
+
+.ss-tree-panel__body--top-content-resized .ss-tree-panel__top-content-body {
+  flex: 1 1 auto;
+}
+
+.ss-tree-panel__body--top-content-resized .ss-tree-panel__top-content-body > * {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.ss-tree-panel__body--top-content-resized .canvas-layers-panel__tree {
+  max-height: none;
+}
+
+.ss-tree-panel__top-content-body {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ss-tree-panel__top-content-body > * {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ss-tree-panel__top-content-resize {
+  flex: 0 0 auto;
+  width: calc(100% - (var(--spacing-md) * 2));
+  height: var(--border-width-default);
+  margin-inline: auto;
+  background: var(--border-subtle);
+}
+
+.ss-tree-panel__top-content-resize:hover,
+.ss-tree-panel__top-content-resize:active,
+.ss-tree-panel__top-content-resize:focus-visible {
+  background: var(--accent-component);
+}
+
+.ss-tree-panel__body--with-top-content > .ss-tree-node,
+.ss-tree-panel__body--with-top-content > .ss-tree-panel__empty {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.ss-tree-panel__body--with-top-content > .ss-tree-node {
+  padding: var(--spacing-xs);
+}
+
+.ss-tree-panel__body--with-top-content > .ss-tree-panel__note {
+  flex: 0 0 auto;
+}
+
+.ss-tree-panel__body--with-top-content > .ss-tree-panel__empty {
+  padding: var(--spacing-md);
+}
+
 .ss-tree-node {
   display: flex;
   flex-direction: column;

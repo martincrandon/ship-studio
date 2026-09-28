@@ -8,9 +8,14 @@ import {
   FolderOpenIcon,
   ImageUploadIcon,
   NestRuleIcon,
+  PlayIcon,
+  RulerIcon,
   SearchIcon,
+  StopIcon,
   TemplateIcon,
   VariablesIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from './index';
 import { getGalleryIcons } from './IconGallery';
 
@@ -57,6 +62,37 @@ describe('shared icons', () => {
       'data-icon-source',
       'icons/template.svg'
     );
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+  });
+
+  it('registers the stop previews icon from the shared icon asset', () => {
+    const { container } = render(<StopIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-icon-source', 'icons/stop.svg');
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+  });
+
+  it('registers the shared play icon from the imported asset', () => {
+    const { container } = render(<PlayIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-icon-source', 'icons/play.svg');
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+  });
+
+  it('registers the ruler icon from the imported asset', () => {
+    const { container } = render(<RulerIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-icon-source', 'icons/ruler.svg');
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+  });
+
+  it('registers the zoom control icons from the imported assets', () => {
+    const { container, rerender } = render(<ZoomOutIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute(
+      'data-icon-source',
+      'icons/zoom-out.svg'
+    );
+    expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
+
+    rerender(<ZoomInIcon />);
+    expect(container.querySelector('svg')).toHaveAttribute('data-icon-source', 'icons/zoom-in.svg');
     expect(container.querySelector('svg')?.innerHTML).toContain('currentColor');
   });
 

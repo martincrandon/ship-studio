@@ -507,18 +507,10 @@ pub fn get_ahead_behind_batch(
 pub(crate) fn load_project_metadata(
     project_path: &std::path::Path,
 ) -> crate::types::ProjectMetadata {
-    let metadata_path = project_path.join(".shipstudio/project.json");
-    let mut metadata: crate::types::ProjectMetadata = std::fs::read_to_string(&metadata_path)
+    crate::commands::projects::read_project_metadata_sync(project_path)
         .ok()
-        .and_then(|contents| serde_json::from_str(&contents).ok())
-        .unwrap_or_default();
-
-    // Apply migrations if needed and save the updated metadata
-    if metadata.migrate() {
-        let _ = save_project_metadata(project_path, &metadata);
-    }
-
-    metadata
+        .flatten()
+        .unwrap_or_default()
 }
 
 /// Helper to save project metadata
@@ -526,13 +518,19 @@ pub(crate) fn save_project_metadata(
     project_path: &std::path::Path,
     metadata: &crate::types::ProjectMetadata,
 ) -> Result<(), String> {
-    let shipstudio_dir = project_path.join(".shipstudio");
-    if !shipstudio_dir.exists() {
-        std::fs::create_dir_all(&shipstudio_dir).map_err(|e| e.to_string())?;
-    }
-    let metadata_path = shipstudio_dir.join("project.json");
-    let json = serde_json::to_string_pretty(metadata).map_err(|e| e.to_string())?;
-    std::fs::write(&metadata_path, json).map_err(|e| e.to_string())
+    crate::commands::projects::save_project_metadata(project_path, metadata)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn update_project_metadata<F, T>(
+    project_path: &std::path::Path,
+    mutate: F,
+) -> Result<T, String>
+where
+    F: FnOnce(&mut crate::types::ProjectMetadata) -> Result<T, crate::errors::CommandError>,
+{
+    crate::commands::projects::update_project_metadata(project_path, mutate)
+        .map_err(|error| error.to_string())
 }
 
 // ============ Tauri Commands ============

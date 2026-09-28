@@ -5,7 +5,7 @@
  * pane's view composition, including floating preview controls and branch tabs.
  */
 
-import type { RefObject } from 'react';
+import { useCallback, useMemo, useRef, useState, type RefObject } from 'react';
 import type {
   PluginAppActions,
   PluginProjectData,
@@ -19,16 +19,36 @@ import { BranchPRTabContainer, type BranchPRTabContainerProps } from './BranchPR
 import { CodeTab } from '../code/CodeTab';
 import type { HealthTabPanelRef } from '../code/HealthTabPanel';
 import { PluginSlot } from '../plugins/PluginSlot';
-import { Preview, type InspectTab, type PreviewHandle } from '../preview/Preview';
+import {
+  Preview,
+  type InspectTab,
+  type PreviewHandle,
+  type PreviewPanelInsets,
+} from '../preview/Preview';
 import { DeviceMirror } from '../preview/DeviceMirror';
 import { ShopifySetup } from '../shopify/ShopifySetup';
+import { ComponentsWorkspace, type ComponentEditPanelRenderer } from './ComponentsWorkspace';
+import type { TreeStructureActions } from '../edit/ElementTreePanel';
+import type { ComponentsNavigation, WorkspaceTab } from './workspaceViewState';
+import {
+  selectElementsPanelModel,
+  WorkspaceElementsPanel,
+  type ElementsPanelCanvasLayers,
+  type ElementsPanelModel,
+} from './components-inspector/ElementsPanel';
+import { useElementTree, type ElementTreeSelection } from '../../hooks/useElementTree';
+import type { EditableSurfaceTarget } from '../../lib/components/editable-surface';
+import { isSameEditableSurface } from '../../lib/components/editable-surface';
+import type { DockablePanelSurfaceRect } from '../primitives/DockablePanel';
 
 /** Props for the web preview, mobile mirror, and code-side workspace pane. */
 export interface WorkspacePreviewPaneProps {
   currentProject: Project;
   previewRef: RefObject<PreviewHandle | null>;
-  workspaceTab: 'preview' | 'code' | 'branches' | 'prs';
-  setWorkspaceTab: (tab: 'preview' | 'code' | 'branches' | 'prs') => void;
+  workspaceTab: WorkspaceTab;
+  setWorkspaceTab: (tab: WorkspaceTab) => void;
+  componentsNavigation: ComponentsNavigation;
+  onNavigateToComponents: (navigation: ComponentsNavigation) => void;
   hasPreview: boolean;
   projectTypeResolved: boolean;
   previewConnectionEnabled: boolean;
@@ -109,6 +129,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     previewRef,
     workspaceTab,
     setWorkspaceTab,
+    componentsNavigation,
+    onNavigateToComponents,
     hasPreview,
     projectTypeResolved,
     previewConnectionEnabled,
@@ -169,6 +191,153 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     shopify,
     branchTabs,
   } = props;
+  const handleComponentsOpenSource = useCallback(
+    (source: { file: string; line: number }) => openInCode(source.file, source.line),
+    [openInCode]
+  );
+  const [previewPanelInsets, setPreviewPanelInsets] = useState<PreviewPanelInsets>({
+    left: 0,
+    right: 0,
+  });
+  const [visualEditorState, setVisualEditorState] = useState(() => ({
+    projectPath: currentProject.path,
+    active: true,
+  }));
+  const visualEditorActive =
+    visualEditorState.projectPath === currentProject.path && visualEditorState.active;
+  const handleVisualEditorActiveChange = useCallback(
+    (active: boolean) => {
+      setVisualEditorState({ projectPath: currentProject.path, active });
+    },
+    [currentProject.path]
+  );
+  const [elementsPanelRect, setElementsPanelRect] = useState<DockablePanelSurfaceRect | null>(null);
+  const [previewElementsModel, setPreviewElementsModel] = useState<ElementsPanelModel | null>(null);
+  const componentFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const [componentSurfaceTarget, setComponentSurfaceTarget] =
+    useState<EditableSurfaceTarget | null>(null);
+  const [componentElementTreeSelection, setComponentElementTreeSelection] =
+    useState<ElementTreeSelection | null>(null);
+  const [componentCanvasLayers, setComponentCanvasLayers] =
+    useState<ElementsPanelCanvasLayers | null>(null);
+  const [componentStructureActions, setComponentStructureActions] =
+    useState<TreeStructureActions | null>(null);
+  const [componentEditPanel, setComponentEditPanel] =
+    useState<ComponentEditPanelRenderer | null>(null);
+  const handleComponentEditPanelChange = useCallback(
+    (panel: ComponentEditPanelRenderer | null) => {
+      // A renderer is itself a function, so wrap it before giving it to the
+      // state setter; otherwise React treats it as a state updater.
+      setComponentEditPanel(() => panel);
+    },
+    []
+  );
+  const closeComponentEditPanel = useCallback(() => {
+    // Closing the shared dock exits the renderer's edit mode. Components mode
+    // then republishes its base Component tab, while the toolbar's Edit toggle
+    // remains the explicit path back into Tailwind/CSS editing.
+    handleVisualEditorActiveChange(false);
+  }, [handleVisualEditorActiveChange]);
+  const handleComponentStructureActionsChange = useCallback(
+    (actions: TreeStructureActions | null) => {
+      setComponentStructureActions((current) => (current === actions ? current : actions));
+    },
+    []
+  );
+  const handleRendererTargetChange = useCallback((target: EditableSurfaceTarget | null) => {
+    setComponentSurfaceTarget((current) => {
+      if (!target) return null;
+      return current && isSameEditableSurface(current, target) ? current : target;
+    });
+    if (!target) setComponentElementTreeSelection(null);
+  }, []);
+  const handleRendererFrameElementChange = useCallback((element: HTMLIFrameElement | null) => {
+    componentFrameRef.current = element;
+  }, []);
+  const componentElementTree = useElementTree({
+    iframeRef: componentFrameRef,
+    surfaceTarget: workspaceTab === 'components' ? componentSurfaceTarget : null,
+    enabled: workspaceTab === 'components' && componentSurfaceTarget !== null,
+    onSelectionChange: setComponentElementTreeSelection,
+  });
+  const {
+    tree: componentTree,
+    componentTree: componentTreeProjection,
+    truncated: componentTreeTruncated,
+    inspectionReady: componentInspectionReady,
+    selectedId: componentSelectedId,
+    hoveredId: componentHoveredId,
+    affectedIds: componentAffectedIds,
+    selectedComponent,
+    selectNode: selectComponentNode,
+    hoverNode: hoverComponentNode,
+    selectComponent,
+    hoverComponent,
+  } = componentElementTree;
+  const componentElementsModel = useMemo<ElementsPanelModel>(
+    () => ({
+      tree: componentTree,
+      componentTree: componentTreeProjection,
+      truncated: componentTreeTruncated,
+      selectedId: componentSelectedId,
+      hoveredId: componentHoveredId,
+      affectedIds: componentAffectedIds,
+      selectedComponentKey: selectedComponent?.key ?? null,
+      canvasLayers: componentCanvasLayers ?? undefined,
+      onSelect: selectComponentNode,
+      onHover: hoverComponentNode,
+      onComponentSelect: selectComponent,
+      onComponentHover: hoverComponent,
+      structure: componentStructureActions ?? undefined,
+      selectedSignature: componentElementTreeSelection?.signature ?? null,
+      emptyMessage: 'Select a component frame to view its elements',
+    }),
+    [
+      componentAffectedIds,
+      componentCanvasLayers,
+      componentElementTreeSelection?.signature,
+      componentHoveredId,
+      componentSelectedId,
+      componentTree,
+      componentTreeProjection,
+      componentTreeTruncated,
+      componentStructureActions,
+      hoverComponent,
+      hoverComponentNode,
+      selectComponent,
+      selectComponentNode,
+      selectedComponent?.key,
+    ]
+  );
+  const elementsPanelInsets = useMemo<PreviewPanelInsets>(() => {
+    if (!elementsPanelRect || !elementTreePinned) return { left: 0, right: 0 };
+    return { left: Math.ceil(elementsPanelRect.width), right: 0 };
+  }, [elementTreePinned, elementsPanelRect]);
+  const activeWorkspacePanelInsets = useMemo<PreviewPanelInsets>(
+    () => ({
+      left: Math.max(
+        previewPanelInsets.left,
+        workspaceTab === 'components' ? elementsPanelInsets.left : 0
+      ),
+      right: Math.max(
+        previewPanelInsets.right,
+        workspaceTab === 'components' ? elementsPanelInsets.right : 0
+      ),
+    }),
+    [elementsPanelInsets, previewPanelInsets, workspaceTab]
+  );
+  const activeElementsModel = selectElementsPanelModel(
+    workspaceTab,
+    previewElementsModel,
+    componentElementsModel
+  );
+  const elementsPanelVisible =
+    elementTreeVisible && (workspaceTab === 'preview' || workspaceTab === 'components');
+  const handlePreviewPanelInsetsChange = useCallback((next: PreviewPanelInsets) => {
+    setPreviewPanelInsets((current) =>
+      current.left === next.left && current.right === next.right ? current : next
+    );
+  }, []);
   const {
     integrations,
     branches,
@@ -204,8 +373,13 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
           onConnected={shopify.connect}
         />
       )}
-      {workspaceTab === 'preview' && previewSurfaceVisible && !shopify.showGate && (
-        <div style={{ flex: 1, display: 'flex' }}>
+      {previewSurfaceVisible && isWebProject && !shopify.showGate && (
+        <div
+          className={`workspace-preview-pane__preview-surface${
+            workspaceTab === 'preview' ? '' : ' workspace-preview-pane__preview-surface--persistent'
+          }`}
+          aria-hidden={workspaceTab !== 'preview'}
+        >
           <Preview
             key={`${currentProject.path}-${devServerPort}`}
             ref={previewRef}
@@ -238,6 +412,15 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             onRestartDevServer={() => void handleRestartDevServer()}
             onRunInstall={onRunInstall}
             onOpenInCode={openInCode}
+            onOpenComponents={onNavigateToComponents}
+            onWorkspacePanelInsetsChange={handlePreviewPanelInsetsChange}
+            onElementsPanelModelChange={setPreviewElementsModel}
+            componentsEditPanel={workspaceTab === 'components' ? componentEditPanel : null}
+            onComponentsEditPanelClose={closeComponentEditPanel}
+            // Keep Preview's body-portaled pinned panels after the workspace-level
+            // Elements panel in Components mode as well. Without this inset the
+            // two surfaces both anchor to the pane's left edge and overlap.
+            workspacePanelInsets={elementsPanelVisible ? elementsPanelInsets : undefined}
             canUndo={canUndo}
             canRedo={canRedo}
             undoTitle={undoTitle}
@@ -245,9 +428,6 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             onUndo={() => void undoSnapshot()}
             onRedo={() => void redoSnapshot()}
             elementTreeVisible={elementTreeVisible}
-            elementTreePinned={elementTreePinned}
-            onToggleElementTreePin={toggleElementTreePinned}
-            onCloseElementTree={closeElementTree}
             onElementTreeAvailabilityChange={setElementTreePreviewAvailable}
             variablesPanelVisible={variablesPanelVisible}
             variablesPanelPinned={variablesPanelPinned}
@@ -259,6 +439,9 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             onCloseComponentsPanel={closeComponentsPanel}
             componentsEditMainId={componentsEditMainId}
             onComponentsEditMainChange={setComponentsEditMainId}
+            componentsCanvasView={workspaceTab === 'components'}
+            visualEditorActive={visualEditorActive}
+            onVisualEditorActiveChange={handleVisualEditorActiveChange}
             previewPlugins={
               previewSlotPlugins.length > 0 ? (
                 <PluginSlot
@@ -292,6 +475,39 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
           />
         </div>
       )}
+      {workspaceTab === 'components' && (
+        <ComponentsWorkspace
+          projectPath={currentProject.path}
+          projectType={projectType}
+          devServerPort={devServerPort}
+          navigation={componentsNavigation}
+          onNavigate={onNavigateToComponents}
+          onOpenSource={handleComponentsOpenSource}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={undoSnapshot}
+          onRedo={redoSnapshot}
+          panelInsets={activeWorkspacePanelInsets}
+          onRendererTargetChange={handleRendererTargetChange}
+          onRendererFrameElementChange={handleRendererFrameElementChange}
+          visualEditorActive={visualEditorActive}
+          onVisualEditorActiveChange={handleVisualEditorActiveChange}
+          elementTreeSelection={componentElementTreeSelection}
+          componentInspectionReady={componentInspectionReady}
+          onTreeStructureActionsChange={handleComponentStructureActionsChange}
+          onCanvasLayersChange={setComponentCanvasLayers}
+          onEditPanelChange={handleComponentEditPanelChange}
+        />
+      )}
+      <WorkspaceElementsPanel
+        model={activeElementsModel ?? undefined}
+        projectPath={currentProject.path}
+        visible={elementsPanelVisible}
+        pinned={elementTreePinned}
+        onTogglePin={toggleElementTreePinned}
+        onClose={closeElementTree}
+        onSurfaceRectChange={setElementsPanelRect}
+      />
       <BranchPRTabContainer
         workspaceTab={workspaceTab}
         setWorkspaceTab={setWorkspaceTab}

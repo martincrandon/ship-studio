@@ -83,4 +83,19 @@ describe('useWorkspaceLayout', () => {
     });
     expect(result.current.isPreviewHidden).toBe(true);
   });
+
+  it('navigates to Components with a typed scope and selected component', () => {
+    const { result } = renderHook(() => useWorkspaceLayout({ isGitHubConnected: false }));
+
+    act(() => {
+      result.current.navigateToComponents({ componentId: 'react:Card', scope: 'focus' });
+    });
+
+    expect(result.current.workspaceTab).toBe('components');
+    expect(result.current.componentsNavigation).toEqual({
+      componentId: 'react:Card',
+      scope: 'focus',
+    });
+    expect(result.current.isPreviewHidden).toBe(false);
+  });
 });

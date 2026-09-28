@@ -29,7 +29,7 @@
  * token so a fast click-through can't post a stale `ss:textInfo`.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   resolveTextSource,
   applyTextEdit,
@@ -45,24 +45,51 @@ import {
   type ComponentFocusContext,
 } from '../lib/components/focus';
 import type { SourceRef } from '../lib/components/types';
+import {
+  boundInspectionMessage,
+  createInspectionTransport,
+  type InspectionSurfaceTransport,
+} from '../lib/components/inspection-transport';
+import type {
+  EditableSurfaceTarget,
+  SourceEditGuard,
+} from '../lib/components/editable-surface';
 
 interface Params {
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
+  /** Optional authenticated component-frame surface. Undefined keeps legacy Preview behavior. */
+  surfaceTarget?: EditableSurfaceTarget | null;
   projectPath: string;
   /** Active whenever either styling editor's edit mode is on. */
   enabled: boolean;
+  /** Component-frame writes stay disabled until the owning inspector confirms Edit main. */
+  writeEnabled?: boolean;
   onToast?: (message: string, type?: 'success' | 'error') => void;
-  /** Focused component context; text writes require source provenance not yet exposed by the resolver. */
+  /** Focused component context; text writes require resolver-provenance inside its definition. */
   componentFocusRef?: React.RefObject<ComponentFocusContext | null>;
+  /** Generic definition-bound guard for negotiated component frames. */
+  sourceEditGuard?: SourceEditGuard;
 }
 
 export function useTextEditing({
   iframeRef,
+  surfaceTarget,
   projectPath,
   enabled,
+  writeEnabled,
   onToast,
   componentFocusRef,
+  sourceEditGuard,
 }: Params) {
+  const transport = useMemo<InspectionSurfaceTransport>(
+    () => createInspectionTransport({ iframeRef, surfaceTarget }),
+    [iframeRef, surfaceTarget]
+  );
+  const surfaceActive = enabled && transport.active;
+  // A component frame may be inspected before Edit main is confirmed. Its
+  // resolver guard is still required to prove the selected range belongs to
+  // the definition; writeEnabled is the separate confirmation seam.
+  const mutationsEnabled = surfaceTarget ? writeEnabled === true : writeEnabled !== false;
   // The resolved text target for the current selection (null when the element's
   // text isn't a plain editable literal). Mirrored into a ref so the ss:textCommit
   // handler reads the latest without re-subscribing. `text` is the source baseline
@@ -78,7 +105,7 @@ export function useTextEditing({
     text: string;
     source: SourceRef | null;
   } | null>(null);
-  const setTextTarget = useCallback((res: TextResolution | null) => {
+  const setTextTarget = useCallback((res: TextResolution | null, sourceOverride?: SourceRef | null) => {
     textTargetRef.current =
       res?.status === 'resolved'
         ? {
@@ -86,7 +113,7 @@ export function useTextEditing({
             line: res.line,
             column: res.column,
             text: res.text,
-            source: sourceRefFromTextResolution(res),
+            source: sourceOverride === undefined ? sourceRefFromTextResolution(res) : sourceOverride,
           }
         : null;
     setTextResolution(res);
@@ -97,52 +124,92 @@ export function useTextEditing({
   // Staleness guard for the select-time resolve — bumped on each new selection so a
   // fast click-through can't let an older resolve post the wrong ss:textInfo.
   const selectTokenRef = useRef(0);
+  const surfaceRevisionRef = useRef(transport.revisionKey);
+  surfaceRevisionRef.current = transport.revisionKey;
 
-  const post = useCallback(
-    (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
-    [iframeRef]
+  const post = useCallback((msg: unknown) => transport.post(msg), [transport]);
+
+  const guardComponentSource = useCallback(
+    (source: SourceRef | null): SourceRef | null => {
+      if (!surfaceTarget) return source;
+      if (!source) {
+        throw new Error(
+          'The selected component child has no exact source range. Refresh and reselect it.'
+        );
+      }
+      if (!sourceEditGuard) {
+        throw new Error(
+          'The component source boundary is unavailable. Refresh the frame before editing it.'
+        );
+      }
+      const result = sourceEditGuard(source);
+      if (result.status === 'refused') throw new Error(result.reason);
+      if (!result.source) {
+        throw new Error(
+          'The selected component child has no exact source range. Refresh and reselect it.'
+        );
+      }
+      return result.source;
+    },
+    [sourceEditGuard, surfaceTarget]
   );
 
   // Drop any stale selection state when edit mode closes, so a target from a prior
   // session can't bleed into the next one.
   useEffect(() => {
-    if (enabled) return;
+    if (surfaceActive) return;
+    selectTokenRef.current += 1;
     selectedSigRef.current = null;
     textTargetRef.current = null;
     setTextResolution(null);
-  }, [enabled]);
+  }, [surfaceActive]);
+
+  // A frame/session/revision switch invalidates any source target from the
+  // previous surface before a delayed resolver or commit can use it.
+  useEffect(() => {
+    selectTokenRef.current += 1;
+    selectedSigRef.current = null;
+    textTargetRef.current = null;
+    setTextResolution(null);
+    setTextBlockedNonce(0);
+  }, [transport.revisionKey]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!surfaceActive) return;
     const handler = (e: MessageEvent) => {
-      // SECURITY: only trust messages from the actual preview iframe. The iframe
-      // hosts untrusted project content; a forged `ss:textCommit` from another
-      // frame would otherwise write to the user's source files.
-      if (e.source !== iframeRef.current?.contentWindow) return;
-      const d = e.data as {
-        type?: string;
-        signature?: ElementSignature;
-        leafText?: boolean;
-        text?: string;
-      } | null;
-      if (!d) return;
+      // SECURITY: negotiated frames require exact origin and every v2 identity
+      // field. Legacy Preview keeps its source-only compatibility contract.
+      if (!transport.accepts(e)) return;
+      const raw = e.data as { type?: string; text?: unknown } | null;
+      if (!raw || typeof raw.type !== 'string') return;
+
+      const textCommit =
+        raw.type === 'ss:textCommit' &&
+        typeof raw.text === 'string' &&
+        raw.text.length <= 4096
+          ? raw.text
+          : null;
 
       // The element turned out not to be editable (dynamic text) — the iframe bounced
       // out of the optimistic edit. No toast: the Tailwind panel shows the "copy a
       // request for your agent" hand-off (DynamicTextHelp) for the still-selected element.
-      if (d.type === 'ss:textBlocked') {
+      if (raw.type === 'ss:textBlocked') {
         setTextBlockedNonce((n) => n + 1);
         return;
       }
 
       // Inline text edit was confirmed in the iframe — write the new text to source.
-      if (d.type === 'ss:textCommit' && typeof d.text === 'string') {
-        const next = d.text;
+      if (textCommit !== null) {
+        const next = textCommit;
         const sig = selectedSigRef.current;
+        const actionRevision = transport.revisionKey;
         // Arm reload suppression before writing (same reasoning as a class commit).
         post({ type: 'ss:suppressReload' });
         void (async () => {
           try {
+            if (surfaceRevisionRef.current !== actionRevision) {
+              throw new Error('The renderer surface changed. Reselect the element and try again.');
+            }
             // The select-time resolve may not have landed yet (fast double-click →
             // type → commit); resolve on demand so the edit is never dropped silently.
             let target = textTargetRef.current;
@@ -160,7 +227,7 @@ export function useTextEditing({
               };
               textTargetRef.current = target;
             }
-            const focus = componentFocusRef?.current;
+            const focus = surfaceTarget ? null : componentFocusRef?.current;
             if (focus && !target.source) {
               if (!sig) throw new Error('Lost track of this element — reselect it and try again.');
               const res = await resolveTextSource(projectPath, sig);
@@ -176,7 +243,15 @@ export function useTextEditing({
               textTargetRef.current = target;
             }
             let focusedSource: SourceRef | null = null;
-            if (focus) {
+            if (surfaceTarget) {
+              focusedSource = guardComponentSource(target.source);
+              if (!focusedSource) {
+                throw new Error(
+                  'The selected component child has no exact source range. Refresh and reselect it.'
+                );
+              }
+              target.source = focusedSource;
+            } else if (focus) {
               const validation = validateFocusedSourceTarget(
                 focus,
                 target.source,
@@ -195,6 +270,12 @@ export function useTextEditing({
             if (next === target.text) {
               post({ type: 'ss:commit' }); // unchanged — just re-baseline, no write
               return;
+            }
+            if (surfaceRevisionRef.current !== actionRevision) {
+              throw new Error('The renderer surface changed. Reselect the element and try again.');
+            }
+            if (surfaceTarget && !mutationsEnabled) {
+              throw new Error('Component editing is not confirmed. Confirm Edit main before changing it.');
             }
             if (focusedSource) {
               await applyTextEdit(
@@ -220,6 +301,9 @@ export function useTextEditing({
                 next
               );
             }
+            if (surfaceRevisionRef.current !== actionRevision) {
+              throw new Error('The renderer surface changed. Reselect the element and try again.');
+            }
             // Advance the drift baseline so consecutive text edits keep working.
             target.text = next;
             setTextResolution((prev) =>
@@ -241,7 +325,7 @@ export function useTextEditing({
             // baseline. The guard itself stays intact: the retry writes against
             // a just-read baseline, it never forces a stale one through.
             const isDrift = cmdErr.type === 'Validation' && cmdErr.field === 'old_text';
-            if (isDrift && sig && !componentFocusRef?.current) {
+            if (isDrift && sig && !componentFocusRef?.current && !surfaceTarget) {
               try {
                 const res = await resolveTextSource(projectPath, sig);
                 // Retry whenever the element still resolves, even when the fresh
@@ -325,38 +409,55 @@ export function useTextEditing({
 
       // A fresh selection: resolve its text-editability and post the verdict back.
       // The iframe gates inline editing on it (single-text-node leaves only).
-      if (d.type !== 'ss:select' || !d.signature) return;
-      const sig = d.signature;
+      if (raw.type !== 'ss:select') return;
+      const bounded = boundInspectionMessage(e.data);
+      if (!bounded || bounded.type !== 'ss:select' || !bounded.signature) return;
+      const sig: ElementSignature = bounded.signature;
       selectedSigRef.current = sig;
       setTextTarget(null); // optimistic; iframe allows editing until told otherwise
       const token = ++selectTokenRef.current;
-      if (d.leafText) {
+      const selectionRevision = surfaceRevisionRef.current;
+      if (bounded.leafText) {
         void (async () => {
           try {
             const textRes = await resolveTextSource(projectPath, sig);
             // Ignore if the selection changed underneath us.
-            if (selectTokenRef.current !== token) return;
-            const focus = componentFocusRef?.current;
+            if (
+              selectTokenRef.current !== token ||
+              surfaceRevisionRef.current !== selectionRevision
+            )
+              return;
+            const focus = surfaceTarget ? null : componentFocusRef?.current;
+            const source = sourceRefFromTextResolution(textRes);
+            const componentSource = surfaceTarget ? guardComponentSource(source) : null;
             const focusedValidation = focus
-              ? validateFocusedSourceTarget(
-                  focus,
-                  sourceRefFromTextResolution(textRes),
-                  undefined,
-                  focus.routeKey
-                )
+              ? validateFocusedSourceTarget(focus, source, undefined, focus.routeKey)
               : null;
             if (focusedValidation?.status === 'refused') {
               setTextTarget(null);
               post({ type: 'ss:textInfo', editable: false });
               return;
             }
-            setTextTarget(textRes);
+            setTextTarget(textRes, surfaceTarget ? componentSource : focusedValidation?.source);
+            if (
+              selectTokenRef.current !== token ||
+              surfaceRevisionRef.current !== selectionRevision
+            )
+              return;
             post({
               type: 'ss:textInfo',
-              editable: textRes.status === 'resolved' && (!focus || !!focusedValidation?.source),
+              editable:
+                mutationsEnabled &&
+                textRes.status === 'resolved' &&
+                (!surfaceTarget || !!componentSource) &&
+                (!focus || !!focusedValidation?.source),
             });
           } catch {
-            if (selectTokenRef.current === token) post({ type: 'ss:textInfo', editable: false });
+            if (
+              selectTokenRef.current === token &&
+              surfaceRevisionRef.current === selectionRevision
+            )
+              post({ type: 'ss:textInfo', editable: false });
           }
         })();
       } else {
@@ -365,7 +466,43 @@ export function useTextEditing({
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [componentFocusRef, enabled, projectPath, onToast, post, iframeRef, setTextTarget]);
+  }, [
+    componentFocusRef,
+    projectPath,
+    onToast,
+    post,
+    setTextTarget,
+    guardComponentSource,
+    mutationsEnabled,
+    surfaceActive,
+    surfaceTarget,
+    transport,
+  ]);
+
+  // Edit-main confirmation can arrive after the selection was resolved. Keep
+  // inspection active, but explicitly re-arm or disable inline text editing
+  // on the negotiated surface as the write gate changes.
+  useEffect(() => {
+    if (!surfaceActive || !surfaceTarget) return;
+    let editable = false;
+    if (mutationsEnabled && textResolution?.status === 'resolved') {
+      try {
+        const source = guardComponentSource(textTargetRef.current?.source ?? null);
+        editable = !!source;
+        if (source && textTargetRef.current) textTargetRef.current.source = source;
+      } catch {
+        editable = false;
+      }
+    }
+    post({ type: 'ss:textInfo', editable });
+  }, [
+    guardComponentSource,
+    mutationsEnabled,
+    post,
+    surfaceActive,
+    surfaceTarget,
+    textResolution,
+  ]);
 
   return {
     /** Text-editability of the current selection (drives the panel's hint). */

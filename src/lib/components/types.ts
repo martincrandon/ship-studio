@@ -152,6 +152,14 @@ export interface ComponentRenderRoot {
   source: SourceRef;
 }
 
+/** Conservative source facts used by framework-native renderer adapters. */
+export interface ComponentRendererSafety {
+  /** More than one export access pattern resolved to the same definition. */
+  ambiguousExport?: boolean;
+  /** The definition module contains a dynamic import expression. */
+  dynamicImport?: boolean;
+}
+
 export interface ComponentDescriptor {
   id: ComponentId;
   dialect: ComponentDialect;
@@ -166,6 +174,7 @@ export interface ComponentDescriptor {
   isClientModule?: boolean;
   /** Stable root signature used by the Next Server Component fallback. */
   renderRoot?: ComponentRenderRoot;
+  rendererSafety?: ComponentRendererSafety;
   props: ComponentPropDescriptor[];
   slots: ComponentSlotDescriptor[];
   variantProps: string[];
@@ -199,6 +208,10 @@ export interface ComponentImportEdge {
   source: SourceRef;
   status: 'resolved' | 'unresolved' | 'external' | 'ambiguous';
   diagnostics: ComponentDiagnostic[];
+  /** Distinguishes a module import from a barrel/re-export edge when known. */
+  kind?: 'import' | 're-export';
+  /** The source module specifier, retained for safe re-export diagnostics. */
+  moduleSpecifier?: string;
 }
 
 export interface ComponentCapabilities {

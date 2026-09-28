@@ -123,10 +123,11 @@ export class ReactComponentAdapter implements ComponentAdapter {
     const descriptors = files.flatMap((file) =>
       file.components.map((component) => component.descriptor)
     );
+    const catalogedDescriptorIds = new Set(descriptors.map((descriptor) => descriptor.id));
     const descriptorById = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
     const descriptorByFileLocal = new Map<string, ComponentDescriptor>();
     for (const file of files) {
-      for (const component of file.components) {
+      for (const component of [...file.components, ...(file.internalComponents ?? [])]) {
         descriptorByFileLocal.set(
           `${normalizeProjectPath(file.snapshot.file)}#${component.localName}`,
           component.descriptor
@@ -151,6 +152,8 @@ export class ReactComponentAdapter implements ComponentAdapter {
           source: raw.sourceRef,
           status: resolved.status,
           diagnostics: resolved.diagnostics,
+          kind: 'import',
+          moduleSpecifier: raw.source,
         });
       }
       for (const raw of file.reExports) {
@@ -167,6 +170,8 @@ export class ReactComponentAdapter implements ComponentAdapter {
           source: raw.sourceRef,
           status: resolved.status,
           diagnostics: resolved.diagnostics,
+          kind: 're-export',
+          moduleSpecifier: raw.source,
         });
       }
     }
@@ -198,6 +203,7 @@ export class ReactComponentAdapter implements ComponentAdapter {
           // outside the project index. They are not evidence of an incomplete
           // project graph and must not produce one warning per JSX occurrence.
           if (importStatus !== 'external' && usage.localName && /^[A-Z]/.test(usage.localName)) {
+            if (isContextNamespaceUsage(usage)) continue;
             diagnostics.push({
               code: 'react-unresolved-usage',
               severity: 'warning',
@@ -208,6 +214,11 @@ export class ReactComponentAdapter implements ComponentAdapter {
           }
           continue;
         }
+        // Private same-file helpers are valid JSX targets, but are not
+        // published catalog entries. They should satisfy resolution without
+        // creating orphan instances whose component id is absent from the
+        // public index.
+        if (!catalogedDescriptorIds.has(target.id)) continue;
         const props: Record<string, StaticExpression | DynamicExpression | UnsetExpression> = {};
         for (const prop of target.props) props[prop.name] = { kind: 'unset' };
         for (const attribute of usage.attributes) {
@@ -238,9 +249,14 @@ export class ReactComponentAdapter implements ComponentAdapter {
           componentId: target.id,
           invocation: usage.invocation,
           containingComponentId: usage.containingLocalName
-            ? (descriptorByFileLocal.get(
-                `${normalizeProjectPath(file.snapshot.file)}#${usage.containingLocalName}`
-              )?.id ?? null)
+            ? (() => {
+                const containing = descriptorByFileLocal.get(
+                  `${normalizeProjectPath(file.snapshot.file)}#${usage.containingLocalName}`
+                );
+                return containing && catalogedDescriptorIds.has(containing.id)
+                  ? containing.id
+                  : null;
+              })()
             : null,
           route: null,
           props,
@@ -443,6 +459,12 @@ export class ReactComponentAdapter implements ComponentAdapter {
   validateMutation(input: MutationValidationInput): MutationValidationResult {
     return validateReactMutation(input);
   }
+}
+
+function isContextNamespaceUsage(usage: import('./types').RawJsxUsage): boolean {
+  if (!usage.namespaceName) return false;
+  const member = usage.tagName.split('.').pop();
+  return member === 'Provider' || member === 'Consumer';
 }
 
 function importKey(edge: RawImportEdge): string {

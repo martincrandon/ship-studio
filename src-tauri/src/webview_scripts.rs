@@ -15,6 +15,32 @@
 pub const INSPECTOR_SHIM: &str = r#"
 (function () {
   try {
+    // Project frames are untrusted. Tauri's default capability applies to the
+    // Ship Studio window, but webview implementations can expose the core
+    // bridge to child frames unless it is explicitly masked. Run this before
+    // the project bundle and keep the parent app's bridge cross-origin.
+    if (window.top !== window) {
+      var blockedInvoke = function () {
+        throw new Error('Ship Studio IPC is unavailable inside project frames');
+      };
+      try {
+        Object.defineProperty(window, '__TAURI_INTERNALS__', {
+          configurable: false,
+          enumerable: false,
+          get: function () { return undefined; },
+          set: function () {}
+        });
+      } catch (_) {
+        try { delete window.__TAURI_INTERNALS__; } catch (_) {}
+      }
+      try { delete window.__TAURI__; } catch (_) {}
+      try {
+        if (window.__TAURI_INTERNALS__) window.__TAURI_INTERNALS__.invoke = blockedInvoke;
+      } catch (_) {}
+      try {
+        if (window.__TAURI__ && window.__TAURI__.invoke) window.__TAURI__.invoke = blockedInvoke;
+      } catch (_) {}
+    }
     if (window.top === window) return;
     var proto = window.location.protocol;
     if (proto !== 'http:' && proto !== 'https:') return;
@@ -513,3 +539,23 @@ pub const INSPECTOR_SHIM: &str = r#"
   }
 })();
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::INSPECTOR_SHIM;
+
+    #[test]
+    fn child_frames_mask_tauri_ipc_before_project_code_runs() {
+        assert!(INSPECTOR_SHIM.contains("window.top !== window"));
+        assert!(INSPECTOR_SHIM.contains("__TAURI_INTERNALS__"));
+        assert!(INSPECTOR_SHIM.contains("Ship Studio IPC is unavailable inside project frames"));
+        assert!(INSPECTOR_SHIM.contains("configurable: false"));
+        assert!(INSPECTOR_SHIM.contains("if (window.top === window) return;"));
+        assert!(
+            INSPECTOR_SHIM.find("window.top !== window").unwrap()
+                < INSPECTOR_SHIM
+                    .find("if (window.top === window) return;")
+                    .unwrap()
+        );
+    }
+}

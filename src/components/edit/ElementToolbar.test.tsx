@@ -61,6 +61,34 @@ describe('ElementToolbar', () => {
     expect(container.querySelector('.ss-el-toolbar__tag-icon')).not.toBeInTheDocument();
   });
 
+  it('shows a busy state without exposing mutation controls while a structure write runs', () => {
+    const selection: StructureSelection = {
+      signature: { tagName: 'p', className: 'hero-title', ancestorClasses: [] },
+      rect: { top: 80, left: 40, width: 120, height: 24 },
+      count: 1,
+      nodeId: 1,
+    };
+
+    render(
+      <ElementToolbar
+        selection={selection}
+        bounds={{ w: 800, h: 600 }}
+        busy
+        hidden={false}
+        onInsert={vi.fn()}
+        onDuplicate={vi.fn()}
+        onDelete={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('group', { name: 'Element actions' })).toContainElement(
+      screen.getByRole('status', { name: 'Loading' })
+    );
+    expect(screen.queryByRole('button', { name: 'Insert element' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Duplicate element' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete element' })).not.toBeInTheDocument();
+  });
+
   it('renders the component selection affordance in the semantic component accent', () => {
     const onComponentFocus = vi.fn();
     const componentSelection: SelectedComponent = {

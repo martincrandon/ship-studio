@@ -1,0 +1,1169 @@
+/* First-class Components workspace: the canvas world is separate from screen-space chrome. */
+
+.components-workspace {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--surface-app);
+}
+
+.components-workspace__main {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  grid-template-rows: var(--size-component-workspace-toolbar) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'toolbar'
+    'canvas';
+}
+
+.components-workspace__toolbar {
+  display: flex;
+  grid-area: toolbar;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--spacing-md);
+  border-bottom: var(--border-width-default) solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+
+.components-workspace__toolbar-leading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.components-workspace__toolbar-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.components-workspace__history-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--button-gap);
+}
+
+.components-workspace__toolbar strong,
+.components-workspace__toolbar .components-workspace__eyebrow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.components-workspace__eyebrow {
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
+  text-transform: uppercase;
+}
+
+.components-workspace__toolbar-actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--button-gap);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.components-workspace__toolbar-actions--canvas {
+  gap: var(--button-group-spacing);
+}
+
+.components-workspace__toolbar-actions--canvas > .button--icon-only {
+  width: var(--button-height);
+  min-width: var(--button-height);
+  height: var(--button-height);
+  min-height: var(--button-height);
+}
+
+.components-workspace__toolbar-actions > * {
+  flex: 0 0 auto;
+}
+
+.components-workspace__canvas-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--component-canvas-floating-toolbar-gap);
+}
+
+.components-workspace__zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.components-workspace__floating-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--button-gap);
+}
+
+.components-workspace__floating-toolbar {
+  position: absolute;
+  right: 50%;
+  bottom: var(--component-canvas-floating-toolbar-bottom-offset);
+  z-index: var(--z-floating-panel);
+  display: inline-flex;
+  min-height: var(--component-canvas-floating-toolbar-height);
+  align-items: center;
+  gap: var(--component-canvas-floating-toolbar-gap);
+  padding: var(--component-canvas-floating-toolbar-padding-inline);
+  background: var(--component-canvas-floating-toolbar-surface);
+  border-radius: var(--component-canvas-floating-toolbar-radius);
+  box-shadow: var(--component-canvas-floating-toolbar-shadow);
+  transform: translateX(50%);
+}
+
+.components-workspace__floating-toolbar .button {
+  padding: var(--spacing-sm);
+}
+
+.components-workspace__floating-toolbar .button--icon-only {
+  width: var(--size-control-standard);
+  min-width: var(--size-control-standard);
+}
+
+.components-workspace__zoom {
+  appearance: none;
+  display: inline-flex;
+  height: var(--size-control-standard);
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-width: var(--size-control-large);
+  padding: var(--spacing-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: var(--font-size-badge);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition:
+    background-color var(--transition-interaction-fast),
+    color var(--transition-interaction-fast);
+}
+
+.components-workspace__zoom:hover {
+  color: var(--text-primary);
+  background: var(--surface-control-hover);
+}
+
+.components-workspace__zoom:focus-visible {
+  outline: var(--component-canvas-focus-ring-width) solid var(--accent-focus);
+  outline-offset: -1px;
+}
+
+.components-workspace__zoom-input {
+  width: calc(var(--size-control-large) + var(--spacing-xs));
+  min-width: var(--size-control-large);
+  height: var(--size-control-standard);
+  padding: var(--spacing-sm);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.components-workspace__viewport {
+  position: relative;
+  grid-area: canvas;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--component-canvas-surface);
+  background-image: none;
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
+.components-workspace__viewport[data-camera-space-held='true'] {
+  cursor: grab;
+}
+
+.components-workspace__viewport[data-camera-pan-active='true'] {
+  cursor: grabbing;
+}
+
+.components-workspace__screen-overlay {
+  position: absolute;
+  inset: 0;
+  /* Leave selection labels in the same stacking context as the rulers so the
+   * ruler surfaces can cover them when a frame is panned underneath. */
+  pointer-events: none;
+}
+
+/* Screen-space HUD stays passive by default, but its explicit controls remain
+ * usable without making selection chrome and notices steal canvas gestures. */
+.components-workspace__screen-overlay
+  :is(
+    .components-workspace__renderer-banner,
+    .components-workspace__variant-toolbar,
+    .components-workspace__canvas-notice
+  ),
+.components-workspace__screen-overlay
+  :is(
+    .components-workspace__renderer-banner,
+    .components-workspace__variant-toolbar,
+    .components-workspace__canvas-notice
+  )
+  button {
+  pointer-events: auto;
+}
+
+/* The element toolbar is screen-space chrome, but its compact controls must
+ * remain interactive while selection outlines continue to pass gestures to
+ * the canvas underneath. */
+.components-workspace__screen-overlay .ss-el-toolbar {
+  pointer-events: auto;
+}
+
+.components-workspace__canvas-frame {
+  position: relative;
+  display: flex;
+  /* Keep the resize track for pointer targeting while extending the canvas
+   * surface beneath it. This keeps the rulers continuous to the edit surface. */
+  grid-area: 2 / 1 / 3 / 3;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.components-workspace__canvas-loading {
+  display: flex;
+  grid-area: canvas;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  background: var(--component-canvas-surface);
+}
+
+.components-workspace__canvas-loading[aria-busy='true'] {
+  cursor: progress;
+}
+
+.components-workspace__canvas-frame > .components-workspace__viewport {
+  width: 100%;
+  height: 100%;
+}
+
+.components-workspace__viewport:focus-visible {
+  outline: var(--component-canvas-focus-ring-width) solid var(--accent-focus);
+  outline-offset: calc(var(--component-canvas-focus-ring-width) * -1);
+}
+
+.components-workspace__variant-toolbar,
+.components-workspace__canvas-notice {
+  position: absolute;
+  z-index: calc(var(--z-floating-panel) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  max-width: min(100% - var(--spacing-lg), var(--size-component-workspace-copy));
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--text-secondary);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-badge);
+}
+
+.components-workspace__variant-toolbar {
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+}
+
+.components-workspace__canvas-notice {
+  right: var(--spacing-md);
+  bottom: var(--spacing-md);
+}
+
+.components-workspace__renderer-banner {
+  position: absolute;
+  top: calc(var(--component-canvas-ruler-thickness) + var(--spacing-md));
+  right: var(--spacing-md);
+  left: calc(var(--component-canvas-ruler-thickness) + var(--spacing-md));
+  z-index: calc(var(--z-floating-panel) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--text-secondary);
+  background: var(--surface-panel);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.components-workspace__renderer-banner > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.components-workspace__renderer-banner span {
+  font-size: var(--font-size-body-sm);
+  text-wrap: pretty;
+}
+
+.components-workspace__world {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* The shared stage owns one project-runtime iframe for the whole world. It is
+ * intentionally opt-in until the host relays pointer gestures across empty
+ * canvas space; legacy per-frame hosts remain the safe default. */
+.component-canvas-stage {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.component-canvas-selection-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The native screenshot API captures the whole app window before cropping to
+ * an iframe. Hide parent-owned overlays so selection handles, menus, and
+ * renderer placeholders never become pixels in a persisted component poster.
+ * Visibility keeps the layout and crop coordinates unchanged. */
+html.component-renderer-snapshot-capture .component-canvas-selection-layer,
+html.component-renderer-snapshot-capture [data-context-menu-content],
+html.component-renderer-snapshot-capture .components-workspace__variant-toolbar,
+html.component-renderer-snapshot-capture .components-workspace__canvas-notice,
+html.component-renderer-snapshot-capture .components-workspace__renderer-banner,
+html.component-renderer-snapshot-capture .component-canvas-node__loading-overlay {
+  visibility: hidden !important;
+}
+
+.component-canvas-selection-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: var(--border-width-default) solid var(--accent-focus);
+  box-shadow: var(--component-canvas-focus-ring);
+}
+
+.component-canvas-node-title {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  color: var(--text-muted);
+  font-size: var(--font-size-subhead);
+  line-height: var(--component-canvas-title-line-height);
+  min-height: var(--component-canvas-handle-hit-size);
+  padding: calc(
+      (var(--component-canvas-handle-hit-size) - var(--component-canvas-title-line-height)) / 2
+    )
+    0;
+  pointer-events: auto;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+  transform: translateY(
+    calc(
+      -100% +
+        (var(--component-canvas-handle-hit-size) - var(--component-canvas-title-line-height)) / 2 -
+        var(--component-canvas-title-gap)
+    )
+  );
+  user-select: none;
+}
+
+.component-canvas-node-title.is-selected {
+  color: var(--accent-focus);
+}
+
+.component-canvas-node-title:active {
+  cursor: grabbing;
+}
+
+.component-canvas-node-title.is-editing {
+  display: inline-grid;
+  width: max-content;
+  overflow: visible;
+  color: var(--accent-focus);
+  cursor: text;
+}
+
+.component-canvas-node-title.is-editing::before {
+  position: absolute;
+  top: calc(
+    (var(--component-canvas-handle-hit-size) - var(--component-canvas-title-line-height)) / 2 -
+      var(--spacing-xs) - var(--border-width-default)
+  );
+  right: calc(-1 * (var(--spacing-xs) + var(--border-width-default)));
+  bottom: calc(
+    (var(--component-canvas-handle-hit-size) - var(--component-canvas-title-line-height)) / 2 -
+      var(--spacing-xs) - var(--border-width-default)
+  );
+  left: calc(-1 * (var(--spacing-xs) + var(--border-width-default)));
+  content: '';
+  background: var(--component-canvas-ruler-surface);
+  border: var(--border-width-default) solid var(--accent-focus);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  z-index: var(--z-editor-spacing-band);
+}
+
+.component-canvas-node-title.is-editing::after {
+  grid-area: 1 / 1;
+  content: attr(data-editing-value);
+  white-space: pre;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.component-canvas-node-title.is-editing:active {
+  cursor: text;
+}
+
+.component-canvas-node-title__input {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: var(--z-editor-spacing-field);
+  min-width: 0;
+  width: 100%;
+  height: var(--component-canvas-title-line-height);
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  line-height: inherit;
+  outline: none;
+}
+
+.component-canvas-node-title__snapshot {
+  margin-inline-start: var(--spacing-xs);
+  color: inherit;
+  font: inherit;
+  opacity: var(--tree-focus-dim-opacity);
+  pointer-events: none;
+}
+
+.component-canvas-selection-label {
+  position: absolute;
+  bottom: calc(100% + var(--component-canvas-selection-label-offset));
+  left: 0;
+  color: var(--accent-focus);
+  font-size: var(--component-canvas-selection-label-font-size);
+  line-height: var(--component-canvas-selection-label-line-height);
+  white-space: nowrap;
+}
+
+.component-canvas-selection-dimensions {
+  position: absolute;
+  top: calc(100% + var(--component-canvas-dimension-offset));
+  left: 50%;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--text-white);
+  background: var(--accent-focus);
+  border-radius: var(--component-canvas-dimension-radius);
+  box-shadow: var(--component-canvas-dimension-shadow);
+  font-size: var(--font-size-subhead);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-control);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.component-canvas-selection-handle {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  /* Grida's selection controls use a compact 16px screen-space hit size;
+   * keep the larger canvas handle token for artboard title drag affordances. */
+  width: var(--spacing-lg);
+  height: var(--spacing-lg);
+  min-width: var(--spacing-lg);
+  padding: 0;
+  border: var(--border-width-default) solid transparent;
+  border-radius: var(--component-canvas-handle-radius);
+  background: transparent;
+  pointer-events: auto;
+  cursor: nwse-resize;
+  transform: translate(-50%, -50%);
+}
+
+.component-canvas-selection-handle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--component-canvas-handle-visual-size);
+  height: var(--component-canvas-handle-visual-size);
+  background: var(--component-canvas-handle-surface);
+  border: var(--border-width-default) solid var(--accent-focus);
+  border-radius: var(--component-canvas-handle-radius);
+  content: '';
+  transform: translate(-50%, -50%);
+}
+
+/* Edges are full-length strips. Their transparent hit surface includes the
+ * border itself, while the corner controls are painted afterward so a corner
+ * remains a resize target where the strips and outer rotate zones overlap. */
+.component-canvas-selection-handle--north::after,
+.component-canvas-selection-handle--east::after,
+.component-canvas-selection-handle--south::after,
+.component-canvas-selection-handle--west::after {
+  display: none;
+}
+
+.component-canvas-selection-handle--north-west::after,
+.component-canvas-selection-handle--north-east::after,
+.component-canvas-selection-handle--south-east::after,
+.component-canvas-selection-handle--south-west::after {
+  border-radius: 0;
+}
+
+.component-canvas-selection-handle:focus-visible {
+  outline: var(--component-canvas-focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
+.component-canvas-selection-handle--north,
+.component-canvas-selection-handle--south {
+  left: 0;
+  width: 100%;
+  min-width: 0;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+}
+
+.component-canvas-selection-handle--north {
+  top: 0;
+}
+
+.component-canvas-selection-handle--south {
+  top: 100%;
+}
+
+.component-canvas-selection-handle--east,
+.component-canvas-selection-handle--west {
+  top: 0;
+  height: 100%;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+
+.component-canvas-selection-handle--east {
+  left: 100%;
+}
+
+.component-canvas-selection-handle--west {
+  left: 0;
+}
+
+.component-canvas-selection-handle--north-west {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.component-canvas-selection-handle--rotate {
+  width: calc(var(--spacing-lg) * 2);
+  height: calc(var(--spacing-lg) * 2);
+  min-width: calc(var(--spacing-lg) * 2);
+  border: 0;
+  border-radius: 0;
+  transform: none;
+  cursor: grab;
+}
+
+.component-canvas-selection-handle--rotate::after {
+  display: none;
+}
+
+.component-canvas-selection-handle--rotate:active {
+  cursor: grabbing;
+}
+
+.component-canvas-selection-handle--rotate-north-west {
+  top: calc(var(--spacing-lg) * -1);
+  left: calc(var(--spacing-lg) * -1);
+  clip-path: polygon(0 0, 100% 0, 100% 50%, 50% 50%, 50% 100%, 0 100%);
+}
+
+.component-canvas-selection-handle--rotate-north-east {
+  top: calc(var(--spacing-lg) * -1);
+  right: calc(var(--spacing-lg) * -1);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 100%, 50% 50%, 0 50%);
+}
+
+.component-canvas-selection-handle--rotate-south-east {
+  right: calc(var(--spacing-lg) * -1);
+  bottom: calc(var(--spacing-lg) * -1);
+  clip-path: polygon(0 50%, 50% 50%, 50% 0, 100% 0, 100% 100%, 0 100%);
+}
+
+.component-canvas-selection-handle--rotate-south-west {
+  bottom: calc(var(--spacing-lg) * -1);
+  left: calc(var(--spacing-lg) * -1);
+  clip-path: polygon(0 0, 50% 0, 50% 50%, 100% 50%, 100% 100%, 0 100%);
+}
+
+.component-canvas-selection-handle--north-east {
+  top: 0;
+  left: 100%;
+  cursor: nesw-resize;
+}
+
+.component-canvas-selection-handle--south-east {
+  top: 100%;
+  left: 100%;
+  cursor: nwse-resize;
+}
+
+.component-canvas-selection-handle--south-west {
+  top: 100%;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.component-canvas-marquee {
+  position: absolute;
+  pointer-events: none;
+  border: var(--border-width-default) solid var(--accent-focus);
+  background: color-mix(in srgb, var(--accent-focus) 15%, transparent);
+}
+
+.component-canvas-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.component-canvas-guide {
+  position: absolute;
+  display: block;
+  background: var(--accent-focus);
+}
+
+.component-canvas-guide--vertical {
+  top: 0;
+  bottom: 0;
+  width: var(--border-width-default);
+}
+
+.component-canvas-guide--horizontal {
+  right: 0;
+  left: 0;
+  height: var(--border-width-default);
+}
+
+.component-canvas-guide.is-snap {
+  background: var(--component-canvas-snap);
+}
+
+.component-canvas-guide-marker {
+  position: absolute;
+  width: var(--component-canvas-snap-marker-size);
+  height: var(--component-canvas-snap-marker-size);
+  background: var(--component-canvas-snap);
+  border-radius: var(--component-canvas-handle-radius);
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.component-canvas-node {
+  position: absolute;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: visible;
+  border: var(--border-width-default) solid var(--component-canvas-artboard-outline);
+  border-radius: 0;
+  background: var(--component-canvas-handle-surface);
+  box-shadow: var(--component-canvas-artboard-shadow);
+}
+
+.component-canvas-node--selected {
+  border-color: var(--component-canvas-artboard-outline);
+  box-shadow: var(--component-canvas-artboard-shadow);
+}
+
+.component-canvas-node:focus-visible {
+  outline: var(--component-canvas-focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
+.component-canvas-node__content {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* Keep the canvas node itself in screen-space geometry. Live component paint
+ * is scaled inside its renderer document so the iframe never enlarges an
+ * already-rasterized surface. */
+.component-canvas-node__content-scale {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  contain: size layout paint;
+}
+
+.component-canvas-node__live-frame {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  contain: size layout paint;
+}
+
+/* Keep the eager iframe mounted and loading behind its cached poster. The
+ * authenticated rendered-dimensions event removes this state in one React
+ * commit, revealing the already-painted frame without a transition. */
+.component-canvas-node__live-frame--pending {
+  pointer-events: none;
+  opacity: 0;
+}
+
+.component-canvas-node__snapshot-poster {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.component-canvas-node__snapshot-poster--pending,
+.component-canvas-node__snapshot-poster--paused,
+.component-canvas-node__snapshot-poster--error {
+  background: var(--surface-panel);
+}
+
+.component-canvas-node__snapshot-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  color: var(--text-muted);
+  text-align: center;
+  background: color-mix(in srgb, var(--surface-panel) 82%, transparent);
+  pointer-events: none;
+}
+
+.component-canvas-node__snapshot-status strong {
+  color: var(--text-primary);
+}
+
+.component-canvas-node__snapshot-status span {
+  max-width: 28ch;
+}
+
+.component-canvas-node__snapshot-status--pending {
+  color: var(--accent-focus);
+}
+
+.component-canvas-node__snapshot-status--error {
+  color: var(--accent-error);
+}
+
+.component-canvas-node__loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  color: var(--text-muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+.component-canvas-node__loading-overlay strong {
+  color: var(--text-secondary);
+}
+
+.component-canvas-node__loading-overlay span {
+  text-wrap: pretty;
+}
+
+.component-canvas-node__body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-lg);
+  color: var(--text-muted);
+  flex-direction: column;
+  text-align: center;
+}
+
+.component-canvas-node__body--pending {
+  position: absolute;
+  inset: 0;
+}
+
+.component-canvas-node__body strong {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.component-canvas-node__body span {
+  max-width: var(--size-component-workspace-copy);
+  font-size: var(--font-size-badge);
+}
+
+.component-canvas-node__body .button {
+  max-width: 100%;
+}
+
+.component-canvas-node__snapshot {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--component-canvas-handle-surface);
+}
+
+.component-canvas-node__snapshot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  outline: var(--border-width-default) solid var(--component-canvas-artboard-outline);
+  outline-offset: calc(var(--border-width-default) * -1);
+}
+
+.component-renderer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  border: 0;
+  background: var(--component-canvas-handle-surface);
+  overflow: hidden;
+}
+
+/* A live frame is a separate browsing context, so its wheel events cannot
+ * bubble to the canvas viewport. Keep unselected frames passive so canvas
+ * gestures still work over every component; the selected frame remains live
+ * for element inspection and editing. */
+.component-renderer-frame--canvas-passive {
+  pointer-events: none;
+}
+
+.components-workspace__status-badge {
+  display: inline-flex;
+  min-height: var(--size-control-compact);
+  align-items: center;
+  padding: 0 var(--spacing-xs);
+  color: var(--text-secondary);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-badge);
+}
+
+.components-workspace__status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.components-workspace__muted {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+}
+
+.components-workspace__component-edit-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: none;
+  overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.components-workspace__component-edit-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+
+.components-workspace__component-style-panel-content {
+  display: contents;
+}
+
+.components-workspace__component-style-panel > .ss-edit-panel__body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.components-workspace__component-edit-tabs {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.components-workspace__component-edit-tabs .tabs__list {
+  display: flex;
+  width: 100%;
+}
+
+.components-workspace__component-edit-tabs .tabs__tab {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: var(--spacing-xs);
+}
+
+.components-workspace__component-edit-tab-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.components-workspace__component-summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.components-workspace__component-summary h2 {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-heading);
+  text-wrap: balance;
+}
+
+.components-workspace__component-summary .components-workspace__status-badges {
+  margin-top: var(--spacing-2xs);
+}
+
+.components-workspace__component-edit-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.components-workspace__component-edit-note {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  color: var(--text-secondary);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  font-size: var(--font-size-body-sm);
+}
+
+.components-workspace__panel-note,
+.components-workspace__error {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  color: var(--text-secondary);
+  background: var(--surface-control);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  font-size: var(--font-size-body-sm);
+}
+
+.components-workspace__panel-note {
+  margin: var(--spacing-sm);
+}
+
+.components-workspace__field-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.components-workspace__preset-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.components-workspace__field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.components-workspace__field-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.components-workspace__field-row code {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-badge);
+}
+
+.components-workspace__error {
+  color: var(--accent-error);
+}
+
+.components-workspace__qa-findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.components-workspace__qa-findings code {
+  display: block;
+  margin-top: var(--spacing-2xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-badge);
+  overflow-wrap: anywhere;
+}
+
+.renderer-setup-modal {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-help);
+}
+
+.renderer-setup-modal p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.renderer-setup-modal ul {
+  display: flex;
+  margin: 0;
+  padding-left: var(--spacing-lg);
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  color: var(--text-secondary);
+}
+
+.renderer-setup-modal .components-workspace__toolbar-actions {
+  margin-top: var(--spacing-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .components-workspace__world {
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .component-canvas-node,
+  .components-workspace__panel-note,
+  .components-workspace__error {
+    border-color: var(--text-primary);
+  }
+}
+
+@media (max-width: 760px) {
+  .components-workspace__canvas-frame {
+    grid-area: canvas;
+  }
+
+  .components-workspace__toolbar {
+    gap: var(--spacing-xs);
+    padding-inline: var(--spacing-sm);
+  }
+
+  .components-workspace__toolbar-title {
+    display: none;
+  }
+
+  .components-workspace__toolbar > .tabs {
+    min-width: 0;
+    max-width: 42%;
+    overflow: hidden;
+  }
+
+  .components-workspace__toolbar .tabs__list {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .components-workspace__toolbar-actions {
+    flex: 1 1 auto;
+    max-width: 42%;
+  }
+}

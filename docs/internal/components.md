@@ -20,32 +20,53 @@ plugins, or the project's Node runtime while building the catalog.
 
 ## Component Canvas rendering and QA
 
+The first-class workspace architecture and renderer-session boundary are
+documented in [component-canvas-workspace.md](./component-canvas-workspace.md).
+The workspace can remain catalog-only while adapters are disabled; opening it
+must not be treated as a failed render.
+
 The Component Canvas is always safe to open: named presets, explicit static
 props/slots, finite choices, frame presentation metadata, orphan reporting, and
 bounded matrix planning are source-backed UI state. Those features do not imply
 that a frame can be rendered in Ship Studio.
 
 Rendered frames and visual/a11y QA require a host-owned isolated renderer. The
-host must negotiate protocol `1`, use the same opaque project identity, accept
-only a component ID/source revision and explicit static values, and return an
-image data URL plus a pixel fingerprint. The host owns the project runtime in
-its own preview surface; Ship Studio never imports a component module, runs
-framework config, evaluates slot text, or mounts returned project markup in its
-own process. Stale or malformed host responses are discarded.
+host must negotiate protocol `2`, use the same opaque project identity, accept
+only a component ID/source revision and explicit static values, and return
+bounded frame events or an approved screenshot fingerprint. The host owns the
+project runtime in its own preview surface; Ship Studio never imports a
+component module, runs framework config, evaluates slot text, or mounts
+returned project markup in its own process. Stale or malformed host responses
+are discarded.
 
-No current web adapter advertises `isolatedPreview`, so the packaged app keeps
-rendered frames, baseline capture, pixel comparison, and automated a11y
-disabled until a dialect provides that proof. Exact live-usage capture remains
-a separate workflow and is never accepted as a Component Canvas baseline: a
-baseline requires the isolated host's screenshot path and pixel fingerprint
-for the explicit frame. Baselines record the source revision, frame identity,
-threshold, and host fingerprint. Legacy baselines without a fingerprint are
-shown as unavailable and must be recaptured rather than reported as a match.
+The legacy web-adapter `isolatedPreview` bit is not the renderer release gate.
+The reviewed Next App/Pages host path is available behind versioned,
+project-scoped first-use consent; React/Vite and editing remain disabled until
+their own acceptance matrices pass. Exact live-usage capture remains a separate workflow and is
+never accepted as a Component Canvas baseline: a baseline requires the
+isolated host's screenshot path and pixel fingerprint for the explicit frame.
+Baselines record the source revision, frame identity, threshold, and host
+fingerprint. Legacy baselines without a fingerprint are shown as unavailable
+and must be recaptured rather than reported as a match.
 
 Capability flags are the contract behind this table. A useful read-only catalog
 does not imply a runtime binding or a write capability. Dynamic values,
 ambiguous source matches, stale hashes, unsupported route boundaries, and
 unresolved imports remain visible as diagnostics and fail closed.
+
+## Components workspace actions
+
+The durable Components workspace is opened through typed navigation rather than
+a viewing modal. The Cmd+K palette contributes `components.open`,
+`components.focusSelected`, `components.showVariants`, `components.showAll`,
+`components.fitCanvas`, `components.resetZoom`, `components.resetLayout`,
+`components.arrangeAll`, `components.arrangeSelection`,
+`components.duplicateSelected`, `components.deleteSelected`, and
+`components.stopRenderer`, plus enable/start/disable renderer actions. Next
+components show one workspace-level enable state until the user reviews and
+approves the generated host; later sessions start from that saved approval.
+Vite and unsupported frameworks remain catalog-only while their
+acceptance work is open.
 
 ## Code-native shared libraries
 

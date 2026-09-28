@@ -1,0 +1,347 @@
+/* Ruler overlay and guide chrome for the Components workspace canvas. */
+
+.component-canvas-rulers {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-floating-panel);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.component-canvas-ruler {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  background-color: var(--component-canvas-ruler-surface);
+  color: var(--component-canvas-ruler-text);
+  font: inherit;
+  appearance: none;
+  pointer-events: none;
+}
+
+/* Keep the visible ruler continuous, but give panel-resize handles an
+ * unobstructed hit area at the far edge. */
+.component-canvas-ruler-hit-area {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.component-canvas-ruler-selection {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  display: block;
+  background: var(--component-canvas-ruler-selected-band);
+  pointer-events: none;
+}
+
+.component-canvas-ruler-selection--horizontal {
+  top: 0;
+  bottom: auto;
+  height: var(--component-canvas-ruler-thickness);
+}
+
+.component-canvas-ruler-selection--vertical {
+  top: var(--component-canvas-ruler-thickness);
+  right: auto;
+  left: 0;
+  bottom: 0;
+  width: var(--component-canvas-ruler-thickness);
+}
+
+.component-canvas-ruler-tick {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  display: block;
+  box-sizing: border-box;
+  background: var(--component-canvas-ruler-tick);
+  pointer-events: none;
+  transition: opacity var(--transition-interaction-fast);
+}
+
+.component-canvas-ruler-tick--horizontal {
+  top: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-major-tick-size)
+  );
+  width: var(--component-canvas-ruler-tick-thickness);
+  height: var(--component-canvas-ruler-major-tick-size);
+}
+
+.component-canvas-ruler-tick--vertical {
+  left: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-major-tick-size)
+  );
+  width: var(--component-canvas-ruler-major-tick-size);
+  height: var(--component-canvas-ruler-tick-thickness);
+}
+
+.component-canvas-ruler-tick--horizontal:not(.is-major) {
+  top: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-minor-tick-size)
+  );
+  height: var(--component-canvas-ruler-minor-tick-size);
+}
+
+.component-canvas-ruler-tick--vertical:not(.is-major) {
+  left: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-minor-tick-size)
+  );
+  width: var(--component-canvas-ruler-minor-tick-size);
+}
+
+.component-canvas-ruler-label {
+  position: absolute;
+  display: block;
+  color: var(--component-canvas-ruler-text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-badge);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-control);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.component-canvas-ruler-tick--horizontal .component-canvas-ruler-label {
+  top: calc(
+    var(--component-canvas-ruler-major-tick-size) - var(--component-canvas-ruler-thickness) +
+      var(--component-canvas-ruler-label-inset)
+  );
+  left: 0;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.component-canvas-ruler-tick--vertical .component-canvas-ruler-label {
+  top: 0;
+  left: calc(
+    var(--component-canvas-ruler-major-tick-size) - var(--component-canvas-ruler-thickness)
+  );
+  width: var(--component-canvas-ruler-thickness);
+  text-align: center;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: center;
+}
+
+.component-canvas-ruler-tick.is-selected {
+  background: var(--accent-focus);
+}
+
+.component-canvas-ruler-tick.is-selected .component-canvas-ruler-label {
+  color: var(--accent-focus);
+}
+
+.component-canvas-ruler-boundary {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  display: block;
+  background: var(--accent-focus);
+  pointer-events: none;
+  transition: opacity var(--transition-interaction-fast);
+}
+
+.component-canvas-ruler-boundary--horizontal {
+  top: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-major-tick-size)
+  );
+  width: var(--component-canvas-ruler-tick-thickness);
+  height: var(--component-canvas-ruler-major-tick-size);
+}
+
+.component-canvas-ruler-boundary--vertical {
+  left: calc(
+    var(--component-canvas-ruler-thickness) - var(--component-canvas-ruler-major-tick-size)
+  );
+  width: var(--component-canvas-ruler-major-tick-size);
+  height: var(--component-canvas-ruler-tick-thickness);
+}
+
+.component-canvas-ruler-boundary__label {
+  position: absolute;
+  display: block;
+  color: var(--accent-focus);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-badge);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-label);
+  line-height: var(--line-height-control);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.component-canvas-ruler-boundary--horizontal .component-canvas-ruler-boundary__label {
+  top: calc(
+    var(--component-canvas-ruler-major-tick-size) - var(--component-canvas-ruler-thickness) +
+      var(--component-canvas-ruler-label-inset)
+  );
+}
+
+.component-canvas-ruler-boundary--horizontal.is-start .component-canvas-ruler-boundary__label {
+  right: var(--component-canvas-ruler-label-inset);
+}
+
+.component-canvas-ruler-boundary--horizontal.is-end .component-canvas-ruler-boundary__label {
+  left: var(--component-canvas-ruler-label-inset);
+}
+
+.component-canvas-ruler-boundary--vertical .component-canvas-ruler-boundary__label {
+  top: 0;
+  left: calc(
+    var(--component-canvas-ruler-major-tick-size) - var(--component-canvas-ruler-thickness)
+  );
+  width: var(--component-canvas-ruler-thickness);
+  text-align: center;
+  transform: translateY(-50%) rotate(-90deg);
+  transform-origin: center;
+}
+
+.component-canvas-ruler-boundary--vertical.is-start .component-canvas-ruler-boundary__label {
+  top: calc(var(--component-canvas-ruler-label-inset) * -1);
+}
+
+.component-canvas-ruler-boundary--vertical.is-end .component-canvas-ruler-boundary__label {
+  top: var(--component-canvas-ruler-label-inset);
+}
+
+.component-canvas-ruler--horizontal {
+  top: 0;
+  right: 0;
+  left: var(--component-canvas-ruler-thickness);
+  height: var(--component-canvas-ruler-thickness);
+  border-bottom: var(--border-width-default) solid var(--component-canvas-ruler-divider);
+}
+
+.component-canvas-ruler-hit-area--horizontal {
+  top: 0;
+  right: var(--spacing-lg);
+  left: var(--component-canvas-ruler-thickness);
+  height: var(--component-canvas-ruler-thickness);
+  cursor: s-resize;
+}
+
+.component-canvas-ruler--vertical {
+  top: var(--component-canvas-ruler-thickness);
+  bottom: 0;
+  left: 0;
+  width: var(--component-canvas-ruler-thickness);
+  border-right: var(--border-width-default) solid var(--component-canvas-ruler-divider);
+}
+
+.component-canvas-ruler-hit-area--vertical {
+  top: var(--component-canvas-ruler-thickness);
+  bottom: var(--spacing-lg);
+  left: 0;
+  width: var(--component-canvas-ruler-thickness);
+  cursor: e-resize;
+}
+
+.component-canvas-ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--component-canvas-ruler-thickness);
+  height: var(--component-canvas-ruler-thickness);
+  border-right: var(--border-width-default) solid var(--component-canvas-ruler-divider);
+  border-bottom: var(--border-width-default) solid var(--component-canvas-ruler-divider);
+  background: var(--component-canvas-ruler-surface);
+  z-index: var(--z-floating-panel);
+  pointer-events: none;
+}
+
+.component-canvas-ruler-hit-area:focus-visible {
+  outline: var(--component-canvas-focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--spacing-2xs);
+}
+
+.component-canvas-user-guide:focus-visible {
+  outline: none;
+}
+
+.component-canvas-user-guide {
+  position: absolute;
+  z-index: var(--z-floating-panel);
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: var(--component-canvas-handle-radius);
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.component-canvas-user-guide::before {
+  content: '';
+  position: absolute;
+  border-radius: var(--component-canvas-handle-radius);
+  background: var(--accent-focus);
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity var(--transition-interaction-fast);
+}
+
+.component-canvas-user-guide.is-selected::before {
+  opacity: 1;
+}
+
+.component-canvas-user-guide--horizontal {
+  right: 0;
+  left: var(--component-canvas-ruler-thickness);
+  height: var(--spacing-sm);
+  transform: translateY(-50%);
+  cursor: ns-resize;
+}
+
+.component-canvas-user-guide--horizontal::before {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: var(--border-width-default);
+  transform: translateY(-50%);
+}
+
+.component-canvas-user-guide--vertical {
+  top: var(--component-canvas-ruler-thickness);
+  bottom: 0;
+  width: var(--spacing-sm);
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+
+.component-canvas-user-guide--vertical::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--border-width-default);
+  transform: translateX(-50%);
+}
+
+.component-canvas-user-guide.is-locked {
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.component-canvas-user-guide.is-locked::before {
+  background: var(--text-muted);
+}
+
+.component-canvas-rulers[data-blocked='true'] {
+  pointer-events: none;
+}
+
+.component-canvas-rulers[data-blocked='true'] * {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .component-canvas-rulers,
+  .component-canvas-rulers * {
+    transition: none;
+    animation: none;
+  }
+}

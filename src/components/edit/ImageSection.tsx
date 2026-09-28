@@ -20,9 +20,11 @@ interface Props {
   projectPath: string;
   /** Write the picked web path to source (rejects on failure — picker stays open). */
   onReplace: (webPath: string) => Promise<void>;
+  /** Prevent source mutation while the owning inspector is read-only. */
+  disabled?: boolean;
 }
 
-export function ImageSection({ signature, resolution, projectPath, onReplace }: Props) {
+export function ImageSection({ signature, resolution, projectPath, onReplace, disabled = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const resolved = resolution?.status === 'resolved';
   // The authored path once resolved (the value a replace will rewrite); before
@@ -56,7 +58,7 @@ export function ImageSection({ signature, resolution, projectPath, onReplace }: 
             </code>
           )}
           {resolved ? (
-            <Button variant="secondary" block onClick={() => setPickerOpen(true)}>
+            <Button variant="secondary" block disabled={disabled} onClick={() => setPickerOpen(true)}>
               Replace image…
             </Button>
           ) : (

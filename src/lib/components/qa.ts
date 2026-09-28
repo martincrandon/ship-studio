@@ -16,6 +16,18 @@ export interface ComponentQABaseline {
   pixelThreshold: number;
   /** Host-issued fingerprint of the pixels captured for this baseline. */
   renderFingerprint?: string;
+  /** Exact render inputs used by the accepted baseline. */
+  snapshotKey?: string;
+}
+
+export interface ComponentSnapshotKeyInput {
+  componentRevision: string;
+  presetFingerprint: string;
+  width: number | null;
+  height: ComponentCanvasFrame['height'];
+  background: ComponentCanvasFrame['background'];
+  locale: string | null;
+  rendererVersion: string;
 }
 
 export interface ComponentQABaselineStore {
@@ -41,6 +53,7 @@ export interface ComponentA11yFinding {
   impact: 'minor' | 'moderate' | 'serious' | 'critical';
   message: string;
   helpUrl?: string;
+  elementRef?: string;
 }
 
 export interface ComponentA11yResult {
@@ -93,7 +106,25 @@ function isBaseline(value: unknown): value is ComponentQABaseline {
     (value.renderFingerprint === undefined ||
       (typeof value.renderFingerprint === 'string' &&
         value.renderFingerprint.length > 0 &&
-        value.renderFingerprint.length <= 512))
+        value.renderFingerprint.length <= 512)) &&
+    (value.snapshotKey === undefined ||
+      (typeof value.snapshotKey === 'string' &&
+        value.snapshotKey.length > 0 &&
+        value.snapshotKey.length <= 512))
+  );
+}
+
+/** Stable QA identity; mismatched render inputs are never compared. */
+export function componentSnapshotKey(input: ComponentSnapshotKeyInput): string {
+  return sha256(
+    JSON.stringify({
+      componentRevision: input.componentRevision,
+      presetFingerprint: input.presetFingerprint,
+      dimensions: { width: input.width, height: input.height },
+      background: input.background,
+      locale: input.locale,
+      rendererVersion: input.rendererVersion,
+    })
   );
 }
 
@@ -141,8 +172,20 @@ export function createComponentQABaseline(
   frameIdentity: string,
   capturedAt = new Date().toISOString(),
   pixelThreshold = COMPONENT_QA_DEFAULT_PIXEL_THRESHOLD,
-  renderFingerprint?: string
+  renderFingerprint?: string,
+  rendererVersion?: string
 ): ComponentQABaseline {
+  const snapshotKey = rendererVersion
+    ? componentSnapshotKey({
+        componentRevision: sourceRevision,
+        presetFingerprint: frameIdentity,
+        width: frame.width,
+        height: frame.height,
+        background: frame.background,
+        locale: frame.locale,
+        rendererVersion,
+      })
+    : undefined;
   return {
     version: COMPONENT_QA_VERSION,
     frameId: frame.id,
@@ -152,6 +195,7 @@ export function createComponentQABaseline(
     capturedAt,
     pixelThreshold: Math.max(0, Math.min(1, pixelThreshold)),
     ...(renderFingerprint ? { renderFingerprint } : {}),
+    ...(snapshotKey ? { snapshotKey } : {}),
   };
 }
 
@@ -165,6 +209,7 @@ export function compareComponentQABaseline(
     currentPixelDifference?: number | null;
     /** Baseline identity the host used for the optional pixel difference. */
     currentComparedBaselineFingerprint?: string | null;
+    snapshotKey?: string | null;
   }
 ): ComponentQADiff {
   if (!baseline) {
@@ -176,7 +221,8 @@ export function compareComponentQABaseline(
   }
   if (
     baseline.sourceRevision !== input.sourceRevision ||
-    baseline.frameIdentity !== input.frameIdentity
+    baseline.frameIdentity !== input.frameIdentity ||
+    (baseline.snapshotKey !== undefined && baseline.snapshotKey !== input.snapshotKey)
   ) {
     return {
       state: 'stale',

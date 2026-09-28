@@ -371,23 +371,15 @@ pub async fn unregister_external_project(path: String) -> Result<(), CommandErro
 /// Clear the `workspace_subpath` field in a project's `.shipstudio/project.json`
 /// without touching any other metadata. No-op when the file is absent.
 fn clear_workspace_subpath_in_metadata(project_root: &Path) -> Result<(), String> {
-    use crate::types::ProjectMetadata;
     let metadata_path = project_root.join(".shipstudio").join("project.json");
     if !metadata_path.exists() {
         return Ok(());
     }
-    let contents =
-        std::fs::read_to_string(&metadata_path).map_err(|e| format!("read metadata: {e}"))?;
-    let mut metadata: ProjectMetadata =
-        serde_json::from_str(&contents).map_err(|e| format!("parse metadata: {e}"))?;
-    if metadata.workspace_subpath.is_none() {
-        return Ok(());
-    }
-    metadata.workspace_subpath = None;
-    let updated =
-        serde_json::to_string_pretty(&metadata).map_err(|e| format!("serialise metadata: {e}"))?;
-    std::fs::write(&metadata_path, updated).map_err(|e| format!("write metadata: {e}"))?;
-    Ok(())
+    crate::commands::projects::update_project_metadata(project_root, |metadata| {
+        metadata.workspace_subpath = None;
+        Ok(())
+    })
+    .map_err(|error| error.to_string())
 }
 
 /// Heuristic: does this directory look like a real project root the user would

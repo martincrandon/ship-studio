@@ -358,6 +358,8 @@ function AppContents({ initialProjectPath }: AppProps) {
     setIsPreviewHidden,
     workspaceTab,
     setWorkspaceTab,
+    componentsNavigation,
+    navigateToComponents,
     resetLayout,
   } = useWorkspaceLayout({
     isGitHubConnected: integrations.projectGithub?.status === 'connected',
@@ -953,6 +955,8 @@ function AppContents({ initialProjectPath }: AppProps) {
       setIsPreviewHidden,
       workspaceTab,
       setWorkspaceTab,
+      componentsNavigation,
+      navigateToComponents,
     }),
     [
       showHealthLogs,
@@ -961,6 +965,8 @@ function AppContents({ initialProjectPath }: AppProps) {
       setIsPreviewHidden,
       workspaceTab,
       setWorkspaceTab,
+      componentsNavigation,
+      navigateToComponents,
     ]
   );
 

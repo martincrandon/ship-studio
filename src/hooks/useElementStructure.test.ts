@@ -40,6 +40,7 @@ import {
 } from '../lib/edit-structure';
 import { resolveElementHtml } from '../lib/edit-html';
 import type { ComponentFocusContext } from '../lib/components/focus';
+import type { SourceRef } from '../lib/components/types';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -53,11 +54,26 @@ function fakeIframeRef() {
   } as unknown as React.RefObject<HTMLIFrameElement | null>;
 }
 
-function setup(enabled = true, componentFocusRef?: React.RefObject<ComponentFocusContext | null>) {
+function setup(
+  enabled = true,
+  componentFocusRef?: React.RefObject<ComponentFocusContext | null>,
+  surfaceTarget?: Parameters<typeof useElementStructure>[0]['surfaceTarget'],
+  sourceEditGuard?: Parameters<typeof useElementStructure>[0]['sourceEditGuard'],
+  writeEnabled?: boolean
+) {
   const iframeRef = fakeIframeRef();
   const onToast = vi.fn();
   const hook = renderHook(() =>
-    useElementStructure({ iframeRef, projectPath: '/proj', enabled, onToast, componentFocusRef })
+    useElementStructure({
+      iframeRef,
+      projectPath: '/proj',
+      enabled,
+      onToast,
+      componentFocusRef,
+      surfaceTarget,
+      sourceEditGuard,
+      writeEnabled,
+    })
   );
   return { ...hook, iframeRef, onToast };
 }
@@ -72,12 +88,42 @@ function posts(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
 }
 
 /** Dispatch a window message as if from the given source, then flush microtasks. */
-async function dispatch(data: unknown, source: MessageEventSource) {
+async function dispatch(data: unknown, source: MessageEventSource, origin = '') {
   await act(async () => {
-    window.dispatchEvent(new MessageEvent('message', { source, data }));
+    window.dispatchEvent(new MessageEvent('message', { source, origin, data }));
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function negotiatedMessage(
+  data: Record<string, unknown>,
+  target: ReturnType<typeof negotiatedTarget>
+) {
+  return {
+    ...data,
+    protocolVersion: 2,
+    sessionId: target.sessionId,
+    capabilityToken: target.capabilityToken,
+    generation: target.generation,
+    frameId: target.frameId,
+    componentId: target.componentId,
+  };
+}
+
+function negotiatedTarget(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
+  return {
+    contentWindow: iframeRef.current!.contentWindow,
+    exactOrigin: 'http://127.0.0.1:4312',
+    surfaceId: 'component-frame:1',
+    sessionId: 'session-1',
+    capabilityToken: 'capability-1',
+    generation: 2,
+    frameId: 'frame-1',
+    componentId: FOCUS_CONTEXT.componentId,
+    componentRevision: FOCUS_CONTEXT.indexRevision,
+    capabilities: { liveFrame: true, snapshots: true, accessibility: true, editing: true },
+  } as const;
 }
 
 const SIG = {
@@ -200,6 +246,81 @@ describe('useElementStructure', () => {
       expectedHash: 'source-hash',
       expectedHtml: '<section class="hero">…</section>',
     });
+  });
+
+  it('uses the negotiated target and refuses a component-frame fallback', async () => {
+    const iframeRef = fakeIframeRef();
+    const target = negotiatedTarget(iframeRef);
+    const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;
+    const hook = renderHook(() =>
+      useElementStructure({
+        iframeRef,
+        projectPath: '/proj',
+        enabled: true,
+        onToast: vi.fn(),
+        surfaceTarget: target,
+      })
+    );
+    await dispatch(
+      negotiatedMessage({ type: 'ss:select', signature: SIG, nodeId: 7 }, target),
+      source,
+      target.exactOrigin
+    );
+    await act(async () => {
+      await hook.result.current.insert('inside', 'p');
+    });
+    expect(resolveElementHtml).not.toHaveBeenCalled();
+    expect(insertElement).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it('passes an exact definition target to negotiated paste', async () => {
+    const iframeRef = fakeIframeRef();
+    const target = negotiatedTarget(iframeRef);
+    const source = iframeRef.current!.contentWindow as unknown as MessageEventSource;
+    const sourceEditGuard = vi.fn((source: SourceRef | null) =>
+      source
+        ? { status: 'valid' as const, source }
+        : { status: 'refused' as const, reason: 'missing source' }
+    );
+    (resolveElementHtml as Fn).mockResolvedValue({
+      file: 'src/pages/index.astro',
+      line: 8,
+      html: '<section class="hero">…</section>',
+      sourceStart: 30,
+      sourceEnd: 61,
+      sourceHash: 'source-hash',
+      sourceLine: 8,
+      sourceColumn: 3,
+    });
+    const hook = renderHook(() =>
+      useElementStructure({
+        iframeRef,
+        projectPath: '/proj',
+        enabled: true,
+        onToast: vi.fn(),
+        surfaceTarget: target,
+        sourceEditGuard,
+        writeEnabled: true,
+      })
+    );
+    await dispatch(
+      negotiatedMessage({ type: 'ss:select', signature: SIG, nodeId: 7 }, target),
+      source,
+      target.exactOrigin
+    );
+    await act(async () => {
+      await hook.result.current.copy();
+      await hook.result.current.paste();
+    });
+    expect(pasteElement).toHaveBeenCalledWith(
+      '/proj',
+      SIG,
+      '<section class="hero">…</section>',
+      'hero',
+      expect.objectContaining({ start: 30, end: 61, expectedHash: 'source-hash' })
+    );
+    hook.unmount();
   });
 
   it('ignores messages that are not from the preview iframe', async () => {

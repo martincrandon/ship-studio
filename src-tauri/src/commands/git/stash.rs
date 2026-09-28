@@ -8,7 +8,7 @@ use tracing::{info, instrument, warn};
 
 use super::{
     get_current_branch_sync, git_has_any_changes, git_stage_and_commit, load_project_metadata,
-    save_project_metadata,
+    update_project_metadata,
 };
 
 /// Get stash info for a project (if any auto-stash exists)
@@ -85,9 +85,10 @@ pub async fn apply_stash(project_path: String) -> Result<bool, CommandError> {
 
     if pop_output.status.success() {
         // Clear stash info from metadata
-        let mut metadata = load_project_metadata(&validated_path);
-        metadata.stash_info = None;
-        if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+        if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+            metadata.stash_info = None;
+            Ok(())
+        }) {
             warn!("Failed to save project metadata after stash apply: {}", e);
         }
         // Invalidate status cache after applying stash
@@ -115,9 +116,10 @@ pub async fn drop_stash(project_path: String) -> Result<bool, CommandError> {
     })?;
 
     // Clear stash info from metadata regardless of drop success
-    let mut metadata = load_project_metadata(&validated_path);
-    metadata.stash_info = None;
-    if let Err(e) = save_project_metadata(&validated_path, &metadata) {
+    if let Err(e) = update_project_metadata(&validated_path, |metadata| {
+        metadata.stash_info = None;
+        Ok(())
+    }) {
         warn!("Failed to save project metadata after stash drop: {}", e);
     }
 

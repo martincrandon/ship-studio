@@ -9,16 +9,19 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { trackPageview } from '../lib/analytics';
+import type {
+  ComponentsNavigation,
+  WorkspaceTab,
+} from '../components/workspace/workspaceViewState';
 
 interface UseWorkspaceLayoutParams {
   /** Whether GitHub is connected for the current project */
   isGitHubConnected: boolean;
 }
 
-type WorkspaceTab = 'preview' | 'code' | 'branches' | 'prs';
-
 const TAB_SCREEN: Record<WorkspaceTab, string> = {
   preview: 'Workspace - Preview',
+  components: 'Workspace - Components',
   code: 'Workspace - Code',
   branches: 'Workspace - Branches',
   prs: 'Workspace - Pull Requests',
@@ -37,6 +40,9 @@ export function useWorkspaceLayout({ isGitHubConnected }: UseWorkspaceLayoutPara
   // gate so branches/prs fall back to preview when GitHub isn't available. We
   // keep the raw value so the user's last selection comes back on reconnect.
   const [workspaceTabRaw, setWorkspaceTabRaw] = useState<WorkspaceTab>('preview');
+  const [componentsNavigation, setComponentsNavigation] = useState<ComponentsNavigation>({
+    scope: 'all',
+  });
 
   // Tab switches are recorded as the `$pageview` below, not as a separate
   // click event — one screen change, one event.
@@ -72,6 +78,12 @@ export function useWorkspaceLayout({ isGitHubConnected }: UseWorkspaceLayoutPara
     // Tabs
     workspaceTab,
     setWorkspaceTab,
+    componentsNavigation,
+    navigateToComponents: (navigation: ComponentsNavigation) => {
+      setComponentsNavigation(navigation);
+      setWorkspaceTabRaw('components');
+      setIsPreviewHidden(false);
+    },
 
     // Reset
     resetLayout,

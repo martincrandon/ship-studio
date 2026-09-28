@@ -92,6 +92,62 @@
   --size-icon-gallery-width: 480px;
   --size-icon-gallery-column: 120px;
   --size-component-review-width: 960px;
+  --size-component-workspace-sidebar: 280px;
+  --size-component-workspace-sidebar-min: 220px;
+  --size-component-workspace-inspector: 275px;
+  --size-component-workspace-toolbar: var(--panel-header-h);
+  --size-component-workspace-zoom: 44px;
+  --size-component-workspace-copy: 240px;
+  --component-canvas-grid: color-mix(in srgb, var(--text-faint) 40%, transparent);
+  --component-canvas-grid-size: var(--space-24);
+  --component-canvas-focus-ring-width: var(--focus-ring-width);
+  --component-canvas-focus-ring: 0 0 0 var(--component-canvas-focus-ring-width)
+    color-mix(in srgb, var(--accent-focus) 15%, transparent);
+
+  /* Components canvas visual contract. Keep canvas chrome separate from the
+   * generic control roles so the canvas can tune its neutral surface, ruler,
+   * selection, and floating-toolbar treatment without changing the rest of
+   * the workspace. */
+  --component-canvas-surface: var(--surface-app);
+  --component-canvas-ruler-surface: var(--surface-panel);
+  --component-canvas-ruler-divider: var(--border-subtle);
+  --component-canvas-ruler-tick: var(--text-faint);
+  --component-canvas-ruler-text: var(--text-muted);
+  --component-canvas-ruler-selected-band: color-mix(in srgb, var(--accent-focus) 25%, transparent);
+  --component-canvas-ruler-thickness: var(--size-control-medium);
+  --component-canvas-ruler-tick-thickness: var(--stroke-1);
+  --component-canvas-ruler-major-tick-size: var(--space-06);
+  --component-canvas-ruler-minor-tick-size: var(--space-02);
+  --component-canvas-ruler-label-inset: var(--space-04);
+  --component-canvas-title-gap: var(--space-10);
+  --component-canvas-title-line-height: var(--space-16);
+  --component-canvas-title-input-min-width: var(--size-control-large);
+  --component-canvas-snap: var(--color-red-500);
+  --component-canvas-snap-marker-size: var(--space-06);
+  --component-canvas-handle-hit-size: calc(var(--size-control-large) + var(--spacing-xs));
+  --component-canvas-handle-visual-size: var(--space-06);
+  --component-canvas-handle-radius: var(--radius-2);
+  --component-canvas-handle-surface: var(--surface-panel);
+  --component-canvas-selection-label-offset: var(--spacing-xs);
+  --component-canvas-selection-label-font-size: var(--font-size-badge);
+  --component-canvas-selection-label-line-height: var(--line-height-control);
+  --component-canvas-dimension-surface: var(--surface-control);
+  --component-canvas-dimension-text: var(--text-inverse);
+  --component-canvas-dimension-offset: var(--space-10);
+  --component-canvas-dimension-padding-inline: var(--spacing-xs);
+  --component-canvas-dimension-padding-block: var(--spacing-2xs);
+  --component-canvas-dimension-radius: var(--radius-control);
+  --component-canvas-dimension-shadow: var(--shadow-sm);
+  --component-canvas-floating-toolbar-surface: var(--surface-panel);
+  --component-canvas-floating-toolbar-height: var(--size-control-standard);
+  --component-canvas-floating-toolbar-padding-inline: var(--spacing-sm);
+  --component-canvas-floating-toolbar-padding-block: var(--spacing-xs);
+  --component-canvas-floating-toolbar-gap: var(--spacing-xl);
+  --component-canvas-floating-toolbar-radius: var(--radius-card);
+  --component-canvas-floating-toolbar-shadow: var(--shadow-md);
+  --component-canvas-floating-toolbar-bottom-offset: var(--spacing-md);
+  --component-canvas-artboard-outline: var(--border-subtle);
+  --component-canvas-artboard-shadow: var(--shadow-sm);
 
   --size-color-picker-width: 320px;
   --size-color-picker-height: 510px;

@@ -1,6 +1,14 @@
 import { hasWebPreview, isMobileProjectType, type ProjectType } from '../../lib/static-server';
 
-export type WorkspaceTab = 'preview' | 'code' | 'branches' | 'prs';
+export type ComponentsScope = 'focus' | 'variants' | 'all';
+export interface ComponentsNavigation {
+  componentId?: string;
+  presetId?: string;
+  selectedNodeIds?: string[];
+  scope: ComponentsScope;
+}
+
+export type WorkspaceTab = 'preview' | 'components' | 'code' | 'branches' | 'prs';
 
 /** Resolves the visible mode value, mapping a hidden preview to focus mode. */
 export function workspaceModeValue(

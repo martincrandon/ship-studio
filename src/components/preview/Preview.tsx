@@ -20,9 +20,9 @@ import {
   useMemo,
   useState,
   useEffect,
+  useLayoutEffect,
   type RefObject,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { usePreviewConnection, SERVER_MAX_RETRIES } from '../../hooks/usePreviewConnection';
 import { useAgentBridge } from '../../hooks/useAgentBridge';
 import { AgentActivityOverlay } from './AgentActivityOverlay';
@@ -64,7 +64,10 @@ import {
   type Breakpoint as TwBreakpoint,
 } from '../../lib/edit';
 import { VisualEditorPanel } from '../edit/VisualEditorPanel';
-import { ElementTreePanel } from '../edit/ElementTreePanel';
+import { EditPanelShell } from '../edit/EditPanelShell';
+import { VisualEditorToggle } from '../edit/VisualEditorToggle';
+import type { ElementsPanelModel } from '../workspace/components-inspector/ElementsPanel';
+import type { ComponentEditPanelRenderer } from '../workspace/ComponentsWorkspace';
 import { VariablesPanel } from '../edit/VariablesPanel';
 import { ComponentsPanel } from '../edit/ComponentsPanel';
 import { ComponentMutationReviewModal } from '../edit/ComponentMutationReviewModal';
@@ -88,7 +91,6 @@ import {
   CloseIcon,
   ComponentsIcon,
   DesktopIcon,
-  EditIcon,
   ExpandIcon,
   FullBreakpointIcon,
   LaptopIcon,
@@ -104,7 +106,7 @@ import {
 import { Dropdown, DropdownItem } from '../primitives/Dropdown';
 import { Spinner } from '../primitives/Spinner';
 import { PanelResizeHandle } from '../primitives/PanelResizeHandle';
-import { DockablePanel } from '../primitives/DockablePanel';
+import { DockablePanel, type DockablePanelSurfaceRect } from '../primitives/DockablePanel';
 import { TREE_PANEL_MIN_WIDTH_PX, maxDockedPanelWidth } from './panelSizing';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { pathLocale, switchPathLocale } from '../../lib/i18n';
@@ -114,7 +116,6 @@ import { logger } from '../../lib/logger';
 import type { ProjectType } from '../../lib/static-server';
 import type { DevServerUnexpectedExit } from '../../hooks/useDevServer';
 import { isEditorFramework, resolveEditorMode } from '../../lib/editorGate';
-import { Tooltip } from '../primitives/Tooltip';
 import { resolveElementHtml } from '../../lib/edit-html';
 import type {
   ComponentBinding,
@@ -128,11 +129,18 @@ import type {
   SourceRef,
   StaticValue,
 } from '../../lib/components/types';
-import type { ComponentIsolatedRendererCapability } from '../../lib/components/isolated-renderer';
-import { compareComponentLibrary, type LibraryForkInput } from '../../lib/components/libraries';
+import {
+  compareComponentLibrary,
+  type ComponentLibraryMetadata,
+  type LibraryForkInput,
+} from '../../lib/components/libraries';
 import { normalizeRuntimeSourcePath } from '../../lib/components/adapters/react-helpers';
 import { sourceRefFromResolution, type ComponentFocusContext } from '../../lib/components/focus';
 import { usageReportForResolution } from '../../lib/components/usage';
+import {
+  editableSurfaceFromIframe,
+  type EditableSurfaceTarget,
+} from '../../lib/components/editable-surface';
 import type { Resolution } from '../../lib/edit';
 
 const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
@@ -229,14 +237,8 @@ interface PreviewProps {
   redoTitle?: string;
   onUndo?: () => void;
   onRedo?: () => void;
-  /** Whether the preview's element tree is visible. */
+  /** Whether the workspace-level Elements panel is visible. */
   elementTreeVisible: boolean;
-  /** Whether Elements occupies its preview-side dock or floats over the workspace. */
-  elementTreePinned: boolean;
-  /** Switch Elements between docked and floating modes. */
-  onToggleElementTreePin: () => void;
-  /** Hide Elements without changing its docked/floating preference. */
-  onCloseElementTree: () => void;
   /** Reports whether the current preview is mounted and able to show the element tree. */
   onElementTreeAvailabilityChange?: (available: boolean) => void;
   /** Whether the standalone project Variables panel is open. */
@@ -259,8 +261,28 @@ interface PreviewProps {
   componentsEditMainId?: ComponentId | null;
   /** Persists definition-editing context while Preview is unmounted for Code. */
   onComponentsEditMainChange?: (componentId: ComponentId | null) => void;
+  /** Whether the Components workspace currently owns the main pane. */
+  componentsCanvasView?: boolean;
+  /** Shared Preview/Components visual-editor state. */
+  visualEditorActive?: boolean;
+  /** Updates the shared Preview/Components visual-editor state. */
+  onVisualEditorActiveChange?: (active: boolean) => void;
+  /** Publishes the preview's Elements model to the workspace singleton. */
+  onElementsPanelModelChange?: (model: ElementsPanelModel | null) => void;
+  /** Renders the selected component's edit panel in Preview's shared dock. */
+  componentsEditPanel?: ComponentEditPanelRenderer | null;
+  /** Closes the externally supplied Components edit panel. */
+  onComponentsEditPanelClose?: () => void;
+  /** Space occupied by the workspace-level Elements panel. */
+  workspacePanelInsets?: PreviewPanelInsets;
   /** Optional externally-owned renderer; absent keeps Canvas frames metadata-only. */
-  isolatedComponentRenderer?: ComponentIsolatedRendererCapability | null;
+  /** Navigate the main workspace to a typed Components canvas destination. */
+  onOpenComponents?: (navigation: {
+    componentId?: ComponentId;
+    scope: 'focus' | 'variants' | 'all';
+  }) => void;
+  /** Reports the space occupied by visible panels so other workspace surfaces can reflow. */
+  onWorkspacePanelInsetsChange?: (insets: PreviewPanelInsets) => void;
 }
 
 /**
@@ -278,6 +300,11 @@ export interface PreviewHandle {
   refresh: () => void;
   /** Check if the dev server is ready and responding */
   isServerReady: () => boolean;
+}
+
+export interface PreviewPanelInsets {
+  left: number;
+  right: number;
 }
 
 /** Smallest the Inspect panel can be dragged to. Below this the tab bar
@@ -298,7 +325,6 @@ const INSPECT_PANEL_MAX_FALLBACK_PX = 160;
 const TREE_PANEL_MAX_WIDTH_PX = 480;
 const TREE_VIEWPORT_RESERVE_PX = 160;
 const TREE_PANEL_DEFAULT_WIDTH_PX = 240;
-const TREE_CODE_DEFAULT_WIDTH_PX = 420;
 /** Default width of the Components catalog and details column. */
 const COMPONENTS_PANEL_MIN_WIDTH_PX = TREE_PANEL_DEFAULT_WIDTH_PX;
 const COMPONENTS_PANEL_MAX_WIDTH_PX = 640;
@@ -311,7 +337,6 @@ const COMPONENTS_PANEL_DETAILS_WIDTH_PX =
 // overriding the new compact-open behavior.
 const COMPONENTS_PANEL_DOCKED_WIDTH_STORAGE_KEY = 'componentsPanelDockedWidthV6';
 const COMPONENTS_PANEL_FLOATING_SIZE_STORAGE_KEY = 'componentsPanelFloatingSizeV6';
-const ELEMENT_TREE_FLOATING_SIZE = { width: 360, height: 620 };
 const EDITOR_PANEL_MIN_WIDTH_PX = 220;
 const EDITOR_PANEL_MAX_WIDTH_PX = 560;
 /** Canvas column the pinned editor must always leave behind. The toolbar
@@ -405,9 +430,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onUndo,
     onRedo,
     elementTreeVisible,
-    elementTreePinned,
-    onToggleElementTreePin,
-    onCloseElementTree,
     onElementTreeAvailabilityChange,
     variablesPanelVisible = false,
     variablesPanelPinned = false,
@@ -419,7 +441,15 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onCloseComponentsPanel = () => undefined,
     componentsEditMainId = null,
     onComponentsEditMainChange = () => undefined,
-    isolatedComponentRenderer = null,
+    componentsCanvasView = false,
+    visualEditorActive,
+    onVisualEditorActiveChange,
+    onElementsPanelModelChange,
+    componentsEditPanel = null,
+    onComponentsEditPanelClose,
+    workspacePanelInsets = { left: 0, right: 0 },
+    onOpenComponents,
+    onWorkspacePanelInsetsChange,
   },
   ref
 ) {
@@ -598,6 +628,9 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }, [showLogs, computeMaxPanelHeight]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [previewSurfaceTarget, setPreviewSurfaceTarget] = useState<EditableSurfaceTarget | null>(
+    null
+  );
   // The editor only works when Tailwind actually compiles in the project — a bare
   // `@import "tailwindcss"` without the Vite/PostCSS plugin produces dead classes.
   // Gate on a backend check so projects without Tailwind never show the edit button.
@@ -692,8 +725,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // Visual editor (Next.js, Vite/React, Astro). Inert until the user toggles edit mode.
   const editor = useVisualEditor({
     iframeRef,
+    surfaceTarget: previewSurfaceTarget,
     projectPath,
     enabled: editorEnabled,
+    editMode: visualEditorActive,
+    onEditModeChange: onVisualEditorActiveChange,
     activeBreakpoint,
     breakpoints,
     onToast,
@@ -710,10 +746,51 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // rules can't be mapped back (hashed class names) and render read-only with an
   // explanation.
   const cssEditorEnabled = conn.serverReady && qualifiedEditorMode === 'css';
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !conn.serverReady || !conn.currentUrl) {
+      setPreviewSurfaceTarget(null);
+      return;
+    }
+    let exactOrigin: string;
+    try {
+      exactOrigin = new URL(conn.currentUrl, window.location.href).origin;
+    } catch {
+      setPreviewSurfaceTarget(null);
+      return;
+    }
+    const syncTarget = () => {
+      setPreviewSurfaceTarget(
+        editableSurfaceFromIframe(iframe, {
+          exactOrigin,
+          surfaceId: 'preview',
+          sessionId: null,
+          frameId: null,
+          componentId: null,
+          componentRevision: null,
+          capabilities: {
+            liveFrame: true,
+            snapshots: true,
+            accessibility: true,
+            editing: editorEnabled || cssEditorEnabled,
+          },
+        })
+      );
+    };
+    syncTarget();
+    iframe.addEventListener('load', syncTarget);
+    return () => {
+      iframe.removeEventListener('load', syncTarget);
+      setPreviewSurfaceTarget(null);
+    };
+  }, [conn.currentUrl, conn.serverReady, cssEditorEnabled, editorEnabled]);
   const cssEditor = useCssCascadeEditor({
     iframeRef,
+    surfaceTarget: previewSurfaceTarget,
     projectPath,
     enabled: cssEditorEnabled,
+    editMode: visualEditorActive,
+    onEditModeChange: onVisualEditorActiveChange,
     cssModulesHint: projectType === 'nextjs',
     onToast,
     componentFocusRef: componentFocusContextRef,
@@ -749,6 +826,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       ? 'css'
       : null;
   const activeEditMode = editor.editMode || cssEditor.editMode;
+  const componentEditPanelVisible = componentsCanvasView && componentsEditPanel !== null;
+  // Preview owns the shared dock, while Components mode supplies the complete
+  // panel surface from the selected component renderer.
+  const editorPanelActive = componentsCanvasView ? componentEditPanelVisible : activeEditMode;
   useEffect(() => {
     onElementTreeAvailabilityChange?.(true);
     return () => onElementTreeAvailabilityChange?.(false);
@@ -1256,17 +1337,51 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           library.componentIds.includes(selectedCatalogComponent.id)
       )
     : undefined;
-  const libraryUpdateCount = (componentIndex?.libraries ?? []).filter((library) => {
-    try {
-      const key = `shipstudio.components.library-baseline:${encodeURIComponent(projectPath)}:${encodeURIComponent(library.id)}`;
-      const raw = localStorage.getItem(key);
-      if (!raw) return false;
-      const baseline = JSON.parse(raw);
-      return compareComponentLibrary(baseline, library).changes.length > 0;
-    } catch {
-      return false;
+  const libraryUpdateCount = (componentIndex?.libraries ?? []).filter(
+    (library: ComponentLibraryMetadata) => {
+      try {
+        const key = `shipstudio.components.library-baseline:${encodeURIComponent(projectPath)}:${encodeURIComponent(library.id)}`;
+        const raw = localStorage.getItem(key);
+        if (!raw) return false;
+        const baseline: unknown = JSON.parse(raw) as unknown;
+        if (!baseline || typeof baseline !== 'object' || Array.isArray(baseline)) return false;
+        const record = baseline as Record<string, unknown>;
+        if (
+          typeof record.id !== 'string' ||
+          typeof record.packageName !== 'string' ||
+          typeof record.packageRoot !== 'string' ||
+          (record.version !== null && typeof record.version !== 'string') ||
+          (record.repository !== null && typeof record.repository !== 'string') ||
+          (record.ownership !== 'library' && record.ownership !== 'project') ||
+          !Array.isArray(record.exportedFiles) ||
+          !record.exportedFiles.every((file) => typeof file === 'string') ||
+          !Array.isArray(record.componentIds) ||
+          !record.componentIds.every((componentId) => typeof componentId === 'string')
+        ) {
+          return false;
+        }
+        const exportedFiles = record.exportedFiles.filter(
+          (file): file is string => typeof file === 'string'
+        );
+        const componentIds = record.componentIds.filter(
+          (componentId): componentId is string => typeof componentId === 'string'
+        );
+        const baselineLibrary: ComponentLibraryMetadata = {
+          id: record.id,
+          packageName: record.packageName,
+          packageRoot: record.packageRoot,
+          version: record.version,
+          repository: record.repository,
+          ownership: record.ownership,
+          exportedFiles,
+          componentIds,
+        };
+        return compareComponentLibrary(baselineLibrary, library).changes.length > 0;
+      } catch {
+        return false;
+      }
     }
-  }).length;
+  ).length;
   const componentsPanelHasDetails = selectedCatalogComponent !== undefined;
   const editingSelectedMain = componentsEditMainId === selectedComponentId;
   const selectedComponentNeedsSetup = selectedCatalogComponent?.props.some(
@@ -1364,7 +1479,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         category: 'navigation' as const,
         when: 'project' as const,
         keywords: ['component', 'canvas', 'variants', 'preset', 'qa', 'frames'],
-        run: () => document.querySelector<HTMLButtonElement>('.ss-components-open-canvas')?.click(),
+        run: () => onOpenComponents?.({ componentId: selectedCatalogComponent.id, scope: 'focus' }),
       },
       ...(selectedCatalogComponent.usageCount > 0
         ? [
@@ -1482,6 +1597,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     editingSelectedMain,
     enterEditMain,
     onComponentsEditMainChange,
+    onOpenComponents,
     componentFocusSession,
     exitComponentFocusSession,
     openComponentSource,
@@ -1702,15 +1818,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // view of the rendered page. Keep the bridge alive for component selection
   // and focus while the tree itself is closed, since the canvas can still be
   // the source of those interactions.
-  const showTree = elementTreeVisible;
+  const showTree = elementTreeVisible && !componentsCanvasView;
   const elementTreeEnabled =
-    (showTree || componentsPanelVisible || activeEditMode) && conn.serverReady;
+    !componentsCanvasView &&
+    (showTree || componentsPanelVisible || activeEditMode) &&
+    conn.serverReady;
   const variablesPanelDocked = variablesPanelVisible && variablesPanelPinned;
   const componentsPanelDocked = componentsPanelVisible && componentsPanelPinned;
-  // The Elements panel's Code (markup-edit) view needs a wider column than the
-  // navigator; the tree panel reports its view so we can widen the grid track.
-  const [treeCodeView, setTreeCodeView] = useState(false);
-  const effectiveTreeCodeView = activeEditMode && treeCodeView;
   const [variablesPanelWidth, setVariablesPanelWidth] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem('variablesPanelDockedWidth'));
     return Number.isFinite(saved) &&
@@ -1731,16 +1845,102 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   });
   const [isComponentsResizing, setIsComponentsResizing] = useState(false);
   const componentsPanelRef = useRef<HTMLDivElement | null>(null);
-  const [treePanelWidth, setTreePanelWidth] = useState<number | null>(() => {
-    const saved = Number(localStorage.getItem('elementTreeDockedWidth'));
-    return Number.isFinite(saved) &&
-      saved >= TREE_PANEL_MIN_WIDTH_PX &&
-      saved <= TREE_PANEL_MAX_WIDTH_PX
-      ? saved
-      : null;
-  });
-  const [isTreeResizing, setIsTreeResizing] = useState(false);
-  const treePanelRef = useRef<HTMLDivElement | null>(null);
+  const [previewContainer, setPreviewContainer] = useState<HTMLDivElement | null>(null);
+  const previewContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setPreviewContainer(node);
+  }, []);
+  const [panelRects, setPanelRects] = useState<
+    Partial<Record<'variables' | 'components' | 'edit', DockablePanelSurfaceRect>>
+  >({});
+  const [previewBounds, setPreviewBounds] = useState<{ left: number; right: number } | null>(null);
+  const updatePanelRect = useCallback(
+    (panel: 'variables' | 'components' | 'edit', rect: DockablePanelSurfaceRect | null) => {
+      setPanelRects((current) => {
+        const previous = current[panel];
+        if (
+          (previous === undefined && rect === null) ||
+          (previous &&
+            rect &&
+            previous.left === rect.left &&
+            previous.top === rect.top &&
+            previous.width === rect.width &&
+            previous.height === rect.height)
+        ) {
+          return current;
+        }
+        if (!rect) {
+          const next = { ...current };
+          delete next[panel];
+          return next;
+        }
+        return { ...current, [panel]: rect };
+      });
+    },
+    []
+  );
+  const reportVariablesPanelRect = useCallback(
+    (rect: DockablePanelSurfaceRect | null) => updatePanelRect('variables', rect),
+    [updatePanelRect]
+  );
+  const reportComponentsPanelRect = useCallback(
+    (rect: DockablePanelSurfaceRect | null) => updatePanelRect('components', rect),
+    [updatePanelRect]
+  );
+  const reportEditPanelRect = useCallback(
+    (rect: DockablePanelSurfaceRect | null) => updatePanelRect('edit', rect),
+    [updatePanelRect]
+  );
+
+  useLayoutEffect(() => {
+    const container = previewContainer;
+    if (!container) {
+      setPreviewBounds(null);
+      onWorkspacePanelInsetsChange?.({ left: 0, right: 0 });
+      return;
+    }
+    const report = () => {
+      const rect = container.getBoundingClientRect();
+      setPreviewBounds((current) =>
+        current && current.left === rect.left && current.right === rect.right
+          ? current
+          : { left: rect.left, right: rect.right }
+      );
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(container);
+    window.addEventListener('resize', report);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', report);
+    };
+  }, [onWorkspacePanelInsetsChange, previewContainer]);
+
+  useEffect(() => {
+    if (!onWorkspacePanelInsetsChange || !previewBounds) return;
+    let left = 0;
+    let right = 0;
+    for (const panel of Object.values(panelRects)) {
+      if (!panel || panel.width <= 0) continue;
+      const overlapLeft = Math.max(previewBounds.left, panel.left);
+      const overlapRight = Math.min(previewBounds.right, panel.left + panel.width);
+      if (overlapRight <= overlapLeft) continue;
+      const leftDistance = Math.abs(panel.left - previewBounds.left);
+      const rightDistance = Math.abs(previewBounds.right - (panel.left + panel.width));
+      if (leftDistance <= rightDistance) {
+        left = Math.max(left, Math.max(0, overlapRight - previewBounds.left));
+      } else {
+        right = Math.max(right, Math.max(0, previewBounds.right - overlapLeft));
+      }
+    }
+    onWorkspacePanelInsetsChange({ left: Math.ceil(left), right: Math.ceil(right) });
+  }, [onWorkspacePanelInsetsChange, panelRects, previewBounds]);
+
+  useEffect(
+    () => () => onWorkspacePanelInsetsChange?.({ left: 0, right: 0 }),
+    [onWorkspacePanelInsetsChange]
+  );
+
   const editorPanelDockRef = useRef<HTMLDivElement | null>(null);
   const [editorPanelWidth, setEditorPanelWidth] = useState(() => {
     const saved = Number(localStorage.getItem('cssPanelDockedWidth'));
@@ -1897,6 +2097,99 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     onComponentsEditMainChange,
   ]);
 
+  const elementsPanelStructure = useMemo(
+    () =>
+      activeEditMode
+        ? {
+            selectAndRun: structure.selectAndRun,
+            insert: (
+              position: Parameters<NonNullable<typeof structure.insert>>[0],
+              kind: Parameters<NonNullable<typeof structure.insert>>[1]
+            ) => void structure.insert(position, kind),
+            duplicate: () => void structure.duplicate(),
+            remove: () => void structure.remove(),
+            copy: () => void structure.copy(),
+            cut: () => void structure.cut(),
+            paste: () => void structure.paste(),
+            hasClipboard: structure.hasClipboard,
+            clipboardSourceNodeId: structure.clipboardSourceNodeId,
+          }
+        : undefined,
+    [
+      activeEditMode,
+      structure.clipboardSourceNodeId,
+      structure.copy,
+      structure.cut,
+      structure.duplicate,
+      structure.hasClipboard,
+      structure.insert,
+      structure.paste,
+      structure.remove,
+      structure.selectAndRun,
+    ]
+  );
+  const editElementsStructuredSlot = useCallback(
+    (
+      instanceId: string,
+      input: Parameters<NonNullable<ElementsPanelModel['onEditStructuredSlot']>>[1]
+    ) => {
+      const instance = componentIndex?.instances.find((candidate) => candidate.id === instanceId);
+      if (instance) void editCatalogStructuredSlot(instance, input);
+    },
+    [componentIndex?.instances, editCatalogStructuredSlot]
+  );
+  const previewElementsModel = useMemo<ElementsPanelModel>(
+    () => ({
+      tree: showTree ? elementTree.tree : null,
+      componentTree: showTree ? elementTree.componentTree : null,
+      truncated: showTree ? elementTree.truncated : false,
+      selectedId: showTree ? elementTree.selectedId : null,
+      hoveredId: showTree ? elementTree.hoveredId : null,
+      affectedIds: showTree ? elementTree.affectedIds : [],
+      selectedComponentKey: showTree ? (elementTree.selectedComponent?.key ?? null) : null,
+      onSelect: elementTree.selectNode,
+      onHover: elementTree.hoverNode,
+      onComponentSelect: selectTreeComponent,
+      onComponentHover: elementTree.hoverComponent,
+      onComponentFocus: enterTreeComponentFocus,
+      onComponentFocusParent: focusParentComponent,
+      onComponentExitFocus: exitComponentFocus,
+      selectedSignature:
+        (editorMode === 'css' ? cssEditor.selection?.signature : editor.selection?.signature) ??
+        null,
+      componentFocusPath,
+      availableComponents: componentIndex?.components ?? [],
+      onEditStructuredSlot: editElementsStructuredSlot,
+      structure: elementsPanelStructure,
+    }),
+    [
+      componentFocusPath,
+      componentIndex?.components,
+      cssEditor.selection?.signature,
+      editElementsStructuredSlot,
+      editor.selection?.signature,
+      editorMode,
+      elementTree.affectedIds,
+      elementTree.componentTree,
+      elementTree.hoverComponent,
+      elementTree.hoveredId,
+      elementTree.selectNode,
+      elementTree.selectedComponent?.key,
+      elementTree.selectedId,
+      elementTree.tree,
+      elementTree.truncated,
+      elementsPanelStructure,
+      enterTreeComponentFocus,
+      exitComponentFocus,
+      focusParentComponent,
+      selectTreeComponent,
+      showTree,
+    ]
+  );
+  useEffect(() => {
+    onElementsPanelModelChange?.(showTree ? previewElementsModel : null);
+  }, [onElementsPanelModelChange, previewElementsModel, showTree]);
+
   useCommands(() => {
     if (!showTree && !componentsPanelVisible) return [];
     const commands = [] as {
@@ -1954,12 +2247,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   ]);
 
   useEffect(() => {
-    if (treePanelWidth !== null) {
-      localStorage.setItem('elementTreeDockedWidth', String(treePanelWidth));
-    }
-  }, [treePanelWidth]);
-
-  useEffect(() => {
     if (variablesPanelWidth !== null) {
       localStorage.setItem('variablesPanelDockedWidth', String(variablesPanelWidth));
     }
@@ -2009,34 +2296,6 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       setVariablesPanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max)));
     },
     [variablesPanelWidth, computeMaxDockedPanelWidth]
-  );
-
-  const resizeTreePanel = useCallback(
-    (clientX: number) => {
-      const panel = treePanelRef.current;
-      const container = panel?.parentElement;
-      if (!panel || !container) return;
-
-      const maxTreeWidth = computeMaxDockedPanelWidth(container.clientWidth);
-      // Elements may follow Variables in the left dock. Measure from the
-      // Elements slot itself so preceding panels do not affect its width.
-      const next = clientX - panel.getBoundingClientRect().left;
-      setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(next, maxTreeWidth)));
-    },
-    [computeMaxDockedPanelWidth]
-  );
-
-  const resizeTreePanelBy = useCallback(
-    (delta: number) => {
-      const panel = treePanelRef.current;
-      const container = panel?.parentElement;
-      if (!panel || !container) return;
-
-      const max = computeMaxDockedPanelWidth(container.clientWidth);
-      const current = treePanelWidth ?? panel.offsetWidth;
-      setTreePanelWidth(Math.max(TREE_PANEL_MIN_WIDTH_PX, Math.min(current + delta, max)));
-    },
-    [treePanelWidth, computeMaxDockedPanelWidth]
   );
 
   /** Widest the pinned editor may get for a given container width, so the
@@ -2133,7 +2392,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // split, docking another panel). Without this the panel keeps a width the
   // canvas can no longer afford and the toolbar's controls collide.
   useEffect(() => {
-    if (!editorPinned || !activeEditMode) return;
+    if (!editorPinned || !editorPanelActive) return;
     const container = editorPanelDockRef.current?.parentElement;
     if (!container) return;
     const ro = new ResizeObserver(() => {
@@ -2142,19 +2401,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     });
     ro.observe(container);
     return () => ro.disconnect();
-  }, [editorPinned, activeEditMode, computeMaxEditorPanelWidth]);
-
-  useEffect(() => {
-    if (!showTree) return;
-    const container = treePanelRef.current?.parentElement;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      const max = computeMaxDockedPanelWidth(container.clientWidth);
-      setTreePanelWidth((prev) => (prev === null || prev <= max ? prev : max));
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [showTree, computeMaxDockedPanelWidth]);
+  }, [editorPinned, editorPanelActive, computeMaxEditorPanelWidth]);
 
   useEffect(() => {
     if (!variablesPanelDocked) return;
@@ -2414,9 +2661,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   }
 
   const hasCustomDockedWidth =
-    (variablesPanelDocked && variablesPanelWidth !== null) ||
-    (showTree && elementTreePinned && treePanelWidth !== null) ||
-    componentsPanelDocked;
+    (variablesPanelDocked && variablesPanelWidth !== null) || componentsPanelDocked;
   const componentsPanelBaseWidth = componentsPanelWidth ?? COMPONENTS_PANEL_DEFAULT_WIDTH_PX;
   const componentsPanelLayoutWidth = componentsPanelHasDetails
     ? Math.min(
@@ -2428,8 +2673,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     hasCustomDockedWidth ||
     variablesPanelDocked ||
     componentsPanelDocked ||
-    (showTree && elementTreePinned) ||
-    (activeEditMode && editorPinned);
+    (editorPanelActive && editorPinned);
   const dockedGridTemplateColumns = hasDockedPanelLayout
     ? [
         variablesPanelDocked
@@ -2438,15 +2682,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             : 'var(--tree-panel-w)'
           : null,
         componentsPanelDocked ? `${componentsPanelLayoutWidth}px` : null,
-        showTree && elementTreePinned
-          ? treePanelWidth !== null
-            ? `${treePanelWidth}px`
-            : effectiveTreeCodeView
-              ? 'var(--tree-code-w)'
-              : 'var(--tree-panel-w)'
-          : null,
         'minmax(0, 1fr)',
-        activeEditMode && editorPinned ? 'var(--editor-panel-visual-w)' : null,
+        editorPanelActive && editorPinned ? 'var(--editor-panel-visual-w)' : null,
       ]
         .filter((column): column is string => column !== null)
         .join(' ')
@@ -2454,17 +2691,18 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
 
   return (
     <div
+      ref={previewContainerRef}
       className={`preview-container${isFullscreen ? ' preview-container--fullscreen' : ''}${
-        activeEditMode && editorPinned ? ' preview-container--editor-pinned' : ''
-      }${showTree && elementTreePinned ? ' preview-container--tree' : ''}${
-        showTree && elementTreePinned && effectiveTreeCodeView
-          ? ' preview-container--tree-code'
-          : ''
+        editorPanelActive && editorPinned ? ' preview-container--editor-pinned' : ''
       }${variablesPanelDocked ? ' preview-container--variables-pinned' : ''}${
         componentsPanelDocked ? ' preview-container--components-pinned' : ''
       }`}
       data-logs={showLogs ? 'open' : 'closed'}
       style={{
+        ...(workspacePanelInsets.left > 0 ? { paddingLeft: `${workspacePanelInsets.left}px` } : {}),
+        ...(workspacePanelInsets.right > 0
+          ? { paddingRight: `${workspacePanelInsets.right}px` }
+          : {}),
         ...(dockedGridTemplateColumns
           ? { gridTemplateColumns: dockedGridTemplateColumns }
           : undefined),
@@ -2473,7 +2711,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
               gridTemplateRows: `auto minmax(0, 1fr) var(--handle-size) ${inspectPanelHeight}px`,
             }
           : undefined),
-        ...(activeEditMode && editorPinned
+        ...(editorPanelActive && editorPinned
           ? ({
               '--editor-panel-visual-w': `${editorPanelWidth}px`,
             } as React.CSSProperties)
@@ -2484,39 +2722,11 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
       <div className="preview-toolbar">
         <div className="preview-toolbar-actions">
           <div className="preview-toolbar-control-group">
-            {editorMode ? (
-              <ToggleButton
-                type="button"
-                className="preview-edit-control"
-                variant={activeEditMode ? 'secondary' : 'default'}
-                onClick={toggleActiveEditor}
-                title="Toggle visual editor"
-                pressed={activeEditMode}
-                aria-label="Edit"
-              >
-                <EditIcon size={13} />
-                <span
-                  className={`preview-edit-toggle-switch ${activeEditMode ? 'is-on' : ''}`}
-                  aria-hidden
-                />
-              </ToggleButton>
-            ) : (
-              // Preview-capable but not editable: show the toggle grayed out with a
-              // shared tooltip explaining why visual editing is unavailable.
-              <Tooltip content="Visual editing is unavailable for this project. Supported projects can be edited by clicking elements in the preview.">
-                <span className="preview-edit-toggle-wrap preview-edit-control">
-                  <Button
-                    type="button"
-                    className="preview-edit-toggle--disabled"
-                    aria-disabled="true"
-                    tabIndex={-1}
-                    aria-label="Edit"
-                  >
-                    <EditIcon size={13} />
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
+            <VisualEditorToggle
+              enabled={editorMode !== null}
+              active={activeEditMode}
+              onToggle={toggleActiveEditor}
+            />
 
             {onToggleLogs && (
               <ToggleButton
@@ -2950,173 +3160,117 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
         onDevServerInput={onDevServerInput}
         onDevServerResize={onDevServerResize}
       />
-      {showTree && (
-        <>
-          <DockablePanel
-            docked={elementTreePinned}
-            ariaLabel="Elements panel"
-            positionKey="elementTreeFloatingPosition"
-            sizeKey="elementTreeFloatingSize"
-            floatingSize={ELEMENT_TREE_FLOATING_SIZE}
-            initialPosition={() => ({ left: 72, top: 96 })}
-            placeholderClassName={`ss-tree-panel-dock${
-              variablesPanelDocked ? ' ss-tree-panel-dock--after-variables' : ''
-            }`}
-            dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${componentsPanelDocked ? componentsPanelLayoutWidth : 'components-floating'}`}
-            surfaceClassName="dockable-panel__surface--preview"
-            placeholderRef={treePanelRef}
-            dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
-          >
-            <ElementTreePanel
-              tree={elementTree.tree}
-              componentTree={elementTree.componentTree}
-              truncated={elementTree.truncated}
-              selectedId={elementTree.selectedId}
-              hoveredId={elementTree.hoveredId}
-              affectedIds={elementTree.affectedIds}
-              selectedComponentKey={elementTree.selectedComponent?.key ?? null}
-              componentFocusPath={componentFocusPath}
-              onSelect={elementTree.selectNode}
-              onHover={elementTree.hoverNode}
-              onComponentSelect={selectTreeComponent}
-              onComponentHover={elementTree.hoverComponent}
-              onComponentFocus={enterTreeComponentFocus}
-              onComponentFocusParent={focusParentComponent}
-              onComponentExitFocus={exitComponentFocus}
-              availableComponents={componentIndex?.components ?? []}
-              onEditStructuredSlot={(instanceId, input) => {
-                const instance = componentIndex?.instances.find(
-                  (candidate) => candidate.id === instanceId
-                );
-                if (instance) void editCatalogStructuredSlot(instance, input);
-              }}
-              projectPath={projectPath}
-              selectedSignature={
-                (editorMode === 'css'
-                  ? cssEditor.selection?.signature
-                  : editor.selection?.signature) ?? null
-              }
-              onViewChange={(v) => setTreeCodeView(v === 'code')}
-              pinned={elementTreePinned}
-              onTogglePin={onToggleElementTreePin}
-              onClose={onCloseElementTree}
-              structure={
-                activeEditMode
-                  ? {
-                      selectAndRun: structure.selectAndRun,
-                      insert: (position, kind) => void structure.insert(position, kind),
-                      duplicate: () => void structure.duplicate(),
-                      remove: () => void structure.remove(),
-                      copy: () => void structure.copy(),
-                      cut: () => void structure.cut(),
-                      paste: () => void structure.paste(),
-                      hasClipboard: structure.hasClipboard,
-                      clipboardSourceNodeId: structure.clipboardSourceNodeId,
-                    }
-                  : undefined
-              }
-            />
-          </DockablePanel>
-          {elementTreePinned && (
-            <PanelResizeHandle
-              value={
-                treePanelWidth ??
-                (effectiveTreeCodeView ? TREE_CODE_DEFAULT_WIDTH_PX : TREE_PANEL_DEFAULT_WIDTH_PX)
-              }
-              min={TREE_PANEL_MIN_WIDTH_PX}
-              max={TREE_PANEL_MAX_WIDTH_PX}
-              label="Resize Elements panel"
-              className={`panel-resize-handle--tree${
-                variablesPanelDocked ? ' panel-resize-handle--tree-after-variables' : ''
-              }`}
-              onResize={resizeTreePanel}
-              onResizeBy={resizeTreePanelBy}
-              onDragChange={setIsTreeResizing}
-            />
-          )}
-        </>
-      )}
-      {(isTreeResizing || isVariablesResizing || isComponentsResizing) && (
+      {(isVariablesResizing || isComponentsResizing) && (
         <div className="panel-resize-overlay panel-resize-overlay--vertical" />
       )}
-      {editor.editMode &&
+      {editorPanelActive &&
         (() => {
-          // Floating mode portals to <body> (position:fixed is the only way to
-          // composite above the iframe in WebKit). Pinned mode renders in-tree
-          // as the container's second grid column — it never overlaps the
-          // iframe, and the grid guarantees it can't cover surrounding chrome.
-          const panel = (
-            <VisualEditorPanel
-              selection={editor.selection}
-              projectPath={projectPath}
-              currentClass={editor.currentClass}
-              variables={cssVariables.variables}
-              tailwindVersion={editor.tailwindVersion}
-              utilityPrefix={editor.utilityPrefix ?? undefined}
-              spacingScale={editor.spacingScale ?? undefined}
-              textResolution={textEditing.textResolution}
-              imageResolution={editor.imageResolution}
-              onReplaceImage={editor.replaceImage}
-              textBlockedNonce={textEditing.textBlockedNonce}
-              breakpoints={breakpoints}
-              activeBreakpoint={activeBreakpoint}
-              breakpointTooWide={breakpointTooWide}
-              onSelectBreakpoint={(bp) => {
-                setPinnedBreakpoint(bp);
-                // Jump the canvas to a breakpoint's width so you can see it; Base
-                // applies at all widths, so leave the canvas where it is.
-                if (bp.minPx > 0) resize.previewAtWidth(bp.minPx);
-              }}
-              autoSave={editor.autoSave}
-              onToggleAutoSave={editor.toggleAutoSave}
-              onStepGap={(dir, step) => editor.stepSpacing('gap', dir, step)}
-              onSetSide={editor.setBoxSide}
-              onSetPositionSide={editor.setPositionSide}
-              onApplyEnum={editor.applyEnum}
-              onReset={editor.reset}
-              multiTarget={editor.multiTarget}
-              onMultiTargetChange={editor.setMultiTarget}
-              editTarget={editor.editTarget}
-              customClasses={editor.customClasses}
-              canCreateClass={editor.classEntryReady}
-              onEditElement={editor.editElement}
-              onEditClass={editor.editClass}
-              onApplyClass={(name) => editor.applyClass(name)}
-              onUnapplyClass={(name) => editor.unapplyClass(name)}
-              onCreateClass={(name) => void editor.createClassFromStyles(name)}
-              onAddFirstClass={(name) => editor.addFirstClass(name)}
-              usage={editor.usage}
-              onOpenInCode={onOpenInCode}
-              onCommit={() => void editor.commit()}
-              onClose={editor.toggleEditMode}
+          // Preview owns the one shared dock for Tailwind, CSS, and Components
+          // edit surfaces. The selected mode only chooses the shell content;
+          // placement, persistence, resize, and body portal stay centralized.
+          const panel = componentsCanvasView ? (
+            componentsEditPanel?.({
+              pinned: editorPinned,
+              onTogglePin: toggleEditorPinned,
+              onClose: onComponentsEditPanelClose ?? (() => undefined),
+            })
+          ) : editor.editMode ? (
+            <EditPanelShell
+              context="Visual Editor"
               pinned={editorPinned}
               onTogglePin={toggleEditorPinned}
-            />
-          );
-          // Pinned: wrap in a relative "dock" grid cell and absolutely-position
-          // the panel inside it. An absolute panel can't grow its grid track, so
-          // it's forced to the cell's real (bounded) height and its body scrolls
-          // — grid track-sizing was letting the in-flow panel grow past the
-          // viewport in WebKit instead.
-          return editorPinned ? (
-            <div ref={editorPanelDockRef} className="ss-edit-panel-dock">
-              {panel}
-              <PanelResizeHandle
-                value={editorPanelWidth}
-                min={EDITOR_PANEL_MIN_WIDTH_PX}
-                max={EDITOR_PANEL_MAX_WIDTH_PX}
-                label="Resize Visual Editor panel"
-                className="ss-edit-panel-dock__resize"
-                onResize={resizeEditorPanel}
-                onResizeBy={resizeEditorPanelBy}
+              onClose={editor.toggleEditMode}
+            >
+              <VisualEditorPanel
+                  selection={editor.selection}
+                  projectPath={projectPath}
+                  currentClass={editor.currentClass}
+                  variables={cssVariables.variables}
+                  tailwindVersion={editor.tailwindVersion}
+                  utilityPrefix={editor.utilityPrefix ?? undefined}
+                  spacingScale={editor.spacingScale ?? undefined}
+                  textResolution={textEditing.textResolution}
+                  imageResolution={editor.imageResolution}
+                  onReplaceImage={editor.replaceImage}
+                  textBlockedNonce={textEditing.textBlockedNonce}
+                  breakpoints={breakpoints}
+                  activeBreakpoint={activeBreakpoint}
+                  breakpointTooWide={breakpointTooWide}
+                  onSelectBreakpoint={(bp) => {
+                    setPinnedBreakpoint(bp);
+                    // Jump the canvas to a breakpoint's width so you can see it; Base
+                    // applies at all widths, so leave the canvas where it is.
+                    if (bp.minPx > 0) resize.previewAtWidth(bp.minPx);
+                  }}
+                  autoSave={editor.autoSave}
+                  onToggleAutoSave={editor.toggleAutoSave}
+                  onStepGap={(dir, step) => {
+                    void editor.stepSpacing('gap', dir, step);
+                  }}
+                  onSetSide={(type, side, value) => {
+                    void editor.setBoxSide(type, side, value);
+                  }}
+                  onSetPositionSide={(side, value) => {
+                    void editor.setPositionSide(side, value);
+                  }}
+                  onApplyEnum={(token, style) => {
+                    void editor.applyEnum(token, style);
+                  }}
+                  onReset={(spec) => {
+                    void editor.reset(spec);
+                  }}
+                  multiTarget={editor.multiTarget}
+                  onMultiTargetChange={editor.setMultiTarget}
+                  editTarget={editor.editTarget}
+                  customClasses={editor.customClasses}
+                  canCreateClass={editor.classEntryReady}
+                  onEditElement={editor.editElement}
+                  onEditClass={editor.editClass}
+                  onApplyClass={(name) => editor.applyClass(name)}
+                  onUnapplyClass={(name) => editor.unapplyClass(name)}
+                  onCreateClass={(name) => void editor.createClassFromStyles(name)}
+                  onAddFirstClass={(name) => editor.addFirstClass(name)}
+                  usage={editor.usage}
+                  onOpenInCode={onOpenInCode}
+                  onCommit={() => void editor.commit()}
+                  onClose={editor.toggleEditMode}
+                  chrome={false}
               />
-            </div>
+            </EditPanelShell>
           ) : (
-            createPortal(panel, document.body)
+            <EditPanelShell
+              context="CSS"
+              pinned={editorPinned}
+              onTogglePin={toggleEditorPinned}
+              onClose={cssEditor.toggleEditMode}
+            >
+              <CssCascadePanel
+                selection={cssEditor.selection}
+                rows={cssEditor.rows}
+                loading={cssEditor.loading}
+                bodies={cssEditor.bodies}
+                overridden={cssEditor.overridden}
+                onChangeBody={cssEditor.setBody}
+                onDeleteRule={(key) => cssEditor.deleteRule(key)}
+                onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
+                onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
+                onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
+                onAddSelector={(sel, atPrelude) => void cssEditor.addSelector(sel, atPrelude)}
+                selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
+                existingSelectors={cssEditor.existingSelectors}
+                variables={cssEditor.variableSuggestions}
+                animations={cssEditor.animationSuggestions}
+                settings={elementSettings}
+                animationsState={cssAnimations}
+                onClose={cssEditor.toggleEditMode}
+                scope={cssScope}
+                onScopeChange={setCssScope}
+                chrome={false}
+              />
+            </EditPanelShell>
           );
-        })()}
-      {cssEditor.editMode &&
-        (() => {
+          if (!panel) return null;
+
           return (
             <div
               ref={editorPanelDockRef}
@@ -3124,7 +3278,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             >
               <DockablePanel
                 docked={editorPinned}
-                ariaLabel="CSS panel"
+                ariaLabel="Edit panel"
                 positionKey="cssPanelFloatingPosition"
                 sizeKey="cssPanelFloatingSize"
                 floatingSize={{ width: 360, height: 680 }}
@@ -3135,38 +3289,16 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
                 placeholderClassName="ss-edit-panel-dock__slot"
                 surfaceClassName="dockable-panel__surface--preview"
                 dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
+                onSurfaceRectChange={reportEditPanelRect}
               >
-                <CssCascadePanel
-                  selection={cssEditor.selection}
-                  rows={cssEditor.rows}
-                  loading={cssEditor.loading}
-                  bodies={cssEditor.bodies}
-                  overridden={cssEditor.overridden}
-                  onChangeBody={cssEditor.setBody}
-                  onDeleteRule={(key) => cssEditor.deleteRule(key)}
-                  onWrapRule={(key, at) => void cssEditor.wrapRule(key, at)}
-                  onRenameRule={(key, sel) => void cssEditor.renameSelector(key, sel)}
-                  onRenameAtRule={(key, m) => void cssEditor.renameAtRule(key, m)}
-                  onAddSelector={(sel, atPrelude) => void cssEditor.addSelector(sel, atPrelude)}
-                  selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
-                  existingSelectors={cssEditor.existingSelectors}
-                  variables={cssEditor.variableSuggestions}
-                  animations={cssEditor.animationSuggestions}
-                  settings={elementSettings}
-                  animationsState={cssAnimations}
-                  onClose={cssEditor.toggleEditMode}
-                  pinned={editorPinned}
-                  onTogglePin={toggleEditorPinned}
-                  scope={cssScope}
-                  onScopeChange={setCssScope}
-                />
+                {panel}
               </DockablePanel>
               {editorPinned && (
                 <PanelResizeHandle
                   value={editorPanelWidth}
                   min={EDITOR_PANEL_MIN_WIDTH_PX}
                   max={EDITOR_PANEL_MAX_WIDTH_PX}
-                  label="Resize CSS panel"
+                  label="Resize Edit panel"
                   className="ss-edit-panel-dock__resize"
                   onResize={resizeEditorPanel}
                   onResizeBy={resizeEditorPanelBy}
@@ -3193,6 +3325,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             placeholderRef={variablesPanelRef}
             surfaceClassName="dockable-panel__surface--preview"
             dockedZIndex={isFullscreen ? 'var(--z-floating-panel)' : undefined}
+            onSurfaceRectChange={reportVariablesPanelRect}
           >
             <VariablesPanel
               variablesState={cssVariables}
@@ -3246,9 +3379,10 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             top: 96,
           })}
           placeholderClassName="ss-components-panel-dock"
-          dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${showTree && elementTreePinned ? (treePanelWidth ?? 'default') : 'floating'}:${activeEditMode && editorPinned ? editorPanelWidth : 'floating'}:${componentsPanelDocked ? componentsPanelLayoutWidth : 'floating'}:${componentsPanelHasDetails ? 'details' : 'catalog'}`}
+          dockLayoutKey={`${variablesPanelDocked ? (variablesPanelWidth ?? 'default') : 'floating'}:${editorPanelActive && editorPinned ? editorPanelWidth : 'floating'}:${componentsPanelDocked ? componentsPanelLayoutWidth : 'floating'}:${componentsPanelHasDetails ? 'details' : 'catalog'}:${workspacePanelInsets.left}:${workspacePanelInsets.right}`}
           placeholderRef={componentsPanelRef}
           surfaceClassName="dockable-panel__surface--preview"
+          onSurfaceRectChange={reportComponentsPanelRect}
         >
           <ComponentsPanel
             index={componentIndex}
@@ -3269,13 +3403,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             }
             placementAvailable={activeEditMode && structure.selection !== null}
             onOpenSource={openComponentSource}
-            onSendCanvasToAgent={onSendToClaude}
+            componentsCanvasView={componentsCanvasView}
+            onOpenCanvas={(componentId) => onOpenComponents?.({ componentId, scope: 'focus' })}
             onDuplicate={duplicateComponent}
             onRename={renameComponent}
             onDelete={deleteComponent}
             onForkLibrary={forkLibraryComponent}
             onRefresh={() => void refreshComponents()}
-            isolatedRenderer={isolatedComponentRenderer}
             onSelectUsage={selectComponentUsage}
             onEditProp={editComponentProp}
             onEditSlot={(instance, slotName, replacementSource) => {

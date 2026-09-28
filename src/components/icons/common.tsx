@@ -9,7 +9,10 @@ import SearchSvg from '../../assets/icons/search.svg?react';
 import LeftSvg from '../../assets/icons/left.svg?react';
 import RightSvg from '../../assets/icons/right.svg?react';
 import GridSvg from '../../assets/icons/grid.svg?react';
+import RulerSvg from '../../assets/icons/ruler.svg?react';
 import ListSvg from '../../assets/icons/list.svg?react';
+import ZoomInSvg from '../../assets/icons/zoom-in.svg?react';
+import ZoomOutSvg from '../../assets/icons/zoom-out.svg?react';
 import CommandPlaceholderSvg from '../../assets/icons/old-icons/command-placeholder.svg?react';
 import MoreHorizontalSvg from '../../assets/icons/old-icons/more-horizontal.svg?react';
 import { createIcon } from './icon-base';
@@ -88,6 +91,27 @@ export const ArrowRightIcon = createIcon(RightSvg, {
 export const GridIcon = createIcon(GridSvg, {
   name: 'GridIcon',
   source: 'icons/grid.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const RulerIcon = createIcon(RulerSvg, {
+  name: 'RulerIcon',
+  source: 'icons/ruler.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ZoomInIcon = createIcon(ZoomInSvg, {
+  name: 'ZoomInIcon',
+  source: 'icons/zoom-in.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ZoomOutIcon = createIcon(ZoomOutSvg, {
+  name: 'ZoomOutIcon',
+  source: 'icons/zoom-out.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

@@ -4,7 +4,7 @@
 //! to `/public` but can be re-pointed per project (e.g. `src/assets` for Astro
 //! image pipelines) via `assets_root` in `.shipstudio/project.json`.
 
-use crate::commands::git::{load_project_metadata, save_project_metadata};
+use crate::commands::git::{load_project_metadata, update_project_metadata};
 use crate::errors::CommandError;
 use crate::types::Asset;
 use crate::utils::{normalize_separators, resolve_workspace_path, validate_project_path};
@@ -212,14 +212,16 @@ pub async fn set_assets_root(project_path: String, root: String) -> Result<Strin
         return Err(("Security error: folder is outside the project".to_string()).into());
     }
 
-    let mut metadata = load_project_metadata(&repo_root);
-    // Store None for the default so untouched projects keep a clean project.json.
-    metadata.assets_root = if sanitized == DEFAULT_ASSETS_ROOT {
-        None
-    } else {
-        Some(sanitized.clone())
-    };
-    save_project_metadata(&repo_root, &metadata)?;
+    update_project_metadata(&repo_root, |metadata| {
+        // Store None for the default so untouched projects keep a clean project.json.
+        metadata.assets_root = if sanitized == DEFAULT_ASSETS_ROOT {
+            None
+        } else {
+            Some(sanitized.clone())
+        };
+        Ok(())
+    })
+    .map_err(CommandError::from)?;
 
     Ok(sanitized)
 }
