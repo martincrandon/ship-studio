@@ -18,6 +18,8 @@ export interface DragSortScopeProps extends DragSortManagerOptions {
   label?: string;
   /** Stable IDs can be supplied for documentation and duplicate checking. */
   items?: readonly (string | number)[];
+  /** Add a presentation class to the projected insertion gap. */
+  placeholderClassName?: string;
 }
 
 export interface DragSortContextValue {
@@ -32,6 +34,7 @@ export function DragSortScope({
   children,
   axis = 'vertical',
   collision = 'midpoint',
+  allowCrossGroup = false,
   canMove,
   onMove,
   announcements,
@@ -44,12 +47,14 @@ export function DragSortScope({
   insideHoldFlashDurationMs,
   label = 'Sortable list',
   items,
+  placeholderClassName,
 }: DragSortScopeProps) {
   const [manager] = useState(
     () =>
       new DragSortManager({
         axis,
         collision,
+        allowCrossGroup,
         canMove,
         onMove,
         announcements,
@@ -68,6 +73,7 @@ export function DragSortScope({
     manager.setOptions({
       axis,
       collision,
+      allowCrossGroup,
       canMove,
       onMove,
       announcements,
@@ -82,6 +88,7 @@ export function DragSortScope({
   }, [
     announcements,
     axis,
+    allowCrossGroup,
     canMove,
     collision,
     hasProjectedMove,
@@ -114,7 +121,12 @@ export function DragSortScope({
   return (
     <DragSortContext.Provider value={value}>
       {children}
-      <DragSortFeedback manager={manager} instructionsId={instructionsId} label={label} />
+      <DragSortFeedback
+        manager={manager}
+        instructionsId={instructionsId}
+        label={label}
+        placeholderClassName={placeholderClassName}
+      />
     </DragSortContext.Provider>
   );
 }
@@ -123,7 +135,10 @@ function DragSortFeedback({
   manager,
   instructionsId,
   label,
-}: Pick<DragSortContextValue, 'manager' | 'instructionsId' | 'label'>) {
+  placeholderClassName,
+}: Pick<DragSortContextValue, 'manager' | 'instructionsId' | 'label'> & {
+  placeholderClassName?: string;
+}) {
   const snapshot = useSyncExternalStore(
     manager.subscribe,
     manager.getSnapshot,
@@ -145,16 +160,34 @@ function DragSortFeedback({
     activeRegistration?.overlay !== null &&
     activeRegistration?.overlay !== false;
   const overlayActive = Boolean(hasOverlay && overlayRect && snapshot.activeId !== null);
+  const targetRegistration =
+    snapshot.targetId === null ? undefined : manager.getItem(snapshot.targetId);
+  const crossesGroup = Boolean(
+    activeRegistration &&
+    targetRegistration &&
+    (activeRegistration.group ?? 'default') !== (targetRegistration.group ?? 'default')
+  );
+  const hasCrossGroupPlaceholder =
+    crossesGroup && Boolean(targetRegistration?.projectPlaceholderOnCrossGroup);
+  const targetSuppressesPlaceholder = Boolean(
+    (targetRegistration?.targetOnly || targetRegistration?.showTargetIndicator) &&
+    !hasCrossGroupPlaceholder
+  );
   const placeholderRect =
     overlayActive &&
     snapshot.targetId !== null &&
     snapshot.placement !== null &&
     !(snapshot.placement === 'inside' && snapshot.insideHold === 'ready') &&
-    !manager.getItem(snapshot.targetId)?.targetOnly &&
-    !manager.getItem(snapshot.targetId)?.showTargetIndicator &&
+    !targetSuppressesPlaceholder &&
     snapshot.invalidReason === null &&
     snapshot.phase !== 'cancelling'
-      ? manager.getProjectedRect(snapshot.activeId!)
+      ? hasCrossGroupPlaceholder
+        ? manager.getCrossGroupPlaceholderRect(
+            snapshot.activeId!,
+            snapshot.targetId,
+            snapshot.placement
+          )
+        : manager.getProjectedRect(snapshot.activeId!)
       : null;
   const placeholderStyle: CSSProperties | undefined = placeholderRect
     ? ({
@@ -187,7 +220,7 @@ function DragSortFeedback({
   const placeholder = placeholderRect
     ? createPortal(
         <div
-          className="drag-sort__placeholder"
+          className={['drag-sort__placeholder', placeholderClassName].filter(Boolean).join(' ')}
           data-drag-sort-placeholder-gap="true"
           style={placeholderStyle}
           aria-hidden="true"

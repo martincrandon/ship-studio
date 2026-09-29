@@ -32,7 +32,7 @@ export interface UseProjectRailReturn {
   /** Full pinned-projects state — rows, isLoading, pin/unpin/reorder, etc. */
   pinnedProjects: UsePinnedProjectsReturn;
   /** Pin or unpin a project, surfacing errors via toast. */
-  handleTogglePin: (projectPath: string, shouldPin: boolean) => Promise<void>;
+  handleTogglePin: (projectPath: string, shouldPin: boolean) => Promise<boolean>;
   /** Open a pinned project when its rail icon is clicked. */
   handleRailClick: (projectPath: string) => void;
   /** Unpin a project from the rail's context menu. */
@@ -58,6 +58,7 @@ export function useProjectRail({
         } else {
           await pinnedProjects.unpin(projectPath);
         }
+        return true;
       } catch (e) {
         const detail = formatCommandError(asCommandError(e));
         const name = basename(projectPath) || 'project';
@@ -67,6 +68,7 @@ export function useProjectRail({
           projectPath,
           shouldPin,
         });
+        return false;
       }
     },
     [pinnedProjects, showToast]
@@ -111,7 +113,7 @@ export function useProjectRail({
   const handleAddProject = useCallback(
     (projectPath: string) => {
       void (async () => {
-        await handleTogglePin(projectPath, true);
+        if (!(await handleTogglePin(projectPath, true))) return;
         const projectName = basename(projectPath) || 'project';
         void handleSelectProject({ name: projectName, path: projectPath, thumbnail: null });
       })();

@@ -40,7 +40,7 @@ import { PanelDockProvider, usePanelDock } from '../../contexts/PanelDockContext
 import { useLayoutCommands } from '../../commands/useLayoutCommands';
 import { isDocked } from '../../lib/workspaceLayout';
 import { WorkspaceHeader } from './WorkspaceHeader';
-import { WorkspaceSidebar } from './WorkspaceSidebar';
+import { WorkspaceSidebar, type ToggleProjectPinHandler } from './WorkspaceSidebar';
 import { trackEvent } from '../../lib/analytics';
 import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
 import { useSnapshots } from '../../hooks/useSnapshots';
@@ -352,7 +352,7 @@ export interface WorkspaceViewProps {
   /** Rename a project folder from the sidebar context menu. */
   onRenameProject?: (projectPath: string, newName: string) => Promise<void>;
   /** Toggle a project's pin state from the sidebar context menu. */
-  onTogglePinProject?: (projectPath: string, shouldPin: boolean) => void | Promise<void>;
+  onTogglePinProject?: ToggleProjectPinHandler;
   /** Stop a project's dev server from the sidebar context menu. */
   onStopDevServer?: (projectPath: string) => void | Promise<void>;
   /** Switch to another project and focus a specific tab (by session id). */

@@ -60,6 +60,9 @@ export function DragSortItem({
   targetOnly = false,
   collisionPriority,
   showTargetIndicator = false,
+  projectPlaceholderOnCrossGroup = false,
+  crossGroupPlaceholderFollower = false,
+  collapseWhenDragging = false,
   overlay,
   className,
   style,
@@ -87,6 +90,9 @@ export function DragSortItem({
     targetOnly,
     collisionPriority,
     showTargetIndicator,
+    projectPlaceholderOnCrossGroup,
+    crossGroupPlaceholderFollower,
+    collapseWhenDragging,
     overlay,
   });
   const rearmHoverReveal = binding.rearmHoverReveal;

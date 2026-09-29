@@ -8,7 +8,7 @@
  * @module components/workspace/HomeSidebar
  */
 
-import { WorkspaceSidebar } from './WorkspaceSidebar';
+import { WorkspaceSidebar, type ToggleProjectPinHandler } from './WorkspaceSidebar';
 import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
 
 const EMPTY_TAB_TITLES = new Map<number, string>();
@@ -31,7 +31,7 @@ interface HomeSidebarProps {
   onUnpinProject?: (projectPath: string) => void;
   onReorderProjects?: (orderedPaths: string[]) => Promise<void> | void;
   onRenameProject?: (projectPath: string, newName: string) => Promise<void>;
-  onTogglePinProject?: (projectPath: string, shouldPin: boolean) => void | Promise<void>;
+  onTogglePinProject?: ToggleProjectPinHandler;
   onSelectProjectTab: (projectPath: string, tabSessionId: string) => void;
   isProjectDevServerRunning: (projectPath: string) => boolean;
   onStopDevServer?: (projectPath: string) => void | Promise<void>;

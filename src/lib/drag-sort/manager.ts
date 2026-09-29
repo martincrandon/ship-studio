@@ -27,6 +27,8 @@ const INTERACTIVE_DESCENDANT_SELECTOR =
 export interface DragSortManagerOptions {
   axis?: DragSortAxis;
   collision?: 'midpoint' | 'containment' | 'closest-center';
+  /** Allow a drag to land on an item registered in another named group. */
+  allowCrossGroup?: boolean;
   canMove?: DragSortValidator;
   onMove?: (move: DragSortMove) => void | Promise<void>;
   announcements?: DragSortAnnouncements;
@@ -220,13 +222,61 @@ export class DragSortManager {
   /** Re-read live geometry after a consumer expands, scrolls, or resizes. */
   remeasure(): void {
     if (!this.active) return;
-    this.active.rects = this.measureRects(this.active.fromGroup);
+    const source = this.getItem(this.active.id)?.element ?? this.active.source;
+    this.active.sourceRect = rectFromElement(source);
+    this.active.rects = this.measureRects(
+      this.active.fromGroup,
+      Boolean(this.options.allowCrossGroup)
+    );
     if (this.snapshot.point) this.updateActivePoint(this.snapshot.point);
+    else {
+      this.setSnapshot({ ...this.snapshot, overlayRect: this.overlayRectFromSource(this.active) }, [
+        this.active.id,
+      ]);
+    }
   }
 
   getProjectedRect(id: DragSortId): ReturnType<typeof rectFromElement> | null {
     if (!this.active || !sameId(this.active.id, id)) return null;
     return this.projectedRects(this.active).get(idKey(id)) ?? null;
+  }
+
+  getCrossGroupPlaceholderRect(
+    activeId: DragSortId,
+    targetId: DragSortId,
+    placement: DragSortPlacement
+  ): ReturnType<typeof rectFromElement> | null {
+    const active = this.active;
+    if (!active || !sameId(active.id, activeId)) return null;
+    const sourceRect = active.rects.get(idKey(activeId));
+    const targetRect = active.rects.get(idKey(targetId));
+    const target = this.getItem(targetId);
+    if (!sourceRect || !targetRect || !target) return null;
+    if (idKey(target.group ?? 'default') === idKey(active.fromGroup)) {
+      return this.getProjectedRect(activeId);
+    }
+
+    const destinationOrder = this.orderFor(target.group, activeId);
+    const destinationIndex = target.index + (placement === 'after' ? 1 : 0);
+    const nextId = destinationOrder[destinationIndex];
+    const previousId = destinationOrder[destinationIndex - 1];
+    const nextRect = nextId === undefined ? undefined : active.rects.get(idKey(nextId));
+    const previousRect = previousId === undefined ? undefined : active.rects.get(idKey(previousId));
+    // Adjacent targets describe the same insertion index in two ways:
+    // "after previous" and "before next". Anchor both to the next row's top
+    // so there is only one stable slot between them, even with row gaps.
+    const top =
+      nextRect?.top ??
+      previousRect?.bottom ??
+      (target.targetOnly && placement === 'after' ? targetRect.bottom : targetRect.top);
+    return {
+      left: targetRect.left,
+      top,
+      right: targetRect.left + sourceRect.width,
+      bottom: top + sourceRect.height,
+      width: sourceRect.width,
+      height: sourceRect.height,
+    };
   }
 
   /**
@@ -250,6 +300,7 @@ export class DragSortManager {
   getItemState(id: DragSortId): {
     isDragging: boolean;
     isTarget: boolean;
+    isCrossGroupPlaceholderTarget: boolean;
     hasProjectedMove: boolean;
     projectedIndex: number | null;
     placement: DragSortPlacement | null;
@@ -268,6 +319,15 @@ export class DragSortManager {
     const projectedRects = active ? this.projectedRects(active) : undefined;
     const projectedRect = projectedRects?.get(idKey(id));
     const isDragging = Boolean(active && sameId(active.id, id));
+    const targetRegistration =
+      this.snapshot.targetId === null ? undefined : this.getItem(this.snapshot.targetId);
+    const isCrossGroupPlaceholderTarget = Boolean(
+      active &&
+      this.snapshot.targetId !== null &&
+      sameId(this.snapshot.targetId, id) &&
+      targetRegistration?.projectPlaceholderOnCrossGroup &&
+      idKey(targetRegistration.group ?? 'default') !== idKey(active.fromGroup)
+    );
     const isInsideTarget = Boolean(
       this.snapshot.targetId &&
       sameId(this.snapshot.targetId, id) &&
@@ -279,9 +339,12 @@ export class DragSortManager {
     );
     const carriedByActiveParent =
       active && !isDragging && this.options.isPartOfActiveMove?.(active.id, id);
+    const crossGroupTransform =
+      active && registration ? this.crossGroupTransform(active, registration) : null;
     return {
       isDragging,
       isTarget: Boolean(this.snapshot.targetId && sameId(this.snapshot.targetId, id)),
+      isCrossGroupPlaceholderTarget,
       hasProjectedMove,
       projectedIndex: projectedIndex >= 0 ? projectedIndex : null,
       placement:
@@ -296,7 +359,7 @@ export class DragSortManager {
       suppressTransition: this.transitionSuppressedIds.has(idKey(id)),
       transform: carriedByActiveParent
         ? { x: 0, y: 0 }
-        : {
+        : (crossGroupTransform ?? {
             x:
               measured && projectedRect && this.options.axis === 'horizontal'
                 ? projectedRect.left - measured.left
@@ -305,8 +368,82 @@ export class DragSortManager {
               measured && projectedRect && this.options.axis !== 'horizontal'
                 ? projectedRect.top - measured.top
                 : 0,
-          },
+          }),
     };
+  }
+
+  private crossGroupTransform(
+    active: ActiveOperation,
+    registration: DragSortRegistration
+  ): { x: number; y: number } | null {
+    const targetId = this.snapshot.targetId;
+    const placement = this.snapshot.placement;
+    if (
+      targetId === null ||
+      placement === null ||
+      this.snapshot.invalidReason !== null ||
+      sameId(active.id, registration.id)
+    ) {
+      return null;
+    }
+    const target = this.getItem(targetId);
+    if (
+      !target?.projectPlaceholderOnCrossGroup ||
+      (registration.targetOnly && !registration.crossGroupPlaceholderFollower) ||
+      idKey(target.group ?? 'default') === idKey(active.fromGroup) ||
+      idKey(registration.group ?? 'default') !== idKey(target.group ?? 'default')
+    ) {
+      return null;
+    }
+
+    const destinationOrder = this.orderFor(target.group, active.id);
+    const destinationIndex = target.index + (placement === 'after' ? 1 : 0);
+    const itemIndex = registration.crossGroupPlaceholderFollower
+      ? registration.index
+      : destinationOrder.findIndex((id) => sameId(id, registration.id));
+    if (itemIndex < destinationIndex) return null;
+
+    const axis = this.options.axis ?? 'vertical';
+    const sourceRect = active.rects.get(idKey(active.id));
+    if (!sourceRect) return null;
+    const orderedRects = destinationOrder
+      .map((id) => active.rects.get(idKey(id)))
+      .filter((rect): rect is ReturnType<typeof rectFromElement> => Boolean(rect));
+    const gapIndex = Math.min(Math.max(destinationIndex - 1, 0), orderedRects.length - 2);
+    const previousRect = gapIndex >= 0 ? orderedRects[gapIndex] : undefined;
+    const nextRect = gapIndex >= 0 ? orderedRects[gapIndex + 1] : undefined;
+    const gap = Math.max(
+      0,
+      previousRect && nextRect
+        ? axis === 'horizontal'
+          ? nextRect.left - previousRect.right
+          : nextRect.top - previousRect.bottom
+        : 0
+    );
+    const offset = (axis === 'horizontal' ? sourceRect.width : sourceRect.height) + gap;
+    return axis === 'horizontal' ? { x: offset, y: 0 } : { x: 0, y: offset };
+  }
+
+  private crossGroupProjectionIds(
+    active: ActiveOperation,
+    targetId: DragSortId | null
+  ): DragSortId[] {
+    if (targetId === null) return [];
+    const target = this.getItem(targetId);
+    if (
+      !target?.projectPlaceholderOnCrossGroup ||
+      idKey(target.group ?? 'default') === idKey(active.fromGroup)
+    ) {
+      return [];
+    }
+    return [...this.registrations.values()]
+      .filter(
+        (registration) =>
+          idKey(registration.group ?? 'default') === idKey(target.group ?? 'default') &&
+          !registration.hidden &&
+          (!registration.targetOnly || registration.crossGroupPlaceholderFollower)
+      )
+      .map((registration) => registration.id);
   }
 
   private projectedRects(active: ActiveOperation): Map<string, ReturnType<typeof rectFromElement>> {
@@ -406,12 +543,17 @@ export class DragSortManager {
   }
 
   private measureRects(
-    group: DragSortId | undefined
+    group: DragSortId | undefined,
+    allGroups = false
   ): Map<string, ReturnType<typeof rectFromElement>> {
     const rects = new Map<string, ReturnType<typeof rectFromElement>>();
     const groupKey = idKey(group ?? 'default');
     for (const registration of this.registrations.values()) {
-      if (idKey(registration.group ?? 'default') !== groupKey || registration.hidden) continue;
+      if (
+        (!allGroups && idKey(registration.group ?? 'default') !== groupKey) ||
+        registration.hidden
+      )
+        continue;
       // A sortable may expose a smaller drop target than its draggable item.
       // This is important for nested trees: the draggable wrapper contains the
       // whole subtree, but only the visible row should participate in collision
@@ -669,7 +811,7 @@ export class DragSortManager {
       fromIndex: registration.index,
       sourceOrder: order,
       projectedOrder: order,
-      rects: this.measureRects(registration.group),
+      rects: this.measureRects(registration.group, Boolean(this.options.allowCrossGroup)),
       sourceRect,
       offsetX: sourceRect.width / 2,
       offsetY: sourceRect.height / 2,
@@ -723,7 +865,7 @@ export class DragSortManager {
       fromIndex: registration.index,
       sourceOrder: this.orderFor(registration.group, pending.id),
       projectedOrder: this.orderFor(registration.group, pending.id),
-      rects: this.measureRects(registration.group),
+      rects: this.measureRects(registration.group, Boolean(this.options.allowCrossGroup)),
       sourceRect,
       offsetX: pending.start.x - sourceRect.left,
       offsetY: pending.start.y - sourceRect.top,
@@ -779,6 +921,7 @@ export class DragSortManager {
         (item, index) => !sameId(item, active.sourceOrder[index] ?? null)
       );
       const hadTarget = active.targetId !== null || active.placement !== null;
+      const previousCrossGroupItems = this.crossGroupProjectionIds(active, active.targetId);
       active.targetId = null;
       active.placement = null;
       active.projectedOrder = active.sourceOrder;
@@ -793,7 +936,7 @@ export class DragSortManager {
           invalidReason: null,
           insideHold: 'idle',
         },
-        active.sourceOrder
+        [...active.sourceOrder, ...previousCrossGroupItems]
       );
       return;
     }
@@ -832,6 +975,7 @@ export class DragSortManager {
         !sameId(active.targetId, targetId) ||
         active.placement !== placement ||
         this.snapshot.invalidReason !== reason;
+      const previousCrossGroupItems = this.crossGroupProjectionIds(active, active.targetId);
       active.targetId = targetId;
       active.placement = placement;
       if (changedTarget) {
@@ -847,7 +991,7 @@ export class DragSortManager {
               this.options.announcements?.invalid?.(this.labelOf(active.id), reason) ??
               `${this.labelOf(active.id)} cannot move there: ${reason}`,
           },
-          [active.id, targetId]
+          [active.id, targetId, ...previousCrossGroupItems]
         );
       }
       return false;
@@ -872,11 +1016,15 @@ export class DragSortManager {
     this.clearInsideHold();
     const previousTargetId = active.targetId;
     const previousPlacement = active.placement;
-    const projected = target.targetOnly
-      ? [...active.sourceOrder]
-      : this.options.projectOrder
-        ? [...this.options.projectOrder(active.sourceOrder, active.id, targetId, placement)]
-        : projectFlatOrder(active.sourceOrder, active.id, targetId, placement, (item) => item);
+    const previousCrossGroupItems = this.crossGroupProjectionIds(active, previousTargetId);
+    const nextCrossGroupItems = this.crossGroupProjectionIds(active, targetId);
+    const crossesGroup = idKey(destination.group) !== idKey(active.fromGroup);
+    const projected =
+      target.targetOnly || crossesGroup
+        ? [...active.sourceOrder]
+        : this.options.projectOrder
+          ? [...this.options.projectOrder(active.sourceOrder, active.id, targetId, placement)]
+          : projectFlatOrder(active.sourceOrder, active.id, targetId, placement, (item) => item);
     const sameOrder =
       projected.length === active.projectedOrder.length &&
       projected.every((item, index) => sameId(item, active.projectedOrder[index] ?? null));
@@ -891,14 +1039,17 @@ export class DragSortManager {
     ) {
       return false;
     }
-    const index = projected.findIndex((item) => sameId(item, active.id));
+    const index = crossesGroup
+      ? destination.index
+      : projected.findIndex((item) => sameId(item, active.id));
+    const total = crossesGroup ? this.orderFor(destination.group).length + 1 : projected.length;
     const announcement =
       this.options.announcements?.move?.(
         this.labelOf(active.id),
         { group: destination.group, index, placement },
-        projected.length,
+        total,
         this.labelOf(targetId)
-      ) ?? `${this.labelOf(active.id)} moved to position ${index + 1} of ${projected.length}`;
+      ) ?? `${this.labelOf(active.id)} moved to position ${index + 1} of ${total}`;
     this.setSnapshot(
       {
         ...this.snapshot,
@@ -909,9 +1060,15 @@ export class DragSortManager {
         invalidReason: null,
         announcement,
       },
-      sameOrder
-        ? [active.id, targetId, ...(previousTargetId === null ? [] : [previousTargetId])]
-        : active.sourceOrder
+      [
+        ...new Set([
+          ...(sameOrder
+            ? [active.id, targetId, ...(previousTargetId === null ? [] : [previousTargetId])]
+            : active.sourceOrder),
+          ...previousCrossGroupItems,
+          ...nextCrossGroupItems,
+        ]),
+      ]
     );
     return !sameOrder;
   }
@@ -933,7 +1090,12 @@ export class DragSortManager {
       active.placement !== null &&
       (active.placement !== 'inside' || confirmedInsidePlacement) &&
       Boolean(this.options.hasProjectedMove?.(active.id, active.targetId, active.placement));
-    const changed = changedOrder || changedHierarchy || confirmedInsidePlacement || targetOnly;
+    const changedGroup = Boolean(
+      active.targetId !== null &&
+      idKey(this.getItem(active.targetId)?.group ?? 'default') !== idKey(active.fromGroup)
+    );
+    const changed =
+      changedOrder || changedHierarchy || confirmedInsidePlacement || targetOnly || changedGroup;
     if (
       !changed ||
       this.snapshot.invalidReason !== null ||
@@ -953,7 +1115,13 @@ export class DragSortManager {
       this.cancel('no valid destination');
       return;
     }
-    const index = active.projectedOrder.findIndex((item) => sameId(item, active.id));
+    const crossesGroup = idKey(target.group ?? 'default') !== idKey(active.fromGroup);
+    const index = crossesGroup
+      ? target.index + (active.placement === 'after' ? 1 : 0)
+      : active.projectedOrder.findIndex((item) => sameId(item, active.id));
+    const destinationTotal = crossesGroup
+      ? this.orderFor(target.group).length + 1
+      : active.projectedOrder.length;
     const move: DragSortMove = {
       activeId: active.id,
       targetId: active.targetId,
@@ -978,12 +1146,8 @@ export class DragSortManager {
         commitPending: true,
         overlayRect: settleRect,
         announcement:
-          this.options.announcements?.drop?.(
-            this.labelOf(active.id),
-            move.to,
-            active.projectedOrder.length
-          ) ??
-          `${this.labelOf(active.id)} dropped at position ${index + 1} of ${active.projectedOrder.length}`,
+          this.options.announcements?.drop?.(this.labelOf(active.id), move.to, destinationTotal) ??
+          `${this.labelOf(active.id)} dropped at position ${index + 1} of ${destinationTotal}`,
       },
       [active.id]
     );
@@ -1103,7 +1267,7 @@ export class DragSortManager {
         (registration) =>
           !sameId(registration.id, active.id) &&
           !this.isCarriedByActive(active.id, registration.id) &&
-          (registration.group ?? 'default') === active.fromGroup
+          (this.options.allowCrossGroup || (registration.group ?? 'default') === active.fromGroup)
       )
       .flatMap((registration) => {
         const element = registration.target ?? registration.element;
@@ -1263,6 +1427,14 @@ export class DragSortManager {
     ) {
       return null;
     }
+    const currentTarget = this.getItem(active.targetId);
+    if (
+      this.options.allowCrossGroup &&
+      currentTarget &&
+      idKey(currentTarget.group ?? 'default') !== idKey(active.fromGroup)
+    ) {
+      return null;
+    }
     const hasProjectedMove = active.projectedOrder.some(
       (item, index) => !sameId(item, active.sourceOrder[index] ?? null)
     );
@@ -1327,6 +1499,14 @@ export class DragSortManager {
   }
 
   private destinationOverlayRect(active: ActiveOperation) {
+    const target = active.targetId === null ? undefined : this.getItem(active.targetId);
+    if (
+      target &&
+      idKey(target.group ?? 'default') !== idKey(active.fromGroup) &&
+      this.snapshot.overlayRect
+    ) {
+      return this.snapshot.overlayRect;
+    }
     const destination = this.projectedRects(active).get(idKey(active.id));
     if (!destination) return this.snapshot.overlayRect ?? this.overlayRectFromSource(active);
     return {

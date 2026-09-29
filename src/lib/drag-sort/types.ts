@@ -20,7 +20,7 @@ export interface DragSortMove {
   from: DragSortPosition;
   to: DragSortPosition;
   input: DragSortInput;
-  /** The immutable projected order, supplied for adapters that commit arrays. */
+  /** Source-group projection; cross-group adapters use `from`, `to`, and `activeId`. */
   projectedOrder?: readonly DragSortId[];
 }
 
@@ -71,6 +71,10 @@ export interface DragSortRegistration {
   collisionPriority?: number;
   /** Render an edge marker instead of a projected full-row placeholder. */
   showTargetIndicator?: boolean;
+  /** Project the full row-sized placeholder into another group's insertion slot. */
+  projectPlaceholderOnCrossGroup?: boolean;
+  /** Move a target-only layout follower when a cross-group placeholder enters its group. */
+  crossGroupPlaceholderFollower?: boolean;
   /** Explicit React content supplied for the body-portaled overlay. */
   overlay?: unknown;
 }

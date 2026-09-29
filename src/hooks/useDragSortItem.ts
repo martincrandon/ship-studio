@@ -29,6 +29,12 @@ export interface UseDragSortItemOptions {
   activation?: DragSortActivation;
   /** Opt in to a target-edge marker and suppress the projected full-row slot. */
   showTargetIndicator?: boolean;
+  /** Project the full row-sized placeholder into another group's insertion slot. */
+  projectPlaceholderOnCrossGroup?: boolean;
+  /** Move a target-only layout follower when a cross-group placeholder enters its group. */
+  crossGroupPlaceholderFollower?: boolean;
+  /** Re-measure item geometry after drag activation changes its layout. */
+  collapseWhenDragging?: boolean;
 }
 
 export interface DragSortItemBinding {
@@ -54,6 +60,7 @@ export interface DragSortItemBinding {
     'data-drag-sort-placeholder': boolean | undefined;
     'data-drag-sort-transition-suppressed': boolean | undefined;
     'data-drag-sort-target-indicator': boolean | undefined;
+    'data-drag-sort-collapse-when-dragging': boolean | undefined;
     'data-drag-sort-hover-reveal-blocked': boolean | undefined;
     /** Whole-item activation exposes the row as the keyboard drag control. */
     tabIndex?: number;
@@ -105,6 +112,8 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
       targetOnly: options.targetOnly,
       collisionPriority: options.collisionPriority,
       showTargetIndicator: options.showTargetIndicator,
+      projectPlaceholderOnCrossGroup: options.projectPlaceholderOnCrossGroup,
+      crossGroupPlaceholderFollower: options.crossGroupPlaceholderFollower,
       overlay: options.overlay,
     });
     return unregister;
@@ -131,6 +140,8 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
       targetOnly: options.targetOnly,
       collisionPriority: options.collisionPriority,
       showTargetIndicator: options.showTargetIndicator,
+      projectPlaceholderOnCrossGroup: options.projectPlaceholderOnCrossGroup,
+      crossGroupPlaceholderFollower: options.crossGroupPlaceholderFollower,
       overlay: options.overlay,
     });
   }, [
@@ -147,6 +158,8 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
     manager,
     options.id,
     options.overlay,
+    options.projectPlaceholderOnCrossGroup,
+    options.crossGroupPlaceholderFollower,
     options.targetDisabled,
     options.targetOnly,
     targetElement,
@@ -169,9 +182,13 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
   const snapshot = useSyncExternalStore(subscribe, manager.getSnapshot, manager.getSnapshot);
   const itemState = manager.getItemState(options.id);
   const { isDragging, isTarget } = itemState;
+  useLayoutEffect(() => {
+    if (options.collapseWhenDragging && isDragging) manager.remeasure();
+  }, [isDragging, manager, options.collapseWhenDragging]);
   const showTargetIndicator =
     options.showTargetIndicator &&
     isTarget &&
+    !itemState.isCrossGroupPlaceholderTarget &&
     itemState.insideHold !== 'pending' &&
     itemState.insideHold !== 'flashing';
   const hasOverlay =
@@ -200,6 +217,7 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
       'data-drag-sort-placeholder': isDragging && hasOverlay ? true : undefined,
       'data-drag-sort-transition-suppressed': itemState.suppressTransition || undefined,
       'data-drag-sort-target-indicator': showTargetIndicator ? true : undefined,
+      'data-drag-sort-collapse-when-dragging': options.collapseWhenDragging || undefined,
       'data-drag-sort-hover-reveal-blocked': hoverRevealBlocked || undefined,
       ...(options.activation === 'item'
         ? {

@@ -338,7 +338,8 @@
 .workspace-sidebar-scroll > .sidebar-group-marker,
 .workspace-sidebar-scroll > .sidebar-group-header,
 .workspace-sidebar-scroll > .sidebar-project,
-.workspace-sidebar-scroll > .sidebar-group-empty {
+.workspace-sidebar-scroll > .sidebar-group-empty,
+.workspace-sidebar-scroll > .workspace-sidebar-active-section-anchor {
   width: 100%;
   max-width: 100%;
 }
@@ -456,6 +457,11 @@
   border-bottom: var(--stroke-1) solid var(--border-subtle);
 }
 
+.sidebar-project[data-drag-sort-collapse-when-dragging='true'][data-drag-sort-dragging='true'] {
+  height: calc(var(--size-sidebar-project-row) + var(--stroke-1));
+  overflow: hidden;
+}
+
 .sidebar-project-row {
   position: relative;
   display: flex;
@@ -507,7 +513,7 @@
   > .sidebar-project-row:hover
   .sidebar-project-drag-handle,
 .drag-sort__item:not([data-drag-sort-hover-reveal-blocked='true'])
-  > .sidebar-project-row:focus-within
+  > .sidebar-project-row:has(:focus-visible)
   .sidebar-project-drag-handle,
 .drag-sort__item:has(.sidebar-project-drag-handle:focus-visible) .sidebar-project-drag-handle {
   /* Keep the handle's hit target clear of the chevron while using the
@@ -519,7 +525,7 @@
   > .sidebar-project-row:hover
   .sidebar-project-drag-handle[data-drag-sort-handle-reveal-on='row'],
 .drag-sort__item:not([data-drag-sort-hover-reveal-blocked='true'])
-  > .sidebar-project-row:focus-within
+  > .sidebar-project-row:has(:focus-visible)
   .sidebar-project-drag-handle[data-drag-sort-handle-reveal-on='row'],
 .drag-sort__item
   > .sidebar-project-row:has(:focus-visible)
@@ -552,10 +558,9 @@
   transition: none;
 }
 
-/* An expanded project keeps its full group in flow so the sortable
- * placeholder moves the subtree as one unit. Its presentational preview is
- * intentionally only the draggable row, though; otherwise the overlay host
- * would paint a tall blank card for the expanded body. */
+/* Keep the floating project preview at its collapsed row height. The source
+ * collapses to the same height while dragging, so the visible preview and the
+ * in-flow drop slot stay in sync. */
 .drag-sort__overlay:has(.sidebar-project-row--overlay) {
   height: var(--size-sidebar-project-row);
 }
@@ -705,6 +710,16 @@
 .sidebar-project-body {
   padding: var(--space-08) var(--space-08) var(--space-16) var(--space-32);
   background: var(--surface-app);
+}
+
+/* Keep the projected project slot on the same neutral surface as its expanded
+ * details area instead of reusing the global accent-colored drag fill. */
+.drag-sort__placeholder.workspace-sidebar-project-drop-placeholder {
+  background: var(--surface-app);
+  opacity: 1;
+  border-radius: 0;
+  border-top: var(--drag-sort-target-indicator-width) solid var(--drag-sort-target-indicator);
+  box-shadow: none;
 }
 
 /* Per-row close/unpin button — appears on hover directly OVER the status
@@ -1351,12 +1366,13 @@
 }
 
 .workspace-sidebar.is-hidden .workspace-sidebar-add-project {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
+  width: var(--control-height-standard);
+  min-width: var(--control-height-standard);
+  max-width: var(--control-height-standard);
   height: var(--control-height-standard);
   min-height: var(--control-height-standard);
   flex: 0 0 var(--control-height-standard);
+  margin-inline: auto;
   padding: 0;
 }
 
