@@ -167,11 +167,8 @@ function DragSortFeedback({
     targetRegistration &&
     (activeRegistration.group ?? 'default') !== (targetRegistration.group ?? 'default')
   );
-  const hasCrossGroupPlaceholder =
-    crossesGroup && Boolean(targetRegistration?.projectPlaceholderOnCrossGroup);
   const targetSuppressesPlaceholder = Boolean(
-    (targetRegistration?.targetOnly || targetRegistration?.showTargetIndicator) &&
-    !hasCrossGroupPlaceholder
+    (targetRegistration?.targetOnly || targetRegistration?.showTargetIndicator) && !crossesGroup
   );
   const placeholderRect =
     overlayActive &&
@@ -181,7 +178,7 @@ function DragSortFeedback({
     !targetSuppressesPlaceholder &&
     snapshot.invalidReason === null &&
     snapshot.phase !== 'cancelling'
-      ? hasCrossGroupPlaceholder
+      ? crossesGroup
         ? manager.getCrossGroupPlaceholderRect(
             snapshot.activeId!,
             snapshot.targetId,

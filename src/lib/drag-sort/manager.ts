@@ -319,14 +319,11 @@ export class DragSortManager {
     const projectedRects = active ? this.projectedRects(active) : undefined;
     const projectedRect = projectedRects?.get(idKey(id));
     const isDragging = Boolean(active && sameId(active.id, id));
-    const targetRegistration =
-      this.snapshot.targetId === null ? undefined : this.getItem(this.snapshot.targetId);
     const isCrossGroupPlaceholderTarget = Boolean(
       active &&
       this.snapshot.targetId !== null &&
       sameId(this.snapshot.targetId, id) &&
-      targetRegistration?.projectPlaceholderOnCrossGroup &&
-      idKey(targetRegistration.group ?? 'default') !== idKey(active.fromGroup)
+      idKey(registration?.group ?? 'default') !== idKey(active.fromGroup)
     );
     const isInsideTarget = Boolean(
       this.snapshot.targetId &&
@@ -388,7 +385,7 @@ export class DragSortManager {
     }
     const target = this.getItem(targetId);
     if (
-      !target?.projectPlaceholderOnCrossGroup ||
+      !target ||
       (registration.targetOnly && !registration.crossGroupPlaceholderFollower) ||
       idKey(target.group ?? 'default') === idKey(active.fromGroup) ||
       idKey(registration.group ?? 'default') !== idKey(target.group ?? 'default')
@@ -430,10 +427,7 @@ export class DragSortManager {
   ): DragSortId[] {
     if (targetId === null) return [];
     const target = this.getItem(targetId);
-    if (
-      !target?.projectPlaceholderOnCrossGroup ||
-      idKey(target.group ?? 'default') === idKey(active.fromGroup)
-    ) {
+    if (!target || idKey(target.group ?? 'default') === idKey(active.fromGroup)) {
       return [];
     }
     return [...this.registrations.values()]

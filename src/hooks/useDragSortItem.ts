@@ -29,8 +29,6 @@ export interface UseDragSortItemOptions {
   activation?: DragSortActivation;
   /** Opt in to a target-edge marker and suppress the projected full-row slot. */
   showTargetIndicator?: boolean;
-  /** Project the full row-sized placeholder into another group's insertion slot. */
-  projectPlaceholderOnCrossGroup?: boolean;
   /** Move a target-only layout follower when a cross-group placeholder enters its group. */
   crossGroupPlaceholderFollower?: boolean;
   /** Re-measure item geometry after drag activation changes its layout. */
@@ -112,7 +110,6 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
       targetOnly: options.targetOnly,
       collisionPriority: options.collisionPriority,
       showTargetIndicator: options.showTargetIndicator,
-      projectPlaceholderOnCrossGroup: options.projectPlaceholderOnCrossGroup,
       crossGroupPlaceholderFollower: options.crossGroupPlaceholderFollower,
       overlay: options.overlay,
     });
@@ -140,7 +137,6 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
       targetOnly: options.targetOnly,
       collisionPriority: options.collisionPriority,
       showTargetIndicator: options.showTargetIndicator,
-      projectPlaceholderOnCrossGroup: options.projectPlaceholderOnCrossGroup,
       crossGroupPlaceholderFollower: options.crossGroupPlaceholderFollower,
       overlay: options.overlay,
     });
@@ -158,7 +154,6 @@ export function useDragSortItem(options: UseDragSortItemOptions): DragSortItemBi
     manager,
     options.id,
     options.overlay,
-    options.projectPlaceholderOnCrossGroup,
     options.crossGroupPlaceholderFollower,
     options.targetDisabled,
     options.targetOnly,
