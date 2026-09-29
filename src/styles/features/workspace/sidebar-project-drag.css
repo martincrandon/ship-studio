@@ -1,0 +1,19 @@
+/* Keep expanded source rows and their placeholders at one row of height. */
+.sidebar-project[data-drag-sort-collapse-when-dragging='true'][data-drag-sort-dragging='true'] {
+  height: calc(var(--size-sidebar-project-row) + var(--border-width-default));
+  overflow: hidden;
+}
+
+/* Use the expanded project surface for the slot and reserve the accent for its edge. */
+.drag-sort__placeholder.workspace-sidebar-project-drop-placeholder {
+  background: var(--surface-app);
+  opacity: 1;
+  border-radius: 0;
+  border-top: var(--drag-sort-target-indicator-width) solid var(--drag-sort-target-indicator);
+  box-shadow: none;
+}
+
+.workspace-sidebar-scroll > .workspace-sidebar-active-section-anchor {
+  width: 100%;
+  max-width: 100%;
+}

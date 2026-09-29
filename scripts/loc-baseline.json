@@ -1,4 +1,15 @@
 {
   "schemaVersion": 1,
-  "files": []
+  "files": [
+    {
+      "path": "src/components/workspace/WorkspaceView.tsx",
+      "baselineLines": 1544,
+      "limit": 1520
+    },
+    {
+      "path": "src/styles/features/workspace/sidebar.css",
+      "baselineLines": 1395,
+      "limit": 1320
+    }
+  ]
 }

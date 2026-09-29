@@ -338,8 +338,7 @@
 .workspace-sidebar-scroll > .sidebar-group-marker,
 .workspace-sidebar-scroll > .sidebar-group-header,
 .workspace-sidebar-scroll > .sidebar-project,
-.workspace-sidebar-scroll > .sidebar-group-empty,
-.workspace-sidebar-scroll > .workspace-sidebar-active-section-anchor {
+.workspace-sidebar-scroll > .sidebar-group-empty {
   width: 100%;
   max-width: 100%;
 }
@@ -455,11 +454,6 @@
 .sidebar-project {
   padding: 0;
   border-bottom: var(--stroke-1) solid var(--border-subtle);
-}
-
-.sidebar-project[data-drag-sort-collapse-when-dragging='true'][data-drag-sort-dragging='true'] {
-  height: calc(var(--size-sidebar-project-row) + var(--stroke-1));
-  overflow: hidden;
 }
 
 .sidebar-project-row {
@@ -710,16 +704,6 @@
 .sidebar-project-body {
   padding: var(--space-08) var(--space-08) var(--space-16) var(--space-32);
   background: var(--surface-app);
-}
-
-/* Keep the projected project slot on the same neutral surface as its expanded
- * details area instead of reusing the global accent-colored drag fill. */
-.drag-sort__placeholder.workspace-sidebar-project-drop-placeholder {
-  background: var(--surface-app);
-  opacity: 1;
-  border-radius: 0;
-  border-top: var(--drag-sort-target-indicator-width) solid var(--drag-sort-target-indicator);
-  box-shadow: none;
 }
 
 /* Per-row close/unpin button — appears on hover directly OVER the status
