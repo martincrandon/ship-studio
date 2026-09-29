@@ -180,9 +180,20 @@ pub(crate) async fn run_git_net_retrying_index_lock(
     cwd: &std::path::Path,
     label: &str,
 ) -> Result<std::process::Output, CommandError> {
+    retry_git_index_lock(label, || run_git_net(args, cwd, label)).await
+}
+
+async fn retry_git_index_lock<F, Fut>(
+    label: &str,
+    mut run: F,
+) -> Result<std::process::Output, CommandError>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<std::process::Output, CommandError>>,
+{
     const ATTEMPTS: u64 = 3;
     for attempt in 1..=ATTEMPTS {
-        let output = run_git_net(args, cwd, label).await?;
+        let output = run().await?;
         let stderr = String::from_utf8_lossy(&output.stderr);
         if output.status.success()
             || !crate::utils::is_index_lock_contention(&stderr)
@@ -775,21 +786,15 @@ mod tests {
     async fn run_git_net_retrying_index_lock_passes_other_failures_through() {
         let tmp = TempDir::new().unwrap();
         init_repo(tmp.path());
-        let started = std::time::Instant::now();
-        let out = run_git_net_retrying_index_lock(
-            &["checkout", "no-such-branch-xyz"],
-            tmp.path(),
-            "checkout",
-        )
+        let mut attempts = 0;
+        let out = retry_git_index_lock("checkout", || {
+            attempts += 1;
+            run_git_net(&["checkout", "no-such-branch-xyz"], tmp.path(), "checkout")
+        })
         .await
         .expect("git should run");
         assert!(!out.status.success());
-        // A retried run would take ≥ 600ms of backoff sleeps alone — a single
-        // un-retried git spawn stays well under that even on a slow machine.
-        assert!(
-            started.elapsed() < std::time::Duration::from_millis(500),
-            "non-contention failures must not be retried"
-        );
+        assert_eq!(attempts, 1, "non-contention failures must not be retried");
     }
 
     /// Initialize a fresh git repo in `dir` with a local user identity so
