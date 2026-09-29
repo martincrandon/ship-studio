@@ -48,7 +48,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 9.15.9
 
       - name: Get pnpm store directory
         shell: bash
@@ -175,7 +175,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 9.15.9
 
       # package.json scripts use bash constructs (check:patterns etc.); point
       # npm's script-shell at Git bash so they run the same as on Unix.
@@ -235,7 +235,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          version: 9.15.9
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
