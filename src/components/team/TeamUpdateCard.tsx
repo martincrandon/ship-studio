@@ -42,6 +42,7 @@ import { Button } from '../primitives/Button';
 import { formatAgo } from '../../lib/workflows';
 import { fileTotals, TEAM_STATUS_LABEL, type TeamUpdate } from '../../lib/team';
 
+/** Selects a known agent icon while retaining a neutral fallback for other names. */
 function AgentMark({ name }: { name: string }) {
   if (name.toLowerCase().includes('claude')) return <ClaudeIcon size={12} />;
   if (name.toLowerCase().includes('codex')) return <CodexIcon size={12} />;
@@ -57,6 +58,7 @@ interface TeamUpdateCardProps {
   now: number;
 }
 
+/** Renders an activity summary with API-backed links and expandable commit/file evidence. */
 export function TeamUpdateCard({
   update,
   expanded,

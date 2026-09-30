@@ -30,6 +30,7 @@ interface TeamCoverageNoteProps {
   repo: string | null;
 }
 
+/** Identifies missing commit context and offers a repository-specific nudge to copy. */
 export function TeamCoverageNote({ members, repo }: TeamCoverageNoteProps) {
   const { showToast } = useOptionalToast();
   const { copy } = useCopyToClipboard({

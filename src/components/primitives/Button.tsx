@@ -13,6 +13,7 @@ export type ButtonVariant =
 export type ButtonSize = 'default' | 'compact' | 'medium' | 'large';
 export type ButtonWidth = 'hug' | 'fill';
 
+/** Builds the shared appearance classes used by every semantic button primitive. */
 export function buttonClassNames({
   variant = 'default',
   size = 'default',

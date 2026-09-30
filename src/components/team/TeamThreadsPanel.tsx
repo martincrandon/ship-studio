@@ -74,6 +74,7 @@ interface TeamThreadsPanelProps {
   pickerHint?: string | null;
 }
 
+/** Formats the saved route and element target as compact, labelled context tags. */
 function ThreadTargetContent({
   target,
   route,
@@ -120,6 +121,7 @@ function ThreadTargetContent({
   );
 }
 
+/** Coordinates thread filtering, selection, conversation details, and agent handoff. */
 export function TeamThreadsPanel({
   threads,
   now,

@@ -35,7 +35,11 @@ test('ordinary sortable rows have no insertion indicator; tree indicators are ex
   assert.doesNotMatch(css, /\.drag-sort__item\.is-target::after/);
   assert.match(
     css,
-    /\.drag-sort__item\[data-drag-sort-target-indicator='true'\]\.is-target::after/
+    /\.drag-sort__item\[data-drag-sort-target-indicator='true'\]:not\(\s*:has\(\.drag-sort__target\)\s*\)\.is-target::after/
+  );
+  assert.match(
+    css,
+    /\.drag-sort__target\[data-drag-sort-target-indicator='true'\]\.is-target::after/
   );
 });
 

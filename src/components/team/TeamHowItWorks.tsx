@@ -39,6 +39,7 @@ const WRITERS = [
   },
 ] as const;
 
+/** Explains repository-backed activity, comment storage, and visibility in the help modal. */
 export function TeamHowItWorks() {
   return (
     <section className="team-how" aria-label="How team activity works">

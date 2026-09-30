@@ -74,6 +74,7 @@ interface TeamPanelProps {
   pickerHint?: string | null;
 }
 
+/** Hosts activity, comments, and people with shared read-state and modal actions. */
 export function TeamPanel({
   hidden,
   onClose,

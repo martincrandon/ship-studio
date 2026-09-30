@@ -282,6 +282,7 @@ export function WorkspaceTitlebar({ children }: WorkspaceTitlebarProps) {
   );
 }
 
+/** Arranges project navigation, workspace actions, team presence, and plugin controls. */
 export function WorkspaceHeader({
   projectPath,
   projectName,

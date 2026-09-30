@@ -23,7 +23,7 @@ export function TeamActorName({ actor, className, children }: TeamActorNameProps
       href={profileUrl}
       target="_blank"
       rel="noreferrer"
-      title="Open in Github"
+      title="Open in GitHub"
       aria-label={`Open ${actor.name}'s GitHub profile`}
       onClick={(event) => {
         event.preventDefault();

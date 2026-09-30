@@ -56,6 +56,7 @@ interface PluginsDropdownProps {
   onOpenPluginManager: () => void;
 }
 
+/** Lists installed and failed plugins and provides access to plugin management. */
 export function PluginsDropdown({
   plugins,
   failures = [],

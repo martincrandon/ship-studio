@@ -46,6 +46,7 @@ interface TeamPeoplePanelProps {
   hasRepo?: boolean;
 }
 
+/** Presents repository members, their current work, and commit-context coverage. */
 export function TeamPeoplePanel({
   members,
   now,
