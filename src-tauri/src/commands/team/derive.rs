@@ -684,7 +684,7 @@ pub async fn pull_requests(project: &std::path::Path) -> HashMap<String, PrSumma
 pub async fn collaborators(
     project: &std::path::Path,
     repo: &str,
-) -> HashMap<String, (Option<String>, Option<super::TeamRole>)> {
+) -> HashMap<String, (Option<String>, Option<String>, Option<super::TeamRole>)> {
     let mut cmd = get_gh_command_for_project(project);
     cmd.args([
         "api",
@@ -721,6 +721,10 @@ pub async fn collaborators(
                 .get("avatar_url")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
+            let profile_url = row
+                .get("html_url")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
             let permissions = row.get("permissions");
             let role = permissions.and_then(|p| {
                 let flag = |key: &str| p.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
@@ -736,10 +740,59 @@ pub async fn collaborators(
                     None
                 }
             });
-            people.insert(login.to_lowercase(), (avatar, role));
+            people.insert(login.to_lowercase(), (avatar, profile_url, role));
         }
     }
     people
+}
+
+/// Profile URLs for repository contributors, including people without
+/// collaborator access. Use GitHub's returned `html_url`, not a guessed URL
+/// assembled from the login.
+pub async fn contributor_profile_urls(
+    project: &std::path::Path,
+    repo: &str,
+) -> HashMap<String, String> {
+    let mut cmd = get_gh_command_for_project(project);
+    cmd.args([
+        "api",
+        "--paginate",
+        &format!("repos/{repo}/contributors?per_page=100"),
+    ])
+    .current_dir(project);
+
+    let Ok(output) = run_with_timeout(
+        tokio::process::Command::from(cmd),
+        "gh api contributors".to_string(),
+        GH_TIMEOUT_SECS,
+    )
+    .await
+    else {
+        return HashMap::new();
+    };
+    if !output.status.success() {
+        return HashMap::new();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut profile_urls = HashMap::new();
+    for value in serde_json::Deserializer::from_str(&stdout).into_iter::<serde_json::Value>() {
+        let Ok(serde_json::Value::Array(rows)) = value else {
+            continue;
+        };
+        for row in rows {
+            let (Some(login), Some(profile_url)) = (
+                row.get("login").and_then(|value| value.as_str()),
+                row.get("html_url")
+                    .and_then(|value| value.as_str())
+                    .filter(|url| !url.is_empty()),
+            ) else {
+                continue;
+            };
+            profile_urls.insert(login.to_lowercase(), profile_url.to_string());
+        }
+    }
+    profile_urls
 }
 
 /// Map a git author to a GitHub login when the email says so.
@@ -772,11 +825,16 @@ const IDENTITY_PAGES: u32 = 3;
 /// commits API returns the answer per commit. That is a *fact*; inferring it
 /// from matching display names is the guess this rule exists to prevent.
 ///
-/// Returns email → login. Empty when `gh` is missing, unauthenticated, or the
-/// repo is private to someone else — in which case identities stay split, which
-/// is wrong-looking but never wrong.
-pub async fn identity_map(project: &std::path::Path, repo: &str) -> HashMap<String, String> {
-    let mut map = HashMap::new();
+/// Returns email → login and login → profile URL, each only when GitHub
+/// supplied it. Both maps are empty when `gh` is missing, unauthenticated, or
+/// the repo is private to someone else — identities then stay split, which is
+/// wrong-looking but never wrong.
+pub async fn identity_map(
+    project: &std::path::Path,
+    repo: &str,
+) -> (HashMap<String, String>, HashMap<String, String>) {
+    let mut identities = HashMap::new();
+    let mut profile_urls = HashMap::new();
 
     for page in 1..=IDENTITY_PAGES {
         let mut cmd = get_gh_command_for_project(project);
@@ -812,17 +870,24 @@ pub async fn identity_map(project: &std::path::Path, repo: &str) -> HashMap<Stri
             // `author` is the GitHub *account*; `commit.author` is what git
             // recorded. A commit whose email GitHub cannot place has
             // `author: null`, and that is left unmapped rather than filled in.
-            let (Some(login), Some(email)) = (
-                row.pointer("/author/login").and_then(|v| v.as_str()),
-                row.pointer("/commit/author/email").and_then(|v| v.as_str()),
-            ) else {
+            let Some(login) = row.pointer("/author/login").and_then(|v| v.as_str()) else {
                 continue;
             };
-            map.insert(email.to_lowercase(), login.to_lowercase());
+            let login_key = login.to_lowercase();
+            if let Some(profile_url) = row
+                .pointer("/author/html_url")
+                .and_then(|v| v.as_str())
+                .filter(|url| !url.is_empty())
+            {
+                profile_urls.insert(login_key.clone(), profile_url.to_string());
+            }
+            if let Some(email) = row.pointer("/commit/author/email").and_then(|v| v.as_str()) {
+                identities.insert(email.to_lowercase(), login_key);
+            }
         }
     }
 
-    map
+    (identities, profile_urls)
 }
 
 /// The signed-in user's own git email, so at minimum *you* are one person.
@@ -872,10 +937,12 @@ pub fn github_url_for(repo: Option<&str>, pr: Option<&PrSummary>, sha: &str) -> 
 /// resolved together and are meaningless apart.
 #[derive(Debug, Default)]
 pub struct People {
-    /// login → (avatar, role), from the collaborators API.
-    pub collaborators: HashMap<String, (Option<String>, Option<super::TeamRole>)>,
+    /// login → (avatar, profile URL, role), from the collaborators API.
+    pub collaborators: HashMap<String, (Option<String>, Option<String>, Option<super::TeamRole>)>,
     /// git email → login, from the commits API. See [`identity_map`].
     pub identities: HashMap<String, String>,
+    /// login → profile URL, from the commits API. See [`identity_map`].
+    pub profile_urls: HashMap<String, String>,
     /// The signed-in login, lowercased.
     pub me: Option<String>,
 }
@@ -897,14 +964,21 @@ impl People {
 /// Actor for a git author, enriched with whatever GitHub could confirm.
 pub fn actor_for(name: &str, email: &str, people: &People) -> TeamActor {
     let login = people.login_for(email);
-    let avatar = login
+    let (avatar_url, collaborator_profile_url) = login
         .as_ref()
         .and_then(|login| people.collaborators.get(login))
-        .and_then(|(avatar, _)| avatar.clone());
+        .map(|(avatar, profile_url, _)| (avatar.clone(), profile_url.clone()))
+        .unwrap_or_default();
+    let profile_url = collaborator_profile_url.or_else(|| {
+        login
+            .as_ref()
+            .and_then(|login| people.profile_urls.get(login).cloned())
+    });
     TeamActor {
         login,
         name: name.to_string(),
-        avatar_url: avatar,
+        avatar_url,
+        profile_url,
     }
 }
 

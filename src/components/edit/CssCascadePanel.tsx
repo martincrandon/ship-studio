@@ -265,7 +265,7 @@ export function CssCascadePanel({
       data-testid="css-cascade-panel"
     >
       <div className="ss-edit-panel__header" data-dockable-drag-handle>
-        <span className="ss-edit-panel__title">CSS</span>
+        <span className="ss-edit-panel__title workspace-panel-title">CSS</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
             <ToggleButton

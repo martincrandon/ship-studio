@@ -130,9 +130,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: var(--font-size-body-lg);
 }
 
 /* No label or value inside the panel wraps. Every property row is a

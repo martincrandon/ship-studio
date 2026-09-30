@@ -129,10 +129,13 @@ pub async fn get_team_snapshot(project_path: String) -> Result<TeamSnapshot, Com
         // Comment authors get the same picture their commits do: GitHub's, when
         // GitHub knows them, and their initials on a colour when it does not.
         threads: records::fold_threads(&stored, &project_name, &project_path_str, &|login| {
-            people
-                .collaborators
-                .get(&login.to_lowercase())
-                .and_then(|(avatar, _)| avatar.clone())
+            let login = login.to_lowercase();
+            let collaborator = people.collaborators.get(&login);
+            let avatar = collaborator.and_then(|(avatar, _, _)| avatar.clone());
+            let profile_url = collaborator
+                .and_then(|(_, profile_url, _)| profile_url.clone())
+                .or_else(|| people.profile_urls.get(&login).cloned());
+            (avatar, profile_url)
         }),
         updates,
         members,
@@ -218,10 +221,10 @@ async fn repo_slug(project: &std::path::Path) -> Option<String> {
 
 /// Everything GitHub can tell us about who is who on this repo.
 ///
-/// All three lookups degrade to nothing rather than failing: no `gh`, no auth,
-/// a repo you can only read. What you lose then is avatars, roles, and the
-/// merging of one person's several git emails — never a row, and never a wrong
-/// attribution.
+/// GitHub lookups degrade to nothing rather than failing: no `gh`, no auth, a
+/// repo you can only read. What you lose then is avatars, profile links, roles,
+/// and the merging of one person's several git emails — never a row, and never
+/// a wrong attribution.
 async fn resolve_people(project: &std::path::Path, repo: Option<&str>) -> People {
     let me =
         crate::commands::github::get_github_username(Some(project.to_string_lossy().into_owned()))
@@ -229,13 +232,15 @@ async fn resolve_people(project: &std::path::Path, repo: Option<&str>) -> People
             .ok()
             .map(|login| login.to_lowercase());
 
-    let (collaborators, mut identities) = match repo {
+    let (collaborators, (mut identities, mut profile_urls), contributor_profile_urls) = match repo {
         Some(repo) => tokio::join!(
             derive::collaborators(project, repo),
-            derive::identity_map(project, repo)
+            derive::identity_map(project, repo),
+            derive::contributor_profile_urls(project, repo)
         ),
         None => Default::default(),
     };
+    profile_urls.extend(contributor_profile_urls);
 
     // Your own email → your own login. Needs no network, no `gh` and no repo
     // permissions, which is why it happens whether or not there is a remote:
@@ -249,6 +254,7 @@ async fn resolve_people(project: &std::path::Path, repo: Option<&str>) -> People
     People {
         collaborators,
         identities,
+        profile_urls,
         me,
     }
 }
@@ -309,6 +315,7 @@ async fn build_update(
         // which asks a provider. Never inferred here from a red-looking commit.
         build_error: None,
         github_url: derive::github_url_for(repo, pr, &tip.sha),
+        commit_url: derive::github_url_for(repo, None, &tip.sha),
     }
 }
 
@@ -384,7 +391,7 @@ fn build_members(
                 role: login
                     .as_ref()
                     .and_then(|login| people.collaborators.get(login))
-                    .and_then(|(_, role)| *role),
+                    .and_then(|(_, _, role)| *role),
                 // Filled in below, once every commit of theirs has been seen.
                 explains_work: false,
                 is_self: match (login.as_deref(), people.me.as_deref()) {
@@ -564,6 +571,7 @@ mod tests {
             login: Some("MayaReed".to_string()),
             name: "Maya Reed".to_string(),
             avatar_url: None,
+            profile_url: None,
         };
         assert_eq!(member_key(&known, "maya@x.com"), "mayareed");
 
@@ -571,6 +579,7 @@ mod tests {
             login: None,
             name: "Maya Reed".to_string(),
             avatar_url: None,
+            profile_url: None,
         };
         assert_eq!(member_key(&anonymous, "Maya@X.com"), "maya@x.com");
     }

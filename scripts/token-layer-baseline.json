@@ -1389,8 +1389,8 @@
       "reason": "Transitional migration-alias consumer; replace with the canonical semantic role."
     },
     {
-      "path": "src/styles/features/team/threads.css",
-      "token": "--space-06",
+      "path": "src/styles/features/team/base.css",
+      "token": "--space-08",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
@@ -1403,7 +1403,7 @@
     {
       "path": "src/styles/features/team/workspace.css",
       "token": "--stroke-1",
-      "count": 4,
+      "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {

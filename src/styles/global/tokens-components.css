@@ -170,6 +170,9 @@
      idle gradient, and opaque: dimming with `opacity` let whatever sat
      behind the button show through it. */
   --button-primary-busy: var(--color-green-800);
+  --button-success-border: color-mix(in srgb, var(--accent-success) 30%, transparent);
+  --button-success-surface-hover: color-mix(in srgb, var(--accent-success) 10%, transparent);
+  --button-success-text: var(--accent-success);
   --button-surface-busy: var(--color-gray-900);
   --button-variable-surface: var(--color-purple-700);
   --button-variable-hover: var(--color-purple-600);

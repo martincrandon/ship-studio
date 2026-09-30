@@ -30,7 +30,7 @@ export function VariablesPanel({
       data-testid="variables-panel"
     >
       <div className="ss-edit-panel__header" data-dockable-drag-handle>
-        <span className="ss-edit-panel__title">Variables</span>
+        <span className="ss-edit-panel__title workspace-panel-title">Variables</span>
         <span className="ss-edit-panel__header-actions">
           {onTogglePin && (
             <ToggleButton

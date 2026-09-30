@@ -16,8 +16,10 @@
  * @module components/team/TeamCoverageNote
  */
 
+import { Fragment } from 'react';
 import { CheckIcon, CopyIcon, GitHubIcon } from '@/components/icons';
 import { TeamAvatar } from './TeamAvatar';
+import { TeamActorName } from './TeamActorName';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { actorKey, teamCoverage, type TeamMember } from '../../lib/team';
@@ -36,12 +38,6 @@ export function TeamCoverageNote({ members, repo }: TeamCoverageNoteProps) {
 
   const coverage = teamCoverage(members);
   if (coverage.missing.length === 0) return null;
-
-  const names = coverage.missing.map((member) => member.actor.name);
-  const nameList =
-    names.length === 1
-      ? names[0]
-      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 
   // A nudge about commit messages, not a pitch for this app. What the feed
   // needs from someone is a sentence in their commit body — which costs them
@@ -65,9 +61,14 @@ export function TeamCoverageNote({ members, repo }: TeamCoverageNoteProps) {
         <strong>
           {coverage.explaining} of {coverage.total} write commit bodies.
         </strong>{' '}
-        {nameList}
-        {names.length === 1 ? "'s commits say" : "'s commits say"} what changed but not why, so
-        their rows have a headline and nothing under it.
+        {coverage.missing.map((member, index) => (
+          <Fragment key={actorKey(member.actor)}>
+            {index > 0 && (index === coverage.missing.length - 1 ? ' and ' : ', ')}
+            <TeamActorName actor={member.actor} />
+          </Fragment>
+        ))}
+        {"'s commits say"} what changed but not why, so their rows have a headline and nothing under
+        it.
       </p>
 
       <button
@@ -110,7 +111,7 @@ export function TeamGitHubOnlyBadge() {
       className="team-github-only"
       title="Their commits have a subject but no body, so their rows show what changed and not why"
     >
-      <GitHubIcon size={9} />
+      <GitHubIcon size={12} />
       no context
     </span>
   );

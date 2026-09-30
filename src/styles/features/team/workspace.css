@@ -89,6 +89,8 @@
 /* The single child the surface stretches to 100%. Everything else hangs off
    this, so the header stays a header instead of becoming a third of a panel. */
 .team-float-inner {
+  container-name: team-panel;
+  container-type: size;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -117,18 +119,10 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  color: var(--text-primary);
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-label);
 }
 
-.team-float-count {
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  border-radius: var(--radius-sm);
-  background: rgba(var(--accent-active-rgb), 0.12);
-  color: var(--accent-active);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-body);
+.team-float-title > .button {
+  flex: none;
 }
 
 /* Provenance, not a button: it sits with the title at the weight of a caption
@@ -166,28 +160,26 @@
 .team-float-tabs {
   flex: none;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   height: var(--panel-header-h);
   padding: 0 var(--spacing-md);
   border-bottom: var(--border-width-default) solid var(--border-subtle);
 }
 
-/* The tabs shrink to fit that height.
- *
- * They were not compact at all despite asking to be: a tab with an icon
- * matches `.button--size-compact.button--has-icon:not(.button--icon-only)`,
- * which sets `height: auto` and lets the content decide — three classes, so it
- * outranks the tabs primitive's own fixed height and quietly wins. That is the
- * 30px tab, the 36px list, and the six extra pixels on the strip.
- *
- * Medium rather than compact: at 24px the list comes to 30px, which centres in
- * the 46px inside the strip with exactly the 8px above and below it used to
- * have. The strip loses the height it should never have had and the tabs keep
- * the breathing room they always looked right with. */
-.team-float-tabs .tabs__tab.button--size-compact.button--has-icon {
-  height: var(--size-control-medium);
-  min-height: var(--size-control-medium);
-  padding-block: 0;
+/* The Team navigation shares the panel's full inner width, with each
+   destination getting an equal-width hit area. */
+.team-float-tabs .tabs,
+.team-float-tabs .tabs__list {
+  width: 100%;
+}
+
+.team-float-tabs .tabs__list {
+  display: flex;
+}
+
+.team-float-tabs .tabs__tab {
+  flex: 1 1 0;
+  justify-content: center;
 }
 
 /* Vertical padding only: horizontal insets belong to whatever is inside.
@@ -213,6 +205,27 @@
   padding-inline: var(--spacing-md);
 }
 
+.team-updates-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin: 0 var(--spacing-md) var(--spacing-md);
+}
+
+.team-updates-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.team-updates-total {
+  color: var(--text-muted);
+  font-size: var(--font-size-body-md);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* The coverage notes are cards, like the rows above them, so they are inset by
    a *margin* rather than padding. Padding made their border box span the full
    panel while every card in the feed sat inside the day section's inset, so the
@@ -223,6 +236,13 @@
 
 .team-float-body > .team-people {
   padding-inline: var(--spacing-md);
+}
+
+.team-float-body[data-tab='people'],
+.team-float-body[data-tab='comments'] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .team-float-body::-webkit-scrollbar {
@@ -241,118 +261,135 @@
   line-height: var(--line-height-compact);
 }
 
-/* At 420px a two-pane reader and the wide people rows do not fit, so both
-   collapse to a single column rather than being squeezed into unreadability. */
-/* The compact reader can be shorter than its content when stacked. Let the
- * bounded body own scrolling while keeping the filter and composer visible. */
+/* Compact comments keep a bounded list above an inset conversation panel.
+   Both scroll independently; the composer stays inside the conversation. */
 .team-threads.is-compact .team-threads-body {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
-  overflow: visible;
+  gap: var(--spacing-md);
   border: none;
+  border-radius: 0;
   background: none;
 }
 
-/* Fill the bounded body so the composer stays on the bottom edge while the
-   thread content scrolls above it. */
 .team-float-body > .team-threads.is-compact {
-  min-height: 100%;
-  /* Reaches the bottom edge, so the sticky composer sits on it. Every other tab
-     is a feed and wants the body's bottom padding; this one ends in a control
-     that has to be flush, so it cancels the padding rather than the body
-     dropping it for everybody — which is what left the What's new feed running
-     off the bottom of the panel. */
-  margin-bottom: calc(-1 * var(--spacing-md));
-}
-
-.team-threads.is-compact .team-thread-pane {
-  display: flex;
-  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.team-threads.is-compact .team-thread-messages {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* Rules separate *sections*; rows separate themselves by highlight.
- *
- * A line between every row said the same thing the hover and selected states
- * already say, and it said it permanently — three weights of horizontal rule in
- * one 420px column, none of which meant anything different from the others. So
- * the only rules left are the ones that divide the list from the reader, and
- * the reader's own bands.
- *
- * Everything bleeds back out over `.team-float-body`'s padding, but the padding
- * moves onto the row rather than the list: that is what lets a hovered or
- * selected row reach both edges of the panel instead of floating in a channel
- * with a gap at each end. */
-/* Every band insets itself, so every rule between bands is full width and no
-   negative margins are involved anywhere. */
 .team-threads.is-compact .team-threads-picker-hint,
-.team-threads.is-compact .team-threads-controls,
-.team-threads.is-compact .team-thread-item,
-.team-threads.is-compact .team-thread-header,
-.team-threads.is-compact .team-thread-messages,
-.team-threads.is-compact .team-thread-composer {
+.team-threads.is-compact .team-threads-controls {
   padding-inline: var(--spacing-md);
 }
 
-.team-threads.is-compact .team-threads-send {
-  margin-inline: var(--spacing-md);
-}
-
 .team-threads.is-compact .team-thread-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 30%;
   gap: 0;
   padding: 0;
-  max-height: 190px;
   border-right: none;
-  border-top: var(--stroke-1) solid var(--border-default);
-  border-bottom: var(--stroke-1) solid var(--border-default);
 }
 
-/* Square and edge-to-edge: a rounded highlight inside a full-width column
-   reads as a card that has come loose from its container. */
+.team-threads.is-compact .team-threads-body.is-detail-closed {
+  gap: 0;
+}
+
+.team-threads.is-compact .team-threads-body.is-detail-closed .team-thread-list {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
 .team-threads.is-compact .team-thread-item {
+  flex-shrink: 0;
   border-radius: 0;
   border-width: 0;
   padding-inline: var(--spacing-md);
 }
 
 .team-threads.is-compact .team-thread-pane {
-  padding-top: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  margin-inline: var(--spacing-md);
+  border: var(--border-width-default) solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-recessed);
+}
+
+.team-threads.is-compact .team-threads-body.is-detail-closed .team-thread-pane {
+  display: none;
+}
+
+.team-threads.is-compact .team-thread-header,
+.team-threads.is-compact .team-thread-messages,
+.team-threads.is-compact .team-thread-composer {
+  padding-inline: var(--spacing-md);
 }
 
 .team-threads.is-compact .team-thread-header {
-  padding-block: var(--spacing-sm);
+  padding-block: var(--spacing-md);
+  background: var(--surface-recessed);
 }
 
-/* The composer is its own band, so the rule above it is the panel's full width
-   and the space inside it is weighted toward the input.
- *
- * The actions row sat tight under the textarea with a wide gap beneath it,
- * which reads as the buttons belonging to whatever comes next rather than to
- * the thing they act on. More air above them, less below. */
-/* Stuck to the bottom of the panel, with the conversation scrolling under it.
-   A reply box that scrolls away is one you have to hunt for after reading the
-   thing you are replying to, which is exactly when you want it. The background
-   is opaque for the same reason — messages pass behind it, not through it. */
 .team-threads.is-compact .team-thread-composer {
-  position: sticky;
-  bottom: 0;
-  z-index: var(--z-sticky-band);
   gap: var(--spacing-md);
-  padding-block: var(--spacing-md) var(--spacing-sm);
-  border-top: var(--stroke-1) solid var(--border-default);
-  background: var(--surface-panel);
+  padding-block: var(--spacing-md);
+  background: var(--surface-recessed);
+}
+
+.team-threads.is-compact .team-thread-input {
+  background: var(--surface-control);
+}
+
+/* Reserve reading space before shrinking the conversation to a sliver. */
+@container team-panel (max-height: 640px) {
+  .team-threads.is-compact .team-thread-list {
+    max-height: 20%;
+  }
+
+  .team-threads.is-compact .team-thread-preview {
+    -webkit-line-clamp: 1;
+  }
+
+  .team-threads.is-compact .team-thread-header,
+  .team-threads.is-compact .team-thread-composer {
+    padding-block: var(--spacing-sm);
+    gap: var(--spacing-xs);
+  }
+
+  .team-threads.is-compact .team-thread-messages {
+    padding: var(--spacing-md);
+    gap: var(--spacing-md);
+  }
+
+  .team-threads.is-compact .team-thread-input {
+    height: var(--control-height-standard);
+    min-height: var(--control-height-standard);
+    padding-block: var(--spacing-xs);
+  }
+
+  .team-threads.is-compact .team-thread-hint {
+    font-size: var(--font-size-micro);
+  }
+}
+
+/* At very short heights, scroll the whole detail rather than trapping the
+   conversation between two fixed bands. */
+@container team-panel (max-height: 480px) {
+  .team-threads.is-compact .team-thread-pane {
+    overflow-y: auto;
+  }
+
+  .team-threads.is-compact .team-thread-messages {
+    flex: none;
+    overflow-y: visible;
+  }
 }
 
 .team-people.is-compact .team-person {
-  padding: var(--spacing-sm);
+  padding: var(--spacing-md);
 }
 
 .team-people.is-compact .team-people-footnote {
@@ -368,10 +405,16 @@
   overflow-wrap: anywhere;
 }
 
+.team-person-doing-label {
+  margin-right: var(--spacing-xs);
+  color: var(--text-faint);
+}
+
 .team-person-when {
-  margin-left: auto;
+  margin-left: 0;
   flex: none;
   color: var(--text-faint);
-  font-size: var(--font-size-body-sm);
+  font-size: var(--font-size-body-md);
+  line-height: var(--line-height-compact);
   white-space: nowrap;
 }

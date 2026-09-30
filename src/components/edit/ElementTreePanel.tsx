@@ -806,7 +806,7 @@ export function ElementTreePanel({
       {structure ? (
         <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
-            <span className="ss-tree-panel__title">Elements</span>
+            <span className="ss-tree-panel__title workspace-panel-title">Elements</span>
             <TabsList className="ss-tree-panel__modes" aria-label="Elements view">
               <TabsTab value="visual">Visual</TabsTab>
               <TabsTab value="code">Code</TabsTab>
@@ -890,7 +890,7 @@ export function ElementTreePanel({
       ) : (
         <>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
-            <span className="ss-tree-panel__title">Elements</span>
+            <span className="ss-tree-panel__title workspace-panel-title">Elements</span>
             <Tooltip content="Turn on edit mode to select and edit elements.">
               <span className="ss-tree-panel__view-only">View only</span>
             </Tooltip>

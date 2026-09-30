@@ -72,7 +72,7 @@ export function PluginsDropdown({
   useClickOutside(menuRef, closeMenu, isOpen);
 
   return (
-    <div className="toolbar-dropdown-container" ref={menuRef}>
+    <div className="toolbar-dropdown-container workspace-plugins-control" ref={menuRef}>
       <MenuButton
         expanded={isOpen}
         onClick={(event) => {

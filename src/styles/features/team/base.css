@@ -61,6 +61,40 @@
   display: none;
 }
 
+/* Shared by long update summaries and comment descriptions. */
+.team-expandable-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.team-expandable-text__content.is-clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 12;
+}
+
+.team-expandable-text__content.is-faded {
+  -webkit-mask-image: linear-gradient(to bottom, var(--text-primary) 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, var(--text-primary) 80%, transparent 100%);
+}
+
+.team-expandable-text__toggle {
+  align-self: flex-start;
+}
+
+.team-expandable-text .team-expandable-text__toggle.button {
+  color: var(--text-faint);
+  text-decoration: none;
+  transition: color var(--transition-interaction);
+}
+
+.team-expandable-text .team-expandable-text__toggle.button:hover:not(:disabled) {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
 /* ---------------------------------------------------------------- avatars */
 
 .team-avatar {
@@ -149,6 +183,23 @@
   flex: none;
 }
 
+.team-external-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter var(--transition-interaction);
+}
+
+.team-external-link:hover {
+  filter: brightness(1.4);
+  text-decoration: none;
+}
+
+.team-external-link:focus-visible {
+  outline: var(--border-width-default) solid var(--accent-active);
+  outline-offset: var(--spacing-2xs);
+}
+
 /* Overlap, with every avatar cut out of the one behind it so the stack reads
    as depth rather than as a smear at small sizes. The ring goes on all of
    them, not only the overlapped ones — ringing `+ .team-avatar` alone leaves
@@ -234,25 +285,32 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
-  margin-bottom: var(--spacing-md);
-  background: var(--surface-recessed);
-  border: var(--border-width-default) solid var(--border-default);
-  border-radius: var(--radius-card);
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
 }
 
-.team-how-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-md);
+.team-how-modal {
+  width: min(760px, 90vw);
+  max-height: 85vh;
+  overflow: hidden;
+  padding: 0;
 }
 
-.team-how-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-subhead);
-  font-weight: var(--font-weight-heading);
-  line-height: var(--line-height-heading);
+.team-how::-webkit-scrollbar {
+  width: var(--space-08);
+}
+
+.team-how::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-pill);
+}
+
+.team-how::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .team-how-lead {
@@ -288,9 +346,9 @@
 .team-how-block-title {
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--font-size-label);
-  font-weight: var(--font-weight-label);
-  line-height: var(--line-height-compact);
+  font-size: var(--font-size-subhead);
+  font-weight: var(--font-weight-heading);
+  line-height: var(--line-height-heading);
 }
 
 .team-how-path {

@@ -12,13 +12,13 @@
 
 .panel-heading-pair-title,
 .panel-heading-pair-meta {
-  font-size: var(--font-size-h4);
+  font-size: var(--font-size-body-lg);
   line-height: 1.25;
 }
 
 .panel-heading-pair-title {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: var(--font-weight-label);
 }
 
 .panel-heading-pair-meta {
@@ -27,6 +27,14 @@
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* One title style across the workspace panels, including floating panels. */
+.workspace-panel-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-body-lg);
+  font-weight: var(--font-weight-label);
+  line-height: 1.25;
 }
 
 * {
@@ -510,6 +518,16 @@ body.compact-mode-active html {
 
 .button--danger:hover:not(:disabled) {
   background: rgba(var(--accent-error-light-rgb), 0.1);
+}
+
+.button--success {
+  background: transparent;
+  color: var(--button-success-text);
+  border-color: var(--button-success-border);
+}
+
+.button--success:hover:not(:disabled) {
+  background: var(--button-success-surface-hover);
 }
 
 .button--ghost {

@@ -18,6 +18,7 @@
 import { BranchIcon, CollaboratorsIcon, PullRequestIcon } from '@/components/icons';
 import { EmptyState } from '../primitives/EmptyState';
 import { TeamAvatar } from './TeamAvatar';
+import { TeamActorName } from './TeamActorName';
 import { TeamCoverageComplete, TeamGitHubOnlyBadge } from './TeamCoverageNote';
 import { formatAgo } from '../../lib/workflows';
 import { actorKey, type TeamMember } from '../../lib/team';
@@ -86,23 +87,29 @@ export function TeamPeoplePanel({
             className={`team-person${member.isSelf ? ' is-self' : ''}`}
             key={actorKey(member.actor)}
           >
-            <TeamAvatar actor={member.actor} size={compact ? 'md' : 'lg'} isSelf={member.isSelf} />
-
-            <div className="team-person-body">
+            <div className="team-person-head">
+              <TeamAvatar actor={member.actor} size="md" isSelf={member.isSelf} />
               <div className="team-person-line">
                 <span className="team-person-name">
-                  {member.actor.name}
-                  {member.isSelf && <span className="team-person-you">you</span>}
+                  <TeamActorName actor={member.actor} />
+                  {member.isSelf && (
+                    <span className="team-person-you team-status team-status--merged">you</span>
+                  )}
                 </span>
-                {!member.explainsWork && !member.isSelf && <TeamGitHubOnlyBadge />}
-                {!compact && <span className="team-person-role">{ROLE_LABEL[member.role]}</span>}
                 <span className="team-person-when">
                   {member.lastPushedAt !== null ? formatAgo(member.lastPushedAt, now) : '—'}
                 </span>
+                {!member.explainsWork && !member.isSelf && <TeamGitHubOnlyBadge />}
+                {!compact && <span className="team-person-role">{ROLE_LABEL[member.role]}</span>}
               </div>
+            </div>
 
+            <div className="team-person-body">
               {member.doing ? (
-                <span className="team-person-doing">{member.doing}</span>
+                <span className="team-person-doing">
+                  <span className="team-person-doing-label">Latest:</span>
+                  {member.doing}
+                </span>
               ) : member.isSelf ? null : (
                 <span className="team-person-idle">Nothing new since you last looked</span>
               )}
@@ -110,7 +117,7 @@ export function TeamPeoplePanel({
               {member.branch ? (
                 <div className="team-person-work">
                   <span className="team-person-branch">
-                    <BranchIcon size={10} />
+                    <BranchIcon size={12} />
                     {member.branch}
                   </span>
                   {member.commitsAhead > 0 && (
@@ -118,7 +125,7 @@ export function TeamPeoplePanel({
                   )}
                   {member.prNumber !== null && (
                     <span className="team-person-pr">
-                      <PullRequestIcon size={10} />#{member.prNumber}
+                      <PullRequestIcon size={12} />#{member.prNumber}
                     </span>
                   )}
                 </div>
@@ -132,13 +139,15 @@ export function TeamPeoplePanel({
         ))}
       </ul>
 
-      <TeamCoverageComplete members={members} />
+      <div className="team-people-summary">
+        <TeamCoverageComplete members={members} />
 
-      {/* The honest caveat, said once, where the misreading would happen. */}
-      <p className="team-people-footnote">
-        “Last pushed” is the only activity a git remote can report. Uncommitted work, and work that
-        has not been pushed, is invisible to everyone, including to this panel.
-      </p>
+        {/* The honest caveat, said once, where the misreading would happen. */}
+        <p className="team-people-footnote">
+          “Last pushed” is the only activity a git remote can report. Uncommitted work, and work
+          that has not been pushed, is invisible to everyone, including to this panel.
+        </p>
+      </div>
     </div>
   );
 }

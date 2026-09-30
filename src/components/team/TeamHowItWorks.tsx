@@ -17,13 +17,6 @@
  * @module components/team/TeamHowItWorks
  */
 
-import { CloseIcon } from '@/components/icons';
-import { IconButton } from '../primitives/IconButton';
-
-interface TeamHowItWorksProps {
-  onClose: () => void;
-}
-
 /** The three writers, in the order they are trusted. */
 const WRITERS = [
   {
@@ -46,21 +39,9 @@ const WRITERS = [
   },
 ] as const;
 
-export function TeamHowItWorks({ onClose }: TeamHowItWorksProps) {
+export function TeamHowItWorks() {
   return (
     <section className="team-how" aria-label="How team activity works">
-      <header className="team-how-header">
-        <h3 className="team-how-title">Your repository is the database</h3>
-        <IconButton
-          variant="ghost"
-          size="compact"
-          icon={<CloseIcon size={12} />}
-          onClick={onClose}
-          title="Close"
-          aria-label="Close"
-        />
-      </header>
-
       <p className="team-how-lead">
         There is no Ship Studio server, no account and no database. What people did is read out of
         your git history, comments are small files in your own repo, and the network is{' '}

@@ -29,8 +29,10 @@ import {
   PinIcon,
 } from '@/components/icons';
 import { DockablePanel } from '../primitives/DockablePanel';
+import { ModalFrame } from '../primitives/ModalFrame';
 import { usePanelDockBinding } from '../../contexts/PanelDockContext';
 import { EmptyState } from '../primitives/EmptyState';
+import { Button } from '../primitives/Button';
 import { IconButton } from '../primitives/IconButton';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Spinner } from '../primitives/Spinner';
@@ -123,8 +125,15 @@ export function TeamPanel({
         <div className="team-float-inner">
           <header className="team-float-header" data-dockable-drag-handle>
             <span className="team-float-title">
-              Team
-              {unseen.length > 0 && <span className="team-float-count">{unseen.length} new</span>}
+              <span className="workspace-panel-title">Team</span>
+              <IconButton
+                variant="ghost"
+                size="compact"
+                icon={<InfoIcon size={12} />}
+                onClick={() => setHowItWorksOpen(true)}
+                title="How this works"
+                aria-label="How team sync works"
+              />
               {/* Said out loud, because the honest answer to "where does this
                   live" is "your repository" — there is no service behind it,
                   and nothing here was invented. Git rather than any one host:
@@ -136,19 +145,6 @@ export function TeamPanel({
               </span>
             </span>
             <div className="team-float-header-actions">
-              {/* The disclosure panel — what gets written into the repository and
-                who can read it. It lived on the home screen, which is gone, and
-                it is the one thing there that was not a duplicate of this one:
-                a feature that writes to someone's repo owes them a plain
-                account of what it writes, reachable from where it happens. */}
-              <IconButton
-                variant="ghost"
-                size="compact"
-                icon={<InfoIcon size={12} />}
-                onClick={() => setHowItWorksOpen(true)}
-                title="How this works"
-                aria-label="How team sync works"
-              />
               <ToggleButton
                 variant="ghost"
                 size="compact"
@@ -159,16 +155,6 @@ export function TeamPanel({
                 pressed={pinned}
                 leftIcon={<PinIcon size={13} />}
               />
-              {unseen.length > 0 && (
-                <IconButton
-                  variant="ghost"
-                  size="compact"
-                  icon={<CheckIcon size={12} />}
-                  onClick={() => markAllSeen()}
-                  title="Mark everything as seen"
-                  aria-label="Mark everything as seen"
-                />
-              )}
               <IconButton
                 variant="ghost"
                 size="compact"
@@ -185,22 +171,62 @@ export function TeamPanel({
               value={tab}
               onValueChange={(next) => setTeamTab(next as TeamTab)}
               mode="navigation"
+              className="workspace-tabs"
             >
-              <TabsList aria-label="Team">
-                <TabsTab value="updates" leftIcon={<HistoryIcon size={11} />}>
+              <TabsList
+                className="workspace-tabs-list"
+                variant="stretch"
+                appearance="underline"
+                aria-label="Team"
+              >
+                <TabsTab
+                  value="updates"
+                  className="workspace-tab"
+                  leftIcon={<HistoryIcon size={14} />}
+                >
                   What&rsquo;s new
                 </TabsTab>
-                <TabsTab value="people" leftIcon={<CollaboratorsIcon size={11} />}>
+                <TabsTab
+                  value="people"
+                  className="workspace-tab"
+                  leftIcon={<CollaboratorsIcon size={14} />}
+                >
                   People
                 </TabsTab>
-                <TabsTab value="comments" leftIcon={<CommentIcon size={11} />}>
+                <TabsTab
+                  value="comments"
+                  className="workspace-tab"
+                  leftIcon={<CommentIcon size={14} />}
+                >
                   {unresolved > 0 ? `Comments (${unresolved})` : 'Comments'}
                 </TabsTab>
               </TabsList>
             </Tabs>
           </div>
 
-          <div className="team-float-body">
+          <div className="team-float-body" data-tab={tab}>
+            {tab === 'updates' && snapshot.updates.length > 0 && (
+              <div className="team-updates-actions">
+                <div className="team-updates-counts">
+                  <span className="team-updates-total">
+                    {snapshot.updates.length} {snapshot.updates.length === 1 ? 'update' : 'updates'}
+                  </span>
+                  {unseen.length > 0 && (
+                    <span className="team-status team-status--merged">{unseen.length} new</span>
+                  )}
+                </div>
+                {unseen.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="compact"
+                    leftIcon={<CheckIcon size={12} />}
+                    onClick={() => markAllSeen()}
+                  >
+                    Mark everything as seen
+                  </Button>
+                )}
+              </div>
+            )}
             {tab === 'updates' &&
               (snapshot.updates.length === 0 ? (
                 loading ? (
@@ -285,10 +311,16 @@ export function TeamPanel({
               />
             )}
           </div>
-
-          {howItWorksOpen && <TeamHowItWorks onClose={() => setHowItWorksOpen(false)} />}
         </div>
       </DockablePanel>
+      <ModalFrame
+        isOpen={howItWorksOpen}
+        onClose={() => setHowItWorksOpen(false)}
+        title="Your repository is the database"
+        className="team-how-modal"
+      >
+        <TeamHowItWorks />
+      </ModalFrame>
     </>
   );
 }

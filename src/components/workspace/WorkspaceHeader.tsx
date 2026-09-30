@@ -515,8 +515,8 @@ export function WorkspaceHeader({
         data-workspace-panel="assets"
         leftIcon={<ImageIcon size={16} />}
       />
-      {headerExtras}
       {teamPresence}
+      {headerExtras}
     </div>
   );
   const projectTitle = (

@@ -88,6 +88,9 @@ pub struct TeamActor {
     /// From the GitHub API only. `None` renders initials, never a guessed
     /// gravatar URL.
     pub avatar_url: Option<String>,
+    /// The profile URL returned by GitHub, when this login was confirmed.
+    #[serde(default)]
+    pub profile_url: Option<String>,
 }
 
 /// Which of the three writers produced a row. Drives how much it may claim.
@@ -164,6 +167,8 @@ pub struct TeamUpdate {
     pub pr_number: Option<i64>,
     pub build_error: Option<String>,
     pub github_url: Option<String>,
+    /// Exact permalink to the newest commit that dates and headlines this stint.
+    pub commit_url: Option<String>,
 }
 
 /// Repo role, from the GitHub collaborators API.

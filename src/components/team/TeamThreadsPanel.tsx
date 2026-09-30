@@ -16,13 +16,25 @@
  */
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
-import { BranchIcon, CheckIcon, CommentIcon, PendingCircleIcon } from '@/components/icons';
+import {
+  BranchIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  CommentIcon,
+  FileIcon,
+  FolderIcon,
+  PendingCircleIcon,
+} from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { Checkbox } from '../primitives/Checkbox';
+import { IconButton } from '../primitives/IconButton';
 import { TextButton } from '../primitives/TextButton';
 import { EmptyState } from '../primitives/EmptyState';
 import { SegmentedControl } from '../primitives/SegmentedControl';
+import { ExpandableTeamText } from './ExpandableTeamText';
 import { TeamAvatar, TeamAvatarStack } from './TeamAvatar';
+import { TeamActorName } from './TeamActorName';
 import { formatAgo } from '../../lib/workflows';
 import { lastMessageAt, threadParticipants, type TeamThread } from '../../lib/team';
 import {
@@ -62,6 +74,52 @@ interface TeamThreadsPanelProps {
   pickerHint?: string | null;
 }
 
+function ThreadTargetContent({
+  target,
+  route,
+  iconSize = 12,
+}: {
+  target: string;
+  route: string;
+  iconSize?: number;
+}) {
+  const page =
+    route === '/'
+      ? 'Home'
+      : route
+          .split('/')
+          .filter(Boolean)
+          .map((part) =>
+            part.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+          )
+          .join(' / ');
+  const separatorIndex = target.indexOf(' · ');
+
+  return (
+    <>
+      <span className="team-thread-page team-thread-context-tag" title={route}>
+        <FileIcon size={12} aria-hidden="true" />
+        {page}
+      </span>
+      {separatorIndex !== -1 && (
+        <>
+          <span className="team-thread-target-kind">
+            {target.slice(0, separatorIndex).replace(/^h([1-6])$/, 'H$1')}
+          </span>
+          <ChevronRightIcon
+            className="team-thread-target-chevron"
+            size={iconSize}
+            aria-hidden="true"
+          />
+        </>
+      )}
+      <span className="team-thread-target-detail">
+        {separatorIndex === -1 ? target : target.slice(separatorIndex + 3)}
+      </span>
+    </>
+  );
+}
+
 export function TeamThreadsPanel({
   threads,
   now,
@@ -74,6 +132,7 @@ export function TeamThreadsPanel({
   const { selectedThreadIds } = useSyncExternalStore(subscribe, getUiSnapshot);
   const [filter, setFilter] = useState<ThreadFilter>('open');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(true);
   const [draft, setDraft] = useState('');
 
   const visible = useMemo(() => {
@@ -85,7 +144,9 @@ export function TeamThreadsPanel({
     return matches.sort((a, b) => lastMessageAt(b) - lastMessageAt(a));
   }, [threads, filter]);
 
-  const selected = visible.find((thread) => thread.id === selectedId) ?? visible[0] ?? null;
+  const selected = isDetailOpen
+    ? (visible.find((thread) => thread.id === selectedId) ?? visible[0] ?? null)
+    : null;
 
   const handleReply = useCallback(() => {
     if (!selected || !draft.trim()) return;
@@ -118,6 +179,23 @@ export function TeamThreadsPanel({
             { value: 'all', label: 'All' },
           ]}
         />
+        {selectable && chosen.length > 0 && (
+          <div className="team-threads-send">
+            <span className="team-threads-send-count">{chosen.length} selected</span>
+            <div className="team-threads-send-actions">
+              <TextButton onClick={clearThreadSelection}>Clear</TextButton>
+              <Button
+                variant="primary"
+                size="compact"
+                disabled={sending}
+                onClick={() => onSendToAgent?.(chosen)}
+                title={agentLabel ? `Send to ${agentLabel}` : 'Send to your agent'}
+              >
+                {sending ? 'Sending…' : 'Send to agent'}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {visible.length === 0 ? (
@@ -131,33 +209,7 @@ export function TeamThreadsPanel({
           }
         />
       ) : (
-        <div className="team-threads-body">
-          {selectable && chosen.length > 0 && (
-            /* Appears on the first tick rather than sitting there greyed out.
-               A permanently visible disabled button asks to be clicked and then
-               refuses; this way the control shows up exactly when it works. */
-            <div className="team-threads-send">
-              <span className="team-threads-send-count">
-                {chosen.length === 1 ? '1 comment selected' : `${chosen.length} comments selected`}
-              </span>
-              <div className="team-threads-send-actions">
-                <TextButton onClick={clearThreadSelection}>Clear</TextButton>
-                <Button
-                  variant="primary"
-                  size="compact"
-                  disabled={sending}
-                  onClick={() => onSendToAgent?.(chosen)}
-                  title={agentLabel ? `Send to ${agentLabel}` : 'Send to your agent'}
-                >
-                  {sending
-                    ? 'Sending…'
-                    : chosen.length === 1
-                      ? 'Send comment to agent'
-                      : 'Send comments to agent'}
-                </Button>
-              </div>
-            </div>
-          )}
+        <div className={`team-threads-body${selected ? '' : ' is-detail-closed'}`}>
           <div className="team-thread-list" role="listbox" aria-label="Comment threads">
             {visible.map((thread) => {
               const last = thread.messages[thread.messages.length - 1];
@@ -171,8 +223,14 @@ export function TeamThreadsPanel({
                     thread.resolved ? ' is-resolved' : ''
                   }`}
                   onClick={() => {
-                    setSelectedId(thread.id);
-                    setDraft('');
+                    const currentId = selected?.id ?? selectedId;
+                    if (thread.id === currentId) {
+                      setIsDetailOpen(!isDetailOpen);
+                    } else {
+                      setSelectedId(thread.id);
+                      setIsDetailOpen(true);
+                      setDraft('');
+                    }
                   }}
                 >
                   <span className="team-thread-item-top">
@@ -180,23 +238,29 @@ export function TeamThreadsPanel({
                       <Checkbox
                         checked={selectedIds.has(thread.id)}
                         onChange={() => toggleThreadSelected(thread.id)}
-                        label={`Send comment ${thread.pin} to an agent`}
+                        label={`Send comment #${thread.pin} to an agent`}
                         stopPropagation
                       />
                     )}
-                    <span className="team-thread-pin" data-resolved={thread.resolved}>
-                      {thread.pin}
+                    <span className="team-thread-pin team-status team-status--merged">
+                      #{thread.pin}
                     </span>
-                    <span className="team-thread-target">{thread.target}</span>
+                    <span
+                      className="team-thread-target"
+                      aria-label={thread.target.replace(' · ', ': ')}
+                    >
+                      <ThreadTargetContent target={thread.target} route={thread.route} />
+                    </span>
                     <span className="team-thread-age">{formatAgo(lastMessageAt(thread), now)}</span>
                   </span>
                   {last && <span className="team-thread-preview">{last.body}</span>}
                   <span className="team-thread-item-meta">
                     <TeamAvatarStack actors={threadParticipants(thread)} />
-                    <span className="team-thread-route">{thread.route}</span>
-                    {thread.messages.length > 1 && (
-                      <span className="team-thread-count">{thread.messages.length} replies</span>
-                    )}
+                    <span className="team-thread-count">
+                      1 comment
+                      {thread.messages.length > 1 &&
+                        `, ${thread.messages.length - 1} ${thread.messages.length === 2 ? 'reply' : 'replies'}`}
+                    </span>
                   </span>
                 </button>
               );
@@ -207,19 +271,41 @@ export function TeamThreadsPanel({
             {selected && (
               <>
                 <header className="team-thread-header">
-                  <div className="team-thread-header-title">
-                    <span className="team-thread-pin" data-resolved={selected.resolved}>
-                      {selected.pin}
-                    </span>
-                    <h3 className="team-thread-heading">{selected.target}</h3>
+                  <div className="team-thread-header-top">
+                    <div className="team-thread-header-meta">
+                      <span className="team-thread-context-tag">
+                        <FolderIcon size={12} />
+                        {selected.projectName}
+                      </span>
+                      <span className="team-thread-context-tag">
+                        <BranchIcon size={12} />
+                        {selected.branch}
+                      </span>
+                    </div>{' '}
+                    <IconButton
+                      className="team-thread-close"
+                      variant="ghost"
+                      size="compact"
+                      icon={<CloseIcon size={14} />}
+                      onClick={() => setIsDetailOpen(false)}
+                      title="Close thread detail"
+                      aria-label="Close thread detail"
+                    />
                   </div>
-                  <div className="team-thread-header-meta">
-                    <span className="team-chip">{selected.projectName}</span>
-                    <span className="team-thread-branch">
-                      <BranchIcon size={10} />
-                      {selected.branch}
+                  <div className="team-thread-header-title">
+                    <span className="team-thread-pin team-status team-status--merged">
+                      #{selected.pin}
                     </span>
-                    <span className="team-thread-route">{selected.route}</span>
+                    <h3
+                      className="team-thread-heading"
+                      aria-label={selected.target.replace(' · ', ': ')}
+                    >
+                      <ThreadTargetContent
+                        target={selected.target}
+                        route={selected.route}
+                        iconSize={16}
+                      />
+                    </h3>
                   </div>
                 </header>
 
@@ -229,19 +315,19 @@ export function TeamThreadsPanel({
                       <TeamAvatar actor={message.actor} size="md" />
                       <div className="team-message-body">
                         <div className="team-message-head">
-                          <span className="team-message-author">{message.actor.name}</span>
+                          <TeamActorName actor={message.actor} className="team-message-author" />
                           <span className="team-message-age">{formatAgo(message.at, now)}</span>
                           {message.pending && (
                             <span
                               className="team-message-pending"
                               title="Written on this machine. Not pushed yet, so nobody else can see it."
                             >
-                              <PendingCircleIcon size={9} />
+                              <PendingCircleIcon size={12} />
                               not pushed
                             </span>
                           )}
                         </div>
-                        <p className="team-message-text">{message.body}</p>
+                        <ExpandableTeamText text={message.body} textClassName="team-message-text" />
                       </div>
                     </article>
                   ))}
@@ -249,7 +335,7 @@ export function TeamThreadsPanel({
                   {selected.resolved && selected.resolvedBy && (
                     <div className="team-thread-resolved-note">
                       <CheckIcon size={11} />
-                      Resolved by {selected.resolvedBy.name}
+                      Resolved by <TeamActorName actor={selected.resolvedBy} />
                     </div>
                   )}
                 </div>
@@ -275,23 +361,18 @@ export function TeamThreadsPanel({
                   />
                   <div className="team-thread-composer-actions">
                     <span className="team-thread-hint">
-                      Enter to send · saved to this project, not pushed yet
+                      <span>Enter to send</span>
+                      <span>Saved to this project, not pushed yet</span>
                     </span>
                     <div className="team-thread-composer-buttons">
                       <Button
                         variant="secondary"
-                        size="compact"
-                        leftIcon={<CheckIcon size={12} />}
+                        leftIcon={<CheckIcon size={14} />}
                         onClick={() => void setThreadResolved(selected.id, !selected.resolved)}
                       >
                         {selected.resolved ? 'Reopen' : 'Resolve'}
                       </Button>
-                      <Button
-                        variant="primary"
-                        size="compact"
-                        disabled={!draft.trim()}
-                        onClick={handleReply}
-                      >
+                      <Button variant="primary" disabled={!draft.trim()} onClick={handleReply}>
                         Reply
                       </Button>
                     </div>

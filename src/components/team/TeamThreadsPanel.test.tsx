@@ -62,14 +62,14 @@ it('offers no send button until something is ticked, then names the count', () =
   // Nothing pre-selected: the button is absent rather than present-and-disabled.
   expect(screen.queryByRole('button', { name: /Send comment/ })).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Send comment 1 to an agent' }));
-  expect(screen.getByRole('button', { name: 'Send comment to agent' })).toBeInTheDocument();
-  expect(screen.getByText('1 comment selected')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Send comment #1 to an agent' }));
+  expect(screen.getByRole('button', { name: 'Send to agent' })).toBeInTheDocument();
+  expect(screen.getByText('1 selected')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Send comment 2 to an agent' }));
-  expect(screen.getByRole('button', { name: 'Send comments to agent' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Send comment #2 to an agent' }));
+  expect(screen.getByText('2 selected')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Send comments to agent' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send to agent' }));
   expect(onSendToAgent).toHaveBeenCalledTimes(1);
   expect(onSendToAgent.mock.calls[0][0].map((sent) => sent.id)).toEqual(['t1', 't2']);
 });

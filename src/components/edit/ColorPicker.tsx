@@ -386,7 +386,7 @@ export function ColorPicker({ value, onChange, onClose }: Props) {
   return (
     <div className="ss-color-picker" role="dialog" aria-label="Color picker">
       <header className="ss-edit-panel__header ss-color-picker__header" data-dockable-drag-handle>
-        <h2 className="ss-edit-panel__title">Color picker</h2>
+        <h2 className="ss-edit-panel__title workspace-panel-title">Color picker</h2>
         <IconButton
           className="ss-color-picker__action"
           size="compact"

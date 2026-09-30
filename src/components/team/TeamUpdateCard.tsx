@@ -19,26 +19,33 @@
  * @module components/team/TeamUpdateCard
  */
 
+import { useLayoutEffect, useRef } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   ChevronIcon,
   ClaudeIcon,
   CodexIcon,
   ErrorIcon,
-  ExternalLinkIcon,
   EyeIcon,
+  FileIcon,
   GenericAgentIcon,
+  GitBranchHorizontalIcon,
+  GitCommitIcon,
   GitHubIcon,
+  GitMergeIcon,
   PullRequestIcon,
 } from '@/components/icons';
 import { TeamAvatar } from './TeamAvatar';
+import { TeamActorName } from './TeamActorName';
+import { ExpandableTeamText } from './ExpandableTeamText';
+import { Button } from '../primitives/Button';
 import { formatAgo } from '../../lib/workflows';
 import { fileTotals, TEAM_STATUS_LABEL, type TeamUpdate } from '../../lib/team';
 
 function AgentMark({ name }: { name: string }) {
-  if (name.toLowerCase().includes('claude')) return <ClaudeIcon size={10} />;
-  if (name.toLowerCase().includes('codex')) return <CodexIcon size={10} />;
-  return <GenericAgentIcon size={10} />;
+  if (name.toLowerCase().includes('claude')) return <ClaudeIcon size={12} />;
+  if (name.toLowerCase().includes('codex')) return <CodexIcon size={12} />;
+  return <GenericAgentIcon size={12} />;
 }
 
 interface TeamUpdateCardProps {
@@ -60,6 +67,69 @@ export function TeamUpdateCard({
   const thin = update.writtenBy === 'app';
   const totals = fileTotals(update.files);
   const githubUrl = update.githubUrl;
+  const commitUrl = update.commitUrl;
+  const footRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const foot = footRef.current;
+    const where = foot?.querySelector<HTMLElement>('.team-update-foot-where');
+    const actions = foot?.querySelector<HTMLElement>('.team-update-foot-actions');
+    if (!foot || !where || !actions) return;
+
+    let lastRect = foot.getBoundingClientRect();
+    const updateWrapMode = () => {
+      // Measure the natural flex layout first. The full-width style is applied
+      // only after the actions have actually moved to a second line.
+      foot.removeAttribute('data-wrapped');
+
+      const whereRect = where.getBoundingClientRect();
+      const actionsRect = actions.getBoundingClientRect();
+      const whereCenter = whereRect.top + whereRect.height / 2;
+      const actionsCenter = actionsRect.top + actionsRect.height / 2;
+
+      if (Math.abs(whereCenter - actionsCenter) > 1) {
+        foot.dataset.wrapped = 'true';
+      }
+
+      lastRect = foot.getBoundingClientRect();
+    };
+
+    updateWrapMode();
+
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            if (entries.length === 0) return;
+            const nextRect = foot.getBoundingClientRect();
+            if (
+              Math.abs(nextRect.width - lastRect.width) <= 0.5 &&
+              Math.abs(nextRect.height - lastRect.height) <= 0.5
+            ) {
+              return;
+            }
+            updateWrapMode();
+          });
+
+    resizeObserver?.observe(foot);
+    resizeObserver?.observe(where);
+    resizeObserver?.observe(actions);
+    window.addEventListener('resize', updateWrapMode);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updateWrapMode);
+      foot.removeAttribute('data-wrapped');
+    };
+  }, [
+    githubUrl,
+    totals.added,
+    totals.removed,
+    update.branch,
+    update.commits.length,
+    update.files.length,
+    update.prNumber,
+  ]);
 
   return (
     <article
@@ -67,12 +137,29 @@ export function TeamUpdateCard({
       data-status={update.status}
     >
       <header className="team-update-head">
-        {/* The unread mark rides the avatar rather than sitting in a gutter of
-            its own. As a column it was blank on every row but the new ones,
-            which left one lonely dot floating in empty space and made two
-            neighbouring cards look misaligned when they were not. */}
         <span className="team-update-figure">
           <TeamAvatar actor={update.actor} size="md" />
+        </span>
+        <div className="team-update-who">
+          <TeamActorName actor={update.actor} className="team-update-name" />
+          {commitUrl ? (
+            <a
+              className="team-update-when team-external-link"
+              href={commitUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Open newest commit in GitHub"
+              aria-label={`Open the newest commit for ${update.headline} on GitHub`}
+              onClick={(event) => {
+                event.preventDefault();
+                void openUrl(commitUrl);
+              }}
+            >
+              {formatAgo(update.at, now)}
+            </a>
+          ) : (
+            <span className="team-update-when">{formatAgo(update.at, now)}</span>
+          )}
           {isNew && (
             <span
               className="team-update-new-dot"
@@ -80,21 +167,19 @@ export function TeamUpdateCard({
               aria-label="New since you last looked"
             />
           )}
-        </span>
-        <div className="team-update-who">
-          <span className="team-update-name">{update.actor.name}</span>
-          <span className="team-update-when">{formatAgo(update.at, now)}</span>
           {update.writtenBy === 'agent' && update.agentName && (
             <span
               className="team-update-agent"
               title={`Summarised by ${update.agentName}, which did the work`}
+              role="img"
+              aria-label={`Summarised by ${update.agentName}, which did the work`}
             >
               <AgentMark name={update.agentName} />
-              {update.agentName}
             </span>
           )}
         </div>
         <span className="team-status" data-status={update.status}>
+          {update.status === 'merged' && <GitMergeIcon size={12} />}
           {TEAM_STATUS_LABEL[update.status]}
         </span>
       </header>
@@ -104,7 +189,7 @@ export function TeamUpdateCard({
       {/* The commit body, as written. Paragraph breaks are preserved because
           the author put them there — a body is prose, and collapsing it into
           one block is a different document from the one they wrote. */}
-      {update.why && <p className="team-update-why">{update.why}</p>}
+      {update.why && <ExpandableTeamText text={update.why} textClassName="team-update-why" />}
 
       {update.changes.length > 0 && (
         <ul className="team-update-changes">
@@ -148,21 +233,38 @@ export function TeamUpdateCard({
             <EyeIcon size={12} />
           </span>
           <span className="team-update-ask-label">
-            {update.actor.name.split(' ')[0]} wants a second pair of eyes
+            <TeamActorName actor={update.actor}>{update.actor.name.split(' ')[0]}</TeamActorName>{' '}
+            wants a second pair of eyes
           </span>
           <p className="team-update-ask-text">{update.asks}</p>
+          {githubUrl && (
+            <Button
+              className="team-update-ask-action"
+              variant="success"
+              size="compact"
+              leftIcon={<GitHubIcon size={12} />}
+              onClick={() => void openUrl(githubUrl)}
+              title="Open these changes on GitHub to review them"
+              aria-label={`Review ${update.actor.name}'s changes on GitHub`}
+            >
+              Review changes
+            </Button>
+          )}
         </div>
       )}
 
       {/* Two groups, not seven loose items. Where it lives (left) and what you
           can do with it (right) — so a narrow panel wraps one whole group
           under the other instead of stranding "Open in GitHub" on its own. */}
-      <footer className="team-update-foot">
+      <footer ref={footRef} className="team-update-foot">
         <span className="team-update-foot-where">
-          <span className="team-branch-chip">{update.branch}</span>
+          <span className="team-branch-chip">
+            <GitBranchHorizontalIcon size={12} />
+            {update.branch}
+          </span>
           {update.prNumber !== null && (
             <span className="team-pr-chip">
-              <PullRequestIcon size={10} />#{update.prNumber}
+              <PullRequestIcon size={12} />#{update.prNumber}
             </span>
           )}
         </span>
@@ -175,26 +277,44 @@ export function TeamUpdateCard({
               onClick={() => onToggleExpanded(update.id)}
               aria-expanded={expanded}
             >
-              <ChevronIcon size={9} className={expanded ? 'chevron-flipped' : undefined} />
-              {update.commits.length} {update.commits.length === 1 ? 'commit' : 'commits'} ·{' '}
-              {update.files.length} {update.files.length === 1 ? 'file' : 'files'}
-              {totals.added > 0 && <span className="team-diff-add">+{totals.added}</span>}
-              {totals.removed > 0 && <span className="team-diff-del">−{totals.removed}</span>}
+              <span className="team-evidence-summary">
+                <span className="team-evidence-label">
+                  <span className="team-evidence-count team-evidence-count--commits">
+                    <GitCommitIcon className="team-evidence-summary-icon" size={16} />
+                    {update.commits.length} {update.commits.length === 1 ? 'commit' : 'commits'}
+                  </span>
+                  <span className="team-evidence-count">
+                    <FileIcon
+                      className="team-evidence-summary-icon team-evidence-summary-icon--file"
+                      size={16}
+                    />
+                    {update.files.length} {update.files.length === 1 ? 'file' : 'files'}
+                  </span>
+                </span>
+                {expanded ? (
+                  <ChevronIcon className="team-evidence-chevron--expanded" size={12} />
+                ) : (
+                  <ChevronIcon size={12} />
+                )}
+              </span>
+              <span className="team-evidence-totals">
+                {totals.added > 0 && <span className="team-diff-add">+{totals.added}</span>}
+                {totals.removed > 0 && <span className="team-diff-del">−{totals.removed}</span>}
+              </span>
             </button>
           )}
 
           {/* On every row, not only the thin ones. GitHub is the one place the
               whole team can already see, whether or not they use this app. */}
-          {githubUrl && (
+          {githubUrl && !update.asks && (
             <button
               type="button"
               className="team-github-link"
               onClick={() => void openUrl(githubUrl)}
-              title={githubUrl}
+              title="Open in GitHub"
+              aria-label="Open in GitHub"
             >
-              <GitHubIcon size={11} />
-              Open in GitHub
-              <ExternalLinkIcon size={9} />
+              <GitHubIcon size={12} />
             </button>
           )}
         </span>
@@ -202,23 +322,35 @@ export function TeamUpdateCard({
 
       {expanded && (
         <div className="team-evidence">
-          <ul className="team-evidence-list">
-            {update.commits.map((commit) => (
-              <li key={commit.sha} className="team-evidence-row">
-                <code className="team-sha">{commit.sha}</code>
-                <span className="team-evidence-text">{commit.message}</span>
-              </li>
-            ))}
-          </ul>
-          <ul className="team-evidence-list">
-            {update.files.map((file) => (
-              <li key={file.path} className="team-evidence-row">
-                <code className="team-evidence-path">{file.path}</code>
-                <span className="team-diff-add">+{file.added}</span>
-                <span className="team-diff-del">−{file.removed}</span>
-              </li>
-            ))}
-          </ul>
+          {update.commits.length > 0 && (
+            <section className="team-evidence-section" aria-label="Commits">
+              <h5 className="team-evidence-heading">Commits</h5>
+              <ul className="team-evidence-list team-evidence-list--commits">
+                {update.commits.map((commit) => (
+                  <li key={commit.sha} className="team-evidence-row">
+                    <GitCommitIcon className="team-evidence-icon" size={16} />
+                    <code className="team-sha">{commit.sha}</code>
+                    <span className="team-evidence-text">{commit.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {update.files.length > 0 && (
+            <section className="team-evidence-section" aria-label="Files">
+              <h5 className="team-evidence-heading">Files</h5>
+              <ul className="team-evidence-list team-evidence-list--files">
+                {update.files.map((file) => (
+                  <li key={file.path} className="team-evidence-row">
+                    <FileIcon className="team-evidence-icon" size={16} />
+                    <code className="team-evidence-path">{file.path}</code>
+                    <span className="team-diff-add">+{file.added}</span>
+                    <span className="team-diff-del">−{file.removed}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
     </article>

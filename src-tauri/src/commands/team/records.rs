@@ -64,6 +64,7 @@ impl RecordActor {
                 self.name.clone()
             },
             avatar_url: None,
+            profile_url: None,
         }
     }
 }
@@ -184,6 +185,7 @@ impl TeamRecord {
                 login: None,
                 name: "Unknown".to_string(),
                 avatar_url: None,
+                profile_url: None,
             })
     }
 }
@@ -299,26 +301,25 @@ fn sort_key(day: &Path, file: &Path) -> String {
 /// comment is genuinely absent — not yet fetched, or on a branch this clone
 /// does not have — is still dropped rather than used to conjure a thread with
 /// no anchor, no route and no target. It reappears when the file does.
-/// Look up a person's avatar, when anything can confirm one.
+/// Look up a person's current GitHub avatar and profile URL, when available.
 ///
 /// A record never stores an avatar: it is a GitHub URL that rotates, and one
 /// committed into history renders a broken image in every clone forever. So the
 /// picture is resolved at read time from what GitHub says right now, and a
 /// person with no GitHub account — or a machine that cannot ask — simply has
-/// none, which the UI draws as their initials on a colour.
-pub type AvatarLookup<'a> = &'a dyn Fn(&str) -> Option<String>;
+/// neither, which leaves their initials on a colour and their name unlinked.
+pub type ActorLinksLookup<'a> = &'a dyn Fn(&str) -> (Option<String>, Option<String>);
 
-/// No avatars available: the local-only case, and the default for callers that
-/// have not asked GitHub anything.
-pub fn no_avatars(_login: &str) -> Option<String> {
-    None
+/// No GitHub actor links available for the local-only case.
+pub fn no_avatars(_login: &str) -> (Option<String>, Option<String>) {
+    (None, None)
 }
 
 pub fn fold_threads(
     records: &[TeamRecord],
     project_name: &str,
     project_path: &str,
-    avatar_for: AvatarLookup<'_>,
+    actor_links_for: ActorLinksLookup<'_>,
 ) -> Vec<TeamThread> {
     let mut threads: Vec<TeamThread> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
@@ -354,7 +355,7 @@ pub fn fold_threads(
             resolved_by: None,
             messages: vec![TeamMessage {
                 id: record.id.clone(),
-                actor: with_avatar(record.actor(), avatar_for),
+                actor: with_avatar(record.actor(), actor_links_for),
                 at: record.at,
                 body: record.body.clone().unwrap_or_default(),
                 pending: None,
@@ -377,7 +378,7 @@ pub fn fold_threads(
         };
         threads[position].messages.push(TeamMessage {
             id: record.id.clone(),
-            actor: with_avatar(record.actor(), avatar_for),
+            actor: with_avatar(record.actor(), actor_links_for),
             at: record.at,
             body: record.body.clone().unwrap_or_default(),
             pending: None,
@@ -390,7 +391,8 @@ pub fn fold_threads(
         };
         let resolved = record.resolved.unwrap_or(true);
         threads[position].resolved = resolved;
-        threads[position].resolved_by = resolved.then(|| with_avatar(record.actor(), avatar_for));
+        threads[position].resolved_by =
+            resolved.then(|| with_avatar(record.actor(), actor_links_for));
     }
 
     // Numbered in creation order, before anything is removed. Retracting note
@@ -412,11 +414,16 @@ pub fn fold_threads(
     threads
 }
 
-/// An actor with their picture attached, if GitHub knows one.
-fn with_avatar(actor: TeamActor, avatar_for: AvatarLookup<'_>) -> TeamActor {
-    let avatar_url = actor.login.as_deref().and_then(avatar_for);
+/// An actor enriched with GitHub's current avatar and profile URL, if known.
+fn with_avatar(actor: TeamActor, actor_links_for: ActorLinksLookup<'_>) -> TeamActor {
+    let (avatar_url, profile_url) = actor
+        .login
+        .as_deref()
+        .map(actor_links_for)
+        .unwrap_or_default();
     TeamActor {
         avatar_url,
+        profile_url,
         ..actor
     }
 }

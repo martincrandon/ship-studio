@@ -18,7 +18,19 @@
 .team-threads-controls {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  min-height: var(--control-height-standard);
   gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.team-threads-controls > .segmented-control {
+  align-self: stretch;
+}
+
+.team-threads-controls > .segmented-control > .button {
+  height: auto;
 }
 
 /* Same two-pane geometry as .inbox-body — a list that drives a reader. */
@@ -32,6 +44,14 @@
   border-radius: var(--radius-card);
   overflow: hidden;
   background: var(--surface-recessed);
+}
+
+.team-threads-body.is-detail-closed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.team-threads-body.is-detail-closed .team-thread-pane {
+  display: none;
 }
 
 .team-thread-list {
@@ -70,13 +90,19 @@
 }
 
 .team-thread-item.is-selected {
-  background: var(--surface-selected);
-  border-color: var(--border-default);
+  background: var(--surface-control);
 }
 
 .team-thread-item.is-resolved .team-thread-target,
 .team-thread-item.is-resolved .team-thread-preview {
   color: var(--text-faint);
+}
+
+.team-thread-item:is(.is-selected, :hover) .team-thread-target,
+.team-thread-item:is(.is-selected, :hover) .team-thread-age,
+.team-thread-item:is(.is-selected, :hover) .team-thread-preview,
+.team-thread-item:is(.is-selected, :hover) .team-thread-item-meta {
+  color: var(--text-primary);
 }
 
 .team-thread-item-top {
@@ -86,37 +112,40 @@
   min-width: 0;
 }
 
-/* The number drawn on the preview pin, so a person and an agent can both say
-   "comment 2" and mean the same element. Outlined once resolved, matching how
-   a sent pin is drawn on the canvas. */
+/* The number drawn on the preview pin, matching the shared status-tag style. */
 .team-thread-pin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  width: 17px;
-  height: 17px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-active);
-  color: var(--text-on-accent);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-label);
-  line-height: 1;
-}
-
-.team-thread-pin[data-resolved='true'] {
-  background: none;
-  box-shadow: inset 0 0 0 var(--border-width-default) var(--border-strong);
-  color: var(--text-faint);
 }
 
 .team-thread-target {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
   min-width: 0;
   flex: 1;
+  margin-left: 0;
   color: var(--text-primary);
   font-size: var(--font-size-body-md);
   font-weight: var(--font-weight-label);
   line-height: var(--line-height-compact);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-thread-page,
+.team-thread-target-kind,
+.team-thread-target-chevron {
+  flex: none;
+}
+
+.team-thread-target-chevron {
+  color: var(--text-muted);
+}
+
+.team-thread-target-detail {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -151,11 +180,6 @@
   line-height: var(--line-height-compact);
 }
 
-.team-thread-route {
-  font-family: var(--font-code);
-  white-space: nowrap;
-}
-
 .team-thread-count {
   white-space: nowrap;
 }
@@ -168,12 +192,13 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--surface-recessed);
 }
 
 .team-thread-header {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-sm);
   flex: none;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: var(--border-width-default) solid var(--border-subtle);
@@ -182,11 +207,35 @@
 .team-thread-header-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   min-width: 0;
 }
 
+.team-thread-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.team-thread-page {
+  margin-right: var(--spacing-xs);
+}
+
+.team-thread-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-label);
+}
+
 .team-thread-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  flex: 1 1 auto;
   margin: 0;
   min-width: 0;
   color: var(--text-primary);
@@ -207,11 +256,20 @@
   font-size: var(--font-size-body-sm);
 }
 
-.team-thread-branch {
+.team-thread-item:is(.is-selected, :hover) .team-thread-context-tag {
+  background: var(--surface-selected);
+}
+
+.team-thread-context-tag {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  background: var(--surface-control);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
   font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
   white-space: nowrap;
 }
 
@@ -289,6 +347,11 @@
   overflow-wrap: break-word;
 }
 
+.team-message-body .team-expandable-text__toggle.button {
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-reading);
+}
+
 .team-thread-resolved-note {
   display: inline-flex;
   align-items: center;
@@ -307,7 +370,7 @@
   gap: var(--spacing-xs);
   flex: none;
   padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--surface-panel);
+  background: var(--surface-recessed);
   border-top: var(--border-width-default) solid var(--border-subtle);
 }
 
@@ -342,6 +405,9 @@
 }
 
 .team-thread-hint {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
   color: var(--text-faint);
   font-size: var(--font-size-body-sm);
 }
@@ -352,36 +418,14 @@
   gap: var(--spacing-xs);
 }
 
-/* Both buttons in this pair keep the compact height, icon or not.
- *
- * `.button--size-compact.button--has-icon` drops to `height: auto` with
- * symmetric padding app-wide, so a compact button carrying a leading icon comes
- * out taller than a label-only one beside it. Here that is Resolve overhanging
- * Reply. The global rule is the actual bug and is worth fixing on its own, but
- * it is shared by nineteen call sites, so the pair that has to line up says so
- * locally rather than that change riding along with this one. */
-.team-thread-composer-buttons .button--size-compact.button--has-icon {
-  height: var(--control-height-compact);
-  min-height: var(--control-height-compact);
-  padding: 0 var(--space-06);
-}
-
-/* The handoff bar. Sits above the list rather than below it: it is about the
-   ticks you just made, and a control that appears under a scrolling list can
-   land off-screen at the moment it becomes relevant.
- *
- * Deliberately quiet. An accent border around a bar that already contains an
- * accent button draws the same attention twice and fights the row beneath it —
- * the button is the thing to look at, so the container gets a recessed surface
- * and a hairline instead, and enough space beneath that it reads as its own
- * band rather than as a lid on the first row. */
+/* Bulk handoff controls share the filter row inside their own quiet container. */
 .team-threads-send {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-  margin-bottom: var(--spacing-sm);
+  flex: 1 1 auto;
+  min-width: min-content;
+  gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-sm);
   border: var(--border-width-default) solid var(--border-subtle);
   border-radius: var(--radius-card);
@@ -389,14 +433,16 @@
 }
 
 .team-threads-send-count {
+  white-space: nowrap;
   font-size: var(--font-size-body-sm);
   color: var(--text-secondary);
 }
 
 .team-threads-send-actions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 /* Why you cannot place a comment, said where you would go looking for it. */

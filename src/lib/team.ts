@@ -84,6 +84,8 @@ export interface TeamActor {
   name: string;
   /** Avatar URL from the GitHub API. Null renders initials, never a guess. */
   avatarUrl: string | null;
+  /** Profile URL returned by GitHub. Missing when GitHub could not confirm it. */
+  profileUrl?: string | null;
 }
 
 /**
@@ -189,6 +191,8 @@ export interface TeamUpdate {
    * are not in this app.
    */
   githubUrl: string | null;
+  /** Exact permalink to the newest commit that dates and headlines this stint. */
+  commitUrl?: string | null;
 }
 
 /**
