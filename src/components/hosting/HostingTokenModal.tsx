@@ -21,7 +21,7 @@ import { Button } from '../primitives/Button';
 import { setAccountCredential, type CredentialKey } from '../../lib/accounts';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { useOptionalToast } from '../../contexts/ToastContext';
-import { PROVIDER_LABELS, type HostingProvider } from '../../lib/hosting';
+import { PROVIDER_LABELS, type CloudflareProduct, type HostingProvider } from '../../lib/hosting';
 
 interface ProviderCopy {
   credentialKey: CredentialKey;
@@ -44,8 +44,6 @@ const PROVIDERS: Record<HostingProvider, ProviderCopy> = {
     tokensUrl: 'https://dash.cloudflare.com/profile/api-tokens',
     tokensLabel: 'dash.cloudflare.com/profile/api-tokens',
     placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxx',
-    requirement:
-      'Give it the Cloudflare Pages:Read and Account Settings:Read permissions — without both, deployments come back empty.',
   },
   netlify: {
     credentialKey: 'netlify_auth_token',
@@ -57,6 +55,7 @@ const PROVIDERS: Record<HostingProvider, ProviderCopy> = {
 
 interface Props {
   provider: HostingProvider;
+  cloudflareProduct?: CloudflareProduct;
   accountId: string;
   workspaceName: string;
   /** True when we had a credential and the provider refused it. */
@@ -67,6 +66,7 @@ interface Props {
 
 export function HostingTokenModal({
   provider,
+  cloudflareProduct = 'pages',
   accountId,
   workspaceName,
   wasRejected = false,
@@ -77,8 +77,17 @@ export function HostingTokenModal({
   const [saving, setSaving] = useState(false);
   const { showToast } = useOptionalToast();
 
-  const name = PROVIDER_LABELS[provider];
+  const name =
+    provider === 'cloudflare'
+      ? `Cloudflare ${cloudflareProduct === 'workers' ? 'Workers' : 'Pages'}`
+      : PROVIDER_LABELS[provider];
   const copy = PROVIDERS[provider];
+  const requirement =
+    provider !== 'cloudflare'
+      ? copy.requirement
+      : cloudflareProduct === 'workers'
+        ? 'Use a user-scoped Cloudflare API token with Account Settings:Read, Workers Scripts Read, and Workers CI Read. These permissions allow Ship Studio to find accounts, list scripts, and read build status and logs.'
+        : 'Give it Account Settings:Read and Cloudflare Pages:Read. These permissions allow Ship Studio to list Pages projects and read deployments.';
 
   const save = async () => {
     const trimmed = token.trim();
@@ -105,7 +114,7 @@ export function HostingTokenModal({
             ? `${name} refused the sign-in Ship Studio was using. Create a token for the account you deploy with and paste it below.`
             : `Create a token for the ${name} account ${workspaceName} deploys with, then paste it below. It's stored in your Keychain and used only by this workspace.`}
         </p>
-        {copy.requirement ? <p className="connect-modal-muted">{copy.requirement}</p> : null}
+        {requirement ? <p className="connect-modal-muted">{requirement}</p> : null}
         <Button variant="secondary" onClick={() => void openUrl(copy.tokensUrl)}>
           Open {copy.tokensLabel} →
         </Button>

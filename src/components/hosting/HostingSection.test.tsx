@@ -231,6 +231,28 @@ describe('hosting copy', () => {
     expect(copy.status).toMatch(/^Ready · Production/);
   });
 
+  it('explains a successful build with an unknown deployment environment', () => {
+    const copy = copyFor(
+      {
+        kind: 'unknown',
+        provider: 'cloudflare',
+        deployment: {
+          ...deployment(),
+          environment: 'unknown',
+          phase: { phase: 'unknown', raw: 'unmapped' },
+          status_label: 'Ready',
+          detail: { detail: 'deployment_unconfirmed' },
+        },
+        detail: { detail: 'deployment_unconfirmed' },
+      },
+      'Ship worker'
+    );
+
+    expect(copy.status).toContain('Unknown env');
+    expect(copy.status).not.toContain('Preview');
+    expect(copy.hint).toBe('The build succeeded; deployment is unconfirmed.');
+  });
+
   it("uses the provider's status word rather than one of its own", () => {
     const building = {
       ...stateFor('building'),

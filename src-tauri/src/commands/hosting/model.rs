@@ -62,11 +62,27 @@ pub enum LinkSource {
     UserPicked,
 }
 
+/// Cloudflare's products have distinct project and deployment APIs.
+/// An absent target on an old saved link always means Pages.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CloudflareTarget {
+    Pages,
+    Workers { script_tag: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloudflareProduct {
+    Pages,
+    Workers,
+}
+
 /// Which project on which provider this repo deploys to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostingLink {
     pub provider: HostingProvider,
-    /// Vercel: `projectId` · Cloudflare: Pages project name · Netlify: site id.
+    /// Vercel: `projectId` · Cloudflare: Pages/Worker name · Netlify: site id.
     pub project_id: String,
     /// Vercel: `teamId` · Cloudflare: `account_id` · Netlify: unused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -74,6 +90,8 @@ pub struct HostingLink {
     /// Saved at link time for display; never used to build a request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloudflare_target: Option<CloudflareTarget>,
     pub source: LinkSource,
     pub linked_at: u64,
 }
@@ -117,6 +135,8 @@ pub struct CommitRef {
 pub enum Environment {
     Production,
     Preview,
+    /// The provider did not identify where this build is serving.
+    Unknown,
 }
 
 /// The unified lifecycle. Every provider's native states reduce into exactly
@@ -163,6 +183,8 @@ impl DeploymentPhase {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "detail", rename_all = "snake_case")]
 pub enum DeploymentDetail {
+    /// A successful Worker build whose serving version is not confirmed.
+    DeploymentUnconfirmed,
     /// Built and available, but not yet serving production traffic
     /// (Vercel `readySubstate: STAGED`).
     NotYetPromoted,
@@ -405,6 +427,8 @@ pub struct HostingProjectChoice {
     pub scope_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloudflare_target: Option<CloudflareTarget>,
 }
 
 /// Enough of the last known state to paint instantly on open and to be honest
@@ -662,6 +686,33 @@ mod tests {
             HostingProvider::Netlify.credential_key(),
             "netlify_auth_token"
         );
+    }
+
+    #[test]
+    fn cloudflare_targets_preserve_legacy_pages_links_and_worker_identity() {
+        let legacy = r#"{"provider":"cloudflare","project_id":"docs","scope_id":"account","source":"user_picked","linked_at":1}"#;
+        let pages: HostingLink = serde_json::from_str(legacy).unwrap();
+        assert_eq!(pages.cloudflare_target, None);
+        // No migration or guessed Worker identity is introduced on re-save.
+        assert!(serde_json::to_value(&pages)
+            .unwrap()
+            .get("cloudflare_target")
+            .is_none());
+
+        let mut workers = pages;
+        workers.cloudflare_target = Some(CloudflareTarget::Workers {
+            script_tag: "immutable-tag".into(),
+        });
+        let json = serde_json::to_value(&workers).unwrap();
+        assert_eq!(
+            json["cloudflare_target"],
+            serde_json::json!({"kind":"workers","script_tag":"immutable-tag"})
+        );
+        assert_eq!(
+            serde_json::from_value::<HostingLink>(json).unwrap(),
+            workers
+        );
+        assert!(serde_json::from_str::<CloudflareTarget>(r#"{"kind":"workers"}"#).is_err());
     }
 
     #[test]

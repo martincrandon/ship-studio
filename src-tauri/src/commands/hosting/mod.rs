@@ -24,6 +24,7 @@
 //! there and must not become load-bearing until it is checked.
 
 pub mod cloudflare;
+pub mod cloudflare_workers;
 pub mod credentials;
 pub mod git_ref;
 pub mod http;
@@ -36,8 +37,9 @@ pub mod vercel;
 use crate::errors::CommandError;
 use crate::utils::validate_project_path;
 use model::{
-    now_ms, Auth, BuildLog, Deployment, DeploymentSnapshot, DetectedLink, HostingLink,
-    HostingProjectChoice, HostingProvider, HostingStatus, Lookup, ProviderStatus,
+    now_ms, Auth, BuildLog, CloudflareProduct, CloudflareTarget, Deployment, DeploymentSnapshot,
+    DetectedLink, HostingLink, HostingProjectChoice, HostingProvider, HostingStatus, Lookup,
+    ProviderStatus,
 };
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -76,6 +78,16 @@ fn cached(key: &(String, HostingProvider, String)) -> Option<ProviderStatus> {
 
 fn cache(key: (String, HostingProvider, String), status: &ProviderStatus) {
     let ttl = match &status.lookup {
+        // Workers can promote or roll back a version after its build finishes.
+        // Production proof must stay current even for a terminal build outcome.
+        Some(Lookup::Found { .. })
+            if matches!(
+                status.link.cloudflare_target,
+                Some(CloudflareTarget::Workers { .. })
+            ) =>
+        {
+            ACTIVE_TTL
+        }
         Some(Lookup::Found { deployment }) if deployment.phase.is_terminal() => TERMINAL_TTL,
         _ => ACTIVE_TTL,
     };
@@ -248,6 +260,7 @@ pub async fn list_hosting_projects(
     project_path: String,
     provider: HostingProvider,
     scope_id: Option<String>,
+    cloudflare_product: Option<CloudflareProduct>,
 ) -> Result<Vec<HostingProjectChoice>, CommandError> {
     let project = validate_project_path(&project_path)?;
     let resolved = credentials::token_for(provider, &project).ok_or_else(|| {
@@ -256,9 +269,37 @@ pub async fn list_hosting_projects(
         }
     })?;
 
-    provider::list_projects(provider, &resolved.token, scope_id.as_deref())
-        .await
-        .map_err(|e| e.into_command_error(provider.label()))
+    provider::list_projects(
+        provider,
+        &resolved.token,
+        scope_id.as_deref(),
+        cloudflare_product,
+    )
+    .await
+    .map_err(|e| e.into_command_error(provider.label()))
+}
+
+/// A Workers link must carry the explicit API tag, never a guessed identity.
+fn validate_cloudflare_target(link: &HostingLink) -> Result<(), CommandError> {
+    if link.cloudflare_target.is_some() && link.provider != HostingProvider::Cloudflare {
+        return Err(CommandError::expected(
+            "Only Cloudflare links can have a Cloudflare target.",
+        ));
+    }
+    if let Some(CloudflareTarget::Workers { script_tag }) = &link.cloudflare_target {
+        if script_tag.trim().is_empty()
+            || link.project_id.trim().is_empty()
+            || link
+                .scope_id
+                .as_deref()
+                .is_none_or(|id| id.trim().is_empty())
+        {
+            return Err(CommandError::expected(
+                "A Workers link requires its script name, tag and account id. Relink the project.",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Record which provider project this repo deploys to.
@@ -266,6 +307,7 @@ pub async fn list_hosting_projects(
 #[tracing::instrument(fields(project = %project_path))]
 pub async fn set_hosting_link(project_path: String, link: HostingLink) -> Result<(), CommandError> {
     let project = validate_project_path(&project_path)?;
+    validate_cloudflare_target(&link)?;
     let mut meta = link::read_metadata(&project);
     meta.links.retain(|l| l.provider != link.provider);
     meta.links.push(HostingLink {
@@ -358,8 +400,23 @@ mod tests {
     use super::*;
     use model::{Deployment, DeploymentPhase, DeploymentUrls, Environment, LinkSource};
 
+    #[test]
+    fn worker_links_require_explicit_identity_and_cloudflare_provider() {
+        let mut link = link_for(HostingProvider::Cloudflare);
+        assert!(validate_cloudflare_target(&link).is_ok());
+        link.cloudflare_target = Some(CloudflareTarget::Workers {
+            script_tag: "tag".into(),
+        });
+        assert!(validate_cloudflare_target(&link).is_err());
+        link.scope_id = Some("account".into());
+        assert!(validate_cloudflare_target(&link).is_ok());
+        link.provider = HostingProvider::Vercel;
+        assert!(validate_cloudflare_target(&link).is_err());
+    }
+
     fn link_for(provider: HostingProvider) -> HostingLink {
         HostingLink {
+            cloudflare_target: None,
             provider,
             project_id: "prj_1".into(),
             scope_id: None,

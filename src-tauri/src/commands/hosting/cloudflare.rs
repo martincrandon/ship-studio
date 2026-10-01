@@ -24,8 +24,8 @@
 
 use super::http::{get_json, HostingHttpError};
 use super::model::{
-    iso_to_ms, BuildLog, Deployment, DeploymentDetail, DeploymentPhase, DeploymentUrls,
-    Environment, HostingLink, HostingProjectChoice, Lookup,
+    iso_to_ms, BuildLog, CloudflareTarget, Deployment, DeploymentDetail, DeploymentPhase,
+    DeploymentUrls, Environment, HostingLink, HostingProjectChoice, Lookup,
 };
 use serde::Deserialize;
 
@@ -252,7 +252,7 @@ fn to_deployment(raw: RawDeployment) -> Deployment {
     // `site` is filled in by the caller from the project's domains; a
     // deployment record does not carry the project's address.
     let primary = match environment {
-        Environment::Preview => deployment_url.clone(),
+        Environment::Preview | Environment::Unknown => deployment_url.clone(),
         Environment::Production => aliases.first().cloned().or_else(|| deployment_url.clone()),
     };
 
@@ -497,6 +497,7 @@ pub async fn list_projects(
 
         for project in projects {
             choices.push(HostingProjectChoice {
+                cloudflare_target: Some(CloudflareTarget::Pages),
                 id: project.name.clone(),
                 name: project.name,
                 scope_id: Some(account.id.clone()),
@@ -798,6 +799,7 @@ mod tests {
         // Cloudflare writes nothing to disk, so an account id can only come
         // from the picker; without one every call would 404 confusingly.
         let link = HostingLink {
+            cloudflare_target: None,
             provider: super::super::model::HostingProvider::Cloudflare,
             project_id: "my-project".into(),
             scope_id: None,

@@ -183,7 +183,7 @@ fn to_deployment(raw: RawDeploy) -> Deployment {
     }
 
     let primary = match environment {
-        Environment::Preview => deployment_url.clone(),
+        Environment::Preview | Environment::Unknown => deployment_url.clone(),
         Environment::Production => site.clone().or_else(|| deployment_url.clone()),
     };
 
@@ -312,6 +312,7 @@ pub async fn list_projects(token: &str) -> Result<Vec<HostingProjectChoice>, Hos
     Ok(raw
         .into_iter()
         .map(|s| HostingProjectChoice {
+            cloudflare_target: None,
             name: s.name.clone().unwrap_or_else(|| s.id.clone()),
             id: s.id,
             scope_id: None,

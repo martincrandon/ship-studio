@@ -65,15 +65,19 @@ function isServingProduction(deployment: Deployment): boolean {
 export function rowsFor(deployment?: Deployment): Row[] {
   if (!deployment) return [];
 
-  // A preview never reached production, so the production domain would be a
-  // link to somebody else's change sitting directly under yours.
-  if (deployment.environment === 'preview') {
+  // Only a confirmed production deployment can be shown with the site's
+  // domain. Preview and unknown environments may point at somebody else's
+  // change, so offer only the immutable address for that build.
+  if (deployment.environment !== 'production') {
     return deployment.urls.deployment
       ? [
           {
             label: 'Deployment',
             url: deployment.urls.deployment,
-            description: 'Open this preview deployment',
+            description:
+              deployment.environment === 'preview'
+                ? 'Open this preview deployment'
+                : 'Open this deployment',
           },
         ]
       : [];

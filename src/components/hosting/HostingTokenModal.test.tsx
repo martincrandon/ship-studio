@@ -28,13 +28,18 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import { ToastContext } from '../../contexts/ToastContext';
 import { HostingTokenModal } from './HostingTokenModal';
 import type { HostingProvider } from '../../lib/hosting';
+import type { CloudflareProduct } from '../../lib/hosting';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn() }));
 
 const showToast = vi.fn();
 
 function renderModal(
-  over: Partial<{ provider: HostingProvider; wasRejected: boolean }> = {},
+  over: Partial<{
+    provider: HostingProvider;
+    cloudflareProduct: CloudflareProduct;
+    wasRejected: boolean;
+  }> = {},
   handlers: Partial<{ onSaved: () => void; onClose: () => void }> = {}
 ) {
   const onSaved = handlers.onSaved ?? vi.fn();
@@ -43,6 +48,7 @@ function renderModal(
     <ToastContext.Provider value={{ toasts: [], showToast, dismissToast: vi.fn() }}>
       <HostingTokenModal
         provider={over.provider ?? 'vercel'}
+        cloudflareProduct={over.cloudflareProduct}
         accountId="default"
         workspaceName="this workspace"
         wasRejected={over.wasRejected ?? false}
@@ -158,6 +164,16 @@ describe('HostingTokenModal', () => {
     // in the product that happens before that.
     expect(document.body.textContent).toMatch(/Account Settings:Read/);
     expect(document.body.textContent).toMatch(/Cloudflare Pages:Read/);
+  });
+
+  it('shows Workers read permissions and says the token must be user-scoped', () => {
+    recordCalls();
+    renderModal({ provider: 'cloudflare', cloudflareProduct: 'workers' });
+
+    expect(document.body.textContent).toMatch(/user-scoped/i);
+    expect(document.body.textContent).toMatch(/Workers Scripts Read/);
+    expect(document.body.textContent).toMatch(/Workers CI Read/);
+    expect(document.body.textContent).not.toMatch(/Cloudflare Pages:Read/);
   });
 
   it('does not show one provider’s requirements while connecting another', () => {

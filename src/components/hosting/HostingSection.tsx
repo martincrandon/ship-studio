@@ -24,7 +24,7 @@ import {
   notifyAccountCredentialsChanged,
   DEFAULT_ACCOUNT_ID,
 } from '../../lib/accounts';
-import type { HostingProvider } from '../../lib/hosting';
+import type { CloudflareProduct, HostingProvider } from '../../lib/hosting';
 
 interface Props {
   projectPath: string;
@@ -38,7 +38,10 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
   const { status, state, refresh } = useHostingStatus({ projectPath, open, pushedAt });
   const { showToast } = useOptionalToast();
 
-  const [connecting, setConnecting] = useState<HostingProvider | null>(null);
+  const [connecting, setConnecting] = useState<{
+    provider: HostingProvider;
+    cloudflareProduct?: CloudflareProduct;
+  } | null>(null);
   const [picking, setPicking] = useState(false);
   /**
    * Which workspace's keychain the token belongs to — the project's, matching
@@ -112,7 +115,18 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
         return;
       case 'no_token':
       case 'token_rejected':
-        setConnecting(state.provider ?? 'vercel');
+        setConnecting({
+          provider: state.provider ?? 'vercel',
+          ...(state.provider === 'cloudflare'
+            ? {
+                cloudflareProduct:
+                  status?.providers.find((item) => item.link.provider === state.provider)?.link
+                    .cloudflare_target?.kind === 'workers'
+                    ? 'workers'
+                    : 'pages',
+              }
+            : {}),
+        });
         return;
       case 'no_link':
         setPicking(true);
@@ -123,7 +137,7 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
       default:
         return;
     }
-  }, [state, refresh, openExternal]);
+  }, [state, status?.providers, refresh, openExternal]);
 
   return (
     <>
@@ -145,7 +159,8 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
           workspace is worse than a connect button that waits a moment. */}
       {connecting && accountId ? (
         <HostingTokenModal
-          provider={connecting}
+          provider={connecting.provider}
+          cloudflareProduct={connecting.cloudflareProduct}
           accountId={accountId}
           workspaceName="this workspace"
           wasRejected={state.kind === 'token_rejected'}
@@ -167,9 +182,9 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
             setPicking(false);
             refresh();
           }}
-          onNeedsToken={(provider) => {
+          onNeedsToken={(provider, cloudflareProduct) => {
             setPicking(false);
-            setConnecting(provider);
+            setConnecting({ provider, cloudflareProduct });
           }}
           onClose={() => setPicking(false)}
         />

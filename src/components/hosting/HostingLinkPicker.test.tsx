@@ -37,7 +37,7 @@ const showToast = vi.fn();
 
 interface Handlers {
   onLinked: () => void;
-  onNeedsToken: (provider: string) => void;
+  onNeedsToken: (provider: string, cloudflareProduct?: string) => void;
   onClose: () => void;
 }
 
@@ -80,9 +80,10 @@ describe('HostingLinkPicker — an empty project list', () => {
     renderPicker();
 
     await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Pages' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/nothing came back from cloudflare/i)).toBeInTheDocument();
+      expect(screen.getByText(/nothing came back from cloudflare pages/i)).toBeInTheDocument();
     });
 
     // The exact sentence this replaced. It stated as fact the one thing an
@@ -157,6 +158,7 @@ describe('HostingLinkPicker — choosing a project', () => {
     renderPicker();
 
     await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Pages' }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /acme-docs — Acme Inc/ })).toBeInTheDocument();
@@ -174,6 +176,7 @@ describe('HostingLinkPicker — choosing a project', () => {
     renderPicker();
 
     await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Pages' }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /acme-docs — Acme Labs/ })).toBeEnabled()
     );
@@ -187,6 +190,65 @@ describe('HostingLinkPicker — choosing a project', () => {
       project_id: 'acme-docs',
       scope_id: 'acct_2',
     });
+  });
+
+  it('requests Workers separately and persists its provider-supplied immutable tag', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    mockIPC((cmd, args) => {
+      if (cmd === 'list_hosting_projects') {
+        calls.push({ cmd, ...((args ?? {}) as Record<string, unknown>) });
+        return [
+          {
+            id: 'acme-api',
+            name: 'acme-api',
+            scope_id: 'acct_2',
+            scope_name: 'Acme Labs',
+            cloudflare_target: { kind: 'workers', script_tag: 'immutable-tag-2' },
+          },
+        ];
+      }
+      if (cmd === 'set_hosting_link') {
+        calls.push({ cmd, ...((args ?? {}) as Record<string, unknown>) });
+      }
+      return null;
+    });
+    const { onLinked } = renderPicker();
+
+    await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Workers' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Workers · acme-api — Acme Labs/ })).toBeEnabled()
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Workers · acme-api — Acme Labs/ }));
+
+    await waitFor(() => expect(onLinked).toHaveBeenCalled());
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({
+      cmd: 'list_hosting_projects',
+      projectPath: '/Users/harness/ShipStudio/acme-marketing',
+      provider: 'cloudflare',
+      cloudflareProduct: 'workers',
+    });
+    expect(calls[1]).toMatchObject({
+      cmd: 'set_hosting_link',
+      projectPath: '/Users/harness/ShipStudio/acme-marketing',
+      link: {
+        provider: 'cloudflare',
+        project_id: 'acme-api',
+        scope_id: 'acct_2',
+        cloudflare_target: { kind: 'workers', script_tag: 'immutable-tag-2' },
+      },
+    });
+  });
+
+  it('does not allow a Workers row without its provider-supplied immutable tag to be linked', async () => {
+    withProjects([{ id: 'acme-api', name: 'acme-api', scope_id: 'acct_2' }]);
+    renderPicker();
+
+    await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Workers' }));
+    const choice = await screen.findByRole('button', { name: /Workers · acme-api/ });
+    expect(choice).toBeDisabled();
   });
 });
 
@@ -239,8 +301,9 @@ describe('HostingLinkPicker — failures', () => {
     const { onNeedsToken } = renderPicker();
 
     await pickProvider(/^cloudflare$/i);
+    await userEvent.click(screen.getByRole('button', { name: 'Pages' }));
 
-    await waitFor(() => expect(onNeedsToken).toHaveBeenCalledWith('cloudflare'));
+    await waitFor(() => expect(onNeedsToken).toHaveBeenCalledWith('cloudflare', 'pages'));
     // Having no token yet is the expected first-run state, not an error.
     expect(showToast).not.toHaveBeenCalled();
   });

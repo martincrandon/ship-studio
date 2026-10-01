@@ -327,6 +327,7 @@ export function DeploymentsModal({ projectPath }: Props) {
                   {statusWord(deployment)}
                   {createdAgo(deployment) && ` · ${createdAgo(deployment)}`}
                   {deployment.environment === 'preview' && ' · Preview'}
+                  {deployment.environment === 'unknown' && ' · Environment unknown'}
                 </span>
               </span>
             </button>

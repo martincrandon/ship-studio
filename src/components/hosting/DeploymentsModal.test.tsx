@@ -155,6 +155,33 @@ describe('DeploymentsModal', () => {
     expect(document.body.textContent).not.toMatch(/yesterday/i);
   });
 
+  it('labels an unknown environment without calling it Preview or opening its site domain', async () => {
+    withDeployments([
+      {
+        id: 'dpl_1',
+        status_label: 'Ready',
+        phase: { phase: 'ready' },
+        environment: 'unknown',
+        commit_sha: 'abc1234',
+        commit_message: 'Worker build',
+        urls: {
+          aliases: [],
+          site: 'https://production.example.com',
+          deployment: 'https://build.example.workers.dev',
+        },
+        created_at: Date.now() - 60_000,
+      },
+    ]);
+
+    renderModal();
+
+    await waitFor(() => expect(screen.getByText('Worker build')).toBeInTheDocument());
+    expect(document.body.textContent).toMatch(/Environment unknown/);
+    expect(document.body.textContent).not.toMatch(/Preview/);
+    expect(screen.queryByRole('button', { name: 'Open site' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open deployment' })).toBeInTheDocument();
+  });
+
   /**
    * `list_recent` never fetches the project's domain for any provider, so
    * `urls.primary` in this panel is always the per-build permalink. The button

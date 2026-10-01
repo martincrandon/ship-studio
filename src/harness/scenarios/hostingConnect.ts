@@ -271,6 +271,7 @@ export const hostingConnectScenarios: Scenario[] = [
       { click: ROW_ACTION },
       // Cloudflare is the second provider button.
       { click: '.connect-modal-body > button:nth-of-type(2)' },
+      { click: '.connect-modal-provider-choices button:first-of-type' },
     ],
     commands: {
       ...connectCommands,
@@ -300,12 +301,52 @@ export const hostingConnectScenarios: Scenario[] = [
     },
   },
   {
+    id: 'hosting-connect-picker-workers',
+    title: 'Connect hosting — choose a Cloudflare Worker script',
+    looksRightWhen:
+      'Workers is a separate request from Pages. The same script name can exist alongside a Pages project without ambiguity, the account is visible, and the row says Workers before the user links it.',
+    ...connectFlow,
+    steps: [
+      { click: ROW_ACTION },
+      { click: '.connect-modal-body > button:nth-of-type(2)' },
+      { click: '.connect-modal-provider-choices button:nth-of-type(2)' },
+    ],
+    commands: {
+      ...connectCommands,
+      get_hosting_status: unlinkedHostingStatus,
+      list_hosting_projects: (args: Record<string, unknown>) =>
+        args.cloudflareProduct === 'workers'
+          ? [
+              {
+                id: 'acme-docs',
+                name: 'acme-docs',
+                scope_id: 'acct_11harness00000000000000000',
+                scope_name: 'Acme Inc',
+                cloudflare_target: { kind: 'workers', script_tag: 'tag-harness-001' },
+              },
+            ]
+          : [
+              {
+                id: 'acme-docs',
+                name: 'acme-docs',
+                scope_id: 'acct_11harness00000000000000000',
+                scope_name: 'Acme Inc',
+                cloudflare_target: { kind: 'pages' },
+              },
+            ],
+    },
+  },
+  {
     id: 'hosting-connect-picker-empty-cloudflare',
     title: 'Connect hosting — Cloudflare returned nothing',
     looksRightWhen:
       'Must NOT assert that the account has no projects. An under-permissioned Cloudflare token (no Account Settings:Read) sees no accounts, so it lists no Pages projects — identical on the wire to a genuinely empty account. The copy has to name the likelier cause instead of reporting a fact it cannot know.',
     ...connectFlow,
-    steps: [{ click: ROW_ACTION }, { click: '.connect-modal-body > button:nth-of-type(2)' }],
+    steps: [
+      { click: ROW_ACTION },
+      { click: '.connect-modal-body > button:nth-of-type(2)' },
+      { click: '.connect-modal-provider-choices button:first-of-type' },
+    ],
     commands: {
       ...connectCommands,
       get_hosting_status: unlinkedHostingStatus,
@@ -384,6 +425,58 @@ export const hostingConnectScenarios: Scenario[] = [
         vercelChoice('prj_h30', 'acme-referrals'),
         vercelChoice('prj_h31', 'acme-labs'),
       ],
+    },
+  },
+  {
+    id: 'hosting-deployment-environment-unknown',
+    title: 'Deployments — unknown environment remains explicit',
+    looksRightWhen:
+      'The successful Worker build is labelled Environment unknown rather than Preview or Production. Without serving proof or a preview URL, no site address is offered.',
+    project: WORKSPACE_PROJECT,
+    command: 'hosting.deployments',
+    clipSelector: '.deployments-modal',
+    requires: '.deployments-modal',
+    commands: {
+      ...workspaceCommands,
+      get_hosting_status: {
+        ...unlinkedHostingStatus,
+        providers: [
+          {
+            link: {
+              provider: 'cloudflare',
+              project_id: 'acme-docs',
+              scope_id: 'acct_11harness00000000000000000',
+              project_name: 'acme-docs',
+              cloudflare_target: { kind: 'workers', script_tag: 'tag-harness-001' },
+              source: 'user_picked',
+              linked_at: 1_757_000_000_000,
+            },
+            auth: { kind: 'ok' },
+            token_source: 'keychain',
+            fetched_at: Date.now(),
+            from_cache: false,
+          },
+        ],
+      },
+      list_recent_deployments: [
+        {
+          id: 'worker-build-harness-001',
+          status_label: 'Success',
+          phase: { phase: 'unknown', raw: 'build succeeded; deployment unconfirmed' },
+          detail: { detail: 'deployment_unconfirmed' },
+          environment: 'unknown',
+          branch: 'main',
+          commit_sha: unlinkedHostingStatus.commit.sha,
+          commit_message: 'Worker build',
+          urls: { aliases: [] },
+          created_at: Date.now() - 45_000,
+        },
+      ],
+      get_deployment_log: {
+        deployment_id: 'worker-build-harness-001',
+        lines: [],
+        truncated: false,
+      },
     },
   },
 ];
