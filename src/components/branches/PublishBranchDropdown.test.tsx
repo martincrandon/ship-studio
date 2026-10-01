@@ -91,7 +91,7 @@ describe('PublishBranchDropdown trigger label', () => {
     expectNoBannedLabels();
   });
 
-  it('says "Push" (disabled) when no GitHub repo exists yet', () => {
+  it('keeps the dropdown trigger enabled when no Git remote exists', () => {
     render(
       <PublishBranchDropdown
         {...makeProps({
@@ -101,7 +101,7 @@ describe('PublishBranchDropdown trigger label', () => {
     );
 
     const button = screen.getByText('Push').closest('button');
-    expect(button).toBeDisabled();
+    expect(button).toBeEnabled();
     expectPushIcon();
     expectNoBannedLabels();
   });
@@ -115,6 +115,28 @@ describe('PublishBranchDropdown trigger label', () => {
 });
 
 describe('PublishBranchDropdown open panel', () => {
+  it('keeps Hosting available and disables only the push action when no remote exists', async () => {
+    render(
+      <PublishBranchDropdown
+        {...makeProps({
+          projectGithubStatus: { status: 'no_repo' } as unknown as ProjectGitHubStatus,
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+
+    expect(await screen.findByText('Hosting')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Connect a Git remote to push commits. You can still review changes and manage hosting below.'
+      )
+    ).toBeInTheDocument();
+    const pushButtons = screen.getAllByRole('button', { name: 'Push' });
+    expect(pushButtons[0]).toBeEnabled();
+    expect(pushButtons[pushButtons.length - 1]).toBeDisabled();
+  });
+
   it('closes on outside click and Escape', () => {
     render(<PublishBranchDropdown {...makeProps()} />);
 
@@ -337,7 +359,7 @@ describe('PublishBranchDropdown open panel', () => {
       expect(screen.queryByText(/create a PR/i)).not.toBeInTheDocument();
     });
 
-    it('still disables push when there is no remote at all', () => {
+    it('keeps hosting available and disables only the push action without any remote', async () => {
       const noRemote = {
         status: 'no-remote',
         github_repo: null,
@@ -348,7 +370,12 @@ describe('PublishBranchDropdown open panel', () => {
 
       render(<PublishBranchDropdown {...makeProps({ projectGithubStatus: noRemote })} />);
 
-      expect(screen.getByText('Push').closest('button')).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+
+      expect(await screen.findByText('Hosting')).toBeInTheDocument();
+      const pushButtons = screen.getAllByRole('button', { name: 'Push' });
+      expect(pushButtons[0]).toBeEnabled();
+      expect(pushButtons[pushButtons.length - 1]).toBeDisabled();
     });
   });
 });

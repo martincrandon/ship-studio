@@ -214,7 +214,7 @@ describe('WorkspaceHeader title bar', () => {
     expect(screen.getByRole('button', { name: 'Variables' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assets' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Branches' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Push' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Push' })).toBeEnabled();
   });
 
   it('places the mode switcher between workspace tools and source controls', () => {

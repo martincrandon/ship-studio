@@ -147,7 +147,7 @@ export function PublishBranchDropdown({
     const prevForceOpen = prevForceOpenRef.current;
     prevForceOpenRef.current = forceOpen;
 
-    if (forceOpen && hasGitHubRepo) {
+    if (forceOpen) {
       setOpen(true);
       onForceOpenHandled?.();
       // In trigger mode, the parent immediately sets forceOpen back to false.
@@ -157,7 +157,7 @@ export function PublishBranchDropdown({
       // Controlled mode: parent explicitly closed the dropdown
       setOpen(false);
     }
-  }, [forceOpen, hasGitHubRepo, onForceOpenHandled, setOpen]);
+  }, [forceOpen, onForceOpenHandled, setOpen]);
 
   // Close dropdown when clicking outside
   const closeDropdown = useCallback(() => {
@@ -285,56 +285,6 @@ export function PublishBranchDropdown({
     onModalClose?.();
   };
 
-  // Still checking GitHub status - show loading state
-  if (projectGithubStatus === null) {
-    return (
-      <div
-        className={`publish-dropdown${grouped ? ' publish-dropdown--grouped' : ''}`}
-        ref={dropdownRef}
-      >
-        <MenuButton
-          ref={triggerRef}
-          expanded={false}
-          className="source-control-push-button"
-          data-education-id="publish-button"
-          disabled
-          title="Checking GitHub status..."
-        >
-          <span className="source-control-push-content">
-            <PushIcon size={16} />
-            <span>Push</span>
-          </span>
-          <ChevronIcon />
-        </MenuButton>
-      </div>
-    );
-  }
-
-  // No remote at all — nothing to push to.
-  if (!canPush) {
-    return (
-      <div
-        className={`publish-dropdown${grouped ? ' publish-dropdown--grouped' : ''}`}
-        ref={dropdownRef}
-      >
-        <MenuButton
-          ref={triggerRef}
-          expanded={false}
-          className="source-control-push-button"
-          data-education-id="publish-button"
-          disabled
-          title="Create a repository for this project first"
-        >
-          <span className="source-control-push-content">
-            <PushIcon size={16} />
-            <span>Push</span>
-          </span>
-          <ChevronIcon />
-        </MenuButton>
-      </div>
-    );
-  }
-
   // Check if there are changes to sync
   const canSync = hasChangesToSync || isPublishing || publishState.status !== 'idle';
 
@@ -346,7 +296,7 @@ export function PublishBranchDropdown({
       <MenuButton
         ref={triggerRef}
         expanded={isOpen}
-        variant={canSync ? 'primary' : 'default'}
+        variant={canSync && canPush ? 'primary' : 'default'}
         className={`${isPublishing ? 'publishing ' : ''}source-control-push-button`}
         data-education-id="publish-button"
         onClick={() => setOpen(!isOpen)}
@@ -423,7 +373,13 @@ export function PublishBranchDropdown({
           {publishState.status === 'idle' && canSync && (
             <>
               <div className="publish-branch-header">
-                <h3>Push to {where}</h3>
+                <h3>
+                  {canPush
+                    ? `Push to ${where}`
+                    : projectGithubStatus === null
+                      ? 'Checking Git connection'
+                      : 'Git remote required to push'}
+                </h3>
               </div>
 
               <div className="publish-branch-body">
@@ -433,8 +389,11 @@ export function PublishBranchDropdown({
                 </div>
 
                 <div className="publish-branch-description">
-                  Commits your changes and pushes the <strong>{currentBranch}</strong> branch to{' '}
-                  {where}.
+                  {canPush
+                    ? `Commits your changes and pushes the ${currentBranch} branch to ${where}.`
+                    : projectGithubStatus === null
+                      ? 'You can review local changes and manage hosting while Ship Studio checks the Git connection.'
+                      : 'Connect a Git remote to push commits. You can still review changes and manage hosting below.'}
                 </div>
               </div>
 
@@ -443,13 +402,19 @@ export function PublishBranchDropdown({
           )}
 
           {/* Synced State */}
-          {publishState.status === 'idle' && !canSync && (
-            <>
-              <div className="publish-success">
-                <SuccessIcon />
-                <span>Nothing to push — {where} is up to date</span>
-              </div>
-            </>
+          {publishState.status === 'idle' && !canSync && canPush && (
+            <div className="publish-success">
+              <SuccessIcon />
+              <span>Nothing to push — {where} is up to date</span>
+            </div>
+          )}
+
+          {publishState.status === 'idle' && !canSync && !canPush && (
+            <div className="publish-branch-description">
+              {projectGithubStatus === null
+                ? 'Checking Git remote…'
+                : 'Connect a Git remote to push commits'}
+            </div>
           )}
 
           {!hideHosting && (
@@ -491,7 +456,8 @@ export function PublishBranchDropdown({
                 <Button
                   variant="primary"
                   onClick={() => void handlePublish()}
-                  disabled={isPublishing}
+                  disabled={!canPush || isPublishing}
+                  title={!canPush ? 'Connect a Git remote before pushing' : undefined}
                 >
                   Push
                 </Button>

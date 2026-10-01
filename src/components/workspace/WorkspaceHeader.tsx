@@ -28,7 +28,6 @@ import { BranchIndicator } from '../branches/BranchIndicator';
 import { BranchesMenu } from '../branches/BranchesMenu';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
-import { hasPushableRemote } from '../../lib/github';
 import { PluginSlot } from '../plugins/PluginSlot';
 import {
   AgentsIcon,
@@ -342,13 +341,6 @@ export function WorkspaceHeader({
   const currentBranchIsLive =
     currentBranch !== null &&
     (branches.find((branch) => branch.name === currentBranch)?.isDefault ?? false);
-  // PublishBranchDropdown renders a bare disabled trigger (no menu at all)
-  // until the project has a remote, so anything that claims to "open Push"
-  // has to be gated on the same condition or it opens nothing. Share the
-  // predicate rather than restating it — the two drifted once already, which
-  // is why a GitLab project's Push menu stayed shut after the dropdown itself
-  // had learned to open it.
-  const pushMenuAvailable = hasPushableRemote(integrations.projectGithub);
   const projectPathContainerRef = useRef<HTMLDivElement>(null);
   const [expandedProjectPathWidth, setExpandedProjectPathWidth] = useState<number | null>(null);
 
@@ -426,7 +418,6 @@ export function WorkspaceHeader({
       <div
         className={`source-control-push${hasUncommittedChanges ? ' has-unsaved-changes' : ''}`}
         onClick={(event) => {
-          if (!pushMenuAvailable) return;
           if ((event.target as HTMLElement).closest('button')) return;
           setOpenSourceMenu(openSourceMenu === 'push' ? null : 'push');
         }}
@@ -444,7 +435,7 @@ export function WorkspaceHeader({
             onDiscard={onDiscardChanges}
             isOpen={openSourceMenu === 'push'}
             onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
-            opensPushMenu={pushMenuAvailable}
+            opensPushMenu
             isLive={currentBranchIsLive}
           />
         )}
