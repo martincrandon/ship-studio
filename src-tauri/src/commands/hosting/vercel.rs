@@ -373,6 +373,7 @@ pub async fn list_projects(
         .projects
         .into_iter()
         .map(|p| HostingProjectChoice {
+            cloudflare_target: None,
             id: p.id,
             name: p.name,
             scope_id: scope_id.map(str::to_string),
@@ -388,7 +389,7 @@ pub async fn list_projects(
 /// contain the change they just pushed.
 fn primary_for(deployment: &Deployment, site: Option<String>) -> Option<String> {
     match deployment.environment {
-        Environment::Preview => deployment.urls.deployment.clone(),
+        Environment::Preview | Environment::Unknown => deployment.urls.deployment.clone(),
         Environment::Production => site.or_else(|| deployment.urls.deployment.clone()),
     }
 }
@@ -824,6 +825,7 @@ mod tests {
     #[test]
     fn scope_query_is_omitted_entirely_for_a_personal_account() {
         let link = HostingLink {
+            cloudflare_target: None,
             provider: super::super::model::HostingProvider::Vercel,
             project_id: "prj_1".into(),
             scope_id: None,
@@ -834,6 +836,7 @@ mod tests {
         assert_eq!(scope_query(&link), "");
 
         let team = HostingLink {
+            cloudflare_target: None,
             scope_id: Some("team_1".into()),
             ..link
         };

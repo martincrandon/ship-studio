@@ -81,10 +81,12 @@ function when(deployment?: Deployment): string {
   return at ? ` · ${compactAge(at)}` : '';
 }
 
-/** Vercel's own two environments, capitalised as its dashboard capitalises them. */
+/** A concise label for the environment returned by the provider. */
 function environmentLabel(deployment?: Deployment): string {
   if (!deployment) return '';
-  return deployment.environment === 'production' ? ' · Production' : ' · Preview';
+  if (deployment.environment === 'production') return ' · Production';
+  if (deployment.environment === 'preview') return ' · Preview';
+  return ' · Unknown env';
 }
 
 /**
@@ -123,6 +125,8 @@ function detailSentence(detail?: DeploymentDetail | null): string | undefined {
   switch (detail.detail) {
     case 'not_yet_promoted':
       return 'Built, but not serving visitors yet.';
+    case 'deployment_unconfirmed':
+      return 'The build succeeded; deployment is unconfirmed.';
     case 'rolling_out':
       return 'Rolling out to visitors.';
     case 'skipped_because':
@@ -251,7 +255,7 @@ export function copyFor(
         // The provider's own word, shown verbatim rather than translated into
         // success or failure — we genuinely do not know which it is.
         status: `${statusWord(state.deployment, 'Unknown')}${env}${when(state.deployment)}`,
-        hint: `Ship Studio doesn't recognize this status yet.`,
+        hint: detailSentence(state.detail) ?? `Ship Studio doesn't recognize this status yet.`,
         action: dashboardLabelFor(state),
       };
 

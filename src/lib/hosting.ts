@@ -23,6 +23,10 @@ import { invoke } from '@tauri-apps/api/core';
 
 export type HostingProvider = 'vercel' | 'cloudflare' | 'netlify';
 
+/** Cloudflare target saved with a hosting link. Missing legacy values mean Pages. */
+export type CloudflareTarget = { kind: 'pages' } | { kind: 'workers'; script_tag: string };
+export type CloudflareProduct = CloudflareTarget['kind'];
+
 export const PROVIDER_LABELS: Record<HostingProvider, string> = {
   vercel: 'Vercel',
   cloudflare: 'Cloudflare',
@@ -38,6 +42,8 @@ export interface HostingLink {
   project_name?: string | null;
   source: LinkSource;
   linked_at: number;
+  /** Absent on old Cloudflare links, which have always referred to Pages. */
+  cloudflare_target?: CloudflareTarget | null;
 }
 
 export interface DetectedLink {
@@ -57,7 +63,7 @@ export interface CommitRef {
   has_upstream: boolean;
 }
 
-export type Environment = 'production' | 'preview';
+export type Environment = 'production' | 'preview' | 'unknown';
 
 export type DeploymentPhase =
   | { phase: 'queued' }
@@ -72,6 +78,7 @@ export type DeploymentPhase =
 
 export type DeploymentDetail =
   | { detail: 'not_yet_promoted' }
+  | { detail: 'deployment_unconfirmed' }
   | { detail: 'rolling_out' }
   | { detail: 'skipped_because'; reason?: string | null }
   | { detail: 'awaiting_review'; reason?: string | null }
@@ -149,6 +156,7 @@ export interface HostingProjectChoice {
   name: string;
   scope_id?: string | null;
   scope_name?: string | null;
+  cloudflare_target?: CloudflareTarget | null;
 }
 
 export interface TokenCheck {
@@ -167,12 +175,14 @@ export function getHostingStatus(projectPath: string): Promise<HostingStatus> {
 export function listHostingProjects(
   projectPath: string,
   provider: HostingProvider,
-  scopeId?: string
+  scopeId?: string,
+  cloudflareProduct?: CloudflareProduct
 ): Promise<HostingProjectChoice[]> {
   return invoke<HostingProjectChoice[]>('list_hosting_projects', {
     projectPath,
     provider,
     scopeId,
+    cloudflareProduct,
   });
 }
 

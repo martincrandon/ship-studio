@@ -106,6 +106,7 @@ pub fn effective_links(project: &Path) -> Vec<HostingLink> {
         match detected.iter().find(|d| d.provider == link.provider) {
             // The CLI relinked this project elsewhere; follow it.
             Some(d) if d.project_id != link.project_id => links.push(HostingLink {
+                cloudflare_target: None,
                 provider: d.provider,
                 project_id: d.project_id.clone(),
                 scope_id: d.scope_id.clone(),
@@ -120,6 +121,7 @@ pub fn effective_links(project: &Path) -> Vec<HostingLink> {
     for d in detected {
         if !links.iter().any(|l| l.provider == d.provider) {
             links.push(HostingLink {
+                cloudflare_target: None,
                 provider: d.provider,
                 project_id: d.project_id,
                 scope_id: d.scope_id,

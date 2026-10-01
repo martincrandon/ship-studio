@@ -15,6 +15,7 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
 import { EmptyState } from '../primitives/EmptyState';
+import { SegmentedControl } from '../primitives/SegmentedControl';
 import { VercelIcon, CloudflareIcon } from '../icons';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { asCommandError, formatCommandError } from '../../lib/errors';
@@ -25,6 +26,7 @@ import {
   type DetectedLink,
   type HostingProjectChoice,
   type HostingProvider,
+  type CloudflareProduct,
 } from '../../lib/hosting';
 
 const PROVIDERS: HostingProvider[] = ['vercel', 'cloudflare', 'netlify'];
@@ -51,11 +53,17 @@ const PROVIDERS: HostingProvider[] = ['vercel', 'cloudflare', 'netlify'];
  * "create a project first" when they have twenty is the worst outcome
  * available.
  */
-const EMPTY_LIST_CAUSE: Record<HostingProvider, string> = {
+const EMPTY_LIST_CAUSE: Record<Exclude<HostingProvider, 'cloudflare'>, string> & {
+  cloudflare: Record<CloudflareProduct, string>;
+} = {
   vercel:
     "This lists the projects your token can see. A token that isn't scoped to your team won't see that team's projects, so this can mean the wrong token rather than an empty account.",
-  cloudflare:
-    'This lists the projects your token can see. Without the Account Settings:Read permission Cloudflare returns no accounts at all, so this can mean a missing permission rather than an empty account.',
+  cloudflare: {
+    pages:
+      'This lists the Pages projects your token can see. Without Account Settings:Read, Cloudflare returns no accounts at all; without Cloudflare Pages:Read, the project list may be empty. Either can mean a missing permission rather than an empty account.',
+    workers:
+      'This lists the Workers scripts your user-scoped token can see. An empty result can mean the token is missing Account Settings:Read or Workers Scripts Read rather than that the account has no scripts.',
+  },
   netlify:
     'This lists the sites your token can see, so this can mean the wrong token rather than an empty account.',
 };
@@ -71,7 +79,7 @@ interface Props {
   detected: DetectedLink[];
   onLinked: () => void;
   /** The chosen provider has no usable credential yet. */
-  onNeedsToken: (provider: HostingProvider) => void;
+  onNeedsToken: (provider: HostingProvider, cloudflareProduct?: CloudflareProduct) => void;
   onClose: () => void;
 }
 
@@ -84,6 +92,7 @@ export function HostingLinkPicker({
 }: Props) {
   const { showToast } = useOptionalToast();
   const [provider, setProvider] = useState<HostingProvider | null>(null);
+  const [cloudflareProduct, setCloudflareProduct] = useState<CloudflareProduct | null>(null);
   const [projects, setProjects] = useState<HostingProjectChoice[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -120,15 +129,24 @@ export function HostingLinkPicker({
   );
 
   const choose = useCallback(
-    async (next: HostingProvider) => {
+    async (next: HostingProvider, product?: CloudflareProduct) => {
       const generation = ++requestRef.current;
       const isCurrent = () => requestRef.current === generation;
+      const selectedProduct = next === 'cloudflare' ? product : undefined;
 
       setProvider(next);
+      setCloudflareProduct(selectedProduct ?? null);
       setProjects(null);
+      if (next === 'cloudflare' && !selectedProduct) {
+        // Ask which Cloudflare product they use before making an API call.
+        // Workers-only tokens may be refused by the Pages endpoint, so an
+        // eager Pages request would strand those users in the wrong flow.
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
-        const list = await listHostingProjects(projectPath, next);
+        const list = await listHostingProjects(projectPath, next, undefined, selectedProduct);
         if (isCurrent()) setProjects(list);
       } catch (err) {
         if (!isCurrent()) return;
@@ -136,7 +154,7 @@ export function HostingLinkPicker({
         // A missing credential is the expected first-run state, not a failure
         // worth a red toast — hand the user straight to the connect flow.
         if (error.type === 'NotAuthenticated') {
-          onNeedsToken(next);
+          onNeedsToken(next, selectedProduct);
           return;
         }
         showToast(formatCommandError(error), 'error');
@@ -151,6 +169,14 @@ export function HostingLinkPicker({
   const link = useCallback(
     async (choice: HostingProjectChoice) => {
       if (!provider) return;
+      const cloudflareTarget =
+        provider !== 'cloudflare'
+          ? undefined
+          : (choice.cloudflare_target ??
+            (cloudflareProduct === 'pages' ? { kind: 'pages' as const } : undefined));
+      // A Workers script name is mutable. The immutable tag comes from the
+      // provider response and must travel with the saved link; never derive it.
+      if (provider === 'cloudflare' && !cloudflareTarget) return;
       setSaving(true);
       try {
         await setHostingLink(projectPath, {
@@ -158,6 +184,7 @@ export function HostingLinkPicker({
           project_id: choice.id,
           scope_id: choice.scope_id,
           project_name: choice.name,
+          ...(cloudflareTarget ? { cloudflare_target: cloudflareTarget } : {}),
           source: 'user_picked',
           linked_at: 0,
         });
@@ -168,7 +195,7 @@ export function HostingLinkPicker({
         setSaving(false);
       }
     },
-    [projectPath, provider, onLinked, showToast]
+    [projectPath, provider, cloudflareProduct, onLinked, showToast]
   );
 
   return (
@@ -215,15 +242,61 @@ export function HostingLinkPicker({
         {provider && loading ? (
           <div className="connect-modal-loading">
             <Spinner />
-            <span>Loading your {PROVIDER_LABELS[provider]} projects…</span>
+            <span>
+              Loading your {PROVIDER_LABELS[provider]}
+              {provider === 'cloudflare'
+                ? ` ${cloudflareProduct === 'pages' ? 'Pages' : 'Workers'}`
+                : ''}
+              {provider === 'cloudflare' && cloudflareProduct === 'workers'
+                ? ' scripts'
+                : ' projects'}
+              …
+            </span>
+          </div>
+        ) : null}
+
+        {provider === 'cloudflare' && cloudflareProduct ? (
+          <SegmentedControl
+            aria-label="Cloudflare product"
+            value={cloudflareProduct}
+            onValueChange={(product) => void choose('cloudflare', product)}
+            options={[
+              { value: 'pages', label: 'Pages', disabled: saving },
+              { value: 'workers', label: 'Workers', disabled: saving },
+            ]}
+          />
+        ) : null}
+
+        {provider === 'cloudflare' && !cloudflareProduct ? (
+          <div className="connect-modal-provider-choices" aria-label="Choose Cloudflare product">
+            <Button
+              variant="secondary"
+              width="fill"
+              disabled={saving}
+              onClick={() => void choose('cloudflare', 'pages')}
+            >
+              Pages
+            </Button>
+            <Button
+              variant="secondary"
+              width="fill"
+              disabled={saving}
+              onClick={() => void choose('cloudflare', 'workers')}
+            >
+              Workers
+            </Button>
           </div>
         ) : null}
 
         {provider && !loading && projects ? (
           projects.length === 0 ? (
             <EmptyState
-              title={`Nothing came back from ${PROVIDER_LABELS[provider]}`}
-              description={EMPTY_LIST_CAUSE[provider]}
+              title={`Nothing came back from ${PROVIDER_LABELS[provider]}${provider === 'cloudflare' ? ` ${cloudflareProduct === 'pages' ? 'Pages' : 'Workers'}` : ''}`}
+              description={
+                provider === 'cloudflare'
+                  ? EMPTY_LIST_CAUSE.cloudflare[cloudflareProduct ?? 'pages']
+                  : EMPTY_LIST_CAUSE[provider]
+              }
             />
           ) : (
             <div className="connect-modal-list">
@@ -234,10 +307,15 @@ export function HostingLinkPicker({
                   it does in the label below. */}
               {projects.map((choice) => (
                 <Button
-                  key={`${choice.scope_id ?? ''}:${choice.id}`}
+                  key={`${provider}:${cloudflareProduct}:${choice.scope_id ?? ''}:${choice.id}:${choice.cloudflare_target?.kind === 'workers' ? choice.cloudflare_target.script_tag : ''}`}
                   variant="secondary"
                   width="fill"
-                  disabled={saving}
+                  disabled={
+                    saving ||
+                    (provider === 'cloudflare' &&
+                      cloudflareProduct === 'workers' &&
+                      choice.cloudflare_target?.kind !== 'workers')
+                  }
                   onClick={() => void link(choice)}
                 >
                   {/* The scope, when the provider gave us one. Cloudflare
@@ -247,7 +325,11 @@ export function HostingLinkPicker({
                       one of which links this repo to the wrong account's
                       project. Vercel and Netlify never send a scope name, so
                       this reads exactly as before for them. */}
-                  {choice.scope_name ? `${choice.name} — ${choice.scope_name}` : choice.name}
+                  {provider === 'cloudflare'
+                    ? `${cloudflareProduct === 'pages' ? 'Pages' : 'Workers'} · ${choice.name}${choice.scope_name || choice.scope_id ? ` — ${choice.scope_name ?? choice.scope_id}` : ''}`
+                    : choice.scope_name
+                      ? `${choice.name} — ${choice.scope_name}`
+                      : choice.name}
                 </Button>
               ))}
             </div>
@@ -259,11 +341,13 @@ export function HostingLinkPicker({
               provider's response can never land behind the user. */}
           <Button
             variant="secondary"
+            disabled={saving}
             onClick={
               provider
                 ? () => {
                     requestRef.current += 1;
                     setProvider(null);
+                    setCloudflareProduct(null);
                     setProjects(null);
                     setLoading(false);
                   }

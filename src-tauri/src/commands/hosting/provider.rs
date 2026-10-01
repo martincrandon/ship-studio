@@ -7,9 +7,10 @@
 
 use super::http::HostingHttpError;
 use super::model::{
-    BuildLog, Deployment, HostingLink, HostingProjectChoice, HostingProvider, Lookup,
+    BuildLog, CloudflareProduct, CloudflareTarget, Deployment, HostingLink, HostingProjectChoice,
+    HostingProvider, Lookup,
 };
-use super::{cloudflare, netlify, vercel};
+use super::{cloudflare, cloudflare_workers, netlify, vercel};
 
 /// Find the deployment for an exact commit.
 pub async fn find_for_commit(
@@ -20,7 +21,12 @@ pub async fn find_for_commit(
 ) -> Result<Lookup, HostingHttpError> {
     match link.provider {
         HostingProvider::Vercel => vercel::find_for_commit(link, token, sha, branch).await,
-        HostingProvider::Cloudflare => cloudflare::find_for_commit(link, token, sha, branch).await,
+        HostingProvider::Cloudflare => match link.cloudflare_target {
+            Some(CloudflareTarget::Workers { .. }) => {
+                cloudflare_workers::find_for_commit(link, token, sha, branch).await
+            }
+            _ => cloudflare::find_for_commit(link, token, sha, branch).await,
+        },
         HostingProvider::Netlify => netlify::find_for_commit(link, token, sha, branch).await,
     }
 }
@@ -34,7 +40,12 @@ pub async fn fetch_logs(
 ) -> Result<BuildLog, HostingHttpError> {
     match link.provider {
         HostingProvider::Vercel => vercel::fetch_logs(link, token, deployment_id).await,
-        HostingProvider::Cloudflare => cloudflare::fetch_logs(link, token, deployment_id).await,
+        HostingProvider::Cloudflare => match link.cloudflare_target {
+            Some(CloudflareTarget::Workers { .. }) => {
+                cloudflare_workers::fetch_logs(link, token, deployment_id).await
+            }
+            _ => cloudflare::fetch_logs(link, token, deployment_id).await,
+        },
         HostingProvider::Netlify => netlify::fetch_logs(link, token, deployment_id).await,
     }
 }
@@ -47,7 +58,12 @@ pub async fn list_recent(
 ) -> Result<Vec<Deployment>, HostingHttpError> {
     match link.provider {
         HostingProvider::Vercel => vercel::list_recent(link, token, limit).await,
-        HostingProvider::Cloudflare => cloudflare::list_recent(link, token, limit).await,
+        HostingProvider::Cloudflare => match link.cloudflare_target {
+            Some(CloudflareTarget::Workers { .. }) => {
+                cloudflare_workers::list_recent(link, token, limit).await
+            }
+            _ => cloudflare::list_recent(link, token, limit).await,
+        },
         HostingProvider::Netlify => netlify::list_recent(link, token, limit).await,
     }
 }
@@ -57,10 +73,16 @@ pub async fn list_projects(
     provider: HostingProvider,
     token: &str,
     scope_id: Option<&str>,
+    cloudflare_product: Option<CloudflareProduct>,
 ) -> Result<Vec<HostingProjectChoice>, HostingHttpError> {
     match provider {
         HostingProvider::Vercel => vercel::list_projects(token, scope_id).await,
-        HostingProvider::Cloudflare => cloudflare::list_projects(token, scope_id).await,
+        HostingProvider::Cloudflare => match cloudflare_product {
+            Some(CloudflareProduct::Workers) => {
+                cloudflare_workers::list_projects(token, scope_id).await
+            }
+            _ => cloudflare::list_projects(token, scope_id).await,
+        },
         HostingProvider::Netlify => netlify::list_projects(token).await,
     }
 }

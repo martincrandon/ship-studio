@@ -149,6 +149,19 @@ describe('HostingUrls', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
+  it('keeps an unknown environment neutral and offers only its build permalink', () => {
+    render(
+      <HostingUrls
+        deployment={deployment({ site: SITE, deployment: BUILD }, 'unknown')}
+        onOpen={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('Domain')).not.toBeInTheDocument();
+    expect(screen.queryByText(SITE.replace('https://', ''))).not.toBeInTheDocument();
+    expect(screen.getByText('Deployment')).toBeInTheDocument();
+  });
+
   it('surfaces the site address, not just the build permalink', () => {
     // Asserted through the accessible name: the visible text goes through
     // MiddleTruncate, which measures with canvas and so collapses to an
