@@ -503,8 +503,10 @@ pub fn run() {
             commands::git::ensure_shipstudio_dir,
             commands::git::check_git_has_changes,
             commands::git::get_changed_files,
+            commands::git::get_changed_file_summary,
             commands::git::get_file_diff,
             commands::git::get_branch_status,
+            commands::git::get_git_sync_status,
             commands::git::list_branches,
             commands::git::get_current_branch,
             commands::git::switch_branch,
@@ -726,6 +728,7 @@ pub fn run() {
             // AI generation
             commands::ai::generate_pr_description,
             commands::ai::generate_commit_message,
+            commands::ai::suggest_commit_message,
             // Claude integration
             commands::claude::check_claude_cli_status,
             commands::claude::claude_session_exists,
@@ -774,6 +777,7 @@ pub fn run() {
             commands::github::detect_package_manager,
             // Publishing
             commands::publishing::publish_branch,
+            commands::publishing::push_current_branch,
             // Hosting — which provider a project deploys to, and whether the
             // pushed commit actually went live.
             commands::hosting::get_hosting_status,

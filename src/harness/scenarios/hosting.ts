@@ -108,6 +108,39 @@ const liveUrls = {
 
 export const hostingScenarios: Scenario[] = [
   {
+    id: 'hosting-not-pushed',
+    title: 'Push popover — not deployed yet, with one remote',
+    looksRightWhen:
+      'Origin is selected automatically; Domain and Deployment both say Not deployed yet without link controls.',
+    project: WORKSPACE_PROJECT,
+    openSelector: '.source-control-push-button',
+    clipSelector: '.publish-dropdown-menu',
+    requires: '.hosting-url--placeholder',
+    commands: {
+      ...workspaceCommands,
+      get_git_sync_status: {
+        status: 'no-upstream',
+        branch: 'main',
+        remote: null,
+        upstream: null,
+        remotes: ['origin'],
+        ahead: null,
+        behind: null,
+        headSha: commit.sha,
+        comparedUpstream: null,
+        comparedUpstreamSha: null,
+        outgoingCommits: [],
+        outgoingComparison: null,
+        outgoingComparisonLabel: null,
+        outgoingCount: null,
+      },
+      get_hosting_status: {
+        ...status({ kind: 'not_found' }),
+        commit: { ...commit, has_upstream: false },
+      },
+    },
+  },
+  {
     id: 'hosting-building',
     title: 'Push popover — build in progress',
     looksRightWhen:

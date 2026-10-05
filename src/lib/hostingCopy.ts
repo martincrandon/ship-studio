@@ -177,7 +177,6 @@ export function copyFor(
       return {
         title,
         status: 'Not pushed yet',
-        hint: 'Deployments appear here after your first push.',
       };
 
     case 'queued':
@@ -301,9 +300,9 @@ export function copyFor(
 
     case 'no_link':
       return {
-        title: 'See if each push went live',
-        status: 'Vercel, Cloudflare, or Netlify',
-        action: 'Set up',
+        title: 'No hosting provider connected',
+        status: 'Connect to see deployments',
+        hint: 'Nothing appears here until a hosting provider is connected.',
       };
 
     case 'offline':

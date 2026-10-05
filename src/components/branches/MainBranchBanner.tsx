@@ -80,7 +80,7 @@ export function MainBranchBanner({
           You're editing <strong>main</strong> directly.
           <span className="main-branch-banner-text-extra">
             {' '}
-            Changes will go live immediately when published.
+            Your hosting provider may deploy pushes from this branch when configured to do so.
           </span>
         </span>
         {onCreateBranch && (

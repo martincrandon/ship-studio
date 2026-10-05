@@ -104,6 +104,30 @@ export function BranchesMenu({
     [branches, currentBranch]
   );
 
+  const branchRows = useMemo(() => {
+    const otherBranches = branches
+      .filter((branch) => !branch.isCurrent && branch.name !== currentBranch)
+      .sort((a, b) => b.lastCommitDate - a.lastCommitDate);
+    const mainBranch = otherBranches.find((branch) => branch.name === 'main');
+    const nonMainBranches = otherBranches.filter((branch) => branch.name !== 'main');
+    const currentRow = currentBranch
+      ? {
+          name: currentBranch,
+          branch: branches.find((branch) => branch.name === currentBranch),
+          isCurrent: true,
+        }
+      : null;
+    const rows = [
+      ...(mainBranch ? [{ name: mainBranch.name, branch: mainBranch, isCurrent: false }] : []),
+      ...(currentRow ? [currentRow] : []),
+      ...nonMainBranches
+        .slice(0, 5 - (mainBranch ? 1 : 0))
+        .map((branch) => ({ name: branch.name, branch, isCurrent: false })),
+    ];
+
+    return { rows, hasOtherBranches: otherBranches.length > 0 };
+  }, [branches, currentBranch]);
+
   const currentOpenPR = useMemo(
     () =>
       currentBranch
@@ -231,43 +255,32 @@ export function BranchesMenu({
                   View all branches
                 </TextButton>
               </div>
-              {currentBranch && (
+              {branchRows.rows.map(({ branch, name, isCurrent }, index) => (
                 <button
                   type="button"
-                  className="branches-menu-row branches-menu-branch-row is-current"
-                  disabled
+                  className={`branches-menu-row branches-menu-branch-row${isCurrent ? ' is-current' : ''}`}
+                  key={`${branch?.isRemote ? 'remote' : 'local'}:${name}`}
+                  disabled={isCurrent || isBranchSwitching}
+                  onClick={() => runAndClose(() => onBranchSwitch(name))}
                 >
                   <span className="branches-menu-row-icon">
                     {branchIcon(
-                      currentBranch,
-                      recentBranches.length === 0,
-                      recentBranches.length === 0
+                      name,
+                      index === branchRows.rows.length - 1,
+                      isCurrent && name === 'main' && branchRows.rows.length === 1
                     )}
                   </span>
                   <span className="branches-menu-row-content">
-                    <span className="branches-menu-row-label">{currentBranch}</span>
-                    <span className="branches-menu-row-meta">Current</span>
-                  </span>
-                </button>
-              )}
-              {recentBranches.map((branch, index) => (
-                <button
-                  type="button"
-                  className="branches-menu-row branches-menu-branch-row"
-                  key={`${branch.isRemote ? 'remote' : 'local'}:${branch.name}`}
-                  disabled={isBranchSwitching}
-                  onClick={() => runAndClose(() => onBranchSwitch(branch.name))}
-                >
-                  <span className="branches-menu-row-icon">
-                    {branchIcon(branch.name, index === recentBranches.length - 1)}
-                  </span>
-                  <span className="branches-menu-row-content">
-                    <span className="branches-menu-row-label">{branch.name}</span>
-                    {branch.isRemote && <span className="branches-menu-row-meta">Remote</span>}
+                    <span className="branches-menu-row-label">{name}</span>
+                    {isCurrent ? (
+                      <span className="branches-menu-row-meta">Current</span>
+                    ) : (
+                      branch?.isRemote && <span className="branches-menu-row-meta">Remote</span>
+                    )}
                   </span>
                 </button>
               ))}
-              {recentBranches.length === 0 && (
+              {!branchRows.hasOtherBranches && (
                 <div className="branches-menu-empty">No other branches yet.</div>
               )}
               <Button

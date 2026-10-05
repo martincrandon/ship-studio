@@ -1,36 +1,87 @@
-/**
- * Tests for PublishBranchDropdown.
- *
- * The core contract: the trigger button says "Push" at ALL times (or
- * "Pushing..." while in flight) — never "Sync", "Publish", "Synced", or
- * "Go Live". That label churn was a real UX complaint; these tests pin it.
- */
-
-import { describe, it, expect, vi } from 'vitest';
-import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
-import type { ReactElement } from 'react';
-import { ModalProvider } from '../../contexts/ModalContext';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PublishBranchDropdown } from './PublishBranchDropdown';
 import type { ProjectGitHubStatus } from '../../lib/github';
+import type { GitSyncStatus } from '../../lib/git';
+import {
+  pushCurrentBranch,
+  switchBranch,
+  type PushResult,
+  type SwitchResult,
+} from '../../lib/branches';
 
 vi.mock('../../lib/branches', () => ({
-  publishBranch: vi.fn().mockResolvedValue({ state: 'PUSHED', url: null }),
-  formatRelativeTime: () => 'just now',
+  pushCurrentBranch: vi.fn(),
+  switchBranch: vi.fn(),
 }));
 
-// The hosting section owns its own data now. These tests are about the
-// popover's structure, so hold it in a single settled state.
+vi.mock('../hosting/HostingSection', () => ({
+  HostingSection: ({
+    pushedCommitSha,
+    pushedBranch,
+  }: {
+    pushedCommitSha?: string;
+    pushedBranch?: string;
+  }) => (
+    <section className="publish-hosting-section" aria-label="Hosting">
+      <span>Hosting</span>
+      <span data-testid="hosting-push-target">
+        {pushedCommitSha && pushedBranch
+          ? `${pushedBranch}:${pushedCommitSha}`
+          : 'No pushed commit'}
+      </span>
+    </section>
+  ),
+}));
+
 const connectedStatus = {
   status: 'connected',
   github_repo: 'user/repo',
 } as unknown as ProjectGitHubStatus;
+
+const readyStatus = {
+  status: 'ready',
+  branch: 'main',
+  remote: 'origin',
+  upstream: 'origin/main',
+  remotes: ['origin'],
+  ahead: 2,
+  behind: 1,
+  headSha: 'abcdef0123456789abcdef0123456789abcdef01',
+  comparedUpstream: 'origin/main',
+  comparedUpstreamSha: '1234567890abcdef1234567890abcdef12345678',
+  outgoingCommits: [
+    {
+      sha: 'abcdef0123456789abcdef0123456789abcdef01',
+      shortSha: 'abcdef0',
+      subject: 'Update project content',
+    },
+    {
+      sha: 'fedcba9876543210fedcba9876543210fedcba98',
+      shortSha: 'fedcba9',
+      subject: 'Adjust page layout',
+    },
+  ],
+  outgoingComparison: 'upstream',
+  outgoingComparisonLabel: 'origin/main',
+  outgoingCount: 2,
+} satisfies GitSyncStatus;
+
+const pushedResult: PushResult = {
+  branch: 'main',
+  remote: 'origin',
+  upstream: 'origin/main',
+  commitSha: '9f3c1ab7d2e40518c6b9a7f0d4e2c8b1a5f60937',
+};
 
 function makeProps(overrides?: Partial<Parameters<typeof PublishBranchDropdown>[0]>) {
   return {
     currentBranch: 'main',
     projectGithubStatus: connectedStatus,
     projectPath: '/test/path',
-    hasChangesToSync: true,
+    changedFiles: [],
+    syncStatus: readyStatus,
+    statusLoaded: true,
     onStatusChange: vi.fn(),
     isPublishing: false,
     setIsPublishing: vi.fn(),
@@ -38,344 +89,331 @@ function makeProps(overrides?: Partial<Parameters<typeof PublishBranchDropdown>[
   };
 }
 
-const BANNED_LABELS = ['Sync', 'Synced', 'Syncing...', 'Publish', 'Publishing...', 'Go Live'];
-
-/**
- * The hosting section opens the deployments panel through ModalContext, which
- * the app always provides around this component. Rendering bare would test a
- * tree that never exists.
- */
-function render(ui: ReactElement) {
-  return rtlRender(<ModalProvider>{ui}</ModalProvider>);
-}
-
-function expectNoBannedLabels() {
-  for (const label of BANNED_LABELS) {
-    expect(screen.queryByText(label)).not.toBeInTheDocument();
-  }
-}
-
-function expectPushIcon() {
-  expect(
-    screen.getByRole('button', { name: /push/i }).querySelector('[data-icon-name="PushIcon"]')
-  ).toBeTruthy();
-}
-
-describe('PublishBranchDropdown trigger label', () => {
-  it('says "Push" on the main branch', () => {
-    render(<PublishBranchDropdown {...makeProps({ currentBranch: 'main' })} />);
-
-    expect(screen.getByText('Push')).toBeInTheDocument();
-    expectPushIcon();
-    expectNoBannedLabels();
+describe('PublishBranchDropdown', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(pushCurrentBranch).mockResolvedValue(pushedResult);
   });
 
-  it('says "Push" on a feature branch', () => {
-    render(<PublishBranchDropdown {...makeProps({ currentBranch: 'feature/thing' })} />);
-
-    expect(screen.getByText('Push')).toBeInTheDocument();
-    expectNoBannedLabels();
+  it('switches the working branch safely before enabling a commit to the selected branch', async () => {
+    let finishSwitch!: (result: SwitchResult) => void;
+    vi.mocked(switchBranch).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSwitch = resolve;
+        })
+    );
+    const onBranchSwitch = vi.fn();
+    const props = makeProps({
+      onBranchSwitch,
+      changedFiles: [{ path: 'src/app.tsx', status: 'modified' }],
+      branches: [
+        {
+          name: 'feature/destination',
+          isCurrent: false,
+          isRemote: false,
+          isDefault: false,
+          lastCommitDate: 0,
+          lastCommitAuthor: 'Developer',
+          aheadOfMain: 0,
+          behindOfMain: 0,
+          pushed: false,
+        },
+      ],
+    });
+    const { rerender } = render(<PublishBranchDropdown {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), {
+      target: { value: 'Save these changes' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Commit to main' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'feature/destination' }));
+    expect(switchBranch).toHaveBeenCalledWith('/test/path', 'feature/destination', false, true);
+    expect(screen.getByRole('button', { name: 'Commit' })).toBeDisabled();
+    expect(onBranchSwitch).not.toHaveBeenCalled();
+    finishSwitch({
+      success: true,
+      stashedChanges: false,
+      pendingStashFrom: null,
+      stashApplied: false,
+      error: null,
+    });
+    await waitFor(() => expect(onBranchSwitch).toHaveBeenCalledWith('feature/destination'));
+    rerender(
+      <PublishBranchDropdown
+        {...props}
+        currentBranch="feature/destination"
+        syncStatus={{ ...readyStatus, branch: 'feature/destination', behind: 0 }}
+      />
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Commit' })).toBeEnabled());
+    expect(screen.getByRole('textbox', { name: 'Commit message' })).toHaveValue(
+      'Save these changes'
+    );
+    expect(
+      screen.getByRole('button', { name: 'Commit to feature/destination' })
+    ).toBeInTheDocument();
   });
 
-  it('says "Push" even when there is nothing to push', () => {
-    render(<PublishBranchDropdown {...makeProps({ hasChangesToSync: false })} />);
+  it('keeps the Push trigger label and reports Git state separately', () => {
+    render(<PublishBranchDropdown {...makeProps()} />);
 
-    expect(screen.getByText('Push')).toBeInTheDocument();
-    expectNoBannedLabels();
+    expect(screen.getByRole('button', { name: /push/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+
+    expect(screen.getByText('Local')).toBeInTheDocument();
+    expect(screen.getByText('Remote')).toBeInTheDocument();
+    expect(screen.getByText('GitHub')).toBeInTheDocument();
+    expect(screen.getByText('2 commits to push')).toBeInTheDocument();
+    expect(screen.getByText('Pull and resolve remote changes before pushing.')).toBeInTheDocument();
+    expect(screen.getByText('Hosting')).toBeInTheDocument();
+    expect(screen.queryByText(/go live|will deploy/i)).not.toBeInTheDocument();
   });
 
-  it('says "Pushing..." while a push is in flight', () => {
-    render(<PublishBranchDropdown {...makeProps({ isPublishing: true })} />);
-
-    expect(screen.getByText('Pushing...')).toBeInTheDocument();
-    expectNoBannedLabels();
-  });
-
-  it('keeps the dropdown trigger enabled when no Git remote exists', () => {
+  it('shows changed and untracked files alongside local commit controls', () => {
     render(
       <PublishBranchDropdown
         {...makeProps({
-          projectGithubStatus: { status: 'no_repo' } as unknown as ProjectGitHubStatus,
+          changedFiles: [
+            { path: 'src/app.tsx', status: 'modified' },
+            { path: 'src/NewPanel.tsx', status: 'untracked' },
+          ],
         })}
       />
     );
 
-    const button = screen.getByText('Push').closest('button');
-    expect(button).toBeEnabled();
-    expectPushIcon();
-    expectNoBannedLabels();
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByText('2 uncommitted changes')).toBeInTheDocument();
+    expect(screen.getByText('NewPanel.tsx')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Commit message' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Commit' })).toBeInTheDocument();
+    expect(pushCurrentBranch).not.toHaveBeenCalled();
   });
 
-  it('keeps the icon visible while GitHub status is loading', () => {
-    render(<PublishBranchDropdown {...makeProps({ projectGithubStatus: null })} />);
+  it('pushes existing commits without changing the visible worktree files', async () => {
+    const onPushComplete = vi.fn();
+    const props = makeProps({
+      changedFiles: [{ path: 'src/app.tsx', status: 'modified' }],
+      syncStatus: { ...readyStatus, behind: 0 },
+      onPushComplete,
+    });
+    render(<PublishBranchDropdown {...props} />);
 
-    expect(screen.getByText('Push')).toBeInTheDocument();
-    expectPushIcon();
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    const pushButtons = screen.getAllByRole('button', { name: 'Push' });
+    fireEvent.click(pushButtons[1]);
+
+    await waitFor(() => expect(onPushComplete).toHaveBeenCalledWith(pushedResult));
+    expect(pushCurrentBranch).toHaveBeenCalledWith('/test/path', undefined, 'main');
+    expect(screen.getByText('app.tsx')).toBeInTheDocument();
+    expect(screen.getByText(/Pushed 9f3c1ab to origin\/main/)).toBeInTheDocument();
   });
-});
 
-describe('PublishBranchDropdown open panel', () => {
-  it('keeps Hosting available and disables only the push action when no remote exists', async () => {
+  it('keeps unknown commit counts unknown', () => {
     render(
       <PublishBranchDropdown
         {...makeProps({
-          projectGithubStatus: { status: 'no_repo' } as unknown as ProjectGitHubStatus,
+          syncStatus: {
+            ...readyStatus,
+            status: 'unknown',
+            ahead: null,
+            behind: null,
+            headSha: 'abcdef0123456789abcdef0123456789abcdef01',
+            comparedUpstream: null,
+            comparedUpstreamSha: null,
+            outgoingCommits: null,
+            outgoingComparison: null,
+            outgoingComparisonLabel: null,
+            outgoingCount: null,
+          },
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByText('Couldn’t check commits to push.')).toBeInTheDocument();
+    expect(screen.getByText('Couldn’t verify that this branch can be pushed.')).toBeInTheDocument();
+    expect(screen.queryByText(/0 commits|Up to date/)).not.toBeInTheDocument();
+  });
+
+  it('reports a behind-only branch accurately instead of claiming it is up to date', () => {
+    render(
+      <PublishBranchDropdown
+        {...makeProps({
+          syncStatus: {
+            ...readyStatus,
+            ahead: 0,
+            behind: 3,
+            outgoingCommits: [],
+            outgoingCount: 0,
+          },
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByText(/3 commits behind/)).toBeInTheDocument();
+    expect(screen.queryByText(/Up to date/)).not.toBeInTheDocument();
+  });
+
+  it('automatically selects the only configured remote for a branch without an upstream', async () => {
+    const { container } = render(
+      <PublishBranchDropdown
+        {...makeProps({
+          syncStatus: {
+            ...readyStatus,
+            status: 'no-upstream',
+            remote: null,
+            upstream: null,
+            ahead: null,
+            behind: null,
+            remotes: ['origin'],
+          },
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByRole('button', { name: 'Push this branch to origin' })).toBeInTheDocument();
+    expect(container.querySelector('.publish-remote-status-row')).not.toBeInTheDocument();
+    expect(
+      container
+        .querySelector('.publish-dropdown-footer button')
+        ?.querySelector('[data-icon-name="PushIcon"]')
+    ).toBeInTheDocument();
+    const pushButtons = screen.getAllByRole('button', { name: 'Push' });
+    fireEvent.click(pushButtons[1]);
+
+    await waitFor(() =>
+      expect(pushCurrentBranch).toHaveBeenCalledWith('/test/path', 'origin', 'main')
+    );
+  });
+
+  it('keeps the Remote action when the footer also needs to commit local changes', () => {
+    const { container } = render(
+      <PublishBranchDropdown
+        {...makeProps({
+          changedFiles: [{ path: 'src/app.tsx', status: 'modified' }],
+          syncStatus: {
+            ...readyStatus,
+            status: 'no-upstream',
+            remote: null,
+            upstream: null,
+            ahead: null,
+            behind: null,
+            remotes: ['origin'],
+          },
         })}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }));
 
-    expect(await screen.findByText('Hosting')).toBeInTheDocument();
+    expect(container.querySelector('.publish-remote-status-row')).toBeInTheDocument();
+    expect(container.querySelector('.publish-dropdown-footer button')).toHaveTextContent(
+      'Commit & Push'
+    );
     expect(
-      screen.getByText(
-        'Connect a Git remote to push commits. You can still review changes and manage hosting below.'
-      )
-    ).toBeInTheDocument();
-    const pushButtons = screen.getAllByRole('button', { name: 'Push' });
-    expect(pushButtons[0]).toBeEnabled();
-    expect(pushButtons[pushButtons.length - 1]).toBeDisabled();
+      container
+        .querySelector('.publish-dropdown-footer button')
+        ?.querySelector('[data-icon-name="PushIcon"]')
+    ).not.toBeInTheDocument();
   });
 
-  it('closes on outside click and Escape', () => {
-    render(<PublishBranchDropdown {...makeProps()} />);
-
-    const trigger = screen.getByRole('button', { name: 'Push' });
-    fireEvent.click(trigger);
-    expect(screen.getByText('Push to GitHub')).toBeInTheDocument();
-
-    fireEvent.mouseDown(document.body);
-    expect(screen.queryByText('Push to GitHub')).not.toBeInTheDocument();
-
-    fireEvent.click(trigger);
-    expect(screen.getByText('Push to GitHub')).toBeInTheDocument();
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByText('Push to GitHub')).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
-  });
-
-  it('uses push terminology throughout the idle panel (feature branch)', () => {
-    render(<PublishBranchDropdown {...makeProps({ currentBranch: 'feature/thing' })} />);
-
-    fireEvent.click(screen.getByText('Push'));
-
-    expect(screen.getByText('Push to GitHub')).toBeInTheDocument();
-    // Trigger + primary action both say Push
-    expect(screen.getAllByText('Push').length).toBeGreaterThanOrEqual(2);
-    expectNoBannedLabels();
-  });
-
-  it('includes changed files and discard in the Push menu', () => {
+  it('requires an explicit configured remote when the branch has no upstream', async () => {
     render(
       <PublishBranchDropdown
-        {...makeProps()}
-        changedFiles={[{ path: 'src/app.tsx', status: 'modified' }]}
+        {...makeProps({
+          syncStatus: {
+            status: 'no-upstream',
+            branch: 'feature/table',
+            remote: null,
+            upstream: null,
+            remotes: ['origin', 'backup'],
+            ahead: null,
+            behind: null,
+            headSha: 'abcdef0123456789abcdef0123456789abcdef01',
+            comparedUpstream: null,
+            comparedUpstreamSha: null,
+            outgoingCommits: null,
+            outgoingComparison: null,
+            outgoingComparisonLabel: null,
+            outgoingCount: null,
+          },
+          currentBranch: 'feature/table',
+        })}
       />
     );
 
-    fireEvent.click(screen.getByText('Push'));
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    const destination = screen.getByLabelText('Push this branch to');
+    fireEvent.change(destination, { target: { value: 'backup' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Push to backup' }));
 
-    expect(screen.getByText('1 Unsaved Change')).toBeInTheDocument();
-    expect(screen.getByText('app.tsx')).toBeInTheDocument();
-    expect(screen.getByText('Discard All')).toBeInTheDocument();
-    const actionRow = screen.getByText('Discard All').closest('.publish-actions');
-    const pushButtons = screen.getAllByRole('button', { name: 'Push' });
-    expect(actionRow).toContainElement(pushButtons[pushButtons.length - 1]);
+    await waitFor(() =>
+      expect(pushCurrentBranch).toHaveBeenCalledWith('/test/path', 'backup', 'feature/table')
+    );
   });
 
-  it('renders the hosting section inside the Push menu', async () => {
-    render(<PublishBranchDropdown {...makeProps()} />);
+  it('passes the returned commit SHA and branch into Hosting after a push', async () => {
+    const onPushComplete = vi.fn();
+    const props = makeProps({ syncStatus: { ...readyStatus, behind: 0 }, onPushComplete });
+    const { rerender } = render(<PublishBranchDropdown {...props} />);
 
-    fireEvent.click(screen.getByText('Push'));
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Push' })[1]);
+    await waitFor(() => expect(onPushComplete).toHaveBeenCalledWith(pushedResult));
 
+    rerender(
+      <PublishBranchDropdown {...props} lastPush={{ result: pushedResult, pushedAt: Date.now() }} />
+    );
+    expect(screen.getByTestId('hosting-push-target')).toHaveTextContent(
+      `main:${pushedResult.commitSha}`
+    );
+  });
+
+  it('keeps local and Git sections available when there is no configured remote', () => {
+    render(
+      <PublishBranchDropdown
+        {...makeProps({
+          syncStatus: {
+            status: 'no-remote',
+            branch: 'main',
+            remote: null,
+            upstream: null,
+            remotes: [],
+            ahead: null,
+            behind: null,
+            headSha: null,
+            comparedUpstream: null,
+            comparedUpstreamSha: null,
+            outgoingCommits: null,
+            outgoingComparison: null,
+            outgoingComparisonLabel: null,
+            outgoingCount: null,
+          },
+          projectGithubStatus: { status: 'no_repo' } as unknown as ProjectGitHubStatus,
+          gitSetupAction: <button type="button">Connect Git</button>,
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByText('Local')).toBeInTheDocument();
+    expect(screen.getByText('Remote')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Git' })).toBeInTheDocument();
+    expect(
+      screen.getByText('No Git remote is configured. Connect one before pushing commits.')
+    ).toBeInTheDocument();
     expect(screen.getByText('Hosting')).toBeInTheDocument();
-    // And it reaches a real state rather than sitting on the spinner — the
-    // default IPC mock reports a project that deploys nowhere.
-    expect(await screen.findByText('See if each push went live')).toBeInTheDocument();
   });
 
-  it('keeps the panel actions below the hosting section', () => {
-    const { container } = render(<PublishBranchDropdown {...makeProps()} />);
+  it('keeps Hosting out of the compact menu while preserving local and Git state', () => {
+    render(<PublishBranchDropdown {...makeProps({ hideHosting: true })} />);
 
-    fireEvent.click(screen.getByText('Push'));
-
-    const menu = container.querySelector('.publish-dropdown-menu');
-    const hostingSection = menu?.querySelector('.publish-hosting-section');
-    const actions = menu?.querySelector('.publish-actions');
-
-    expect(hostingSection).toBeInTheDocument();
-    expect(actions).toBeInTheDocument();
-    expect(menu?.lastElementChild).toBe(actions);
-  });
-
-  it('keeps Done below the hosting section when GitHub is up to date', () => {
-    const { container } = render(
-      <PublishBranchDropdown {...makeProps({ hasChangesToSync: false })} />
-    );
-
-    fireEvent.click(screen.getByText('Push'));
-
-    const menu = container.querySelector('.publish-dropdown-menu');
-    const actions = menu?.querySelector('.publish-actions');
-
-    expect(screen.getByText('Done')).toBeInTheDocument();
-    expect(menu?.lastElementChild).toBe(actions);
-  });
-
-  it('never reaches into plugin DOM to force a menu open', () => {
-    // The popover used to hold the Vercel/Cloudflare plugins' hover menus open
-    // with a synthetic `mouseover` dispatched from a MutationObserver, so every
-    // mouse-out collapsed and restored the whole panel.
-    const observe = vi.fn();
-    const original = globalThis.MutationObserver;
-    globalThis.MutationObserver = class {
-      observe = observe;
-      disconnect = vi.fn();
-      takeRecords = vi.fn(() => []);
-    } as unknown as typeof MutationObserver;
-
-    try {
-      render(<PublishBranchDropdown {...makeProps()} />);
-      fireEvent.click(screen.getByText('Push'));
-      expect(observe).not.toHaveBeenCalled();
-    } finally {
-      globalThis.MutationObserver = original;
-    }
-  });
-
-  it('can hide the hosting section where there is no room for it', () => {
-    const { container } = render(<PublishBranchDropdown {...makeProps({ hideHosting: true })} />);
-
-    fireEvent.click(screen.getByText('Push'));
-
-    expect(container.querySelector('.publish-hosting-section')).not.toBeInTheDocument();
-  });
-
-  it('describes the GitHub push without inferring deployment state', () => {
-    const { container } = render(
-      <PublishBranchDropdown {...makeProps({ currentBranch: 'main' })} />
-    );
-
-    fireEvent.click(screen.getByText('Push'));
-
-    expect(container.querySelector('.publish-branch-description')).toHaveTextContent(
-      'Commits your changes and pushes the main branch to GitHub.'
-    );
-    expect(screen.queryByText(/live site/i)).not.toBeInTheDocument();
-    expectNoBannedLabels();
-  });
-
-  it('supports the grouped trigger treatment without changing the label', () => {
-    const { container } = render(<PublishBranchDropdown {...makeProps()} grouped />);
-
-    expect(container.querySelector('.publish-dropdown')).toHaveClass('publish-dropdown--grouped');
-    expect(screen.getByText('Push')).toBeInTheDocument();
-  });
-
-  it('says there is nothing to push when GitHub is up to date', () => {
-    render(<PublishBranchDropdown {...makeProps({ hasChangesToSync: false })} />);
-
-    fireEvent.click(screen.getByText('Push'));
-
-    expect(screen.getByText(/Nothing to push/i)).toBeInTheDocument();
-    expectNoBannedLabels();
-  });
-
-  describe('remotes that are not GitHub', () => {
-    const gitlabStatus = {
-      status: 'other-remote',
-      github_repo: null,
-      github_url: null,
-      remote_host: 'gitlab.com',
-      remote_forge: 'GitLab',
-    } as unknown as ProjectGitHubStatus;
-
-    const selfManagedStatus = {
-      status: 'other-remote',
-      github_repo: null,
-      github_url: null,
-      remote_host: 'git.acme.com',
-      remote_forge: null,
-    } as unknown as ProjectGitHubStatus;
-
-    it('lets a GitLab project push', () => {
-      // The regression: Push was gated on having a *GitHub* repo, so a GitLab
-      // project got a permanently disabled button telling it to create one.
-      // `publish_branch` is plain `git push` and always would have worked.
-      render(<PublishBranchDropdown {...makeProps({ projectGithubStatus: gitlabStatus })} />);
-
-      const trigger = screen.getByText('Push').closest('button');
-      expect(trigger).not.toBeDisabled();
-    });
-
-    it('names the actual forge instead of saying GitHub', () => {
-      const { container } = render(
-        <PublishBranchDropdown
-          {...makeProps({ projectGithubStatus: gitlabStatus, currentBranch: 'main' })}
-        />
-      );
-
-      fireEvent.click(screen.getByText('Push'));
-
-      expect(container.querySelector('.publish-branch-description')).toHaveTextContent(
-        'Commits your changes and pushes the main branch to GitLab.'
-      );
-      expect(screen.getByRole('heading', { name: 'Push to GitLab' })).toBeInTheDocument();
-      expect(container.textContent).not.toContain('GitHub');
-    });
-
-    it('falls back to the host when the forge is unknown', () => {
-      // A self-managed instance gets its address shown, not a guessed vendor.
-      const { container } = render(
-        <PublishBranchDropdown
-          {...makeProps({ projectGithubStatus: selfManagedStatus, currentBranch: 'main' })}
-        />
-      );
-
-      fireEvent.click(screen.getByText('Push'));
-
-      expect(container.querySelector('.publish-branch-description')).toHaveTextContent(
-        'Commits your changes and pushes the main branch to git.acme.com.'
-      );
-      expect(container.textContent).not.toContain('GitHub');
-    });
-
-    it('does not offer PR creation for a non-GitHub remote', () => {
-      // `gh pr create` has nothing to talk to here.
-      const onCreatePR = vi.fn();
-      render(
-        <PublishBranchDropdown
-          {...makeProps({
-            projectGithubStatus: gitlabStatus,
-            currentBranch: 'feature/x',
-            onCreatePR,
-          })}
-        />
-      );
-
-      fireEvent.click(screen.getByText('Push'));
-
-      expect(screen.queryByText(/create a PR/i)).not.toBeInTheDocument();
-    });
-
-    it('keeps hosting available and disables only the push action without any remote', async () => {
-      const noRemote = {
-        status: 'no-remote',
-        github_repo: null,
-        github_url: null,
-        remote_host: null,
-        remote_forge: null,
-      } as unknown as ProjectGitHubStatus;
-
-      render(<PublishBranchDropdown {...makeProps({ projectGithubStatus: noRemote })} />);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Push' }));
-
-      expect(await screen.findByText('Hosting')).toBeInTheDocument();
-      const pushButtons = screen.getAllByRole('button', { name: 'Push' });
-      expect(pushButtons[0]).toBeEnabled();
-      expect(pushButtons[pushButtons.length - 1]).toBeDisabled();
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+    expect(screen.getByText('Local')).toBeInTheDocument();
+    expect(screen.getByText('Remote')).toBeInTheDocument();
+    expect(screen.queryByText('Hosting')).not.toBeInTheDocument();
   });
 });

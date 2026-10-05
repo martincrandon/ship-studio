@@ -50,12 +50,13 @@ export interface SwitchResult {
   error: string | null;
 }
 
-/** Result of a publish operation */
-export interface PublishResult {
-  /** Deployment URL (may be empty initially) */
-  url: string;
-  /** Deployment state */
-  state: string;
+/** Result of pushing a branch that already has a local commit. */
+export interface PushResult {
+  branch: string;
+  remote: string;
+  upstream: string | null;
+  /** Full SHA returned from the commit that was pushed. */
+  commitSha: string;
 }
 
 /**
@@ -106,12 +107,14 @@ export async function getCurrentBranch(projectPath: string): Promise<string> {
  * @param projectPath - Absolute path to the project directory
  * @param branchName - Name of the branch to switch to
  * @param autoStash - Whether to automatically stash uncommitted changes
+ * @param carryChanges - Carry the working changes through Git's safe checkout, without stashing or pulling
  * @returns Result with success status and any errors
  */
 export async function switchBranch(
   projectPath: string,
   branchName: string,
-  autoStash = true
+  autoStash = true,
+  carryChanges = false
 ): Promise<SwitchResult> {
   const result = await invoke<{
     success: boolean;
@@ -119,7 +122,7 @@ export async function switchBranch(
     pending_stash_from: string | null;
     stash_applied: boolean;
     error: string | null;
-  }>('switch_branch', { projectPath, branchName, autoStash });
+  }>('switch_branch', { projectPath, branchName, autoStash, carryChanges });
 
   return {
     success: result.success,
@@ -294,7 +297,8 @@ export async function getBranchGraph(
  * @param branchName - Local branch to push
  */
 export async function pushBranch(projectPath: string, branchName: string): Promise<void> {
-  return invoke('push_branch', { projectPath, branchName });
+  await invoke('push_branch', { projectPath, branchName });
+  syncAfterGitActivity();
 }
 
 /**
@@ -320,23 +324,47 @@ export async function setDefaultBaseBranch(
 }
 
 /**
- * Publish (push) the current branch to origin.
- * Commits any uncommitted changes before pushing.
+ * Push existing commits from the current branch. This operation leaves
+ * uncommitted working-tree changes alone.
  * @param projectPath - Absolute path to the project directory
- * @param commitMessage - Optional commit message
- * @returns Publish result
+ * @param remote - Optional configured remote to set as this branch's upstream
+ * @param expectedBranch - Branch shown to the user when the action began
+ * @returns The destination and exact commit SHA pushed
  */
-export async function publishBranch(
+export async function pushCurrentBranch(
   projectPath: string,
-  commitMessage?: string
-): Promise<PublishResult> {
-  const result = await invoke<PublishResult>('publish_branch', { projectPath, commitMessage });
+  remote?: string | null,
+  expectedBranch?: string | null
+): Promise<PushResult> {
+  const result = await invoke<{
+    branch: string;
+    remote: string;
+    upstream: string | null;
+    commit_sha: string;
+  }>('push_current_branch', {
+    projectPath,
+    remote: remote ?? null,
+    expectedBranch: expectedBranch ?? null,
+  });
   // You have just proved you have network and credentials, and you are already
   // waiting on the remote. Comments ride out on the back of that rather than
   // waiting for a timer — this is the moment a teammate most expects to see
   // what you said.
   syncAfterGitActivity();
-  return result;
+  return {
+    branch: result.branch,
+    remote: result.remote,
+    upstream: result.upstream,
+    commitSha: result.commit_sha,
+  };
+}
+
+/**
+ * Compatibility wrapper retained for existing app call sites. Push now sends
+ * only commits that already exist; commitChanges is the separate local action.
+ */
+export async function publishBranch(projectPath: string): Promise<PushResult> {
+  return pushCurrentBranch(projectPath);
 }
 
 /**

@@ -4,7 +4,6 @@ use crate::cache::GIT_CACHE;
 use crate::errors::CommandError;
 use crate::utils::validate_project_path;
 
-use super::git_stage_and_commit;
 // Network git ops (fetch, pull, merge) go through the workspace-scoped helper in
 // the parent module so they authenticate as the project's workspace login.
 // Pull/merge mutate the index, so they additionally retry on .git/index.lock
@@ -356,14 +355,45 @@ pub async fn discard_changes(project_path: String) -> Result<(), CommandError> {
 /// Stage all changes and create a commit with the given message.
 /// Returns true if a commit was made, false if there was nothing to commit.
 #[tauri::command]
-#[tracing::instrument(skip(project_path, message), fields(project = %project_path))]
-pub async fn commit_changes(project_path: String, message: String) -> Result<bool, CommandError> {
+#[tracing::instrument(skip(project_path, message, agent), fields(project = %project_path))]
+pub async fn commit_changes(
+    project_path: String,
+    message: String,
+    agent: Option<String>,
+    expected_branch: Option<String>,
+) -> Result<bool, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
+    let message = message.trim();
+    if message.is_empty() {
+        return Err(CommandError::expected(
+            "Add a commit message before creating a local commit.",
+        ));
+    }
+    if let Some(agent_name) = agent.as_deref() {
+        if !crate::agent::ALL_AGENTS
+            .iter()
+            .any(|agent| agent.display_name == agent_name)
+        {
+            return Err(CommandError::expected(
+                "The commit message attribution is invalid. Generate it again or commit it as your own message.",
+            ));
+        }
+    }
+    let branch = super::ensure_branch_mutation_is_safe(
+        &validated_path,
+        expected_branch.as_deref(),
+        "commit",
+    )?;
     // Self-heal a missing user.name/user.email from the gh CLI identity before
     // committing, mirroring push_to_github — without it, Submit for Review's
     // auto-commit dies on git's "Please tell me who you are" (issue #276).
     let _ = crate::commands::github::ensure_git_identity(&validated_path);
-    let committed = git_stage_and_commit(&validated_path, &message)?;
+    let committed = super::git_stage_and_commit_authored_on_branch(
+        &validated_path,
+        message,
+        agent.as_deref(),
+        Some(&branch),
+    )?;
     if committed {
         GIT_CACHE.invalidate_status(&project_path);
     }

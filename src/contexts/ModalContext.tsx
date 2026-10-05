@@ -42,6 +42,7 @@ export type ModalId =
   | 'commandPalette'
   | 'shopifyStore'
   | 'deployments'
+  | 'commitChanges'
   | 'worktreeCreate'
   | 'siteUrlImport'
   | 'migrationFidelity';

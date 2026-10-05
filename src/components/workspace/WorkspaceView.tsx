@@ -22,6 +22,7 @@ import {
 } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { logger } from '../../lib/logger';
+import { classifyGitPushError } from '../../lib/errors';
 import { setTerminalState } from '../../lib/project';
 import type { PreviewHandle, InspectTab } from '../preview/Preview';
 import { CompactWorkspace } from './CompactWorkspace';
@@ -58,7 +59,11 @@ import type { Toast, ToastType } from '../../hooks/useToasts';
 import type { NotificationSettings } from '../../lib/sounds';
 import type { IntegrationState, AuthTerminalConfig } from '../../hooks/useIntegrationStatus';
 import type { BranchInfo, PullRequestInfo } from '../../lib/branches';
+import { pushCurrentBranch, type PushResult } from '../../lib/branches';
 import type { ChangedFile } from '../../lib/git';
+import type { SourceControlSnapshot } from '../../hooks/useBranchManagement';
+import { useAsyncState } from '../../hooks/useAsyncState';
+import { CommitChangesModal, type CommitIntent } from '../branches/CommitChangesModal';
 import type { LoadedPlugin, PluginFailure } from '../../hooks/usePlugins';
 import type { PluginThemeData } from '../../contexts/PluginContext';
 import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
@@ -234,6 +239,7 @@ interface BranchProps {
   openPRs: PullRequestInfo[];
   hasUncommittedChanges: boolean;
   changedFiles: ChangedFile[];
+  sourceControlSnapshot: SourceControlSnapshot | null;
   showSubmitReview: string | null;
   setShowSubmitReview: (branch: string | null) => void;
   isBranchSwitching: boolean;
@@ -255,7 +261,7 @@ interface BranchProps {
   /** Whether the repository is mid-merge, as opposed to whether the resolution
    *  panel is on screen. Polled, so a merge started in a terminal counts. */
   repoHasConflicts: boolean;
-  fetchBranchInfo: (projectPath: string) => Promise<void>;
+  fetchBranchInfo: (projectPath: string, destinationRemote?: string) => Promise<void>;
   checkGitStatus: (projectPath: string) => Promise<void>;
   handleBranchSwitch: (branchName: string) => Promise<void>;
   handlePullLatest: () => Promise<void>;
@@ -476,6 +482,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   const mcpModal = useModal('mcp');
   const devCommandModal = useModal('devCommand');
   const projectSettingsModal = useModal('projectSettings');
+  const commitChangesModal = useModal('commitChanges');
   useEffect(() => {
     const cleanups = [
       envEditorModal.registerOnClose(focusActiveTerminal),
@@ -483,6 +490,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
       assetsPanelModal.registerOnClose(focusActiveTerminal),
       devCommandModal.registerOnClose(focusActiveTerminal),
       projectSettingsModal.registerOnClose(focusActiveTerminal),
+      commitChangesModal.registerOnClose(focusActiveTerminal),
     ];
     return () => cleanups.forEach((fn) => fn());
   }, [
@@ -491,6 +499,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     assetsPanelModal,
     devCommandModal,
     projectSettingsModal,
+    commitChangesModal,
     focusActiveTerminal,
   ]);
 
@@ -618,6 +627,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     openPRs,
     hasUncommittedChanges,
     changedFiles,
+    sourceControlSnapshot,
     showSubmitReview,
     setShowSubmitReview,
     isBranchSwitching,
@@ -657,6 +667,94 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     handleAutoAcceptWarningAccept,
     handleSaveDevCommand,
   } = lifecycle;
+
+  const currentSourceControl =
+    sourceControlSnapshot?.projectPath === currentProject.path ? sourceControlSnapshot : null;
+  const [commitDialogRequest, setCommitDialogRequest] = useState<{
+    projectPath: string;
+    intent: CommitIntent;
+    expectedBranch: string | null;
+    changedFiles: ChangedFile[] | null;
+  } | null>(null);
+  const [lastPush, setLastPush] = useState<{ result: PushResult; pushedAt: number } | null>(null);
+
+  const currentPush = useAsyncState(
+    (request: { projectPath: string; branch: string }) =>
+      pushCurrentBranch(request.projectPath, undefined, request.branch),
+    {
+      onError: (error) => {
+        const classified = classifyGitPushError(error);
+        const expected = classified.errorType !== 'generic';
+        showToast(`Push failed: ${classified.message}`, expected ? 'info' : 'error');
+        handlePublishError(classified.message, classified.errorType);
+      },
+    }
+  );
+
+  const openCommit = useCallback(
+    (intent: CommitIntent) => {
+      const status = currentSourceControl?.syncStatus ?? null;
+      const expectedBranch = status
+        ? status.status === 'detached' || status.status === 'not-repository'
+          ? null
+          : status.branch
+        : currentBranch;
+      setCommitDialogRequest({
+        projectPath: currentProject.path,
+        intent,
+        expectedBranch,
+        changedFiles: currentSourceControl?.changedFiles ?? null,
+      });
+      commitChangesModal.open();
+    },
+    [currentSourceControl, currentProject.path, currentBranch, commitChangesModal]
+  );
+
+  const pushCurrentCommits = useCallback(async () => {
+    const status = currentSourceControl?.syncStatus;
+    const branch = status?.branch;
+    if (!branch || status?.status !== 'ready' || status.behind !== 0 || (status.ahead ?? 0) <= 0) {
+      return;
+    }
+    setIsPublishing(true);
+    const result = await currentPush.execute({ projectPath: currentProject.path, branch });
+    setIsPublishing(false);
+    if (!result) return;
+    setLastPush({ result, pushedAt: Date.now() });
+    showToast('Pushed existing commits', 'success');
+    void fetchBranchInfo(currentProject.path);
+    void handleGitHubStatusChange();
+    void worktree.refresh();
+  }, [
+    currentSourceControl,
+    currentProject.path,
+    currentPush.execute,
+    setIsPublishing,
+    showToast,
+    fetchBranchInfo,
+    handleGitHubStatusChange,
+    worktree.refresh,
+  ]);
+
+  const canCommit =
+    currentSourceControl?.syncStatus !== null &&
+    currentSourceControl?.syncStatus !== undefined &&
+    (currentSourceControl?.changedFiles?.length ?? 0) > 0 &&
+    currentSourceControl?.syncStatus?.branch !== null &&
+    currentSourceControl?.syncStatus?.branch !== undefined &&
+    currentSourceControl.syncStatus.status !== 'not-repository' &&
+    currentSourceControl.syncStatus.status !== 'detached';
+  const canPushCurrentCommits =
+    currentSourceControl?.syncStatus?.status === 'ready' &&
+    currentSourceControl.syncStatus.behind === 0 &&
+    (currentSourceControl.syncStatus.ahead ?? 0) > 0;
+  const canCommitAndPush =
+    canCommit &&
+    (currentSourceControl?.syncStatus?.status !== 'ready' ||
+      currentSourceControl.syncStatus.behind === 0) &&
+    (Boolean(currentSourceControl?.syncStatus?.upstream) ||
+      (currentSourceControl?.syncStatus?.status === 'no-upstream' &&
+        currentSourceControl.syncStatus.remotes.length > 0));
 
   // Web frameworks always receive the iframe preview. Generic projects only
   // receive it when they have a configured dev command (#691); native mobile
@@ -855,6 +953,9 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   useWorkspaceCommands({
     currentBranch,
     hasUncommittedChanges,
+    canCommit,
+    canPushCurrentCommits,
+    canCommitAndPush,
     // The repository's actual state, not whether the panel happens to be open.
     // Gating the palette entry on the panel meant "Resolve merge conflicts"
     // only appeared once you had already found your way to the resolution UI,
@@ -863,7 +964,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     setWorkspaceTab,
     setShowSubmitReview,
     handleResolveConflicts: () => void handleResolveConflicts(),
-    openPushDropdown: () => setForcePublishOpen(true),
+    openCommit,
+    pushCurrentCommits,
     openBranchesMenu: () => setForceBranchesOpen(true),
     openCreateBranch: () => {
       setIsPreviewHidden(false);
@@ -1115,11 +1217,20 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     openPRs,
     hasUncommittedChanges,
     changedFiles,
+    sourceChangedFiles: currentSourceControl?.changedFiles ?? null,
+    sourceChangedFileSummary: currentSourceControl?.changedFileSummary ?? null,
+    syncStatus: currentSourceControl?.syncStatus ?? null,
+    statusLoaded: currentSourceControl?.syncStatusLoaded ?? false,
+    sourceChangedFilesLoading:
+      currentSourceControl === null || !currentSourceControl.changedFilesLoaded,
+    onPushComplete: (result) => setLastPush({ result, pushedAt: Date.now() }),
+    lastPush,
+    hideHosting: compactWorkspaceToolbarEnabled,
     isPulling,
     isBranchSwitching,
     isRepositoryViewActive: workspaceTab === 'branches' || workspaceTab === 'prs',
     onPullLatest: () => void handlePullLatest(),
-    onBranchSwitch: (branch) => void handleBranchSwitch(branch),
+    onBranchSwitch: handleBranchSwitch,
     onViewBranches: () => {
       setIsPreviewHidden(false);
       setWorkspaceTab('branches');
@@ -1137,9 +1248,9 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     isPublishing,
     setIsPublishing,
     onPublishError: handlePublishError,
-    onPublishStatusChange: () => {
+    onPublishStatusChange: (destinationRemote?: string) => {
       void handleGitHubStatusChange();
-      void fetchBranchInfo(currentProject.path);
+      void fetchBranchInfo(currentProject.path, destinationRemote);
       void worktree.refresh();
     },
     onCreatePR: (branch) => setShowSubmitReview(branch ?? currentBranch ?? 'main'),
@@ -1155,6 +1266,21 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
 
   return (
     <>
+      {commitDialogRequest && (
+        <CommitChangesModal
+          projectPath={commitDialogRequest.projectPath}
+          expectedBranch={commitDialogRequest.expectedBranch}
+          changedFiles={commitDialogRequest.changedFiles}
+          syncStatus={currentSourceControl?.syncStatus ?? null}
+          intent={commitDialogRequest.intent}
+          onStatusChange={() => {
+            void fetchBranchInfo(currentProject.path);
+            void handleGitHubStatusChange();
+            void worktree.refresh();
+          }}
+          onPushComplete={(result) => setLastPush({ result, pushedAt: Date.now() })}
+        />
+      )}
       <div
         className={`app workspace${
           compactWorkspaceToolbarEnabled ? ' workspace--compact-toolbar' : ''

@@ -157,6 +157,10 @@
   text-overflow: ellipsis;
 }
 
+.hosting-url--placeholder {
+  cursor: default;
+}
+
 .hosting-url-value {
   min-width: 0;
   color: var(--text-secondary);
@@ -164,7 +168,7 @@
   font-size: var(--font-size-body-sm);
 }
 
-.hosting-url:hover .hosting-url-value {
+.hosting-url:not(.hosting-url--placeholder):hover .hosting-url-value {
   color: var(--text-primary);
 }
 

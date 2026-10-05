@@ -18,8 +18,13 @@ import {
   switchBranch,
   pullAndMerge,
 } from '../lib/branches';
-import { getChangedFiles, ChangedFile } from '../lib/git';
-import { invoke } from '@tauri-apps/api/core';
+import {
+  getChangedFileSummary,
+  getGitSyncStatus,
+  type ChangedFile,
+  type ChangedFileSummary,
+  type GitSyncStatus,
+} from '../lib/git';
 import { logger } from '../lib/logger';
 import {
   asCommandError,
@@ -43,6 +48,17 @@ export interface UseBranchManagementParams {
   fetchBranchInfoExternal?: (projectPath: string) => Promise<void>;
 }
 
+/** The last independently verified worktree and upstream snapshot for a project. */
+export interface SourceControlSnapshot {
+  projectPath: string;
+  changedFiles: ChangedFile[] | null;
+  changedFileSummary: ChangedFileSummary | null;
+  changedFilesLoaded: boolean;
+  syncStatus: GitSyncStatus | null;
+  syncStatusLoaded: boolean;
+  syncStatusRemote: string | null;
+}
+
 export function useBranchManagement({
   currentProject,
   previewRef,
@@ -55,6 +71,13 @@ export function useBranchManagement({
   const [openPRs, setOpenPRs] = useState<PullRequestInfo[]>([]);
   const [hasUncommittedChanges, setHasUncommittedChanges] = useState(false);
   const [changedFiles, setChangedFiles] = useState<ChangedFile[]>([]);
+  const [sourceControlSnapshot, setSourceControlSnapshot] = useState<SourceControlSnapshot | null>(
+    null
+  );
+  const currentProjectPathRef = useRef(currentProject?.path ?? null);
+  currentProjectPathRef.current = currentProject?.path ?? null;
+  const sourceRefreshSequenceRef = useRef(0);
+  const comparisonRemoteRef = useRef<{ projectPath: string; remote: string } | null>(null);
   const [showSubmitReview, setShowSubmitReview] = useState<string | null>(null);
   const [isBranchSwitching, setIsBranchSwitching] = useState(false);
   const [gitError, setGitError] = useState<{
@@ -74,31 +97,132 @@ export function useBranchManagement({
   // Pull-latest state (the small sync button beside the branch indicator)
   const [isPulling, setIsPulling] = useState(false);
 
+  // Worktree dirt and commits ahead of the upstream are separate facts. Keep
+  // each command's failure as unknown so a failed lookup never becomes zero.
+  const refreshSourceControl = useCallback(
+    async (projectPath: string, destinationRemote?: string) => {
+      const isCurrentProject = () =>
+        currentProjectPathRef.current === null || currentProjectPathRef.current === projectPath;
+      if (!isCurrentProject()) return { files: null, syncStatus: null };
+      if (destinationRemote !== undefined) {
+        comparisonRemoteRef.current = { projectPath, remote: destinationRemote };
+      }
+      const requestedRemote =
+        destinationRemote ??
+        (comparisonRemoteRef.current?.projectPath === projectPath
+          ? comparisonRemoteRef.current.remote
+          : null);
+      const sequence = ++sourceRefreshSequenceRef.current;
+      const isCurrentRefresh = () =>
+        isCurrentProject() && sourceRefreshSequenceRef.current === sequence;
+      const blankSnapshot = (): SourceControlSnapshot => ({
+        projectPath,
+        changedFiles: null,
+        changedFileSummary: null,
+        changedFilesLoaded: false,
+        syncStatus: null,
+        syncStatusLoaded: false,
+        syncStatusRemote: null,
+      });
+      const updateSnapshot = (update: Partial<SourceControlSnapshot>) => {
+        if (!isCurrentRefresh()) return;
+        setSourceControlSnapshot((previous) => ({
+          ...(previous?.projectPath === projectPath ? previous : blankSnapshot()),
+          ...update,
+          projectPath,
+        }));
+      };
+
+      setSourceControlSnapshot((previous) => {
+        const current = previous?.projectPath === projectPath ? previous : blankSnapshot();
+        if (destinationRemote === undefined && current.syncStatusRemote === requestedRemote) {
+          return current;
+        }
+        return {
+          ...current,
+          syncStatus: null,
+          syncStatusLoaded: false,
+          syncStatusRemote: requestedRemote,
+        };
+      });
+      if (currentProjectPathRef.current === projectPath) {
+        setChangedFiles([]);
+        setHasUncommittedChanges(false);
+      }
+
+      const filesPromise = getChangedFileSummary(projectPath)
+        .then((summary) => {
+          const files = summary.files;
+          updateSnapshot({
+            changedFiles: files,
+            changedFileSummary: summary,
+            changedFilesLoaded: true,
+          });
+          if (isCurrentRefresh()) {
+            setChangedFiles(files);
+            setHasUncommittedChanges(files.length > 0);
+          }
+          return summary;
+        })
+        .catch((error: unknown) => {
+          logger.warn('Failed to check uncommitted files', { projectPath, error: String(error) });
+          updateSnapshot({
+            changedFiles: null,
+            changedFileSummary: null,
+            changedFilesLoaded: true,
+          });
+          if (isCurrentRefresh()) {
+            setChangedFiles([]);
+            setHasUncommittedChanges(false);
+          }
+          return null;
+        });
+
+      const syncPromise = getGitSyncStatus(projectPath, requestedRemote)
+        .then((syncStatus) => {
+          updateSnapshot({ syncStatus, syncStatusLoaded: true, syncStatusRemote: requestedRemote });
+          return syncStatus;
+        })
+        .catch((error: unknown) => {
+          logger.warn('Failed to check Git remote status', { projectPath, error: String(error) });
+          updateSnapshot({
+            syncStatus: null,
+            syncStatusLoaded: true,
+            syncStatusRemote: requestedRemote,
+          });
+          return null;
+        });
+
+      const [files, syncStatus] = await Promise.all([filesPromise, syncPromise]);
+      return { files: files?.files ?? null, syncStatus };
+    },
+    []
+  );
+
   // Fetch branch info for a project
-  const fetchBranchInfo = useCallback(async (projectPath: string) => {
-    try {
-      const [branch, branchList] = await Promise.all([
-        getCurrentBranch(projectPath).catch(() => null),
-        listBranches(projectPath).catch(() => []),
-      ]);
-      setCurrentBranch(branch);
-      setBranches(branchList);
+  const fetchBranchInfo = useCallback(
+    async (projectPath: string, destinationRemote?: string) => {
+      void refreshSourceControl(projectPath, destinationRemote);
+      try {
+        const [branch, branchList] = await Promise.all([
+          getCurrentBranch(projectPath).catch(() => null),
+          listBranches(projectPath).catch(() => []),
+        ]);
+        setCurrentBranch(branch);
+        setBranches(branchList);
 
-      // Fetch open PRs for branch status display (non-blocking)
-      void listPullRequests(projectPath)
-        .then((prs) => setOpenPRs(prs.filter((pr) => pr.state === 'OPEN')))
-        .catch(() => setOpenPRs([]));
-
-      // Check for uncommitted changes using the backend
-      void invoke<boolean>('check_git_has_changes', { projectPath })
-        .then((hasChanges) => setHasUncommittedChanges(hasChanges))
-        .catch(() => setHasUncommittedChanges(false));
-    } catch (e) {
-      logger.error('Failed to fetch branch info', { error: e });
-      setCurrentBranch(null);
-      setBranches([]);
-    }
-  }, []);
+        // Fetch open PRs for branch status display (non-blocking)
+        void listPullRequests(projectPath)
+          .then((prs) => setOpenPRs(prs.filter((pr) => pr.state === 'OPEN')))
+          .catch(() => setOpenPRs([]));
+      } catch (e) {
+        logger.error('Failed to fetch branch info', { error: e });
+        setCurrentBranch(null);
+        setBranches([]);
+      }
+    },
+    [refreshSourceControl]
+  );
 
   // Use a ref for currentBranch in the polling callback to avoid recreating the
   // interval every time the branch changes (which tears down and restarts polling).
@@ -115,10 +239,9 @@ export function useBranchManagement({
   const checkGitStatus = useCallback(
     async (projectPath: string) => {
       try {
-        const [branch, hasChanges, files, conflicted] = await Promise.all([
+        const [branch, sourceControl, conflicted] = await Promise.all([
           getCurrentBranch(projectPath).catch(() => null),
-          invoke<boolean>('check_git_has_changes', { projectPath }).catch(() => false),
-          getChangedFiles(projectPath).catch(() => []),
+          refreshSourceControl(projectPath),
           // A merge can be started outside the app — by the user in a terminal,
           // or by their agent — so this is polled like the branch itself rather
           // than only being set by the flows in this file.
@@ -135,21 +258,27 @@ export function useBranchManagement({
             .catch((err) => logger.warn('Failed to refresh branch list', { error: err }));
         }
 
-        // Detect external push: had changes before, now synced, same branch
-        if (hadChangesRef.current && !hasChanges && branch === currentBranchRef.current) {
+        // Detect external push: pending local work is now fully synchronized on
+        // the same branch. Unknown comparisons do not count as synchronized.
+        const hasPendingWork =
+          (sourceControl.files?.length ?? 0) > 0 ||
+          (sourceControl.syncStatus?.status === 'ready' &&
+            (sourceControl.syncStatus.ahead ?? 0) > 0);
+        const isKnownSynced =
+          sourceControl.files !== null &&
+          sourceControl.syncStatus?.status === 'ready' &&
+          sourceControl.syncStatus.ahead === 0;
+        if (hadChangesRef.current && isKnownSynced && branch === currentBranchRef.current) {
           void trackEvent('branch_published', { source: 'external', $screen_name: 'Workspace' });
         }
-        hadChangesRef.current = hasChanges;
-
-        setHasUncommittedChanges(hasChanges);
-        setChangedFiles(files);
+        hadChangesRef.current = hasPendingWork;
         setRepoHasConflicts(conflicted);
       } catch (e) {
         // Silently ignore errors during periodic checks
         logger.warn('Error checking git status', { error: e });
       }
     },
-    [] // stable — reads currentBranch from ref
+    [refreshSourceControl] // stable — reads currentBranch from ref
   );
 
   // Track tab visibility so polling pauses when the window is hidden
@@ -215,6 +344,7 @@ export function useBranchManagement({
       setCurrentBranch(branchName);
       // Reset uncommitted changes immediately - will be updated by fetchBranchInfo
       setHasUncommittedChanges(false);
+      setChangedFiles([]);
       if (currentProject) {
         await fetchBranchInfo(currentProject.path);
         // Re-assert: fetchBranchInfo may have set stale cached branch data
@@ -411,6 +541,7 @@ export function useBranchManagement({
     setBranches([]);
     setHasUncommittedChanges(false);
     setChangedFiles([]);
+    setSourceControlSnapshot(null);
   }, []);
 
   return {
@@ -421,6 +552,8 @@ export function useBranchManagement({
     openPRs,
     hasUncommittedChanges,
     changedFiles,
+    sourceControlSnapshot:
+      sourceControlSnapshot?.projectPath === currentProject?.path ? sourceControlSnapshot : null,
     showSubmitReview,
     setShowSubmitReview,
     isBranchSwitching,

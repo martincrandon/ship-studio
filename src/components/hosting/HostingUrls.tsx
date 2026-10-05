@@ -117,11 +117,24 @@ function displayHost(url: string): string {
 
 interface Props {
   deployment?: Deployment;
+  notDeployed?: boolean;
   onOpen: (url: string) => void;
 }
 
-export function HostingUrls({ deployment, onOpen }: Props) {
+export function HostingUrls({ deployment, notDeployed = false, onOpen }: Props) {
   const rows = rowsFor(deployment);
+  if (!deployment && notDeployed) {
+    return (
+      <div className="hosting-urls">
+        {['Domain', 'Deployment'].map((label) => (
+          <div className="hosting-url hosting-url--placeholder" key={label}>
+            <span className="hosting-url-label">{label}</span>
+            <span className="hosting-url-value">Not deployed yet</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
   if (rows.length === 0) return null;
 
   return (

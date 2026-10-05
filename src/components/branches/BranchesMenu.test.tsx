@@ -149,6 +149,36 @@ describe('BranchesMenu', () => {
     ).toBeTruthy();
   });
 
+  it('keeps main at the top of the branch list while marking the selected branch current', () => {
+    const props = makeProps({
+      currentBranch: 'feature/menu',
+      branches: [
+        branch('feature/menu', 100, true),
+        branch('newest', 90),
+        branch('newer', 80),
+        branch('older', 70),
+        branch('oldest', 60),
+        branch('outside-preview', 50),
+        branch('main', 1),
+      ],
+    });
+    render(<BranchesMenu {...props} />);
+    const branchesSection = screen.getByText('View all branches').closest('.branches-menu-section');
+    const rows = [...(branchesSection?.querySelectorAll('.branches-menu-branch-row') ?? [])];
+
+    expect(rows.map((row) => row.querySelector('.branches-menu-row-label')?.textContent)).toEqual([
+      'main',
+      'feature/menu',
+      'newest',
+      'newer',
+      'older',
+      'oldest',
+    ]);
+    expect(rows[0]?.querySelector('[data-icon-name="GitBranchMainIcon"]')).toBeTruthy();
+    expect(rows[1]).toHaveClass('is-current');
+    expect(rows[1]?.querySelector('.branches-menu-row-meta')).toHaveTextContent('Current');
+  });
+
   it('uses the empty main-branch icon only when main has no other branches', () => {
     const props = makeProps({
       currentBranch: 'main',

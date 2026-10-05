@@ -197,7 +197,7 @@
 }
 
 .branch-card-name > svg,
-.branch-card-name > .branch-live-badge,
+.branch-card-name > .branch-default-badge,
 .branch-card-name > .branch-card-current-label {
   flex-shrink: 0;
 }

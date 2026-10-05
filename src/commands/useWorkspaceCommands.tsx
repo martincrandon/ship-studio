@@ -7,6 +7,7 @@ import {
   PullIcon,
   PullRequestIcon,
   PushIcon,
+  SaveIcon,
   GlobeIcon,
   WarningIcon,
 } from '@/components/icons';
@@ -24,12 +25,20 @@ import {
 export interface UseWorkspaceCommandsParams {
   currentBranch: string | null;
   hasUncommittedChanges: boolean;
+  /** True only when changed-file state is known and has at least one file. */
+  canCommit: boolean;
+  /** True only when a known upstream comparison has commits ahead. */
+  canPushCurrentCommits: boolean;
+  /** True when there are known worktree changes and a usable push destination. */
+  canCommitAndPush: boolean;
   hasConflicts: boolean;
   setWorkspaceTab: (tab: 'preview' | 'code' | 'branches' | 'prs') => void;
   setShowSubmitReview: (branch: string | null) => void;
   handleResolveConflicts: () => void | Promise<void>;
-  /** Opens the header Push dropdown */
-  openPushDropdown: () => void;
+  /** Opens the shared commit dialog in local-only or commit-and-push mode. */
+  openCommit: (mode: 'local' | 'commit-and-push') => void;
+  /** Pushes existing commits only and surfaces failures to the user. */
+  pushCurrentCommits: () => void | Promise<void>;
   /** Opens the header Branches workflow menu */
   openBranchesMenu: () => void;
   /** Opens the full Branches view with its creation form active. */
@@ -54,11 +63,15 @@ export interface UseWorkspaceCommandsParams {
 export function useWorkspaceCommands({
   currentBranch,
   hasUncommittedChanges,
+  canCommit,
+  canPushCurrentCommits,
+  canCommitAndPush,
   hasConflicts,
   setWorkspaceTab,
   setShowSubmitReview,
   handleResolveConflicts,
-  openPushDropdown,
+  openCommit,
+  pushCurrentCommits,
   openBranchesMenu,
   openCreateBranch,
   handlePullLatest,
@@ -87,14 +100,34 @@ export function useWorkspaceCommands({
         run: () => openModal('deployments'),
       },
       {
+        id: 'git.commit',
+        title: 'Commit changes…',
+        subtitle: 'Create a local commit',
+        icon: <SaveIcon size={14} />,
+        category: 'branch',
+        when: ({ kind }) => kind === 'project' && canCommit,
+        keywords: ['save', 'checkpoint', 'git', 'local'],
+        run: () => openCommit('local'),
+      },
+      {
         id: 'git.push',
         title: `Push to ${target}`,
-        subtitle: hasUncommittedChanges ? 'Commits your changes, then pushes' : undefined,
+        subtitle: 'Push existing commits; uncommitted files stay local',
         icon: <PushIcon size={14} />,
         category: 'branch',
-        when: ({ kind }) => kind === 'project' && repoAvailable,
-        keywords: ['publish', 'sync', 'upload', 'commit', 'git'],
-        run: openPushDropdown,
+        when: ({ kind }) => kind === 'project' && canPushCurrentCommits,
+        keywords: ['publish', 'sync', 'upload', 'git'],
+        run: pushCurrentCommits,
+      },
+      {
+        id: 'git.commitAndPush',
+        title: 'Commit and push…',
+        subtitle: `Create a commit, then push to ${target}`,
+        icon: <PushIcon size={14} />,
+        category: 'branch',
+        when: ({ kind }) => kind === 'project' && canCommitAndPush,
+        keywords: ['publish', 'sync', 'upload', 'git'],
+        run: () => openCommit('commit-and-push'),
       },
       {
         id: 'git.pull',
@@ -194,11 +227,15 @@ export function useWorkspaceCommands({
     [
       currentBranch,
       hasUncommittedChanges,
+      canCommit,
+      canPushCurrentCommits,
+      canCommitAndPush,
       hasConflicts,
       setWorkspaceTab,
       setShowSubmitReview,
       handleResolveConflicts,
-      openPushDropdown,
+      openCommit,
+      pushCurrentCommits,
       openBranchesMenu,
       openCreateBranch,
       handlePullLatest,

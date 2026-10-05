@@ -80,6 +80,20 @@ export function formatCommandError(err: CommandError): string {
   }
 }
 
+export type GitPushErrorType = 'push_rejected' | 'auth_error' | 'merge_conflict' | 'generic';
+
+/** Normalize a push failure once so menus and shortcuts show the same recovery path. */
+export function classifyGitPushError(value: unknown): {
+  message: string;
+  errorType: GitPushErrorType;
+} {
+  const message = formatCommandError(asCommandError(value));
+  if (message.includes('MERGE_CONFLICT')) return { message, errorType: 'merge_conflict' };
+  if (message.includes('PUSH_REJECTED')) return { message, errorType: 'push_rejected' };
+  if (message.includes('AUTH_ERROR')) return { message, errorType: 'auth_error' };
+  return { message, errorType: 'generic' };
+}
+
 /**
  * True when a caught error is one the backend classified as Expected — a
  * known environment state, not a malfunction. Telemetry chokepoints (error

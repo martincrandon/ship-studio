@@ -17,14 +17,19 @@ import { HostingRow, HostingLinks } from './HostingRow';
 import { HostingUrls } from './HostingUrls';
 import { HostingTokenModal } from './HostingTokenModal';
 import { HostingLinkPicker } from './HostingLinkPicker';
+import { Button } from '../primitives/Button';
+import { IconButton } from '../primitives/IconButton';
+import { ExternalLinkIcon, GlobeIcon } from '@/components/icons';
 import { copyFor } from '../../lib/hostingCopy';
 import { logger } from '../../lib/logger';
 import {
+  ACCOUNT_CREDENTIALS_CHANGED_EVENT,
   getProjectAccountId,
   notifyAccountCredentialsChanged,
   DEFAULT_ACCOUNT_ID,
 } from '../../lib/accounts';
-import type { CloudflareProduct, HostingProvider } from '../../lib/hosting';
+import type { AccountCredentialsChangedDetail } from '../../lib/accounts';
+import { PROVIDER_LABELS, type CloudflareProduct, type HostingProvider } from '../../lib/hosting';
 
 interface Props {
   projectPath: string;
@@ -32,10 +37,25 @@ interface Props {
   open: boolean;
   /** When the push completed, if it happened in this session. */
   pushedAt?: number;
+  /** The accepted push commit and branch, so the monitor cannot drift to a newer push. */
+  pushedCommitSha?: string;
+  pushedBranch?: string;
 }
 
-export function HostingSection({ projectPath, open, pushedAt }: Props) {
-  const { status, state, refresh } = useHostingStatus({ projectPath, open, pushedAt });
+export function HostingSection({
+  projectPath,
+  open,
+  pushedAt,
+  pushedCommitSha,
+  pushedBranch,
+}: Props) {
+  const { status, state, refresh } = useHostingStatus({
+    projectPath,
+    open,
+    pushedAt,
+    commitSha: pushedCommitSha,
+    branch: pushedBranch,
+  });
   const { showToast } = useOptionalToast();
 
   const [connecting, setConnecting] = useState<{
@@ -69,6 +89,18 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
   const accountId = account?.path === projectPath ? account.id : null;
 
   useEffect(() => {
+    if (!accountId) return;
+    const handleCredentialsChanged = (event: Event) => {
+      const changedAccountId = (event as CustomEvent<AccountCredentialsChangedDetail>).detail
+        ?.accountId;
+      if (changedAccountId === accountId) refresh();
+    };
+    window.addEventListener(ACCOUNT_CREDENTIALS_CHANGED_EVENT, handleCredentialsChanged);
+    return () =>
+      window.removeEventListener(ACCOUNT_CREDENTIALS_CHANGED_EVENT, handleCredentialsChanged);
+  }, [accountId, refresh]);
+
+  useEffect(() => {
     let cancelled = false;
     void getProjectAccountId(projectPath)
       .then((id) => {
@@ -84,7 +116,13 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
     };
   }, [projectPath]);
 
-  const copy = copyFor(state, status?.commit.subject, status?.commit.short_sha);
+  const copy = copyFor(state, status?.commit?.subject, status?.commit?.short_sha);
+  const linkedProvider =
+    state.provider ??
+    (status?.providers.length === 1 ? status.providers[0]?.link.provider : undefined);
+  const linkedProviderName = linkedProvider ? PROVIDER_LABELS[linkedProvider] : null;
+  const dashboardUrl = state.deployment?.dashboard_url;
+  const dashboardLabel = state.provider ? `Open in ${PROVIDER_LABELS[state.provider]}` : null;
 
   const openExternal = useCallback(
     (url?: string | null) => {
@@ -128,9 +166,6 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
             : {}),
         });
         return;
-      case 'no_link':
-        setPicking(true);
-        return;
       case 'offline':
         refresh();
         return;
@@ -142,17 +177,46 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
   return (
     <>
       <section className="publish-hosting-section" aria-labelledby="publish-hosting-heading">
-        <div className="publish-hosting-heading" id="publish-hosting-heading">
-          Hosting
+        <div className="publish-section-heading" id="publish-hosting-heading">
+          <GlobeIcon size={14} />
+          <span>Hosting</span>
+          {linkedProviderName && <strong>{linkedProviderName}</strong>}
         </div>
-        <HostingRow
-          state={state}
-          commitSubject={status?.commit.subject}
-          shortSha={status?.commit.short_sha}
-          onAction={handleAction}
+        {state.kind === 'no_link' ? (
+          <div className="publish-hosting-connect-row">
+            <span>Connect hosting to track deployments</span>
+            <Button variant="default" onClick={() => setPicking(true)}>
+              Connect
+            </Button>
+          </div>
+        ) : (
+          <HostingRow
+            state={state}
+            commitSubject={status?.commit?.subject}
+            shortSha={status?.commit?.short_sha}
+            actionSlot={
+              state.deployment ? (
+                dashboardUrl && dashboardLabel ? (
+                  <IconButton
+                    variant="ghost"
+                    size="compact"
+                    icon={<ExternalLinkIcon size={14} />}
+                    aria-label={dashboardLabel}
+                    title={dashboardLabel}
+                    onClick={() => openExternal(dashboardUrl)}
+                  />
+                ) : null
+              ) : undefined
+            }
+            onAction={handleAction}
+          />
+        )}
+        <HostingUrls
+          deployment={state.deployment}
+          notDeployed={state.kind === 'not_pushed'}
+          onOpen={openExternal}
         />
-        <HostingUrls deployment={state.deployment} onOpen={openExternal} />
-        <HostingLinks state={state} hint={copy.hint} />
+        {state.kind !== 'no_link' && <HostingLinks state={state} hint={copy.hint} />}
       </section>
 
       {/* Gated on a resolved account: a token saved against the wrong
@@ -168,7 +232,6 @@ export function HostingSection({ projectPath, open, pushedAt }: Props) {
             setConnecting(null);
             // Terminals in this workspace get the new token too, so tell them.
             notifyAccountCredentialsChanged(accountId);
-            refresh();
           }}
           onClose={() => setConnecting(null)}
         />

@@ -197,14 +197,28 @@ async fn status_for_link(
     }
 }
 
-/// The state of every provider this project deploys to, for the commit that was
-/// actually pushed.
+/// The state of every provider this project deploys to, for the exact commit
+/// returned by a successful Push operation when a SHA is supplied.
 #[tauri::command]
-#[tracing::instrument(fields(project = %project_path))]
-pub async fn get_hosting_status(project_path: String) -> Result<HostingStatus, CommandError> {
+#[tracing::instrument(skip(commit_sha, branch), fields(project = %project_path))]
+pub async fn get_hosting_status(
+    project_path: String,
+    commit_sha: Option<String>,
+    branch: Option<String>,
+) -> Result<HostingStatus, CommandError> {
     let project = validate_project_path(&project_path)?;
-    let commit = git_ref::pushed_commit(&project)?;
     let links = link::effective_links(&project);
+    let commit = match git_ref::pushed_commit(&project, commit_sha.as_deref(), branch.as_deref()) {
+        Ok(commit) => commit,
+        Err(CommandError::Expected { .. }) if links.is_empty() => {
+            return Ok(HostingStatus {
+                commit: None,
+                providers: Vec::new(),
+                detected: link::unconfirmed_links(&project),
+            });
+        }
+        Err(error) => return Err(error),
+    };
 
     let mut providers = Vec::with_capacity(links.len());
     for link in links {
@@ -238,7 +252,7 @@ pub async fn get_hosting_status(project_path: String) -> Result<HostingStatus, C
     }
 
     Ok(HostingStatus {
-        commit,
+        commit: Some(commit),
         providers,
         detected: link::unconfirmed_links(&project),
     })

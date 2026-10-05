@@ -218,6 +218,105 @@ pub(crate) fn classify_git_net_error(stderr: &str) -> Option<CommandError> {
         .or_else(|| crate::commands::publishing::push_missing_remote_error(stderr))
 }
 
+/// Validate the current branch and reject commits/pushes that would
+/// accidentally continue an in-progress merge, rebase, cherry-pick, revert,
+/// or conflict resolution. When the UI supplies the branch it showed the
+/// user, verify it still matches before mutating Git state.
+pub(crate) fn ensure_branch_mutation_is_safe(
+    path: &std::path::Path,
+    expected_branch: Option<&str>,
+    action: &str,
+) -> Result<String, CommandError> {
+    let branch_output = crate::utils::git_command_in(path)?
+        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .output()
+        .map_err(|error| CommandError::Io {
+            message: error.to_string(),
+        })?;
+    if !branch_output.status.success() {
+        return Err(CommandError::expected(format!(
+            "Can't {action} while this project is in detached HEAD. Switch to a branch first."
+        )));
+    }
+    let branch = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
+    if branch.is_empty() {
+        return Err(CommandError::expected(format!(
+            "Git could not determine the branch to {action}. Switch to a branch and try again."
+        )));
+    }
+    if let Some(expected) = expected_branch {
+        if expected != branch {
+            return Err(CommandError::expected(format!(
+                "The current branch changed from {expected} to {branch} while this action was open. Review the current branch before continuing."
+            )));
+        }
+    }
+
+    let unmerged = crate::utils::git_command_in(path)?
+        .args(["ls-files", "--unmerged"])
+        .output()
+        .map_err(|error| CommandError::Io {
+            message: error.to_string(),
+        })?;
+    if !unmerged.status.success() {
+        return Err(CommandError::expected(format!(
+            "Git could not check for merge conflicts before it tried to {action}. Resolve the Git state and try again."
+        )));
+    }
+    if !String::from_utf8_lossy(&unmerged.stdout).trim().is_empty() {
+        return Err(CommandError::expected(format!(
+            "Can't {action} while merge conflicts are unresolved. Resolve them first."
+        )));
+    }
+
+    for state in [
+        "MERGE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "REVERT_HEAD",
+        "REBASE_HEAD",
+    ] {
+        let output = crate::utils::git_command_in(path)?
+            .args(["rev-parse", "--verify", "--quiet", state])
+            .output()
+            .map_err(|error| CommandError::Io {
+                message: error.to_string(),
+            })?;
+        if output.status.success() {
+            return Err(CommandError::expected(format!(
+                "Can't {action} while Git is in the middle of a merge or replay operation. Finish or abort that operation first."
+            )));
+        }
+    }
+    for state_dir in ["rebase-merge", "rebase-apply"] {
+        let output = crate::utils::git_command_in(path)?
+            .args(["rev-parse", "--git-path", state_dir])
+            .output()
+            .map_err(|error| CommandError::Io {
+                message: error.to_string(),
+            })?;
+        if output.status.success() {
+            let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let state_relative = std::path::Path::new(&raw);
+            let state_path = if state_relative.is_absolute() {
+                state_relative.to_path_buf()
+            } else {
+                // `--git-path` may return a path relative to the current
+                // directory or a relative common git dir in a worktree.
+                path.join(state_relative)
+            };
+            if state_path.exists() {
+                return Err(CommandError::expected(format!(
+                    "Can't {action} while Git is in the middle of a rebase. Finish or abort it first."
+                )));
+            }
+        }
+    }
+
+    Ok(branch)
+}
+
 // ============ Git Helper Functions ============
 
 /// Checks if there are uncommitted changes (staged or unstaged tracked files).
@@ -363,6 +462,18 @@ pub fn git_stage_and_commit_authored(
     message: &str,
     agent: Option<&str>,
 ) -> Result<bool, CommandError> {
+    git_stage_and_commit_authored_on_branch(path, message, agent, None)
+}
+
+/// Stage and commit only while the checked-out branch still matches the branch
+/// shown when the user opened the commit flow. This prevents an agent branch
+/// switch during staging from attaching the staged work to another branch.
+pub fn git_stage_and_commit_authored_on_branch(
+    path: &std::path::Path,
+    message: &str,
+    agent: Option<&str>,
+    expected_branch: Option<&str>,
+) -> Result<bool, CommandError> {
     // Defense-in-depth backstop for #345: even if a too-broad path slipped past
     // registration, never run `git add -A` across the home tree.
     if crate::utils::is_forbidden_project_root(path) {
@@ -427,6 +538,10 @@ pub fn git_stage_and_commit_authored(
     // appended by `git interpret-trailers` rather than by string concatenation,
     // because a trailer block git cannot parse is worse than no trailer at all.
     let message = crate::commands::team::with_trailers(path, message, agent);
+
+    if let Some(expected_branch) = expected_branch {
+        ensure_branch_mutation_is_safe(path, Some(expected_branch), "commit")?;
+    }
 
     // Commit — same index.lock retry as the staging step (#377).
     let commit_output = crate::utils::output_retrying_index_lock(|| {

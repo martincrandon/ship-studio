@@ -8,6 +8,7 @@ use crate::errors::CommandError;
 use crate::external_command::run_with_timeout;
 use crate::types::GeneratedPR;
 use crate::utils::{create_command, get_extended_path, validate_project_path};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error, info, warn};
@@ -643,6 +644,38 @@ fn parse_response(response: &str) -> Result<GeneratedPR, String> {
 pub async fn generate_commit_message(project_path: String) -> Result<String, CommandError> {
     let validated_path = validate_project_path(&project_path)?;
     generate_commit_message_for_path(&validated_path).await
+}
+
+/// A suggested commit message retains the agent attribution needed by the
+/// shared team trailer. The UI may let the user edit it; in that case it must
+/// clear `agent` before calling `commit_changes`.
+#[derive(Serialize)]
+pub struct CommitMessageSuggestion {
+    pub message: String,
+    pub agent: Option<String>,
+}
+
+/// Build an editable commit message through the team summary path. That path
+/// validates generated prose against project secrets and only attributes a
+/// real agent writer; the plain AI helper above intentionally remains for its
+/// existing non-commit callers.
+#[tauri::command]
+#[tracing::instrument(skip(project_path, expected_branch), fields(project = %project_path))]
+pub async fn suggest_commit_message(
+    project_path: String,
+    expected_branch: Option<String>,
+) -> Result<CommitMessageSuggestion, CommandError> {
+    let validated_path = validate_project_path(&project_path)?;
+    let branch = crate::commands::git::ensure_branch_mutation_is_safe(
+        &validated_path,
+        expected_branch.as_deref(),
+        "prepare a commit message",
+    )?;
+    let prepared = crate::commands::team::prepare_push(&validated_path, &branch, None).await;
+    Ok(CommitMessageSuggestion {
+        message: prepared.message,
+        agent: prepared.agent.map(str::to_string),
+    })
 }
 
 /// A commit message and, when one was involved, the agent that wrote it.

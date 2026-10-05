@@ -21,7 +21,9 @@ describe('BranchIndicator', () => {
   it('drops the review affordance once the tree is clean', () => {
     const { rerender } = render(<BranchIndicator {...defaultProps} />);
 
-    expect(screen.getByRole('button', { name: /review 1 unsaved change/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /review 1 uncommitted change/i })
+    ).toBeInTheDocument();
     rerender(<BranchIndicator {...defaultProps} hasUncommittedChanges={false} changedFiles={[]} />);
     expect(screen.queryByRole('button', { name: /review/i })).not.toBeInTheDocument();
   });
@@ -33,7 +35,7 @@ describe('BranchIndicator', () => {
     // there is nothing to review — otherwise Publish looks like it targets main.
     expect(screen.getByText('feature/test')).toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(screen.queryByText(/unsaved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/uncommitted/i)).not.toBeInTheDocument();
   });
 
   it('keeps the Push trigger on a clean tree when it opens the Push menu', () => {
@@ -51,7 +53,7 @@ describe('BranchIndicator', () => {
 
     const trigger = screen.getByRole('button', { name: /open push options for feature\/test/i });
     expect(trigger).toBeInTheDocument();
-    expect(screen.queryByText(/unsaved/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/uncommitted/i)).not.toBeInTheDocument();
 
     fireEvent.click(trigger);
     expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -70,7 +72,7 @@ describe('BranchIndicator', () => {
     );
 
     expect(screen.getByText('main')).toBeInTheDocument();
-    expect(screen.getByText('2 unsaved')).toBeInTheDocument();
+    expect(screen.getByText('2 uncommitted')).toBeInTheDocument();
     expect(screen.queryByText('Live')).not.toBeInTheDocument();
   });
 
@@ -78,11 +80,11 @@ describe('BranchIndicator', () => {
     render(<BranchIndicator {...defaultProps} />);
 
     fireEvent.mouseEnter(screen.getByRole('button', { name: /review/i }));
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Uncommitted changes' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /review/i }));
-    expect(screen.getByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument();
-    expect(screen.getByText('1 Unsaved Change')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Uncommitted changes' })).toBeInTheDocument();
+    expect(screen.getByText('1 Uncommitted Change')).toBeInTheDocument();
     expect(screen.getByText('test.ts')).toBeInTheDocument();
     expect(screen.queryByText('Push')).not.toBeInTheDocument();
   });
@@ -94,7 +96,7 @@ describe('BranchIndicator', () => {
     fireEvent.click(screen.getByRole('button', { name: /test.ts/i }));
 
     expect(screen.getByText('Diff for src/test.ts')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Uncommitted changes' })).not.toBeInTheDocument();
   });
 
   it('closes on Escape and reports controlled state changes', () => {
@@ -120,6 +122,6 @@ describe('BranchIndicator', () => {
     fireEvent.click(screen.getByRole('button', { name: /open push options/i }));
 
     expect(onOpenChange).toHaveBeenCalledWith(true);
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Uncommitted changes' })).not.toBeInTheDocument();
   });
 });

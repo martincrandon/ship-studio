@@ -37,6 +37,10 @@ pub struct GitCache {
     has_changes: Mutex<HashMap<String, CacheEntry<bool>>>,
     /// Cache for changed files per project
     changed_files: Mutex<HashMap<String, CacheEntry<Vec<crate::types::ChangedFile>>>>,
+    /// Summary cache is guarded by a fresh status/head/file-metadata signature,
+    /// so polling can avoid rebuilding a temporary Git index without hiding edits.
+    changed_file_summaries:
+        Mutex<HashMap<String, CacheEntry<(u64, crate::types::ChangedFileSummary)>>>,
     /// Cache for the dashboard scan's uncommitted count per project. Stores
     /// failures too (`None`) so a repo that errors or times out isn't
     /// re-forked on every dashboard load.
@@ -57,6 +61,7 @@ impl GitCache {
             current_branch: Mutex::new(HashMap::new()),
             has_changes: Mutex::new(HashMap::new()),
             changed_files: Mutex::new(HashMap::new()),
+            changed_file_summaries: Mutex::new(HashMap::new()),
             scan_status: Mutex::new(HashMap::new()),
             branch_ttl: Duration::from_secs(5),
             status_ttl: Duration::from_secs(5),
@@ -169,6 +174,37 @@ impl GitCache {
         }
     }
 
+    /// Get summary data only when the caller's fresh working-tree signature matches.
+    pub fn get_changed_file_summary(
+        &self,
+        project_path: &str,
+        signature: u64,
+    ) -> Option<crate::types::ChangedFileSummary> {
+        let cache = self.changed_file_summaries.lock().ok()?;
+        let entry = cache.get(project_path)?;
+        if entry.is_expired() || entry.value.0 != signature {
+            None
+        } else {
+            Some(entry.value.1.clone())
+        }
+    }
+
+    /// Cache line stats against their status/head/file-metadata signature.
+    pub fn set_changed_file_summary(
+        &self,
+        project_path: &str,
+        signature: u64,
+        summary: crate::types::ChangedFileSummary,
+    ) {
+        if let Ok(mut cache) = self.changed_file_summaries.lock() {
+            cache.retain(|_, entry| !entry.is_expired());
+            cache.insert(
+                project_path.to_string(),
+                CacheEntry::new((signature, summary), Duration::from_secs(60)),
+            );
+        }
+    }
+
     /// Invalidate all caches for a project (call after write operations)
     pub fn invalidate(&self, project_path: &str) {
         debug!(project = project_path, "Invalidating all caches");
@@ -179,6 +215,9 @@ impl GitCache {
             cache.remove(project_path);
         }
         if let Ok(mut cache) = self.changed_files.lock() {
+            cache.remove(project_path);
+        }
+        if let Ok(mut cache) = self.changed_file_summaries.lock() {
             cache.remove(project_path);
         }
         if let Ok(mut cache) = self.scan_status.lock() {
@@ -195,6 +234,9 @@ impl GitCache {
         if let Ok(mut cache) = self.changed_files.lock() {
             cache.remove(project_path);
         }
+        if let Ok(mut cache) = self.changed_file_summaries.lock() {
+            cache.remove(project_path);
+        }
         if let Ok(mut cache) = self.scan_status.lock() {
             cache.remove(project_path);
         }
@@ -209,6 +251,9 @@ impl GitCache {
             cache.retain(|_, entry| !entry.is_expired());
         }
         if let Ok(mut cache) = self.changed_files.lock() {
+            cache.retain(|_, entry| !entry.is_expired());
+        }
+        if let Ok(mut cache) = self.changed_file_summaries.lock() {
             cache.retain(|_, entry| !entry.is_expired());
         }
         if let Ok(mut cache) = self.scan_status.lock() {

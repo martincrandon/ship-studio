@@ -775,7 +775,7 @@ select.submit-review-input {
   background: var(--surface-control);
 }
 
-/* Unsaved Changes Modal (body + actions only — overlay/header/buttons handled by ModalFrame + Button primitives) */
+/* Uncommitted Changes Modal (body + actions only — overlay/header/buttons handled by ModalFrame + Button primitives) */
 .unsaved-changes-content {
   width: 420px;
 }
@@ -794,6 +794,11 @@ select.submit-review-input {
 .unsaved-changes-body strong {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.unsaved-changes-body .unsaved-changes-error {
+  margin-top: var(--spacing-sm);
+  color: var(--accent-error);
 }
 
 .unsaved-changes-actions {

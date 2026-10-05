@@ -1,8 +1,8 @@
 /**
- * Modal for handling unsaved changes when switching branches.
+ * Modal for handling uncommitted changes when switching branches.
  *
  * Shows options to:
- * - Publish changes and switch
+ * - Commit and push changes, then switch
  * - Discard changes and switch
  * - Cancel and stay on current branch
  *
@@ -11,7 +11,8 @@
 
 import { useState } from 'react';
 import { WarningIcon } from '@/components/icons';
-import { publishBranch, discardChanges, switchBranch } from '../../lib/branches';
+import { discardChanges, pushBranch, switchBranch } from '../../lib/branches';
+import { commitChanges, suggestCommitMessage } from '../../lib/git';
 import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { useOptionalToast } from '../../contexts/ToastContext';
@@ -35,6 +36,8 @@ interface UnsavedChangesModalProps {
   onSwitchComplete: (branchName: string) => void;
   /** Callback to close the modal */
   onClose: () => void;
+  /** Refresh the branch and source-control state after committing or pushing. */
+  onRefresh?: () => void;
 }
 
 export function UnsavedChangesModal({
@@ -43,11 +46,15 @@ export function UnsavedChangesModal({
   projectPath,
   onSwitchComplete,
   onClose,
+  onRefresh,
 }: UnsavedChangesModalProps) {
   const { showToast } = useOptionalToast();
   const onToast = (message: string, type?: ToastType) => showToast(message, type);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
+  const [hasLocalCommit, setHasLocalCommit] = useState(false);
+  const [hasPushedCommit, setHasPushedCommit] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   /**
    * Toast a git failure without re-reporting it. Recognized conditions (a
@@ -87,18 +94,59 @@ export function UnsavedChangesModal({
 
   const handlePublishAndSwitch = async () => {
     setIsPublishing(true);
+    setActionError(null);
+    let committedLocally = hasLocalCommit;
+    let pushed = hasPushedCommit;
     try {
-      await publishBranch(projectPath);
-      onToast?.(`Published ${currentBranch}`, 'success');
+      if (!committedLocally) {
+        const suggestion = await suggestCommitMessage(projectPath, currentBranch);
+        await commitChanges(projectPath, suggestion.message, {
+          agent: suggestion.agent,
+          expectedBranch: currentBranch,
+        });
+        committedLocally = true;
+        setHasLocalCommit(true);
+        onRefresh?.();
+      }
+
+      if (!pushed) {
+        await pushBranch(projectPath, currentBranch);
+        pushed = true;
+        setHasPushedCommit(true);
+        onRefresh?.();
+        onToast(`Pushed ${currentBranch}`, 'success');
+      }
+
       const result = await switchWithStashRetry();
       if (result.success) {
         onSwitchComplete(targetBranch);
         onClose();
       } else {
+        const message = humanizeGitError(result.error, {
+          branch: currentBranch,
+          base: targetBranch,
+        });
+        setActionError(`The commit was pushed, but the branch switch failed: ${message}`);
         toastGitFailure('Failed to switch branch', result.error);
       }
     } catch (e) {
-      toastGitFailure('Failed to publish', e);
+      const message = humanizeGitError(e, { branch: currentBranch, base: targetBranch });
+      if (committedLocally && !pushed) {
+        setHasLocalCommit(true);
+        setActionError(`Committed locally; push failed: ${message} Retry will push that commit.`);
+        toastGitFailure('Committed locally; push failed', e);
+      } else if (!committedLocally) {
+        // Commit hooks can stage or rewrite files before rejecting. Refresh the
+        // branch view even though the commit did not complete, so its changed-
+        // file list reflects the index/worktree Git left behind.
+        onRefresh?.();
+        setActionError(`Commit failed: ${message}`);
+        toastGitFailure('Failed to commit', e);
+      } else {
+        setHasPushedCommit(true);
+        setActionError(`The commit was pushed, but the branch switch failed: ${message}`);
+        toastGitFailure('Failed to switch branch', e);
+      }
     } finally {
       setIsPublishing(false);
     }
@@ -134,21 +182,31 @@ export function UnsavedChangesModal({
       title={
         <>
           <WarningIcon size={20} />
-          <span>Unsaved Changes</span>
+          <span>Uncommitted Changes</span>
         </>
       }
     >
       <div className="unsaved-changes-body">
         <p>
-          You have uncommitted changes on <strong>{currentBranch}</strong>. What would you like to
-          do?
+          You have uncommitted changes on <strong>{currentBranch}</strong>. Commit and push them
+          before switching, or discard them.
         </p>
+        {actionError && (
+          <p className="unsaved-changes-error" role="alert">
+            {actionError}
+          </p>
+        )}
       </div>
       <div className="unsaved-changes-actions">
         <Button variant="secondary" onClick={onClose} disabled={isLoading}>
           Cancel
         </Button>
-        <Button variant="danger" onClick={() => void handleDiscardAndSwitch()} disabled={isLoading}>
+        <Button
+          variant="danger"
+          onClick={() => void handleDiscardAndSwitch()}
+          disabled={isLoading || hasLocalCommit}
+          title={hasLocalCommit ? 'This change is already committed locally' : undefined}
+        >
           {isDiscarding ? 'Discarding...' : 'Discard Changes'}
         </Button>
         <Button
@@ -156,7 +214,13 @@ export function UnsavedChangesModal({
           onClick={() => void handlePublishAndSwitch()}
           disabled={isLoading}
         >
-          {isPublishing ? 'Publishing...' : 'Publish & Switch'}
+          {isPublishing
+            ? 'Working...'
+            : hasPushedCommit
+              ? 'Switch Branch'
+              : hasLocalCommit
+                ? 'Retry Push & Switch'
+                : 'Commit & Push, then Switch'}
         </Button>
       </div>
     </ModalFrame>

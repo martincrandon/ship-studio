@@ -408,7 +408,10 @@ pub struct ProviderStatus {
 /// is linked to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostingStatus {
-    pub commit: CommitRef,
+    /// Absent when no branch or commit exists yet. An unlinked project can
+    /// still offer hosting setup without treating that normal state as an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<CommitRef>,
     /// One per persisted link. Empty means the project isn't linked to
     /// anything, which the UI renders as an invitation rather than an error.
     pub providers: Vec<ProviderStatus>,

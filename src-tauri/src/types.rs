@@ -429,9 +429,66 @@ pub struct GitHubLanguage {
 // ============ Publishing ============
 
 #[derive(Serialize)]
-pub struct PublishResult {
-    pub url: String,
-    pub state: String,
+pub struct PushResult {
+    pub branch: String,
+    pub remote: String,
+    pub upstream: Option<String>,
+    pub commit_sha: String,
+}
+
+/// Whether a local branch can be compared with its configured remote tracking
+/// ref. `Unknown` is deliberately distinct from `NoUpstream`: a failed Git
+/// query must never turn into an invented zero count.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GitSyncState {
+    Ready,
+    NotRepository,
+    Detached,
+    Unborn,
+    NoRemote,
+    NoUpstream,
+    Unknown,
+}
+
+/// Local branch and tracking information for the Push menu.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitSyncStatus {
+    pub status: GitSyncState,
+    pub branch: Option<String>,
+    pub remote: Option<String>,
+    pub upstream: Option<String>,
+    pub remotes: Vec<String>,
+    /// Commits local HEAD is ahead of its configured upstream. `None` means
+    /// there is no trustworthy comparison available.
+    pub ahead: Option<u32>,
+    /// Commits local HEAD is behind its configured upstream. `None` means
+    /// there is no trustworthy comparison available.
+    pub behind: Option<u32>,
+    /// Full local commit IDs used for this comparison. Null when HEAD is unavailable.
+    pub head_sha: Option<String>,
+    /// Resolved upstream ref name and object ID used for the comparison.
+    pub compared_upstream: Option<String>,
+    pub compared_upstream_sha: Option<String>,
+    /// Complete local-only commit list for the resolved comparison. Null means
+    /// Git could not establish a trustworthy list; an empty list is known zero.
+    pub outgoing_commits: Option<Vec<GitOutgoingCommit>>,
+    /// Comparison basis: `upstream` or `remote-known-branches`.
+    pub outgoing_comparison: Option<String>,
+    /// Human-readable label for the reference set behind the outgoing list.
+    pub outgoing_comparison_label: Option<String>,
+    /// Exact number of listed commits, or null when the list is unknown.
+    pub outgoing_count: Option<u32>,
+}
+
+/// One commit reachable from local HEAD but not the configured upstream.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitOutgoingCommit {
+    pub sha: String,
+    pub short_sha: String,
+    pub subject: String,
 }
 
 // ============ Branch Management ============
@@ -511,6 +568,20 @@ pub struct ChangedFile {
     pub path: String,
     /// Change type: "modified", "added", "deleted"
     pub status: String,
+    /// Number of added lines when Git can calculate it; unknown for binaries or unreadable files.
+    pub additions: Option<u64>,
+    /// Number of deleted lines when Git can calculate it; unknown for binaries or unreadable files.
+    pub deletions: Option<u64>,
+}
+
+/// Changed files and trustworthy aggregate line counts for the push dropdown.
+#[derive(Serialize, Clone)]
+pub struct ChangedFileSummary {
+    pub files: Vec<ChangedFile>,
+    /// Null when any changed file has unknown line counts.
+    pub additions: Option<u64>,
+    /// Null when any changed file has unknown line counts.
+    pub deletions: Option<u64>,
 }
 
 /// Diff content for a single uncommitted file

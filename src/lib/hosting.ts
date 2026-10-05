@@ -146,7 +146,7 @@ export interface ProviderStatus {
 }
 
 export interface HostingStatus {
-  commit: CommitRef;
+  commit?: CommitRef | null;
   providers: ProviderStatus[];
   detected: DetectedLink[];
 }
@@ -169,8 +169,16 @@ export interface TokenCheck {
 // Commands
 // ---------------------------------------------------------------------------
 
-export function getHostingStatus(projectPath: string): Promise<HostingStatus> {
-  return invoke<HostingStatus>('get_hosting_status', { projectPath });
+export function getHostingStatus(
+  projectPath: string,
+  commitSha?: string | null,
+  branch?: string | null
+): Promise<HostingStatus> {
+  return invoke<HostingStatus>('get_hosting_status', {
+    projectPath,
+    commitSha: commitSha ?? null,
+    branch: branch ?? null,
+  });
 }
 export function listHostingProjects(
   projectPath: string,
@@ -358,7 +366,7 @@ export function deriveSectionState(
   const provider = p.link.provider;
   const tokenSource = p.token_source ?? undefined;
 
-  if (!status.commit.has_upstream) return { kind: 'not_pushed', provider };
+  if (!status.commit?.has_upstream) return { kind: 'not_pushed', provider };
 
   if (p.auth.kind === 'no_token') return { kind: 'no_token', provider };
   if (p.auth.kind === 'rejected') return { kind: 'token_rejected', provider, tokenSource };
@@ -399,7 +407,7 @@ export function deriveSectionState(
 
   // Not found. Only timing decides whether we still expect one — never a claim
   // that the deploy failed, which no provider's API can actually tell us.
-  const since = ctx.pushedAt ?? status.commit.committed_at ?? 0;
+  const since = ctx.pushedAt ?? status.commit?.committed_at ?? 0;
   const waiting = since > 0 && now - since < NOT_FOUND_GRACE_MS;
 
   return {

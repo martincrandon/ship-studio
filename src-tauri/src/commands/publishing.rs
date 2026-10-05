@@ -1,10 +1,10 @@
 //! # Publishing Commands
 //!
-//! Pushing the current branch to origin, and the git-push error taxonomy that
+//! Pushing existing commits, and the git-push error taxonomy that
 //! turns GitHub's stderr into something a user can act on.
 //!
 //! There used to be `publish_to_staging` and `publish_to_production` here too,
-//! pushing `HEAD:staging` and `HEAD:main` and each returning a `PublishResult`
+//! pushing `HEAD:staging` and `HEAD:main` and each returning a `PushResult`
 //! of `{ url: "", state: "QUEUED" }` — a deploy state nobody had observed,
 //! about a URL nobody knew. Nothing called them. Deployment status now comes
 //! from asking the provider about the commit (`commands::hosting`).
@@ -13,9 +13,8 @@
 // publish authenticates as the project's workspace GitHub login, matching the
 // gh-based repo-create path.
 use crate::commands::git::run_git_net;
-use crate::commands::github::ensure_git_identity;
 use crate::errors::CommandError;
-use crate::types::PublishResult;
+use crate::types::PushResult;
 use crate::utils::validate_project_path;
 use tracing::{error, info, instrument, warn};
 
@@ -34,7 +33,7 @@ fn push_auth_error(stderr: &str) -> Option<CommandError> {
         || lower.contains("write access to repository not granted");
     if is_auth {
         return Some(CommandError::NotAuthenticated {
-            service: format!("github (AUTH_ERROR: {stderr})"),
+            service: format!("git remote (AUTH_ERROR: {stderr})"),
         });
     }
     None
@@ -110,8 +109,8 @@ pub(crate) fn push_transient_server_error(stderr: &str) -> Option<CommandError> 
         .contains("internal server error")
         .then(|| {
             CommandError::expected(
-                "GitHub had a temporary problem accepting this push (a server error on \
-                 GitHub's side). Nothing is wrong with your changes — wait a moment and \
+                "The remote host had a temporary problem accepting this push (a server error \
+                 on its side). Nothing is wrong with your changes — wait a moment and \
                  try again.",
             )
         })
@@ -129,7 +128,7 @@ pub(crate) fn push_missing_remote_error(stderr: &str) -> Option<CommandError> {
         || (lower.contains("repository") && lower.contains("not found") && lower.contains("fatal"));
     missing.then(|| {
         CommandError::expected(
-            "The linked GitHub repository couldn't be found — it may have been deleted, renamed,              or you may no longer have access. Check the repository on GitHub or reconnect it,              then try again.",
+            "The configured remote repository couldn't be found — it may have been deleted, renamed,              or you may no longer have access. Check the remote URL and credentials, then try again.",
         )
     })
 }
@@ -153,61 +152,225 @@ pub(crate) fn push_unresolvable_branch_error(stderr: &str, branch: &str) -> Opti
     })
 }
 
-/// Publish (push) the current branch to origin
+/// Push the current branch's existing commits to its upstream, or to the
+/// explicitly selected remote when the branch has no upstream. This operation
+/// never stages files or creates commits.
+#[tauri::command]
+#[instrument(name = "push_current_branch", skip(project_path), fields(project = %project_path))]
+pub async fn push_current_branch(
+    project_path: String,
+    remote: Option<String>,
+    expected_branch: Option<String>,
+) -> Result<PushResult, CommandError> {
+    let validated_path = validate_project_path(&project_path).map_err(CommandError::from)?;
+    let result =
+        push_current_branch_inner(&validated_path, remote, expected_branch.as_deref()).await?;
+    crate::cache::GIT_CACHE.invalidate_status(&project_path);
+    Ok(result)
+}
+
+/// Compatibility command for existing callers. Its behavior now matches the
+/// Push label: it sends commits that already exist and leaves working-tree
+/// changes alone. Commit and push are separate commands in the UI.
 #[tauri::command]
 #[instrument(name = "publish_branch", skip(project_path, commit_message), fields(project = %project_path))]
 pub async fn publish_branch(
     project_path: String,
     commit_message: Option<String>,
-) -> Result<PublishResult, CommandError> {
+) -> Result<PushResult, CommandError> {
+    let _ = commit_message;
     let validated_path = validate_project_path(&project_path).map_err(CommandError::from)?;
+    let result = push_current_branch_inner(&validated_path, None, None).await?;
+    crate::cache::GIT_CACHE.invalidate_status(&project_path);
+    Ok(result)
+}
 
-    // Get current branch name
-    let branch_output = crate::utils::git_command_in(&validated_path)?
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .map_err(CommandError::from)?;
+fn local_git_output(
+    path: &std::path::Path,
+    args: &[&str],
+) -> Result<std::process::Output, CommandError> {
+    let mut cmd = crate::utils::git_command_in(path)?;
+    cmd.args(args);
+    crate::external_command::spawn_with_pressure_retry(&format!("git {}", args.join(" ")), || {
+        cmd.output()
+    })
+}
 
-    let branch = String::from_utf8_lossy(&branch_output.stdout)
-        .trim()
-        .to_string();
-    // In a detached HEAD (checked-out tag/commit, mid-rebase) `rev-parse
-    // --abbrev-ref HEAD` literally returns "HEAD", which we'd then hand git as
-    // a push destination — git refuses with an unreadable "not a full refname"
-    // wall of text and telemetry logs it as a defect. A normal git state with a
-    // user-side fix, so stop before committing anything (issue #794; same guard
-    // get_current_branch got in #317).
-    if branch == "HEAD" {
-        warn!("Publish blocked: repository is in a detached HEAD state");
+fn output_text(output: &std::process::Output) -> Option<String> {
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|text| !text.is_empty())
+}
+
+fn configured_branch_upstream(path: &std::path::Path, branch: &str) -> Option<(String, String)> {
+    let remote_key = format!("branch.{branch}.remote");
+    let merge_key = format!("branch.{branch}.merge");
+    let remote = output_text(&local_git_output(path, &["config", "--get", &remote_key]).ok()?)?;
+    let merge = output_text(&local_git_output(path, &["config", "--get", &merge_key]).ok()?)?;
+    let branch = merge.strip_prefix("refs/heads/").unwrap_or(&merge);
+    Some((remote, branch.to_string()))
+}
+
+fn parse_upstream_remote<'a>(
+    upstream: &'a str,
+    remotes: &'a [String],
+) -> Option<(&'a str, &'a str)> {
+    remotes
+        .iter()
+        .filter_map(|remote| {
+            upstream
+                .strip_prefix(&format!("{remote}/"))
+                .map(|branch| (remote.as_str(), branch))
+        })
+        .max_by_key(|(remote, _)| remote.len())
+}
+
+/// Record the destination that was just accepted by the remote so the next
+/// sync-status read can compare against that known commit. If this local
+/// metadata write fails, Push still succeeded; callers receive `None` for the
+/// upstream and can show the exact destination from the other result fields.
+fn record_pushed_upstream(
+    project: &std::path::Path,
+    branch: &str,
+    remote: &str,
+    remote_branch: &str,
+    commit_sha: &str,
+    configure_upstream: bool,
+) -> bool {
+    if configure_upstream {
+        let remote_key = format!("branch.{branch}.remote");
+        let merge_key = format!("branch.{branch}.merge");
+        let config_remote = local_git_output(
+            project,
+            &["config", "--local", "--replace-all", &remote_key, remote],
+        );
+        let config_merge = local_git_output(
+            project,
+            &[
+                "config",
+                "--local",
+                "--replace-all",
+                &merge_key,
+                &format!("refs/heads/{remote_branch}"),
+            ],
+        );
+        if !config_remote
+            .as_ref()
+            .map(|out| out.status.success())
+            .unwrap_or(false)
+            || !config_merge
+                .as_ref()
+                .map(|out| out.status.success())
+                .unwrap_or(false)
+        {
+            warn!(
+                branch,
+                remote, "Push succeeded but Git could not save the upstream configuration"
+            );
+            return false;
+        }
+    }
+
+    let tracking_ref = format!("refs/remotes/{remote}/{remote_branch}");
+    let update = local_git_output(project, &["update-ref", &tracking_ref, commit_sha]);
+    if !update
+        .as_ref()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+    {
+        warn!(
+            branch,
+            remote, "Push succeeded but Git could not update its local tracking ref"
+        );
+        return false;
+    }
+    true
+}
+
+async fn push_current_branch_inner(
+    project: &std::path::Path,
+    requested_remote: Option<String>,
+    expected_branch: Option<&str>,
+) -> Result<PushResult, CommandError> {
+    let branch =
+        crate::commands::git::ensure_branch_mutation_is_safe(project, expected_branch, "push")?;
+
+    let head = local_git_output(project, &["rev-parse", "--verify", "HEAD^{commit}"])?;
+    let commit_sha = output_text(&head).ok_or_else(|| {
+        CommandError::expected(
+            "This branch has no commit yet. Create a local commit before pushing.",
+        )
+    })?;
+
+    let remote_output = local_git_output(project, &["remote"])?;
+    if !remote_output.status.success() {
         return Err(CommandError::expected(
-            "This project isn't on a branch right now (git calls this a detached HEAD — it \
-             happens mid-rebase or after checking out a specific commit or tag). Switch to a \
-             branch first, then publish.",
+            "Git could not read this project's configured remotes. Check the repository and try again.",
         ));
     }
-    // Ask the agent what this push is, and write the record *before* staging,
-    // so `git add -A` picks it up and the work and its explanation land in one
-    // commit. Everything about this step is optional and none of it can fail
-    // the push: no agent, no headless mode, a timeout, an unreadable reply or a
-    // summary the gauntlet refuses all fall back to a plain commit message.
-    let content =
-        crate::commands::team::prepare_push(&validated_path, &branch, commit_message).await;
-    let message = content.message;
-    info!(branch = %branch, message = %message, "Publishing branch");
+    let remotes = String::from_utf8_lossy(&remote_output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|remote| !remote.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
 
-    // Ensure git identity matches GitHub account before committing
-    let _ = ensure_git_identity(&validated_path);
+    let (remote, remote_branch, set_upstream) = if let Some(remote) = requested_remote {
+        if !remotes.iter().any(|configured| configured == &remote) {
+            return Err(CommandError::expected(format!(
+                "The remote \"{remote}\" is not configured for this project. Refresh the Push menu and choose an available remote."
+            )));
+        }
+        (remote, branch.clone(), true)
+    } else if let Some(upstream) = output_text(&local_git_output(
+        project,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )?) {
+        let Some((remote, remote_branch)) = parse_upstream_remote(&upstream, &remotes) else {
+            return Err(CommandError::expected(
+                "The current branch's upstream is not a configured remote. Choose a push destination in the Push menu.",
+            ));
+        };
+        (remote.to_string(), remote_branch.to_string(), false)
+    } else if let Some((remote, remote_branch)) = configured_branch_upstream(project, &branch) {
+        // A configured upstream whose tracking ref has not been fetched (or
+        // has been deleted locally) is still a known destination. Preserve its
+        // explicit remote/branch instead of falling back to `origin` or main.
+        if remote == "." || !remotes.iter().any(|configured| configured == &remote) {
+            return Err(CommandError::expected(
+                "The current branch's upstream is not an available remote. Choose a push destination in the Push menu.",
+            ));
+        }
+        (remote, remote_branch, false)
+    } else {
+        return Err(CommandError::expected(if remotes.is_empty() {
+            "This project has no Git remote. Add a remote before pushing this commit."
+        } else {
+            "This branch has no upstream. Choose a configured remote to publish it."
+        }));
+    };
 
-    // Stage and commit through the shared helper. The old hand-rolled sequence
-    // discarded `git add -A`'s result entirely, so a staging failure surfaced
-    // later as an inexplicable "Uncommitted changes" on switch (issue #273);
-    // the helper also handles sparse-checkout (#275) and empty commits (#274).
-    crate::commands::git::git_stage_and_commit_authored(&validated_path, &message, content.agent)
-        .map_err(CommandError::from)?;
+    let branch_at_push =
+        crate::commands::git::ensure_branch_mutation_is_safe(project, Some(&branch), "push")?;
+    let head_at_push = output_text(&local_git_output(
+        project,
+        &["rev-parse", "--verify", "HEAD^{commit}"],
+    )?);
+    if branch_at_push != branch || head_at_push.as_deref() != Some(commit_sha.as_str()) {
+        return Err(CommandError::expected(
+            "The current branch or commit changed while Push was preparing. Refresh the Push menu and try again.",
+        ));
+    }
 
-    // Push to origin
-    let push_output =
-        run_git_net(&["push", "-u", "origin", &branch], &validated_path, "push").await?;
+    info!(branch = %branch, remote = %remote, remote_branch = %remote_branch, "Pushing existing commits");
+    // Push the SHA captured above, so a concurrent agent commit or branch
+    // switch cannot make the returned commitSha describe a different ref.
+    let refspec = format!("{commit_sha}:refs/heads/{remote_branch}");
+    let push_args = vec!["push".to_string(), remote.clone(), refspec];
+    let push_arg_refs = push_args.iter().map(String::as_str).collect::<Vec<_>>();
+    let push_output = run_git_net(&push_arg_refs, project, "push").await?;
 
     if !push_output.status.success() {
         let stderr = String::from_utf8_lossy(&push_output.stderr);
@@ -216,7 +379,7 @@ pub async fn publish_branch(
         // them first or the frontend shows the "someone else pushed, pull
         // first" modal for a problem pulling can't fix (issues #626/#636).
         if let Some(err) = push_pre_receive_error(&stderr) {
-            warn!(error = %stderr, branch = %branch, "Push declined by GitHub pre-receive check");
+            warn!(error = %stderr, branch = %branch, "Push declined by remote pre-receive check");
             return Err(err);
         }
         // GitHub-side 5xx: "! [remote rejected] … (Internal Server Error)"
@@ -237,7 +400,7 @@ pub async fn publish_branch(
             return Err(CommandError::expected(format!("PUSH_REJECTED:{stderr}")));
         }
         if let Some(err) = push_auth_error(&stderr) {
-            error!(error = %stderr, branch = %branch, "Authentication error");
+            error!(error = %stderr, branch = %branch, "Push authentication error");
             return Err(err);
         }
         if let Some(err) = push_missing_remote_error(&stderr) {
@@ -257,17 +420,33 @@ pub async fn publish_branch(
         }
     }
 
-    info!(branch = %branch, "Branch published successfully");
-    Ok(PublishResult {
-        url: String::new(),
-        state: "QUEUED".to_string(),
+    let tracking_recorded = record_pushed_upstream(
+        project,
+        &branch,
+        &remote,
+        &remote_branch,
+        &commit_sha,
+        set_upstream,
+    );
+    let upstream = if !tracking_recorded {
+        None
+    } else {
+        Some(format!("{remote}/{remote_branch}"))
+    };
+    info!(branch = %branch, remote = %remote, "Branch pushed successfully");
+    Ok(PushResult {
+        branch,
+        remote,
+        upstream,
+        commit_sha,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        push_pre_receive_error, push_transient_server_error, push_unresolvable_branch_error,
+        push_current_branch_inner, push_pre_receive_error, push_transient_server_error,
+        push_unresolvable_branch_error,
     };
     use crate::commands::git::run_git_net;
     use crate::errors::CommandError;
@@ -367,6 +546,91 @@ mod tests {
             "remote: error: GH006: Protected branch update failed for refs/heads/main"
         )
         .is_none());
+    }
+
+    #[tokio::test]
+    async fn current_branch_pushes_only_the_captured_commit_and_leaves_working_tree_alone() {
+        let repo = tempfile::tempdir().expect("temporary repository");
+        let remote = tempfile::tempdir().expect("temporary bare remote");
+        let run = |cwd: &Path, args: &[&str]| {
+            Command::new("git")
+                .args(args)
+                .current_dir(cwd)
+                .output()
+                .expect("git should start")
+        };
+        let assert_success = |output: std::process::Output| {
+            assert!(
+                output.status.success(),
+                "git failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+
+        assert_success(run(repo.path(), &["init", "--initial-branch=main", "-q"]));
+        assert_success(run(
+            repo.path(),
+            &["config", "user.name", "Ship Studio Test"],
+        ));
+        assert_success(run(
+            repo.path(),
+            &["config", "user.email", "test@example.com"],
+        ));
+        std::fs::write(repo.path().join("tracked.txt"), "committed\n").unwrap();
+        assert_success(run(repo.path(), &["add", "tracked.txt"]));
+        assert_success(run(repo.path(), &["commit", "-m", "Initial commit", "-q"]));
+        assert_success(run(remote.path(), &["init", "--bare", "-q"]));
+        assert_success(run(
+            repo.path(),
+            &[
+                "remote",
+                "add",
+                "destination",
+                remote.path().to_str().unwrap(),
+            ],
+        ));
+
+        // These changes are visible in the status menu but are deliberately
+        // outside the commit SHA being pushed.
+        std::fs::write(repo.path().join("tracked.txt"), "still uncommitted\n").unwrap();
+        std::fs::write(repo.path().join("new.txt"), "untracked\n").unwrap();
+        let result =
+            push_current_branch_inner(repo.path(), Some("destination".into()), Some("main"))
+                .await
+                .expect("the local bare remote should accept the push");
+
+        assert_eq!(result.branch, "main");
+        assert_eq!(result.remote, "destination");
+        assert_eq!(result.upstream.as_deref(), Some("destination/main"));
+        let remote_head = Command::new("git")
+            .args([
+                "--git-dir",
+                remote.path().to_str().unwrap(),
+                "rev-parse",
+                "refs/heads/main",
+            ])
+            .output()
+            .unwrap();
+        assert!(remote_head.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&remote_head.stdout).trim(),
+            result.commit_sha
+        );
+
+        let status = run(repo.path(), &["status", "--porcelain"]);
+        assert_success(status.clone());
+        let status = String::from_utf8_lossy(&status.stdout);
+        assert!(
+            status.contains("tracked.txt"),
+            "tracked edit was staged or lost: {status}"
+        );
+        assert!(
+            status.contains("?? new.txt"),
+            "untracked file was staged or lost: {status}"
+        );
+        let count = run(repo.path(), &["rev-list", "--count", "HEAD"]);
+        assert_success(count.clone());
+        assert_eq!(String::from_utf8_lossy(&count.stdout).trim(), "1");
     }
 
     /// The network git helper must actually execute git through the timeout path

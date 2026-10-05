@@ -40,6 +40,19 @@ const branch = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const manyChangedFiles = Array.from({ length: 26 }, (_, index) => ({
+  path: `src/components/publishing/PublishRow${String(index + 1).padStart(2, '0')}.tsx`,
+  status: index % 8 === 0 ? 'added' : index % 9 === 0 ? 'deleted' : 'modified',
+  additions: 3 + (index % 11),
+  deletions: index % 5,
+}));
+
+const manyChangedFileSummary = {
+  files: manyChangedFiles,
+  additions: manyChangedFiles.reduce((total, file) => total + file.additions, 0),
+  deletions: manyChangedFiles.reduce((total, file) => total + file.deletions, 0),
+};
+
 const workflow = (slug: string, name: string, over: Record<string, unknown> = {}) => ({
   id: `${WORKSPACE_PROJECT}::${slug}`,
   slug,
@@ -93,6 +106,89 @@ export const featureScenarios: Scenario[] = [
       'Header, sidebar, agent pane, and preview all render. This is the baseline every command capture is diffed against.',
     project: WORKSPACE_PROJECT,
     commands: { ...workspaceCommands },
+  },
+  {
+    id: 'push-many-changes',
+    title: 'Push popover — a long list of changes',
+    looksRightWhen:
+      'The file count and total line changes are visible, per-file additions and deletions line up on the right, the list scrolls, and the bottom actions remain visible.',
+    project: WORKSPACE_PROJECT,
+    openSelector: '.source-control-push-button',
+    clipSelector: '.publish-dropdown-menu',
+    requires: '.publish-dropdown-menu',
+    commands: {
+      ...workspaceCommands,
+      get_changed_files: manyChangedFiles,
+      get_changed_file_summary: manyChangedFileSummary,
+    },
+  },
+  {
+    id: 'push-ready-no-commits',
+    title: 'Push popover — local changes with nothing outgoing',
+    looksRightWhen:
+      'The local summary expands, the local commit controls stay visible, and the disabled pure push explains that local changes must be committed first.',
+    project: WORKSPACE_PROJECT,
+    openSelector: '.source-control-push-button',
+    clipSelector: '.publish-dropdown-menu',
+    requires: '.publish-dropdown-menu',
+    commands: {
+      ...workspaceCommands,
+      get_changed_files: manyChangedFiles,
+      get_changed_file_summary: manyChangedFileSummary,
+      get_git_sync_status: {
+        status: 'ready',
+        branch: 'feat/cloudflare-workers',
+        remote: 'origin',
+        upstream: 'origin/feat/cloudflare-workers',
+        remotes: ['origin'],
+        ahead: 0,
+        behind: 0,
+        headSha: '1111111111111111111111111111111111111111',
+        comparedUpstream: 'origin/feat/cloudflare-workers',
+        comparedUpstreamSha: '1111111111111111111111111111111111111111',
+        outgoingCommits: [],
+        outgoingComparison: 'upstream',
+        outgoingComparisonLabel: 'origin/feat/cloudflare-workers',
+        outgoingCount: 0,
+      },
+    },
+  },
+  {
+    id: 'push-no-upstream',
+    title: 'Push popover — choose an upstream remote',
+    looksRightWhen:
+      'The destination selector and Push action share one aligned row beneath the destination label.',
+    project: WORKSPACE_PROJECT,
+    openSelector: '.source-control-push-button',
+    clipSelector: '.publish-dropdown-menu',
+    requires: '.publish-remote-select-row',
+    commands: {
+      ...workspaceCommands,
+      get_changed_files: manyChangedFiles,
+      get_changed_file_summary: manyChangedFileSummary,
+      get_git_sync_status: {
+        status: 'no-upstream',
+        branch: 'main',
+        remote: null,
+        upstream: null,
+        remotes: ['origin', 'backup'],
+        ahead: null,
+        behind: null,
+        headSha: '2222222222222222222222222222222222222222',
+        comparedUpstream: null,
+        comparedUpstreamSha: null,
+        outgoingCommits: [
+          {
+            sha: '2222222222222222222222222222222222222222',
+            shortSha: '2222222',
+            subject: 'Test alternative homepage hero',
+          },
+        ],
+        outgoingComparison: 'remote-known-branches',
+        outgoingComparisonLabel: 'origin known branches (last fetched)',
+        outgoingCount: 1,
+      },
+    },
   },
   {
     id: 'gitlab-remote-push',

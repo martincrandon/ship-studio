@@ -260,7 +260,9 @@ pub async fn switch_branch(
     project_path: String,
     branch_name: String,
     auto_stash: bool,
+    carry_changes: Option<bool>,
 ) -> Result<SwitchResult, CommandError> {
+    let carry_changes = carry_changes.unwrap_or(false);
     let validated_path = validate_project_path(&project_path)?;
     // Reject ref names that could be parsed by git as an option (argument
     // injection) — same guard create_branch already applies.
@@ -281,7 +283,10 @@ pub async fn switch_branch(
     // Check for uncommitted changes
     let has_changes = git_has_any_changes(&validated_path)?;
 
-    if has_changes && auto_stash {
+    // The commit destination selector carries the worktree through checkout.
+    // Git refuses if the target would overwrite tracked or untracked changes.
+    // Do not stash, restore another branch's stash, or pull in this mode.
+    if has_changes && auto_stash && !carry_changes {
         let mut stash_cmd = crate::utils::git_command_in(&validated_path)?;
         stash_cmd.args([
             "stash",
@@ -314,7 +319,7 @@ pub async fn switch_branch(
                 }
             }
         }
-    } else if has_changes && !auto_stash {
+    } else if has_changes && !auto_stash && !carry_changes {
         return Ok(SwitchResult {
             success: false,
             stashed_changes: false,
@@ -423,7 +428,7 @@ pub async fn switch_branch(
     // Reload metadata in case it was updated
     metadata = load_project_metadata(&validated_path);
 
-    if let Some(ref stash_info) = metadata.stash_info {
+    if let Some(stash_info) = metadata.stash_info.as_ref().filter(|_| !carry_changes) {
         // If we're switching back to the branch where we stashed from, offer to apply
         if stash_info.from_branch == branch_name {
             // Try to auto-apply the stash
@@ -451,11 +456,13 @@ pub async fn switch_branch(
     }
 
     // Pull latest changes from remote
-    if let Err(e) = crate::utils::git_command_in(&validated_path)?
-        .args(["pull", "--ff-only"])
-        .output()
-    {
-        warn!("Failed to pull latest changes after branch switch: {}", e);
+    if !carry_changes {
+        if let Err(e) = crate::utils::git_command_in(&validated_path)?
+            .args(["pull", "--ff-only"])
+            .output()
+        {
+            warn!("Failed to pull latest changes after branch switch: {}", e);
+        }
     }
 
     // Touch next.config file to trigger Next.js full rebuild

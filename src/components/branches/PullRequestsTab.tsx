@@ -342,8 +342,8 @@ export function PullRequestsTab({
           <div className="post-merge-body">
             <p>
               This will merge <strong>{confirmMergePr.headRef}</strong> into{' '}
-              <strong>{confirmMergePr.baseRef}</strong>. The changes will go live, but can be rolled
-              back if needed.
+              <strong>{confirmMergePr.baseRef}</strong>. Your hosting provider may deploy the
+              changes if it is configured to build from that branch.
             </p>
           </div>
           <div className="post-merge-footer">

@@ -15,7 +15,7 @@ vi.mock('../lib/branches', () => ({
 }));
 
 vi.mock('../lib/git', () => ({
-  getChangedFiles: vi.fn().mockResolvedValue([]),
+  getChangedFileSummary: vi.fn().mockResolvedValue({ files: [], additions: 0, deletions: 0 }),
 }));
 
 vi.mock('../lib/conflicts', () => ({
@@ -83,7 +83,11 @@ describe('useBranchManagement', () => {
     vi.mocked(branches.getCurrentBranch).mockResolvedValue('main');
     vi.mocked(branches.listBranches).mockResolvedValue([defaultBranch]);
     vi.mocked(branches.listPullRequests).mockResolvedValue([]);
-    vi.mocked(git.getChangedFiles).mockResolvedValue([]);
+    vi.mocked(git.getChangedFileSummary).mockResolvedValue({
+      files: [],
+      additions: 0,
+      deletions: 0,
+    });
     vi.mocked(core.invoke).mockImplementation((cmd: string) => {
       if (cmd === 'check_git_has_changes')
         return Promise.resolve(false) as ReturnType<typeof core.invoke>;
@@ -204,9 +208,11 @@ describe('useBranchManagement', () => {
           return Promise.resolve(true) as ReturnType<typeof core.invoke>;
         return Promise.resolve(undefined) as ReturnType<typeof core.invoke>;
       });
-      vi.mocked(git.getChangedFiles).mockResolvedValue([
-        { path: 'file.ts', status: 'modified' },
-      ] as Awaited<ReturnType<typeof git.getChangedFiles>>);
+      vi.mocked(git.getChangedFileSummary).mockResolvedValue({
+        files: [{ path: 'file.ts', status: 'modified', additions: 4, deletions: 2 }],
+        additions: 4,
+        deletions: 2,
+      });
 
       const params = createParams();
       const { result } = renderHook(() => useBranchManagement(params));

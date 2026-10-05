@@ -53,7 +53,7 @@ function provider(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
 
 function status(
   providers: ProviderStatus[],
-  commit: Partial<HostingStatus['commit']> = {}
+  commit: Partial<NonNullable<HostingStatus['commit']>> = {}
 ): HostingStatus {
   return {
     commit: {
@@ -127,6 +127,12 @@ describe('deriveSectionState', () => {
 
   it('invites setup when the project deploys nowhere', () => {
     expect(deriveSectionState(status([]), { now: NOW }).kind).toBe('no_link');
+  });
+
+  it('invites setup when there are no links and no commit to check', () => {
+    expect(
+      deriveSectionState({ commit: null, providers: [], detected: [] }, { now: NOW }).kind
+    ).toBe('no_link');
   });
 
   it('says nothing has been pushed before there is an upstream', () => {

@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceHeader, WorkspaceTitlebar, type WorkspaceHeaderProps } from './WorkspaceHeader';
 import { openInFinder } from '../../lib/ide';
+import { mockInvokeResponse } from '../../test/setup';
 
 const { startDragging } = vi.hoisted(() => ({ startDragging: vi.fn() }));
 
@@ -215,6 +216,64 @@ describe('WorkspaceHeader title bar', () => {
     expect(screen.getByRole('button', { name: 'Assets' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Branches' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Push' })).toBeEnabled();
+  });
+
+  it('offers Git and Hosting connection actions inside the Push menu when unconfigured', async () => {
+    mockInvokeResponse('get_hosting_status', {
+      commit: null,
+      providers: [],
+      detected: [],
+    });
+    const props = headerProps();
+    props.integrations.github = {
+      cliStatus: { installed: true, authenticated: false },
+      username: null,
+    };
+    props.integrations.projectGithub = {
+      status: 'no-remote',
+      github_repo: null,
+      github_url: null,
+      remote_host: null,
+      remote_forge: null,
+    };
+    render(<HeaderHarness props={props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+
+    expect(await screen.findByText('Git')).toBeInTheDocument();
+    const gitSetup = document.querySelector('.publish-git-setup-action');
+    expect(gitSetup).toBeInTheDocument();
+    const gitConnect = within(gitSetup as HTMLElement).getByRole('button', { name: 'Connect' });
+    expect(gitConnect).toHaveClass('button--default', 'button--size-default');
+    fireEvent.click(gitConnect);
+    expect(props.onGitHubConnect).toHaveBeenCalledOnce();
+    expect(await screen.findByText('No hosting provider connected')).toBeInTheDocument();
+    expect(await screen.findByText('Connect to see deployments')).toBeInTheDocument();
+    const hostingAction = document.querySelector('.hosting-row-action') as HTMLElement;
+    const hostingConnect = within(hostingAction).getByRole('button', { name: 'Connect' });
+    expect(hostingConnect).toHaveClass('button--default', 'button--size-default');
+    expect(hostingAction).toContainElement(hostingConnect);
+  });
+
+  it('keeps real hosting lookup failures distinct from an unconnected provider', async () => {
+    mockInvokeResponse('get_hosting_status', () => {
+      throw new Error("This project isn't on a branch, so there's nothing to check.");
+    });
+    const props = headerProps();
+    props.integrations.projectGithub = {
+      status: 'no-remote',
+      github_repo: null,
+      github_url: null,
+      remote_host: null,
+      remote_forge: null,
+    };
+    render(<HeaderHarness props={props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Push' }));
+
+    expect(await screen.findByText('Deployment status unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('No hosting provider connected')).not.toBeInTheDocument();
+    expect(document.querySelector('.hosting-row-action')).toHaveAttribute('data-empty', 'true');
   });
 
   it('places the mode switcher between workspace tools and source controls', () => {

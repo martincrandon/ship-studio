@@ -102,9 +102,78 @@ export const workspaceCommands: CommandMap = {
    */
   get_changed_files: [
     { path: 'src/app/pricing/page.tsx', status: 'modified' },
-    { path: 'src/components/PricingTable.tsx', status: 'added' },
+    { path: 'src/components/PricingTable.tsx', status: 'untracked' },
     { path: 'README.md', status: 'modified' },
   ],
+  // The push menu consumes one coherent summary call for its file list and
+  // line counts; keep these rows aligned with `get_changed_files` for the
+  // shared three-change workspace fixture.
+  get_changed_file_summary: {
+    files: [
+      {
+        path: 'src/app/pricing/page.tsx',
+        status: 'modified',
+        additions: 12,
+        deletions: 4,
+      },
+      {
+        path: 'src/components/PricingTable.tsx',
+        status: 'untracked',
+        additions: 23,
+        deletions: 0,
+      },
+      { path: 'README.md', status: 'modified', additions: 3, deletions: 1 },
+    ],
+    additions: 38,
+    deletions: 5,
+  },
+  // The header's Git section reports only a comparison the backend can
+  // actually make. Two local commits are ahead of the configured upstream;
+  // the three worktree files above remain a separate local fact.
+  get_git_sync_status: {
+    status: 'ready',
+    branch: 'main',
+    remote: 'origin',
+    upstream: 'origin/main',
+    remotes: ['origin'],
+    ahead: 2,
+    behind: 0,
+    headSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    comparedUpstream: 'origin/main',
+    comparedUpstreamSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    outgoingCommits: [
+      {
+        sha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        shortSha: 'aaaaaaa',
+        subject: 'Add workspace navigation',
+      },
+      {
+        sha: 'cccccccccccccccccccccccccccccccccccccccc',
+        shortSha: 'ccccccc',
+        subject: 'Tune preview layout',
+      },
+    ],
+    outgoingComparison: 'upstream',
+    outgoingComparisonLabel: 'origin/main',
+    outgoingCount: 2,
+  },
+  suggest_commit_message: { message: 'Update the project', agent: null },
+  commit_changes: true,
+  push_branch: null,
+  discard_changes: null,
+  switch_branch: {
+    success: true,
+    stashed_changes: false,
+    pending_stash_from: null,
+    stash_applied: false,
+    error: null,
+  },
+  push_current_branch: {
+    branch: 'main',
+    remote: 'origin',
+    upstream: 'origin/main',
+    commit_sha: '9f3c1ab7d2e40518c6b9a7f0d4e2c8b1a5f60937',
+  },
 
   // ---- snapshots ---------------------------------------------------------
   snapshot_status: {

@@ -355,8 +355,11 @@ export function Dropdown({
       // edge to the anchor. Inline styles must own both horizontal edges.
       const vertical =
         side === 'top'
-          ? { top: 'auto', bottom: window.innerHeight - rect.top + 6 }
-          : { top: rect.bottom + 6, bottom: 'auto' };
+          ? {
+              top: 'auto',
+              bottom: `calc(${window.innerHeight - rect.top}px + var(--spacing-xs))`,
+            }
+          : { top: `calc(${rect.bottom}px + var(--spacing-xs))`, bottom: 'auto' };
       setPortalPos({
         position: 'fixed',
         ...vertical,

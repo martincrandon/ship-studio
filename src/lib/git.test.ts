@@ -142,6 +142,8 @@ describe('lib/git', () => {
       expect(core.invoke).toHaveBeenCalledWith('commit_changes', {
         projectPath: '/abs/project',
         message: 'feat: add widget',
+        agent: null,
+        expectedBranch: null,
       });
       expect(result).toBe(true);
     });

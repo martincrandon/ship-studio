@@ -4,7 +4,7 @@
  * The branch name is always shown — knowing which branch you're about to
  * publish from is the point of the chip, and hiding it on a clean tree let a
  * user hit Publish believing they were on main. What's conditional is the
- * *affordance*: with unsaved changes the chip opens a compact changed-files
+ * *affordance*: with uncommitted changes the chip opens a compact changed-files
  * review (or the shared Push menu, via `opensPushMenu`); with nothing to open
  * it degrades to a plain label rather than a button that does nothing.
  *
@@ -24,7 +24,10 @@ import { asCommandError, formatCommandError } from '../../lib/errors';
 interface BranchIndicatorProps {
   currentBranch: string;
   hasUncommittedChanges: boolean;
-  changedFiles: ChangedFile[];
+  /** `null` means the changed-file query failed or has not completed. */
+  changedFiles: ChangedFile[] | null;
+  /** Distinguishes a pending query from a settled failure. */
+  changedFilesLoading?: boolean;
   projectPath: string;
   onDiscard?: () => void;
   /** Controlled open state used by the header to keep its menus exclusive. */
@@ -32,20 +35,18 @@ interface BranchIndicatorProps {
   onOpenChange?: (open: boolean) => void;
   /** Opens the shared Push menu instead of rendering a second popover. */
   opensPushMenu?: boolean;
-  /** Whether the current branch is explicitly known to be the live/default branch. */
-  isLive?: boolean;
 }
 
 export function BranchIndicator({
   currentBranch,
   hasUncommittedChanges,
   changedFiles,
+  changedFilesLoading = false,
   projectPath,
   onDiscard,
   isOpen: controlledOpen,
   onOpenChange,
   opensPushMenu = false,
-  isLive = false,
 }: BranchIndicatorProps) {
   const { showToast } = useOptionalToast();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -145,22 +146,31 @@ export function BranchIndicator({
     return parts.length > 1 ? `${parts.slice(0, -1).join('/')}/` : '';
   };
 
-  const changeCount = changedFiles.length;
-  const visibleStatus = changeCount > 0 ? `${changeCount} unsaved` : 'Unsaved';
-  const accessibleStatus =
-    changeCount > 0
-      ? `${changeCount} unsaved ${changeCount === 1 ? 'change' : 'changes'}`
-      : 'unsaved changes';
+  const changeCount = changedFiles?.length ?? null;
+  const filesUnknown = changeCount === null;
+  const visibleStatus = filesUnknown
+    ? changedFilesLoading
+      ? 'Checking…'
+      : 'Couldn’t check'
+    : changeCount > 0
+      ? `${changeCount} uncommitted`
+      : 'Uncommitted';
+  const accessibleStatus = filesUnknown
+    ? changedFilesLoading
+      ? 'checking for changed files'
+      : 'could not check changed files'
+    : changeCount > 0
+      ? `${changeCount} uncommitted ${changeCount === 1 ? 'change' : 'changes'}`
+      : 'uncommitted changes';
 
   // Clean tree and no Push menu behind the chip: there's nothing for a click
   // to open, so render the branch name as a label instead of a dead button.
-  if (!hasUncommittedChanges && !opensPushMenu) {
+  if (!hasUncommittedChanges && !filesUnknown && !opensPushMenu) {
     return (
       <div className="branch-indicator is-clean" data-education-id="branch-indicator">
         <span className="branch-indicator-label">
           <BranchIcon size={14} />
           <span className="branch-name">{currentBranch}</span>
-          {isLive && <span className="branch-live-badge">Live</span>}
         </span>
       </div>
     );
@@ -182,14 +192,17 @@ export function BranchIndicator({
             aria-label={
               hasUncommittedChanges
                 ? `Open Push options for ${accessibleStatus} on ${currentBranch}`
-                : `Open Push options for ${currentBranch}`
+                : filesUnknown
+                  ? `Open Push options; ${accessibleStatus} on ${currentBranch}`
+                  : `Open Push options for ${currentBranch}`
             }
             onClick={() => setOpen(!isOpen)}
             leftIcon={<BranchIcon size={14} />}
           >
             <span className="branch-name">{currentBranch}</span>
-            {isLive && <span className="branch-live-badge">Live</span>}
-            {hasUncommittedChanges && <span className="branch-unsaved-label">{visibleStatus}</span>}
+            {(hasUncommittedChanges || filesUnknown) && (
+              <span className="branch-uncommitted-label">{visibleStatus}</span>
+            )}
           </Button>
         ) : (
           <Button
@@ -202,19 +215,22 @@ export function BranchIndicator({
             leftIcon={<BranchIcon size={14} />}
           >
             <span className="branch-name">{currentBranch}</span>
-            {isLive && <span className="branch-live-badge">Live</span>}
-            <span className="branch-unsaved-label">{visibleStatus}</span>
+            <span className="branch-uncommitted-label">{visibleStatus}</span>
           </Button>
         )}
 
         {isOpen && !opensPushMenu && (
-          <div className="branch-changes-dropdown" role="dialog" aria-label="Unsaved changes">
+          <div className="branch-changes-dropdown" role="dialog" aria-label="Uncommitted changes">
             <div className="branch-changes-header">
-              {changeCount} Unsaved {changeCount === 1 ? 'Change' : 'Changes'}
+              {changeCount === null
+                ? changedFilesLoading
+                  ? 'Checking changed files'
+                  : 'Couldn’t check changed files'
+                : `${changeCount} Uncommitted ${changeCount === 1 ? 'Change' : 'Changes'}`}
             </div>
-            {changeCount > 0 ? (
+            {changeCount !== null && changeCount > 0 ? (
               <div className="branch-changes-list">
-                {changedFiles.map((file) => (
+                {changedFiles?.map((file) => (
                   <button
                     type="button"
                     key={`${file.status}:${file.path}`}
@@ -233,9 +249,15 @@ export function BranchIndicator({
                   </button>
                 ))}
               </div>
+            ) : changeCount === null ? (
+              <div className="branch-changes-empty" role="status">
+                {changedFilesLoading
+                  ? 'Checking for uncommitted changes…'
+                  : 'Git could not check the changed files. Retry after the repository status is available.'}
+              </div>
             ) : (
               <div className="branch-changes-empty">
-                Git reports unsaved changes, but no changed-file details are available.
+                Git reports uncommitted changes, but no changed-file details are available.
               </div>
             )}
             <div className="branch-changes-footer">

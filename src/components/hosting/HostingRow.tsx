@@ -10,6 +10,7 @@
  * Nothing in this component or its stylesheet may change size on hover.
  */
 
+import type { ReactNode } from 'react';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { VercelIcon, CloudflareIcon } from '../icons';
@@ -76,12 +77,21 @@ interface Props {
   commitSubject?: string | null;
   shortSha?: string;
   onAction?: () => void;
+  actionSlot?: ReactNode;
 }
 
-export function HostingRow({ state, commitSubject, shortSha, onAction }: Props) {
+export function HostingRow({ state, commitSubject, shortSha, onAction, actionSlot }: Props) {
   const copy = copyFor(state, commitSubject, shortSha);
   const tone = DOT_TONES[state.kind];
   const pulsing = PULSING.has(state.kind);
+  const action =
+    actionSlot !== undefined ? (
+      actionSlot
+    ) : copy.action ? (
+      <Button size="compact" variant="secondary" onClick={onAction}>
+        {copy.action}
+      </Button>
+    ) : null;
 
   return (
     <div className="hosting-row" data-state={state.kind}>
@@ -117,12 +127,8 @@ export function HostingRow({ state, commitSubject, shortSha, onAction }: Props) 
       </div>
 
       {/* Always rendered so the column keeps its width in every state. */}
-      <div className="hosting-row-action" data-slot="action" data-empty={!copy.action}>
-        {copy.action ? (
-          <Button size="compact" variant="secondary" onClick={onAction}>
-            {copy.action}
-          </Button>
-        ) : null}
+      <div className="hosting-row-action" data-slot="action" data-empty={!action}>
+        {action}
       </div>
     </div>
   );

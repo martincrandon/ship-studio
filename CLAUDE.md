@@ -359,15 +359,37 @@ These names predate the layered token system. Product code must use the canonica
 
 ## Common Patterns
 
-### Publishing Flow
-1. User clicks Push in `PublishBranchDropdown`
-2. `publish_branch` commits any pending changes and pushes the **current** branch to origin
-3. Whatever the project's host does next is the host's business — we push, we don't deploy
+### Git and Hosting Flow
 
-That last point is the change: publishing used to push `HEAD:staging` or `HEAD:main` and then
-record `{ url, state, publishedAt }` into `.shipstudio/project.json`. The state was assumed rather
-than observed (a literal `"QUEUED"`), the URL was empty or assembled from the project name, and
-nothing invalidated it. Deployment truth is now *asked for*, per commit, by the Hosting Flow below.
+The Push menu has three sections, in order: **Local**, **Git**, and **Hosting**. Keep their states
+separate: changed files are uncommitted work, commits ahead of an upstream are unpushed work, and
+deployment status is a provider response. A failed or unavailable status query is unknown, never
+zero. Changed-file status includes untracked files.
+
+1. **Local** shows the known count of changed files and opens their diff review. **Commit…** opens
+   a review with the included scope and an editable message, then creates a local commit only. The
+   scope is all current changes, including untracked files. A commit hook failure stops the flow
+   before any push. The optional suggested message is user-editable; a user-provided message takes
+   precedence over generation, and a generated summary must pass the team writer's secret check
+   before it can become a commit message. `Made-With` attribution must reflect the actual message
+   author, or Ship Studio when the app wrote the message itself.
+2. **Git** shows a branch, destination and ahead/behind counts only when the backend has a known
+   upstream comparison. A pure **Push** sends existing commits and does not stage or commit
+   worktree changes. The remote list and branch/upstream relationship come from backend Git state;
+   never construct a destination from `origin`, the branch name, or a guessed default. **Commit &
+   Push…** commits first, then pushes. If the commit succeeds and the push fails, keep that local
+   commit, say so clearly, and make retry push the existing commit without committing again.
+3. **Hosting** reports whether the exact pushed commit deployed. When a push result is available,
+   pass its returned commit SHA and branch to `get_hosting_status`; without one, resolve the current
+   remote branch SHA. Ask the connected provider about that SHA; never report the latest deployment
+   for some other commit. A Git push may trigger the hosting provider's own configured build, but
+   Ship Studio does not deploy from this menu or infer production from a branch name such as `main`.
+   Show deployment URLs and outcomes only when the provider returned them.
+
+Deployment truth is *asked for*, per commit, by the Hosting Flow below. The old flow pushed
+`HEAD:staging` or `HEAD:main` and recorded `{ url, state, publishedAt }` into `.shipstudio/project.json`.
+That state was assumed rather than observed (a literal `"QUEUED"`), the URL was empty or assembled
+from the project name, and nothing invalidated it. Do not restore that behavior.
 
 ### Hosting Flow
 

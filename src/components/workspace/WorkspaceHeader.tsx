@@ -26,6 +26,7 @@ import {
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { BranchIndicator } from '../branches/BranchIndicator';
 import { BranchesMenu } from '../branches/BranchesMenu';
+import { GitHubButton } from '../branches/GitHubButton';
 import { openInFinder } from '../../lib/ide';
 import { PublishBranchDropdown } from '../branches/PublishBranchDropdown';
 import { PluginSlot } from '../plugins/PluginSlot';
@@ -48,7 +49,8 @@ import type { IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type { PluginThemeData } from '../../contexts/PluginContext';
 import type { BranchInfo, PullRequestInfo } from '../../lib/branches';
-import type { ChangedFile } from '../../lib/git';
+import type { PushResult } from '../../lib/branches';
+import type { ChangedFile, ChangedFileSummary, GitSyncStatus } from '../../lib/git';
 
 /** Re-exported from lib/plugins so non-UI code can share the list (issue #386). */
 export { HOSTING_PLUGIN_IDS } from '../../lib/plugins';
@@ -118,11 +120,19 @@ export interface WorkspaceHeaderProps {
   openPRs: PullRequestInfo[];
   hasUncommittedChanges: boolean;
   changedFiles: ChangedFile[];
+  sourceChangedFiles?: ChangedFile[] | null;
+  sourceChangedFileSummary?: ChangedFileSummary | null;
+  sourceChangedFilesLoading?: boolean;
+  syncStatus?: GitSyncStatus | null;
+  statusLoaded?: boolean;
+  onPushComplete?: (result: PushResult) => void;
+  lastPush?: { result: PushResult; pushedAt: number } | null;
+  hideHosting?: boolean;
   isPulling: boolean;
   isBranchSwitching: boolean;
   isRepositoryViewActive: boolean;
   onPullLatest: () => void;
-  onBranchSwitch: (branch: string) => void;
+  onBranchSwitch: (branch: string) => void | Promise<void>;
   onViewBranches: () => void;
   onCreateBranch: () => void;
   onViewPRs: () => void;
@@ -133,7 +143,7 @@ export interface WorkspaceHeaderProps {
     error: string,
     errorType: 'push_rejected' | 'auth_error' | 'merge_conflict' | 'generic'
   ) => void;
-  onPublishStatusChange: () => void;
+  onPublishStatusChange: (destinationRemote?: string) => void;
   onCreatePR: (branch?: string) => void;
   forcePublishOpen: boolean;
   onForcePublishOpenHandled: () => void;
@@ -314,6 +324,14 @@ export function WorkspaceHeader({
   openPRs,
   hasUncommittedChanges,
   changedFiles,
+  sourceChangedFiles,
+  sourceChangedFileSummary,
+  sourceChangedFilesLoading,
+  syncStatus,
+  statusLoaded,
+  onPushComplete,
+  lastPush,
+  hideHosting,
   isPulling,
   isBranchSwitching,
   isRepositoryViewActive,
@@ -338,9 +356,6 @@ export function WorkspaceHeader({
   pluginTheme,
 }: WorkspaceHeaderProps) {
   const [openSourceMenu, setOpenSourceMenu] = useState<'branches' | 'push' | null>(null);
-  const currentBranchIsLive =
-    currentBranch !== null &&
-    (branches.find((branch) => branch.name === currentBranch)?.isDefault ?? false);
   const projectPathContainerRef = useRef<HTMLDivElement>(null);
   const [expandedProjectPathWidth, setExpandedProjectPathWidth] = useState<number | null>(null);
 
@@ -406,7 +421,7 @@ export function WorkspaceHeader({
         isOpen={openSourceMenu === 'branches'}
         onOpenChange={(open) => setOpenSourceMenu(open ? 'branches' : null)}
         onPullLatest={onPullLatest}
-        onBranchSwitch={onBranchSwitch}
+        onBranchSwitch={(branch) => void onBranchSwitch(branch)}
         onViewBranches={onViewBranches}
         onCreateBranch={onCreateBranch}
         onViewPRs={onViewPRs}
@@ -418,7 +433,14 @@ export function WorkspaceHeader({
       <div
         className={`source-control-push${hasUncommittedChanges ? ' has-unsaved-changes' : ''}`}
         onClick={(event) => {
-          if ((event.target as HTMLElement).closest('button')) return;
+          if ((event.target as HTMLElement).closest('.publish-dropdown-menu')) return;
+          if (
+            (event.target as HTMLElement).closest(
+              'button, select, input, textarea, a, [role="button"], [role="combobox"]'
+            )
+          ) {
+            return;
+          }
           setOpenSourceMenu(openSourceMenu === 'push' ? null : 'push');
         }}
       >
@@ -429,33 +451,58 @@ export function WorkspaceHeader({
         {currentBranch && (
           <BranchIndicator
             currentBranch={currentBranch}
-            hasUncommittedChanges={hasUncommittedChanges}
-            changedFiles={changedFiles}
+            hasUncommittedChanges={
+              sourceChangedFiles !== undefined
+                ? (sourceChangedFiles?.length ?? 0) > 0
+                : hasUncommittedChanges
+            }
+            changedFiles={sourceChangedFiles !== undefined ? sourceChangedFiles : changedFiles}
+            changedFilesLoading={sourceChangedFilesLoading}
             projectPath={projectPath}
             onDiscard={onDiscardChanges}
             isOpen={openSourceMenu === 'push'}
             onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
             opensPushMenu
-            isLive={currentBranchIsLive}
           />
         )}
         <PublishBranchDropdown
-          currentBranch={currentBranch || 'main'}
+          currentBranch={currentBranch}
           projectGithubStatus={integrations.projectGithub}
           projectPath={projectPath}
           hasChangesToSync={hasUncommittedChanges}
           onStatusChange={onPublishStatusChange}
+          branches={branches}
+          onBranchSwitch={onBranchSwitch}
+          isBranchSwitching={isBranchSwitching}
           onModalClose={focusActiveTerminal}
           isPublishing={isPublishing}
           setIsPublishing={setIsPublishing}
           onPublishError={onPublishError}
           onCreatePR={onCreatePR}
+          gitSetupAction={
+            <GitHubButton
+              githubState={integrations.github}
+              projectStatus={integrations.projectGithub}
+              projectPath={projectPath}
+              projectName={projectName}
+              onStatusChange={onGitHubStatusChange}
+              onGitHubConnect={onGitHubConnect}
+              onModalClose={focusActiveTerminal}
+            />
+          }
           forceOpen={forcePublishOpen}
           onForceOpenHandled={onForcePublishOpenHandled}
           open={openSourceMenu === 'push'}
           onOpenChange={(open) => setOpenSourceMenu(open ? 'push' : null)}
           grouped={hasUncommittedChanges}
-          changedFiles={changedFiles}
+          changedFiles={sourceChangedFiles !== undefined ? sourceChangedFiles : changedFiles}
+          changedFileSummary={sourceChangedFileSummary}
+          changedFilesLoading={sourceChangedFilesLoading}
+          syncStatus={syncStatus}
+          statusLoaded={statusLoaded}
+          onPushComplete={onPushComplete}
+          lastPush={lastPush}
+          hideHosting={hideHosting ?? compactWorkspaceToolbarEnabled}
           onDiscardChanges={onDiscardChanges}
           excludeClickOutsideSelector=".source-control-push"
         />

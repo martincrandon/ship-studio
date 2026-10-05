@@ -43,24 +43,613 @@
 
 .publish-dropdown-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + var(--spacing-xs));
   right: 0;
-  width: var(--popover-source-control-width);
-  /* Width was pinned but height was not, so a long changed-files list or a
-     slow-arriving hosting status could grow the panel past the bottom of the
-     screen with no way to reach the actions. Same viewport clamp the sibling
-     `.branches-menu-popover` already uses. */
-  max-height: calc(100vh - var(--spacing-2xl) - var(--panel-header-h));
-  overflow-y: auto;
+  width: min(var(--popover-source-control-width), calc(100vw - var(--spacing-2xl)));
+  max-height: calc(100vh - var(--panel-header-h) - var(--spacing-2xl) - var(--spacing-2xl));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--surface-panel);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-md);
   z-index: var(--z-modal-overlay);
 }
 
+.publish-dropdown-menu[hidden] {
+  display: none;
+}
+
+.publish-dropdown-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.publish-dropdown-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) var(--spacing-md) var(--spacing-md);
+}
+
+.publish-dropdown-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  text-wrap: balance;
+  white-space: nowrap;
+}
+
+.publish-dropdown-heading p {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  text-wrap: pretty;
+}
+
+.publish-commit-destination {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  justify-content: flex-start;
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.publish-commit-destination > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.publish-commit-destination > .ss-dropdown {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 75%;
+}
+
+.publish-commit-destination .button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.publish-commit-destination .button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.publish-dropdown-branch {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+
+.publish-dropdown-branch .publish-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publish-local-branch,
+.publish-remote-branch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  margin: 0 0 var(--spacing-sm);
+}
+
+.publish-local-branch {
+  padding-bottom: var(--spacing-sm);
+  border-bottom: var(--stroke-1) solid var(--border-default);
+}
+
+.publish-local-branch-label,
+.publish-remote-branch-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  white-space: nowrap;
+}
+
+.publish-branch-info.publish-local-branch-pill,
+.publish-branch-info.publish-remote-branch-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  box-sizing: border-box;
+  height: var(--button-height);
+  min-height: var(--button-height);
+  min-width: 0;
+  max-width: 72%;
+  margin: 0;
+  padding: 0 var(--spacing-md);
+}
+
+.publish-local-branch-pill .publish-branch-name,
+.publish-remote-branch-pill .publish-branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+.publish-local-section,
+.publish-remote-section {
+  padding: var(--spacing-md);
+}
+
+.publish-remote-section {
+  border-top: var(--stroke-1) solid var(--border-default);
+}
+
+.publish-remote-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.publish-remote-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.publish-remote-status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.publish-remote-name {
+  color: var(--text-primary);
+}
+
+.publish-remote-status-copy .publish-branch-description {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-badge);
+  line-height: var(--line-height-help);
+}
+
+.publish-remote-count {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.publish-remote-status-action.button {
+  flex: 0 0 auto;
+}
+
+.publish-destination-context {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.publish-destination-context strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.publish-outgoing-disclosure {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.publish-outgoing-disclosure:hover {
+  color: var(--text-primary);
+}
+
+.publish-outgoing-disclosure:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-control);
+}
+
+.publish-outgoing-disclosure-icon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.publish-outgoing-disclosure[aria-expanded='true'] .publish-outgoing-disclosure-icon {
+  transform: none;
+}
+
+.publish-outgoing-list {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(var(--spacing-2xl) * 6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: var(--spacing-xs) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.publish-outgoing-list[hidden] {
+  display: none;
+}
+
+.publish-outgoing-commit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding-block: var(--spacing-2xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.publish-outgoing-commit code {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-size-badge);
+}
+
+.publish-outgoing-commit span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.publish-remote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+.publish-remote-select-label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.publish-remote-destination {
+  min-width: 0;
+}
+
+.publish-remote-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.publish-remote-select-row > .ss-dropdown {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.publish-remote-select-trigger.button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  box-sizing: border-box;
+  height: var(--button-height);
+  min-height: var(--button-height);
+  min-width: 0;
+  width: 100%;
+  padding: 0 var(--spacing-md);
+  border-radius: var(--radius-card);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+  background: var(--surface-control);
+  text-align: left;
+}
+
+.publish-remote-select-trigger.button:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+}
+
+.publish-remote-select-trigger > svg:first-child {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.publish-remote-select-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-regular);
+}
+
+.publish-remote-select-chevron {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.publish-remote-options.ss-dropdown__menu {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 100%;
+  max-width: none;
+}
+
+.publish-remote-options .ss-dropdown__item {
+  overflow-wrap: anywhere;
+}
+
+.publish-git-section .publish-branch-header {
+  padding: 0 0 var(--spacing-sm);
+}
+
+.publish-git-section .publish-branch-body {
+  padding: 0;
+}
+
+.publish-git-connection-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.publish-git-connection-row .publish-branch-description {
+  margin-bottom: 0;
+}
+
+.publish-git-section .publish-success {
+  padding: var(--spacing-sm) 0;
+}
+
+.publish-error-guidance {
+  margin-top: var(--spacing-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
 .publish-changes-actions {
   justify-content: space-between;
+}
+
+.publish-changes-section .branch-changes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: 0 0 var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.publish-changes-disclosure {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.publish-change-count {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publish-changes-disclosure .publish-change-totals {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.publish-changes-disclosure:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-control);
+}
+
+.publish-changes-disclosure-icon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.publish-changes-disclosure[aria-expanded='true'] .publish-changes-disclosure-icon {
+  transform: none;
+}
+
+.branch-changes-heading-copy {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.publish-change-totals,
+.publish-file-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 0 0 auto;
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.publish-change-totals-unknown {
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+}
+
+.publish-discard-text-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.publish-changes-section .branch-changes-item {
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-sm) 0;
+  font-size: var(--font-size-body-sm);
+}
+
+.publish-changes-section .branch-changes-list {
+  max-height: calc(
+    var(--spacing-2xl) + var(--spacing-2xl) + var(--spacing-2xl) + var(--spacing-2xl) +
+      var(--spacing-2xl)
+  );
+  overflow-y: auto;
+}
+
+.publish-changes-section .branch-changes-list[hidden] {
+  display: none;
+}
+
+.publish-zero-changes-empty.branch-changes-empty {
+  padding: var(--spacing-xs) 0 0 calc(var(--spacing-md) + var(--spacing-xs));
+}
+
+.publish-changes-section .branch-changes-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.publish-file-stats {
+  margin-left: auto;
+}
+
+.publish-discard-button {
+  flex: 0 0 auto;
+}
+
+.publish-commit-composer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  border: var(--stroke-1) solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-control);
+}
+
+.publish-commit-composer:focus-within {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.publish-commit-message.ss-text-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--button-height);
+  padding: 0 var(--spacing-sm);
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.publish-commit-composer .publish-commit-message.ss-text-field:focus {
+  outline: none;
+}
+
+.publish-commit-composer .button {
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin: calc(-1 * var(--stroke-1));
+  margin-left: 0;
+}
+
+.publish-commit-composer .button:focus-visible {
+  outline: none;
+}
+
+.publish-commit-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.publish-commit-helper {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.publish-dropdown-footer {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-top: var(--stroke-1) solid var(--border-default);
+  background: var(--surface-panel);
+}
+
+.publish-footer-summary {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-body-sm);
 }
 
 .publish-hosting-section {
@@ -68,14 +657,168 @@
   border-top: var(--stroke-1) solid var(--border-default);
 }
 
-.publish-hosting-heading {
+.publish-section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
   margin-bottom: var(--spacing-sm);
   color: var(--text-muted);
   font-size: var(--font-size-body-sm);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-code);
-  text-transform: uppercase;
 }
+
+.publish-section-heading > svg {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.publish-section-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.publish-hosting-consequence {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.publish-hosting-connect-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+}
+
+.commit-changes-modal {
+  width: min(520px, 92vw);
+  max-height: 84vh;
+  overflow: hidden;
+}
+
+.commit-changes-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg) var(--spacing-xl);
+}
+
+.commit-changes-scope,
+.commit-changes-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+}
+
+.commit-changes-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  list-style: none;
+  background: var(--surface-control);
+  border-radius: var(--radius-control);
+}
+
+.commit-changes-file-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  overflow-wrap: anywhere;
+}
+
+.commit-file-status {
+  flex: 0 0 var(--spacing-md);
+  color: var(--text-muted);
+  font-weight: var(--font-weight-semibold);
+}
+
+.commit-file-status--added,
+.commit-file-status--untracked {
+  color: var(--accent-success);
+}
+
+.commit-file-status--deleted {
+  color: var(--accent-error);
+}
+
+.commit-message-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-label);
+}
+
+.commit-changes-body .ss-text-field--multiline {
+  min-height: calc(var(--spacing-2xl) + var(--spacing-2xl) + var(--spacing-2xl));
+  resize: vertical;
+}
+
+.commit-remote-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  color: var(--text-primary);
+  font-size: var(--font-size-body-sm);
+  font-weight: var(--font-weight-label);
+}
+
+.commit-remote-select {
+  width: 100%;
+}
+
+.commit-changes-error,
+.commit-changes-partial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: var(--stroke-1) solid var(--border-default);
+  border-radius: var(--radius-control);
+  color: var(--accent-error-deep);
+  font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-help);
+  overflow-wrap: anywhere;
+}
+
+.commit-changes-partial {
+  color: var(--text-secondary);
+  background: var(--surface-control);
+}
+
+.commit-changes-partial strong {
+  color: var(--accent-warning);
+}
+
+.commit-changes-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-xl);
+  border-top: var(--stroke-1) solid var(--border-default);
+}
+
 /* The rules that used to live here reached into the Vercel and Cloudflare
    plugins' own class names to flatten their absolutely-positioned hover menus
    into this section, and revealed their hidden actions on `:hover`. The section

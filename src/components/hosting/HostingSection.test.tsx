@@ -139,6 +139,16 @@ describe('HostingRow geometry', () => {
     expect(action).toBeInTheDocument();
     expect(action).toHaveAttribute('data-empty', 'true');
   });
+
+  it('renders a supplied connection action in the existing action column', () => {
+    const { container, getByRole } = render(
+      <HostingRow state={{ kind: 'no_link' }} actionSlot={<button type="button">Connect</button>} />
+    );
+    const action = container.querySelector('[data-slot="action"]');
+
+    expect(action).toHaveAttribute('data-empty', 'false');
+    expect(action).toContainElement(getByRole('button', { name: 'Connect' }));
+  });
 });
 
 describe('hosting copy', () => {
