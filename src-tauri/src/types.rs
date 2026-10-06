@@ -878,6 +878,11 @@ pub struct AppState {
     /// (and every existing install) reads as disabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spotify_widget_enabled: Option<bool>,
+    /// Whether dev servers stay running in background projects and while the
+    /// Preview is hidden. Opt-in so existing installs keep the beginner-safe
+    /// automatic stop behavior.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_dev_servers_running: Option<bool>,
     /// Whether the dashboard home header is hidden
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dashboard_header_hidden: Option<bool>,

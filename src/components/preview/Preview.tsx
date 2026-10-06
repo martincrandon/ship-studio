@@ -196,6 +196,10 @@ interface PreviewProps {
   /** Whether the preview may probe its port. The Preview shell stays mounted
    *  while project setup is still reserving the real port. */
   previewConnectionEnabled?: boolean;
+  /** True when this project already has a tracked server from an earlier view. */
+  serverAlreadyRunning?: boolean;
+  /** Unique identity for the tracked server process, used to scope warm readiness. */
+  serverInstanceId?: number | null;
   /** Detected project type; gates the visual editor to Next.js for v1. */
   projectType?: ProjectType;
   /** Callback to send prompt to Claude terminal */
@@ -324,6 +328,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     isDevServerRestarting = false,
     isStaticProject = false,
     previewConnectionEnabled = true,
+    serverAlreadyRunning = false,
+    serverInstanceId = null,
     projectType,
     onSendToClaude,
     previewPlugins,
@@ -375,6 +381,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     isDevServerRestarting,
     isStaticProject,
     enabled: previewConnectionEnabled,
+    serverAlreadyRunning,
+    serverInstanceId,
     onServerReady,
     onPageChange,
     onSendToClaude,

@@ -4,11 +4,14 @@ import {
   COMPACT_WORKSPACE_TOOLBAR_CHANGED_EVENT,
   DASHBOARD_VISIBILITY_CHANGED_EVENT,
   ELEMENT_BREADCRUMB_ENABLED_CHANGED_EVENT,
+  KEEP_DEV_SERVERS_RUNNING_LOCAL_CHANGED_EVENT,
   getAppIcon,
+  getKeepDevServersRunning,
   setCalendarHidden,
   setCompactWorkspaceToolbarEnabled,
   setDashboardHeaderHidden,
   setElementBreadcrumbEnabled,
+  setKeepDevServersRunning,
   setAppIcon,
   setSlackCtaHidden,
 } from './settings';
@@ -116,5 +119,34 @@ describe('app icon setting', () => {
     await setAppIcon('light');
 
     expect(invokeMock).toHaveBeenCalledWith('set_app_icon', { icon: 'light' });
+  });
+});
+
+describe('background dev-server setting', () => {
+  const invokeMock = vi.mocked(invoke);
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+  });
+
+  it('defaults to disabled when the preference cannot be read', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('unavailable'));
+
+    await expect(getKeepDevServersRunning()).resolves.toBe(false);
+    expect(invokeMock).toHaveBeenCalledWith('get_keep_dev_servers_running');
+  });
+
+  it('persists the preference and notifies this window', async () => {
+    const listener = vi.fn();
+    window.addEventListener(KEEP_DEV_SERVERS_RUNNING_LOCAL_CHANGED_EVENT, listener);
+
+    await setKeepDevServersRunning(true);
+
+    expect(invokeMock).toHaveBeenCalledWith('set_keep_dev_servers_running', { enabled: true });
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]?.[0]).toMatchObject({ detail: true });
+
+    window.removeEventListener(KEEP_DEV_SERVERS_RUNNING_LOCAL_CHANGED_EVENT, listener);
   });
 });

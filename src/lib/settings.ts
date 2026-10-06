@@ -20,6 +20,11 @@ export const ELEMENT_BREADCRUMB_ENABLED_CHANGED_EVENT =
  *  sidebar (which renders the widget) isn't a child of the Settings modal
  *  (which owns the toggle), so this is how the toggle reaches it live. */
 export const SPOTIFY_WIDGET_ENABLED_CHANGED_EVENT = 'shipstudio:spotify-widget-enabled-changed';
+/** Tauri event broadcast whenever the app-wide dev-server setting changes. */
+export const KEEP_DEV_SERVERS_RUNNING_CHANGED_EVENT = 'keep-dev-servers-running-changed';
+/** Window-local event for keeping separate Settings surfaces in sync. */
+export const KEEP_DEV_SERVERS_RUNNING_LOCAL_CHANGED_EVENT =
+  'shipstudio:keep-dev-servers-running-changed';
 
 /** The app icons available for the macOS Dock. */
 export const APP_ICON_OPTIONS = [
@@ -281,6 +286,27 @@ export async function setSpotifyWidgetEnabled(enabled: boolean): Promise<void> {
     await invoke('set_spotify_widget_enabled', { enabled });
     window.dispatchEvent(
       new CustomEvent<boolean>(SPOTIFY_WIDGET_ENABLED_CHANGED_EVENT, { detail: enabled })
+    );
+  } catch {
+    // Silently fail, matching the other non-critical UI preferences.
+  }
+}
+
+/** Whether dev servers stay alive while their project or Preview is hidden. */
+export async function getKeepDevServersRunning(): Promise<boolean> {
+  try {
+    return await invoke<boolean>('get_keep_dev_servers_running');
+  } catch {
+    return false;
+  }
+}
+
+/** Persist the opt-in and notify Settings surfaces in this window. */
+export async function setKeepDevServersRunning(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_keep_dev_servers_running', { enabled });
+    window.dispatchEvent(
+      new CustomEvent<boolean>(KEEP_DEV_SERVERS_RUNNING_LOCAL_CHANGED_EVENT, { detail: enabled })
     );
   } catch {
     // Silently fail, matching the other non-critical UI preferences.

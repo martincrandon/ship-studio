@@ -266,7 +266,11 @@ describe('useDevServer', () => {
       expect(detectedType).toBe('statichtml');
       expect(result.current.projectType).toBe('statichtml');
       expect(result.current.devServerPort).toBe(9090);
-      expect(startStaticServer).toHaveBeenCalledWith('main', '/path/to/project');
+      expect(startStaticServer).toHaveBeenCalledWith(
+        'main',
+        '/path/to/project',
+        '/path/to/project'
+      );
     });
 
     it('serves a generic project statically when force_static_serve is set', async () => {
@@ -292,7 +296,11 @@ describe('useDevServer', () => {
 
       expect(detectedType).toBe('statichtml');
       expect(result.current.projectType).toBe('statichtml');
-      expect(startStaticServer).toHaveBeenCalledWith('main', '/path/to/project');
+      expect(startStaticServer).toHaveBeenCalledWith(
+        'main',
+        '/path/to/project',
+        '/path/to/project'
+      );
       // It must NOT fall into the generic/no-command branch that starts nothing.
       expect(startDevServer).not.toHaveBeenCalled();
     });
@@ -544,6 +552,91 @@ describe('useDevServer', () => {
   });
 
   describe('stopServer', () => {
+    it('stops a process whose start resolves after Stop was clicked', async () => {
+      const project = await import('../lib/project');
+      const { detectProjectType } = await import('../lib/static-server');
+      vi.mocked(detectProjectType).mockResolvedValue('nextjs');
+
+      let resolveStart!: (handle: never) => void;
+      const pendingStart = new Promise<never>((resolve) => {
+        resolveStart = resolve;
+      });
+      vi.mocked(project.startDevServer).mockImplementationOnce(() => pendingStart);
+
+      const stopHandle = vi.fn().mockResolvedValue(undefined);
+      const handle = {
+        pty: { kill: vi.fn() },
+        stop: stopHandle,
+      } as never;
+      const path = '/path/to/project';
+      const { result } = renderHook(() => useDevServer(path));
+
+      let startPromise!: Promise<unknown>;
+      await act(async () => {
+        startPromise = result.current.startServerForProject(path, 'project', 3000, 'main');
+        await vi.waitFor(() => expect(project.startDevServer).toHaveBeenCalledOnce());
+      });
+
+      let stopPromise!: Promise<void>;
+      act(() => {
+        stopPromise = result.current.stopServer(path);
+      });
+      let processStopFinished = false;
+      void stopPromise.then(() => {
+        processStopFinished = true;
+      });
+      await Promise.resolve();
+      expect(processStopFinished).toBe(false);
+
+      await act(async () => {
+        resolveStart(handle);
+        await Promise.all([startPromise, stopPromise]);
+      });
+
+      expect(stopHandle).toHaveBeenCalledOnce();
+      expect(result.current.isServerRunning(path)).toBe(false);
+    });
+
+    it('stops a static server whose start resolves after Stop was clicked', async () => {
+      const { detectProjectType, startStaticServer, stopStaticServer } =
+        await import('../lib/static-server');
+      vi.mocked(detectProjectType).mockResolvedValue('statichtml');
+
+      let resolveStart!: (port: number) => void;
+      const pendingStart = new Promise<number>((resolve) => {
+        resolveStart = resolve;
+      });
+      vi.mocked(startStaticServer).mockImplementationOnce(() => pendingStart);
+
+      const path = '/path/to/static-project';
+      const { result } = renderHook(() => useDevServer(path));
+
+      let startPromise!: Promise<unknown>;
+      await act(async () => {
+        startPromise = result.current.startServerForProject(path, 'project', 3000, 'main');
+        await vi.waitFor(() => expect(startStaticServer).toHaveBeenCalledOnce());
+      });
+
+      let stopPromise!: Promise<void>;
+      act(() => {
+        stopPromise = result.current.stopServer(path);
+      });
+      let staticStopFinished = false;
+      void stopPromise.then(() => {
+        staticStopFinished = true;
+      });
+      await Promise.resolve();
+      expect(staticStopFinished).toBe(false);
+
+      await act(async () => {
+        resolveStart(9090);
+        await Promise.all([startPromise, stopPromise]);
+      });
+
+      expect(stopStaticServer).toHaveBeenCalledWith('main', path);
+      expect(result.current.isServerRunning(path)).toBe(false);
+    });
+
     it('keeps the last-known project type so the Preview tab survives a stop', async () => {
       const { result } = renderHook(() => useDevServer('/path/to/project'));
 

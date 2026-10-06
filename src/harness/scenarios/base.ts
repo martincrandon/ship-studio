@@ -98,6 +98,7 @@ export const baseCommands: CommandMap = {
   list_pinned_projects: [],
   get_pinned_projects: [],
   get_settings: {},
+  get_keep_dev_servers_running: false,
   get_compact_workspace_toolbar_enabled: false,
   // Both default-on in the product, so captures show what people actually see.
   get_element_breadcrumb_enabled: true,

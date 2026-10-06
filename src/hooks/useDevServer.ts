@@ -1,7 +1,6 @@
 /**
  * Hook for dev server lifecycle management — owns one dev-server handle per
- * project path so hot (pinned) projects keep their servers running across
- * project switches.
+ * project path so a retained project can reuse its server after a switch.
  *
  * `startServerForProject` phases: resolve workspace cwd (monorepo subpath) →
  * detect project type → dependency gate (`node_modules` missing sets
@@ -110,9 +109,27 @@ export interface DevServerUnexpectedExit {
   at: number;
 }
 
+export type ProjectDevServerStatus = 'starting' | 'ready' | 'stopped' | 'not-running';
+
+/** Read-only lifecycle information for project rows and warm-preview reuse. */
+export interface ProjectDevServerSnapshot {
+  status: ProjectDevServerStatus;
+  /** Host and port only, and only when this project's port is known. */
+  address: string | null;
+  /** Unique for each successful server start; null when no process is live. */
+  instanceId: number | null;
+}
+
 /** All the per-project server state we track in the map. */
 interface ProjectServerState {
   handle: DevServerHandle | null;
+  serverInstanceId: number | null;
+  /** Invalidates in-flight detection/spawn work when Stop is clicked. */
+  startGeneration: number;
+  starting: boolean;
+  inFlightStart: Promise<unknown> | null;
+  /** Static server is live only after its bind command resolves. */
+  staticStarted: boolean;
   port: number;
   /** False until `port` holds a value that affirmatively belongs to THIS
    *  project — a reservation, a static-server bind, or a port the server
@@ -188,6 +205,11 @@ function safePtyResize(handle: DevServerHandle | null, cols: number, rows: numbe
 function makeState(): ProjectServerState {
   return {
     handle: null,
+    serverInstanceId: null,
+    startGeneration: 0,
+    starting: false,
+    inFlightStart: null,
+    staticStarted: false,
     port: DEFAULT_PORT,
     portKnown: false,
     type: 'unknown',
@@ -269,6 +291,7 @@ export function useDevServer(currentProjectPath: string | null) {
   // app it always resolves to the app-root provider.
   const { showToast } = useOptionalToast();
   const statesRef = useRef<Map<string, ProjectServerState>>(new Map());
+  const stopPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   // Last-known capability info per project path. `stopServer` drops a
   // project's live state entirely (by design), but the Preview tab must stay
   // visible while nothing is running — so we keep the detected type and any
@@ -288,6 +311,13 @@ export function useDevServer(currentProjectPath: string | null) {
   // to re-read. Output from non-current projects accumulates silently.
   const [renderKey, setRenderKey] = useState(0);
   const bump = useCallback(() => setRenderKey((v) => v + 1), []);
+  const [serverLifecycleVersion, setServerLifecycleVersion] = useState(0);
+  const bumpServerLifecycle = useCallback(() => setServerLifecycleVersion((v) => v + 1), []);
+  const nextServerInstanceIdRef = useRef(0);
+  const markServerStarted = useCallback((s: ProjectServerState) => {
+    nextServerInstanceIdRef.current += 1;
+    s.serverInstanceId = nextServerInstanceIdRef.current;
+  }, []);
 
   const healthPanelRef = useRef<HealthTabPanelRef>(null);
 
@@ -474,6 +504,7 @@ export function useDevServer(currentProjectPath: string | null) {
             exitCode: exitCode ?? null,
           });
           current.handle = null;
+          current.serverInstanceId = null;
           // Only exits Ship Studio did NOT initiate reach this point:
           // stopServer deletes the map entry and restart paths null the
           // handle before their kill lands, so `current.handle !== handle`
@@ -481,12 +512,13 @@ export function useDevServer(currentProjectPath: string | null) {
           // a real process restart instead of a poll-only Retry.
           current.unexpectedExit = { exitCode: exitCode ?? null, at: Date.now() };
           bump();
+          bumpServerLifecycle();
         });
       } catch (e) {
         logger.warn('[useDevServer] failed to attach exit watcher', { error: String(e) });
       }
     },
-    [bump]
+    [bump, bumpServerLifecycle]
   );
 
   const createOutputHandler = useCallback(
@@ -588,7 +620,15 @@ export function useDevServer(currentProjectPath: string | null) {
 
   const startServerForProject = useCallback(
     async (projectPath: string, projectName: string, port: number, windowLabel: string) => {
+      await stopPromisesRef.current.get(projectPath);
       const s = getOrCreateState(projectPath);
+      if (s.starting || s.handle) return s.type;
+      const generation = ++s.startGeneration;
+      const isCurrentStart = () =>
+        statesRef.current.get(projectPath) === s && s.startGeneration === generation;
+      s.starting = true;
+      s.serverInstanceId = null;
+      bumpServerLifecycle();
       // Re-enable output handling for the (possibly new) server on this path.
       s.suppressed = false;
       s.port = port;
@@ -601,6 +641,7 @@ export function useDevServer(currentProjectPath: string | null) {
       // For monorepo projects, dev server / project-type detection should run
       // against the picked workspace subdir. Git/PR ops still use the repo root.
       const cwd = await resolveDevServerCwd(projectPath);
+      if (!isCurrentStart()) return s.type;
       if (cwd !== projectPath) {
         logger.info('[OpenProject] Using workspace subpath as dev server cwd', {
           projectPath,
@@ -617,6 +658,7 @@ export function useDevServer(currentProjectPath: string | null) {
       } catch {
         logger.warn('[OpenProject] Failed to detect project type, defaulting to unknown');
       }
+      if (!isCurrentStart()) return s.type;
 
       // A plain static site that carries a root `package.json` only for build
       // tooling (PostCSS, autoprefixer, a CSS minifier) is detected as `generic`
@@ -633,6 +675,7 @@ export function useDevServer(currentProjectPath: string | null) {
       } catch {
         /* default: respect detection */
       }
+      if (!isCurrentStart()) return s.type;
       if (forceStatic && (detectedType === 'generic' || detectedType === 'unknown')) {
         logger.info('[OpenProject] force_static_serve set; serving as static HTML', {
           projectPath,
@@ -668,6 +711,7 @@ export function useDevServer(currentProjectPath: string | null) {
           detectedType === 'shopifytheme' || forceStatic
             ? { installed: true, hasPackageJson: false, workspaceHasPackageJson: false }
             : await checkDependenciesInstalled(projectPath);
+        if (!isCurrentStart()) return s.type;
         if (detectedType !== 'shopifytheme' && !forceStatic) {
           hasPackageJson = depStatus.hasPackageJson;
           // Older backends predate the field; keep null (= unknown) then.
@@ -681,6 +725,7 @@ export function useDevServer(currentProjectPath: string | null) {
             );
             return 'npm';
           });
+          if (!isCurrentStart()) return s.type;
           s.needsInstall = { packageManager };
           bump();
           logger.info('[OpenProject] Dependencies missing; deferring dev server', {
@@ -688,6 +733,7 @@ export function useDevServer(currentProjectPath: string | null) {
             packageManager,
             projectType: detectedType,
           });
+          s.starting = false;
           return detectedType;
         }
       } catch (err) {
@@ -706,6 +752,7 @@ export function useDevServer(currentProjectPath: string | null) {
         } catch {
           /* no custom command configured */
         }
+        if (!isCurrentStart()) return s.type;
         s.customCommand = cmd;
         bump();
 
@@ -722,14 +769,28 @@ export function useDevServer(currentProjectPath: string | null) {
               project_name: projectName,
               $screen_name: 'Workspace',
             });
-            s.handle = await startDevServer(
+            const startPromise = startDevServer(
               cwd,
               port,
               windowLabel,
               createOutputHandler(projectPath),
               cmd
             );
-            wireExitWatcher(projectPath, s);
+            const startTask = startPromise.then(async (handle) => {
+              if (!isCurrentStart()) {
+                await handle.stop().catch(() => undefined);
+                return null;
+              }
+              s.handle = handle;
+              markServerStarted(s);
+              wireExitWatcher(projectPath, s);
+              return handle;
+            });
+            s.inFlightStart = startTask;
+            const handle = await startTask;
+            if (!handle) return s.type;
+            s.inFlightStart = null;
+            bumpServerLifecycle();
             logger.info('[OpenProject] Generic project dev server started with custom command', {
               command: cmd,
             });
@@ -741,7 +802,20 @@ export function useDevServer(currentProjectPath: string | null) {
         }
       } else if (detectedType === 'statichtml') {
         try {
-          const staticPort = await startStaticServer(windowLabel, cwd);
+          const startPromise = startStaticServer(windowLabel, projectPath, cwd);
+          const startTask = startPromise.then(async (staticPort) => {
+            if (!isCurrentStart()) {
+              await stopStaticServer(windowLabel, projectPath).catch(() => undefined);
+              return null;
+            }
+            return staticPort;
+          });
+          s.inFlightStart = startTask;
+          const staticPort = await startTask;
+          if (staticPort === null) return s.type;
+          s.inFlightStart = null;
+          s.staticStarted = true;
+          markServerStarted(s);
           s.port = staticPort;
           s.portKnown = true;
           bump();
@@ -751,6 +825,7 @@ export function useDevServer(currentProjectPath: string | null) {
             project_name: projectName,
             $screen_name: 'Workspace',
           });
+          bumpServerLifecycle();
           logger.info(`[OpenProject] Static server started on port ${staticPort}`);
         } catch (error) {
           logger.error('Failed to start static server', { error });
@@ -775,6 +850,7 @@ export function useDevServer(currentProjectPath: string | null) {
         } catch {
           /* not connected yet */
         }
+        if (!isCurrentStart()) return s.type;
         if (store) {
           try {
             s.outputBuffer = '';
@@ -795,14 +871,29 @@ export function useDevServer(currentProjectPath: string | null) {
             // Reap prompt-stuck leftovers first: they hold a dev session that
             // would make this run stall on a "proceed?" confirm.
             await killStaleThemeDev(store).catch(() => undefined);
-            s.handle = await startDevServer(
+            if (!isCurrentStart()) return s.type;
+            const startPromise = startDevServer(
               cwd,
               port,
               windowLabel,
               createOutputHandler(projectPath),
               shopifyThemeDevCommand(store, port)
             );
-            wireExitWatcher(projectPath, s);
+            const startTask = startPromise.then(async (handle) => {
+              if (!isCurrentStart()) {
+                await handle.stop().catch(() => undefined);
+                return null;
+              }
+              s.handle = handle;
+              markServerStarted(s);
+              wireExitWatcher(projectPath, s);
+              return handle;
+            });
+            s.inFlightStart = startTask;
+            const handle = await startTask;
+            if (!handle) return s.type;
+            s.inFlightStart = null;
+            bumpServerLifecycle();
             logger.info('[OpenProject] Shopify theme dev server started', { store, port });
           } catch (error) {
             logger.error('Failed to start Shopify theme dev server', { error });
@@ -856,8 +947,27 @@ export function useDevServer(currentProjectPath: string | null) {
             project_name: projectName,
             $screen_name: 'Workspace',
           });
-          s.handle = await startDevServer(cwd, port, windowLabel, createOutputHandler(projectPath));
-          wireExitWatcher(projectPath, s);
+          const startPromise = startDevServer(
+            cwd,
+            port,
+            windowLabel,
+            createOutputHandler(projectPath)
+          );
+          const startTask = startPromise.then(async (handle) => {
+            if (!isCurrentStart()) {
+              await handle.stop().catch(() => undefined);
+              return null;
+            }
+            s.handle = handle;
+            markServerStarted(s);
+            wireExitWatcher(projectPath, s);
+            return handle;
+          });
+          s.inFlightStart = startTask;
+          const handle = await startTask;
+          if (!handle) return s.type;
+          s.inFlightStart = null;
+          bumpServerLifecycle();
         } catch (error) {
           logger.error('Failed to start dev server', { error });
         }
@@ -870,19 +980,44 @@ export function useDevServer(currentProjectPath: string | null) {
         });
       }
 
+      if (isCurrentStart()) {
+        s.starting = false;
+        s.inFlightStart = null;
+        bumpServerLifecycle();
+      }
       return detectedType;
     },
-    [bump, createOutputHandler, getOrCreateState, wireExitWatcher]
+    [
+      bump,
+      bumpServerLifecycle,
+      createOutputHandler,
+      getOrCreateState,
+      markServerStarted,
+      wireExitWatcher,
+    ]
   );
 
   // Stop the dev/static server for a specific project (or the current project
   // if no path given). Safe to call when nothing is running.
   const stopServer = useCallback(
-    async (projectPath?: string) => {
+    (projectPath?: string): Promise<void> => {
       const targetPath = projectPath ?? currentPathRef.current;
-      if (!targetPath) return;
+      if (!targetPath) return Promise.resolve();
+      const existingStop = stopPromisesRef.current.get(targetPath);
+      if (existingStop) return existingStop;
       const s = statesRef.current.get(targetPath);
-      if (!s) return;
+      if (!s) return Promise.resolve();
+
+      // Invalidate pending detection/spawn work synchronously. A restart for
+      // this path waits on the stop promise below, so it cannot race teardown.
+      s.startGeneration += 1;
+      s.starting = false;
+      const inFlightStart = s.inFlightStart;
+      s.inFlightStart = null;
+      const handleToStop = s.handle;
+      s.handle = null;
+      s.serverInstanceId = null;
+      s.staticStarted = false;
 
       // Suppress output BEFORE stopping — prevents leaked PTY onData listeners
       // from appending to a buffer that consumers think is "cleared."
@@ -899,37 +1034,62 @@ export function useDevServer(currentProjectPath: string | null) {
       }
       s.healthPending = false;
 
-      if (s.handle) {
-        try {
-          await s.handle.stop();
-        } catch (e) {
-          logger.warn('[stopServer] handle.stop threw', { error: String(e), path: targetPath });
+      const stopPromise = (async () => {
+        // The pending start observes the invalidated generation and stops a
+        // process it created. Wait for that cleanup before releasing this path.
+        await Promise.resolve(inFlightStart).catch(() => undefined);
+        if (handleToStop) {
+          try {
+            await handleToStop.stop();
+          } catch (e) {
+            logger.warn('[stopServer] handle.stop threw', { error: String(e), path: targetPath });
+          }
         }
-        s.handle = null;
-      }
 
-      // Static server runs per-window, not per-project. If the stopped path
-      // had a running static server, stopping it is correct. If it didn't,
-      // this is a no-op and safely swallowed.
-      try {
-        await stopStaticServer(getWindowLabel());
-      } catch {
-        /* not started / already stopped */
-      }
+        try {
+          await stopStaticServer(getWindowLabel(), targetPath);
+        } catch {
+          /* not started / already stopped */
+        }
+        try {
+          await invoke('stop_preview_proxy', {
+            windowLabel: getWindowLabel(),
+            projectPath: targetPath,
+          });
+        } catch {
+          /* no preview proxy for this project */
+        }
 
-      // Keep the last-known type/custom command for the Preview tab (see
-      // lastKnownRef), then drop the live entry so the map doesn't leak for
-      // closed projects. (Pinned-project guards in useProjectLifecycle make
-      // sure we don't call stopServer for hot projects we intend to keep.)
-      lastKnownRef.current.set(targetPath, {
-        type: s.type,
-        projectTypeResolved: s.projectTypeResolved,
-        customCommand: s.customCommand,
+        lastKnownRef.current.set(targetPath, {
+          type: s.type,
+          projectTypeResolved: s.projectTypeResolved,
+          customCommand: s.customCommand,
+        });
+        if (statesRef.current.get(targetPath) === s) statesRef.current.delete(targetPath);
+        bumpServerLifecycle();
+        bump();
+      })();
+      stopPromisesRef.current.set(targetPath, stopPromise);
+      void stopPromise.finally(() => {
+        if (stopPromisesRef.current.get(targetPath) === stopPromise) {
+          stopPromisesRef.current.delete(targetPath);
+        }
       });
-      statesRef.current.delete(targetPath);
-      bump();
+      return stopPromise;
     },
-    [bump]
+    [bump, bumpServerLifecycle]
+  );
+
+  // Stop every running dev/static server except the one currently visible in
+  // Preview. Used when background persistence is disabled.
+  const stopAllServersExcept = useCallback(
+    async (projectPathToKeep: string | null) => {
+      const paths = Array.from(statesRef.current.keys()).filter(
+        (path) => path !== projectPathToKeep
+      );
+      await Promise.allSettled(paths.map((path) => stopServer(path)));
+    },
+    [stopServer]
   );
 
   // Stop every running dev/static server. Used by beforeunload so no PTYs
@@ -944,8 +1104,36 @@ export function useDevServer(currentProjectPath: string | null) {
   // pipeline on re-entering a pinned project whose server is still alive.
   const isServerRunning = useCallback((projectPath: string): boolean => {
     const s = statesRef.current.get(projectPath);
-    return !!s && s.handle !== null;
+    // Static servers are backend-owned rather than PTY-backed. Their project
+    // state and known port are the frontend's live handle until explicit stop.
+    return !!s && (s.handle !== null || (s.type === 'statichtml' && s.staticStarted));
   }, []);
+
+  const getProjectDevServerSnapshot = useCallback(
+    (projectPath: string): ProjectDevServerSnapshot => {
+      const s = statesRef.current.get(projectPath);
+      if (!s) return { status: 'not-running', address: null, instanceId: null };
+
+      const isRunning = s.handle !== null || (s.type === 'statichtml' && s.staticStarted);
+      return {
+        status: s.starting
+          ? 'starting'
+          : isRunning
+            ? 'ready'
+            : s.unexpectedExit
+              ? 'stopped'
+              : 'not-running',
+        address: s.portKnown ? `localhost:${s.port}` : null,
+        instanceId: isRunning ? s.serverInstanceId : null,
+      };
+    },
+    []
+  );
+
+  const isServerStarting = useCallback(
+    (projectPath: string): boolean => statesRef.current.get(projectPath)?.starting ?? false,
+    []
+  );
 
   // Read-only accessor for the tracked project type of any project, current
   // or not. Returns 'unknown' when the project has no state.
@@ -959,21 +1147,39 @@ export function useDevServer(currentProjectPath: string | null) {
   const handleRestartDevServer = useCallback(
     async (projectPath: string, portOverride?: number) => {
       setIsRestartingDevServer(true);
+      await stopPromisesRef.current.get(projectPath);
       const s = getOrCreateState(projectPath);
+      if (s.starting) {
+        setIsRestartingDevServer(false);
+        return;
+      }
+      const generation = ++s.startGeneration;
+      const isCurrentRestart = () =>
+        statesRef.current.get(projectPath) === s && s.startGeneration === generation;
+      s.starting = true;
+      s.serverInstanceId = null;
+      bumpServerLifecycle();
       const effectivePort = portOverride ?? s.port ?? DEFAULT_PORT;
 
       const cwd = await resolveDevServerCwd(projectPath);
+      if (!isCurrentRestart()) {
+        setIsRestartingDevServer(false);
+        return;
+      }
 
       const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
       const stopAndRestart = async (customCmd?: string) => {
         if (s.handle) {
+          const handle = s.handle;
+          s.handle = null;
+          s.serverInstanceId = null;
           try {
-            await withTimeoutFallback(s.handle.stop(), 5000, undefined);
+            await withTimeoutFallback(handle.stop(), 5000, undefined);
           } catch (e) {
             logger.warn('Error stopping dev server, continuing with restart', { error: e });
           }
-          s.handle = null;
+          if (!isCurrentRestart()) return;
         }
         s.unexpectedExit = null;
         s.outputBuffer = '';
@@ -982,7 +1188,8 @@ export function useDevServer(currentProjectPath: string | null) {
         s.healthVersion = 0;
         bump();
         await delay(500);
-        s.handle = await withTimeoutFallback(
+        if (!isCurrentRestart()) return;
+        const startPromise = withTimeoutFallback(
           startDevServer(
             cwd,
             effectivePort,
@@ -993,7 +1200,23 @@ export function useDevServer(currentProjectPath: string | null) {
           RESTART_SPAWN_TIMEOUT_MS,
           null as unknown as DevServerHandle
         );
-        if (!s.handle) {
+        const startTask = Promise.resolve(startPromise).then(async (handle) => {
+          if (!handle || !isCurrentRestart()) {
+            if (handle) await handle.stop().catch(() => undefined);
+            return null;
+          }
+          s.handle = handle;
+          markServerStarted(s);
+          s.port = effectivePort;
+          s.portKnown = true;
+          wireExitWatcher(projectPath, s);
+          return handle;
+        });
+        s.inFlightStart = startTask;
+        const handle = await startTask;
+        if (!isCurrentRestart()) return;
+        s.inFlightStart = null;
+        if (!handle) {
           // Say so. The only trace this left was a context-free log line, so
           // the restart button finished, the preview stayed dark, and nothing
           // told the user why (issue #906).
@@ -1009,9 +1232,7 @@ export function useDevServer(currentProjectPath: string | null) {
             'error'
           );
         } else {
-          s.port = effectivePort;
-          s.portKnown = true;
-          wireExitWatcher(projectPath, s);
+          bumpServerLifecycle();
         }
       };
 
@@ -1029,6 +1250,7 @@ export function useDevServer(currentProjectPath: string | null) {
           } catch {
             /* not connected yet */
           }
+          if (!isCurrentRestart()) return;
           if (!store) {
             logger.warn('[DevServer] Restart skipped: Shopify theme has no connected store');
             return;
@@ -1042,25 +1264,44 @@ export function useDevServer(currentProjectPath: string | null) {
           } catch {
             /* Ignore if nothing to kill */
           }
+          if (!isCurrentRestart()) return;
           // Reap prompt-stuck leftovers (they never bind the port, so
           // kill_port can't see them, and their stale dev session makes the
           // new run stall on a "proceed?" confirm).
           await killStaleThemeDev(store).catch(() => undefined);
+          if (!isCurrentRestart()) return;
           s.shopifyLoginDetector = null;
           s.shopifyLoginNudgePending = false;
           await stopAndRestart(shopifyThemeDevCommand(store, effectivePort));
         } else if (s.type === 'statichtml') {
           const windowLabel = getWindowLabel();
           try {
-            await stopStaticServer(windowLabel);
+            await stopStaticServer(windowLabel, projectPath);
           } catch {
             /* Ignore */
           }
+          s.staticStarted = false;
+          if (!isCurrentRestart()) return;
           await delay(300);
-          const newPort = await startStaticServer(windowLabel, cwd);
+          if (!isCurrentRestart()) return;
+          const startPromise = startStaticServer(windowLabel, projectPath, cwd);
+          const startTask = startPromise.then(async (newPort) => {
+            if (!isCurrentRestart()) {
+              await stopStaticServer(windowLabel, projectPath).catch(() => undefined);
+              return null;
+            }
+            return newPort;
+          });
+          s.inFlightStart = startTask;
+          const newPort = await startTask;
+          if (newPort === null || !isCurrentRestart()) return;
+          s.inFlightStart = null;
+          s.staticStarted = true;
+          markServerStarted(s);
           s.port = newPort;
           s.portKnown = true;
           bump();
+          bumpServerLifecycle();
         } else {
           try {
             await withTimeoutFallback(
@@ -1071,6 +1312,7 @@ export function useDevServer(currentProjectPath: string | null) {
           } catch {
             /* Ignore if nothing to kill */
           }
+          if (!isCurrentRestart()) return;
           try {
             await withTimeoutFallback(
               invoke('clear_project_cache', { projectPath }),
@@ -1080,6 +1322,7 @@ export function useDevServer(currentProjectPath: string | null) {
           } catch {
             /* Non-critical */
           }
+          if (!isCurrentRestart()) return;
           await stopAndRestart();
         }
         void trackEvent('dev_server_restarted', {
@@ -1091,10 +1334,23 @@ export function useDevServer(currentProjectPath: string | null) {
           error: formatCommandError(asCommandError(error)),
         });
       } finally {
+        if (isCurrentRestart()) {
+          s.starting = false;
+          s.inFlightStart = null;
+          bumpServerLifecycle();
+        }
         setIsRestartingDevServer(false);
       }
     },
-    [bump, createOutputHandler, getOrCreateState, wireExitWatcher, showToast]
+    [
+      bump,
+      bumpServerLifecycle,
+      createOutputHandler,
+      getOrCreateState,
+      markServerStarted,
+      wireExitWatcher,
+      showToast,
+    ]
   );
 
   /** Type into the current project's dev-server PTY — lets the user answer
@@ -1118,12 +1374,21 @@ export function useDevServer(currentProjectPath: string | null) {
 
   const saveCustomDevCommand = useCallback(
     async (projectPath: string, command: string | null) => {
+      await stopPromisesRef.current.get(projectPath);
       const s = getOrCreateState(projectPath);
+      if (s.starting) return;
+      const generation = ++s.startGeneration;
+      const isCurrentSave = () =>
+        statesRef.current.get(projectPath) === s && s.startGeneration === generation;
+      s.starting = true;
+      s.serverInstanceId = null;
+      bumpServerLifecycle();
       try {
         await setCustomDevCommandApi(projectPath, command);
       } catch (e) {
         logger.error('Failed to save custom dev command', { error: e });
       }
+      if (!isCurrentSave()) return;
       s.customCommand = command;
       bump();
       void trackEvent('custom_dev_command_saved', {
@@ -1131,14 +1396,17 @@ export function useDevServer(currentProjectPath: string | null) {
         $screen_name: 'Workspace',
       });
 
-      if (s.handle) {
+      const handleToStop = s.handle;
+      s.handle = null;
+      s.serverInstanceId = null;
+      if (handleToStop) {
         try {
-          await s.handle.stop();
+          await handleToStop.stop();
         } catch {
           /* Ignore */
         }
-        s.handle = null;
       }
+      if (!isCurrentSave()) return;
 
       if (command) {
         try {
@@ -1149,20 +1417,47 @@ export function useDevServer(currentProjectPath: string | null) {
           s.healthVersion = 0;
           bump();
           const cwd = await resolveDevServerCwd(projectPath);
-          s.handle = await startDevServer(
+          if (!isCurrentSave()) return;
+          const startPromise = startDevServer(
             cwd,
             s.port,
             getWindowLabel(),
             createOutputHandler(projectPath),
             command
           );
-          wireExitWatcher(projectPath, s);
+          const startTask = startPromise.then(async (handle) => {
+            if (!isCurrentSave()) {
+              await handle.stop().catch(() => undefined);
+              return null;
+            }
+            s.handle = handle;
+            markServerStarted(s);
+            wireExitWatcher(projectPath, s);
+            return handle;
+          });
+          s.inFlightStart = startTask;
+          const handle = await startTask;
+          if (!handle || !isCurrentSave()) return;
+          s.inFlightStart = null;
+          bumpServerLifecycle();
         } catch (e) {
           logger.error('Failed to start custom dev server', { error: e });
         }
       }
+      if (isCurrentSave()) {
+        s.starting = false;
+        s.inFlightStart = null;
+        bumpServerLifecycle();
+      }
     },
-    [bump, createOutputHandler, getOrCreateState, wireExitWatcher]
+    [
+      bump,
+      bumpServerLifecycle,
+      createOutputHandler,
+      getOrCreateState,
+      markServerStarted,
+      wireExitWatcher,
+    ]
   );
 
   return {
@@ -1191,9 +1486,13 @@ export function useDevServer(currentProjectPath: string | null) {
     handleHealthOutput,
     handleRestartDevServer,
     startServerForProject,
+    serverLifecycleVersion,
     stopServer,
+    stopAllServersExcept,
     stopAllServers,
     isServerRunning,
+    isServerStarting,
+    getProjectDevServerSnapshot,
     getProjectType,
     clearOutputBuffers,
     saveCustomDevCommand,

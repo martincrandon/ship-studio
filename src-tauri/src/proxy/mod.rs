@@ -466,15 +466,34 @@ struct ProxyInstance {
     _task_handle: JoinHandle<()>,
 }
 
-/// Maps window_label -> ProxyInstance
-static PROXY_INSTANCES: LazyLock<Mutex<HashMap<String, ProxyInstance>>> =
+/// Maps (window_label, project_path) -> ProxyInstance. A project's proxy can
+/// stay warm alongside its dev server while another project is active.
+static PROXY_INSTANCES: LazyLock<Mutex<HashMap<(String, String), ProxyInstance>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static PROXY_START_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 /// Start a reverse proxy for the given window, forwarding to `target_port`.
 /// Returns the proxy's listening port.
-pub async fn start_preview_proxy(window_label: String, target_port: u16) -> Result<u16, String> {
-    // Stop any existing proxy for this window
-    stop_preview_proxy(&window_label);
+pub async fn start_preview_proxy(
+    window_label: String,
+    project_path: String,
+    target_port: u16,
+) -> Result<u16, String> {
+    let _start_guard = PROXY_START_LOCK.lock().await;
+    let key = (window_label.clone(), project_path.clone());
+    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
+        if let Some(existing) = instances.get(&key) {
+            if existing._target_port == target_port {
+                return Ok(existing._proxy_port);
+            }
+        }
+        if let Some(mut existing) = instances.remove(&key) {
+            if let Some(tx) = existing.shutdown_tx.take() {
+                let _ = tx.send(());
+            }
+        }
+    }
 
     // Bind to a random available port on localhost
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -525,16 +544,26 @@ pub async fn start_preview_proxy(window_label: String, target_port: u16) -> Resu
     PROXY_INSTANCES
         .lock()
         .map_err(|e| format!("Failed to acquire proxy lock: {e}"))?
-        .insert(window_label, instance);
+        .insert(key, instance);
 
     tracing::info!("[Proxy] Proxy registered on port {}", proxy_port);
     Ok(proxy_port)
 }
 
-/// Stop the proxy for the given window.
-pub fn stop_preview_proxy(window_label: &str) {
+/// Stop the proxy for one project in a window.
+pub async fn stop_preview_proxy(window_label: &str, project_path: &str) {
+    // A stop waits for any already-issued async start to finish, then removes
+    // it. This makes explicit Stop authoritative when Preview unmounts or a
+    // project switch races proxy binding.
+    let _start_guard = PROXY_START_LOCK.lock().await;
+    stop_preview_proxy_now(window_label, project_path);
+}
+
+fn stop_preview_proxy_now(window_label: &str, project_path: &str) {
     if let Ok(mut instances) = PROXY_INSTANCES.lock() {
-        if let Some(mut instance) = instances.remove(window_label) {
+        if let Some(mut instance) =
+            instances.remove(&(window_label.to_string(), project_path.to_string()))
+        {
             if let Some(tx) = instance.shutdown_tx.take() {
                 let _ = tx.send(());
             }
@@ -543,14 +572,42 @@ pub fn stop_preview_proxy(window_label: &str) {
     }
 }
 
+/// Stop all project proxies owned by one closing window.
+pub async fn stop_preview_proxies_for_window(window_label: &str) {
+    let _start_guard = PROXY_START_LOCK.lock().await;
+    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
+        let keys: Vec<_> = instances
+            .keys()
+            .filter(|(label, _)| label == window_label)
+            .cloned()
+            .collect();
+        for key in keys {
+            if let Some(mut instance) = instances.remove(&key) {
+                if let Some(tx) = instance.shutdown_tx.take() {
+                    let _ = tx.send(());
+                }
+                tracing::info!(
+                    "[Proxy] Stopped proxy for window '{}' project '{}'",
+                    key.0,
+                    key.1
+                );
+            }
+        }
+    }
+}
+
 /// Stop all running proxies (called during app cleanup).
 pub fn stop_all_proxies() {
     if let Ok(mut instances) = PROXY_INSTANCES.lock() {
-        for (label, mut instance) in instances.drain() {
+        for ((label, project_path), mut instance) in instances.drain() {
             if let Some(tx) = instance.shutdown_tx.take() {
                 let _ = tx.send(());
             }
-            tracing::info!("[Proxy] Stopped proxy for window '{}' (cleanup)", label);
+            tracing::info!(
+                "[Proxy] Stopped proxy for window '{}' project '{}' (cleanup)",
+                label,
+                project_path
+            );
         }
     }
 }
@@ -1879,7 +1936,7 @@ mod tests {
 /// the proxy forwards, and the raw response bytes show what a webview would see.
 #[cfg(test)]
 mod e2e_tests {
-    use super::{start_preview_proxy, stop_preview_proxy};
+    use super::{start_preview_proxy, stop_preview_proxies_for_window, stop_preview_proxy};
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -1949,7 +2006,7 @@ mod e2e_tests {
             captured.clone(),
         )
         .await;
-        let proxy_port = start_preview_proxy("e2e-http".into(), upstream)
+        let proxy_port = start_preview_proxy("e2e-http".into(), "/tmp/e2e-http".into(), upstream)
             .await
             .unwrap();
 
@@ -1960,7 +2017,7 @@ mod e2e_tests {
             ),
         )
         .await;
-        stop_preview_proxy("e2e-http");
+        stop_preview_proxy("e2e-http", "/tmp/e2e-http").await;
 
         // What the dev server saw: its own port in Host/Origin, no Accept-Encoding.
         let seen = captured.lock().await.join("").to_lowercase();
@@ -1992,7 +2049,7 @@ mod e2e_tests {
             captured.clone(),
         )
         .await;
-        let proxy_port = start_preview_proxy("e2e-ws".into(), upstream)
+        let proxy_port = start_preview_proxy("e2e-ws".into(), "/tmp/e2e-ws".into(), upstream)
             .await
             .unwrap();
 
@@ -2003,7 +2060,7 @@ mod e2e_tests {
             ),
         )
         .await;
-        stop_preview_proxy("e2e-ws");
+        stop_preview_proxy("e2e-ws", "/tmp/e2e-ws").await;
 
         // The upgrade reached the dev server with ITS port in Host/Origin —
         // Vite origin-checks the HMR socket; the proxy port would get it
@@ -2049,9 +2106,10 @@ mod e2e_tests {
             stream.write_all(tail.as_bytes()).await.unwrap();
         });
 
-        let proxy_port = start_preview_proxy("e2e-stream".into(), upstream)
-            .await
-            .unwrap();
+        let proxy_port =
+            start_preview_proxy("e2e-stream".into(), "/tmp/e2e-stream".into(), upstream)
+                .await
+                .unwrap();
         let mut client = TcpStream::connect(("127.0.0.1", proxy_port)).await.unwrap();
         client
             .write_all(
@@ -2090,8 +2148,84 @@ mod e2e_tests {
                 Ok(Err(_)) => break,
             }
         }
-        stop_preview_proxy("e2e-stream");
+        stop_preview_proxy("e2e-stream", "/tmp/e2e-stream").await;
         let full = String::from_utf8_lossy(&received).to_string();
         assert!(full.contains("<p>second</p></body></html>"), "{full}");
+    }
+
+    #[tokio::test]
+    async fn proxy_identity_and_cleanup_are_scoped_to_project_and_window() {
+        let empty_capture = || Arc::new(Mutex::new(Vec::new()));
+        let upstream_a = spawn_upstream(
+            "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nproject-a",
+            empty_capture(),
+        )
+        .await;
+        let upstream_b = spawn_upstream(
+            "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nproject-b",
+            empty_capture(),
+        )
+        .await;
+        let upstream_c = spawn_upstream(
+            "HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nproject-c",
+            empty_capture(),
+        )
+        .await;
+        let window = format!("proxy-scope-{}", uuid::Uuid::new_v4());
+        let other_window = format!("proxy-scope-{}", uuid::Uuid::new_v4());
+
+        let proxy_a = start_preview_proxy(window.clone(), "/project/a".into(), upstream_a)
+            .await
+            .unwrap();
+        let same_project_proxy =
+            start_preview_proxy(window.clone(), "/project/a".into(), upstream_a)
+                .await
+                .unwrap();
+        let proxy_b = start_preview_proxy(window.clone(), "/project/b".into(), upstream_b)
+            .await
+            .unwrap();
+        let proxy_c = start_preview_proxy(other_window.clone(), "/project/c".into(), upstream_c)
+            .await
+            .unwrap();
+
+        assert_eq!(proxy_a, same_project_proxy);
+        assert_ne!(proxy_a, proxy_b);
+        let request =
+            |port| format!("GET / HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n");
+        assert!(roundtrip(proxy_a, request(proxy_a))
+            .await
+            .contains("project-a"));
+        assert!(roundtrip(proxy_b, request(proxy_b))
+            .await
+            .contains("project-b"));
+        assert!(roundtrip(proxy_c, request(proxy_c))
+            .await
+            .contains("project-c"));
+
+        stop_preview_proxy(&window, "/project/a").await;
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while TcpStream::connect(("127.0.0.1", proxy_a)).await.is_ok() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(roundtrip(proxy_b, request(proxy_b))
+            .await
+            .contains("project-b"));
+
+        stop_preview_proxies_for_window(&window).await;
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while TcpStream::connect(("127.0.0.1", proxy_b)).await.is_ok() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(roundtrip(proxy_c, request(proxy_c))
+            .await
+            .contains("project-c"));
+
+        stop_preview_proxies_for_window(&other_window).await;
     }
 }

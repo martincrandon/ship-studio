@@ -58,11 +58,15 @@ export async function detectProjectType(projectPath: string): Promise<ProjectTyp
 }
 
 /** Start the built-in static file server, returns the port it's listening on */
-export async function startStaticServer(windowLabel: string, projectPath: string): Promise<number> {
-  return invoke<number>('start_static_server', { windowLabel, projectPath });
+export async function startStaticServer(
+  windowLabel: string,
+  projectPath: string,
+  servePath: string
+): Promise<number> {
+  return invoke<number>('start_static_server', { windowLabel, projectPath, servePath });
 }
 
 /** Stop the static file server for a window */
-export async function stopStaticServer(windowLabel: string): Promise<void> {
-  return invoke<void>('stop_static_server', { windowLabel });
+export async function stopStaticServer(windowLabel: string, projectPath: string): Promise<void> {
+  return invoke<void>('stop_static_server', { windowLabel, projectPath });
 }

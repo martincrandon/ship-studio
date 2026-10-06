@@ -6,7 +6,7 @@ use crate::commands::setup::{read_app_state, write_app_state};
 use crate::errors::CommandError;
 use crate::utils::{invalidate_projects_root_cache, projects_root};
 use std::path::Path;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
 
 const DEFAULT_APP_ICON: &str = "brand";
@@ -144,6 +144,25 @@ pub fn set_spotify_widget_enabled(enabled: bool) -> Result<(), CommandError> {
     let mut state = read_app_state();
     state.spotify_widget_enabled = Some(enabled);
     write_app_state(&state).map_err(CommandError::from)
+}
+
+/// Get whether dev servers stay alive when their project or Preview is in the
+/// background. Defaults to `false` for installs that have not chosen a value.
+#[tauri::command]
+#[tracing::instrument]
+pub fn get_keep_dev_servers_running() -> Result<bool, CommandError> {
+    Ok(read_app_state().keep_dev_servers_running.unwrap_or(false))
+}
+
+/// Persist the background dev-server preference and notify every open window.
+#[tauri::command]
+#[tracing::instrument(skip(app))]
+pub fn set_keep_dev_servers_running(app: AppHandle, enabled: bool) -> Result<(), CommandError> {
+    let mut state = read_app_state();
+    state.keep_dev_servers_running = Some(enabled);
+    write_app_state(&state)?;
+    let _ = app.emit("keep-dev-servers-running-changed", enabled);
+    Ok(())
 }
 
 /// Get whether the Slack community CTA is hidden on the dashboard.

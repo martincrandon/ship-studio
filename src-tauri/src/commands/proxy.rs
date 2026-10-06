@@ -12,18 +12,22 @@ use crate::errors::CommandError;
 #[tracing::instrument]
 pub async fn start_preview_proxy(
     window_label: String,
+    project_path: String,
     target_port: u16,
 ) -> Result<u16, CommandError> {
-    crate::proxy::start_preview_proxy(window_label, target_port)
+    crate::proxy::start_preview_proxy(window_label, project_path, target_port)
         .await
         .map_err(CommandError::from)
 }
 
-/// Stop the preview proxy for the given window.
+/// Stop the preview proxy for one project in a window.
 #[tauri::command]
 #[tracing::instrument]
-pub fn stop_preview_proxy(window_label: String) -> Result<(), CommandError> {
-    crate::proxy::stop_preview_proxy(&window_label);
+pub async fn stop_preview_proxy(
+    window_label: String,
+    project_path: String,
+) -> Result<(), CommandError> {
+    crate::proxy::stop_preview_proxy(&window_label, &project_path).await;
     Ok(())
 }
 

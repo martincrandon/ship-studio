@@ -77,6 +77,7 @@ import {
   unreadCount,
 } from './lib/workflowsStore';
 import { useCompactWorkspaceToolbar } from './hooks/useCompactWorkspaceToolbar';
+import { useKeepDevServersRunning } from './hooks/useKeepDevServersRunning';
 import { installAppLifecycleTracking, quitAppWithTracking } from './lib/appLifecycle';
 import type { AppView } from './lib/types';
 import './styles/index.css';
@@ -129,6 +130,7 @@ function App({ initialProjectPath }: AppProps) {
 
 function AppContents({ initialProjectPath }: AppProps) {
   const [view, setView] = useState<AppView>('loading');
+  const keepDevServersRunning = useKeepDevServersRunning();
   const { openAccountSelect, accountSelectProps } = useAccountSelectNavigation(view, setView);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isSidebarHidden, setIsSidebarHidden] = useState(false);
@@ -254,9 +256,13 @@ function AppContents({ initialProjectPath }: AppProps) {
     handleHealthOutput,
     handleRestartDevServer: restartDevServer,
     startServerForProject,
+    serverLifecycleVersion,
     stopServer,
+    stopAllServersExcept,
     stopAllServers,
     isServerRunning,
+    isServerStarting,
+    getProjectDevServerSnapshot,
     saveCustomDevCommand,
     needsInstall,
     devServerUnexpectedExit,
@@ -352,6 +358,20 @@ function AppContents({ initialProjectPath }: AppProps) {
       integrations.projectGithub?.status === 'connected' ||
       integrations.projectGithub?.status === 'other-remote',
   });
+
+  // The experimental opt-in keeps background servers alive. When it is off,
+  // stop every project except the one currently visible in Preview; the same
+  // effect covers project switches, Code/Branches views, focus mode, and home
+  // screens. The loading state prevents a slow settings read from stopping a
+  // server before the saved preference is known.
+  const visiblePreviewPath =
+    view === 'workspace' && workspaceTab === 'preview' && !isPreviewHidden
+      ? (currentProject?.path ?? null)
+      : null;
+  useEffect(() => {
+    if (keepDevServersRunning === null || keepDevServersRunning) return;
+    void stopAllServersExcept(visiblePreviewPath);
+  }, [keepDevServersRunning, serverLifecycleVersion, stopAllServersExcept, visiblePreviewPath]);
 
   // Plugin state
   const {
@@ -470,6 +490,7 @@ function AppContents({ initialProjectPath }: AppProps) {
     setDevServerPort,
     startServerForProject,
     isServerRunning,
+    isServerStarting,
     restartDevServer,
     clearNeedsInstall,
     pasteToActiveTerminal,
@@ -717,7 +738,7 @@ function AppContents({ initialProjectPath }: AppProps) {
           }
         : null,
     [
-      currentProject,
+      currentProject?.path,
       currentBranch,
       hasUncommittedChanges,
       devServerPort,
@@ -829,7 +850,7 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   const devServerProps = useMemo(
     () => ({
-      hasDevServer: !!devServerRef.current,
+      hasDevServer: currentProject ? isServerRunning(currentProject.path) : false,
       knownDevServerPort,
       healthPanelRef,
       devServerPort,
@@ -851,6 +872,8 @@ function AppContents({ initialProjectPath }: AppProps) {
     }),
     [
       devServerRef,
+      currentProject?.path,
+      isServerRunning,
       knownDevServerPort,
       devServerPort,
       projectType,
@@ -1092,6 +1115,8 @@ function AppContents({ initialProjectPath }: AppProps) {
       onReorderProjects: handleReorderProjects,
       onSelectProjectTab: handleSelectProjectTab,
       isProjectDevServerRunning: isServerRunning,
+      getProjectDevServerSnapshot,
+      devServerLifecycleVersion: serverLifecycleVersion,
       onStopDevServer: handleStopDevServer,
       onSwitchAccount: openAccountSelect,
     }),
@@ -1110,6 +1135,8 @@ function AppContents({ initialProjectPath }: AppProps) {
       handleReorderProjects,
       handleSelectProjectTab,
       isServerRunning,
+      getProjectDevServerSnapshot,
+      serverLifecycleVersion,
       handleStopDevServer,
       setView,
     ]
@@ -1255,6 +1282,8 @@ function AppContents({ initialProjectPath }: AppProps) {
     onOpenProjectPicker: openProjectPicker,
     onSwitchAccount: openAccountSelect,
     isProjectDevServerRunning: isServerRunning,
+    getProjectDevServerSnapshot,
+    devServerLifecycleVersion: serverLifecycleVersion,
     isSidebarHidden,
     onToggleSidebar: toggleSidebar,
     compactWorkspaceToolbarEnabled,

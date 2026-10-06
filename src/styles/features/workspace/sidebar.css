@@ -681,7 +681,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--pixel-loader-size-sm);
+  gap: var(--space-04);
+  min-width: var(--pixel-loader-size-sm);
   height: var(--pixel-loader-size-sm);
   flex-shrink: 0;
 }
@@ -1063,8 +1064,8 @@
 }
 
 .sidebar-row-dot {
-  width: 6px;
-  height: 6px;
+  width: var(--space-06);
+  height: var(--space-06);
   border-radius: var(--radius-full);
   flex-shrink: 0;
   background: var(--text-muted);
@@ -1106,6 +1107,41 @@
   animation: sidebar-pulse 1.6s ease-in-out infinite;
 }
 
+.sidebar-row-dot.dot-waiting {
+  background: var(--accent-warning);
+  box-shadow: 0 0 0 2px rgba(var(--accent-warning-rgb), 0.2);
+}
+
+.sidebar-row-dot.dot-error {
+  background: var(--accent-error);
+  box-shadow: 0 0 0 2px rgba(var(--accent-error-rgb), 0.2);
+}
+
+.sidebar-row-dot.dot-server-starting {
+  background: var(--accent-focus);
+  animation: sidebar-pulse 1.6s ease-in-out infinite;
+}
+
+.sidebar-row-dot.dot-server-ready {
+  background: var(--accent-success);
+  box-shadow:
+    0 0 var(--space-02) color-mix(in srgb, var(--accent-success) 35%, transparent),
+    0 0 var(--space-06) color-mix(in srgb, var(--accent-success) 15%, transparent);
+  animation: sidebar-server-light-glow var(--duration-loader-isolated) ease-in-out infinite;
+}
+
+.sidebar-project.is-current .sidebar-row-dot.dot-server-ready {
+  opacity: 1;
+  box-shadow:
+    0 0 var(--space-04) color-mix(in srgb, var(--accent-success) 85%, transparent),
+    0 0 var(--space-12) color-mix(in srgb, var(--accent-success) 55%, transparent);
+  animation: none;
+}
+
+.sidebar-row-dot.dot-server-stopped {
+  background: var(--border-default);
+}
+
 @keyframes sidebar-pulse {
   0%,
   100% {
@@ -1113,6 +1149,29 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+@keyframes sidebar-server-light-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    box-shadow:
+      0 0 var(--space-02) color-mix(in srgb, var(--accent-success) 35%, transparent),
+      0 0 var(--space-06) color-mix(in srgb, var(--accent-success) 15%, transparent);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow:
+      0 0 var(--space-04) color-mix(in srgb, var(--accent-success) 85%, transparent),
+      0 0 var(--space-12) color-mix(in srgb, var(--accent-success) 55%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-row-dot.dot-server-ready {
+    animation: none;
   }
 }
 

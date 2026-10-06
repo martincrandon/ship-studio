@@ -27,7 +27,7 @@ import type { PreviewHandle, InspectTab } from '../preview/Preview';
 import { CompactWorkspace } from './CompactWorkspace';
 import { MainBranchBanner } from '../branches/MainBranchBanner';
 import type { HealthTabPanelRef } from '../code/HealthTabPanel';
-import type { DevServerUnexpectedExit } from '../../hooks/useDevServer';
+import type { DevServerUnexpectedExit, ProjectDevServerSnapshot } from '../../hooks/useDevServer';
 import { useIsCompact } from '../../hooks/useIsCompact';
 import { useLocalStorageFlag } from '../../hooks/useLocalStorageFlag';
 import { WorkspaceModalHost } from './WorkspaceModalHost';
@@ -377,6 +377,10 @@ export interface WorkspaceViewProps {
   /** Predicate: is a dev server currently tracked for the given project path?
    *  Used by the sidebar to populate background projects' Commands section. */
   isProjectDevServerRunning: (projectPath: string) => boolean;
+  /** Known server address/lifecycle for project rows and warm Preview reuse. */
+  getProjectDevServerSnapshot: (projectPath: string) => ProjectDevServerSnapshot;
+  /** Re-render project rows when background server lifecycles change. */
+  devServerLifecycleVersion: number;
   /** Whether the shared project sidebar is in its compact state. */
   isSidebarHidden: boolean;
   /** Toggle the shared project sidebar between full and compact states. */
@@ -434,6 +438,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   onReorderProjects,
   onOpenProjectPicker,
   isProjectDevServerRunning,
+  getProjectDevServerSnapshot,
+  devServerLifecycleVersion,
   isSidebarHidden,
   onToggleSidebar,
   compactWorkspaceToolbarEnabled,
@@ -441,6 +447,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   // Window-width gate for the compact layout. Purely reactive — no Tauri
   // resize calls, no pinning. See src/hooks/useIsCompact.ts for the threshold.
   const isCompact = useIsCompact();
+  const currentDevServerSnapshot = getProjectDevServerSnapshot(currentProject.path);
 
   // Destructure domain groups for readability in JSX
   const {
@@ -1210,6 +1217,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
               onRenameProject={onRenameProject}
               onTogglePinProject={onTogglePinProject}
               onStopDevServer={onStopDevServer}
+              getProjectDevServerSnapshot={getProjectDevServerSnapshot}
+              devServerLifecycleVersion={devServerLifecycleVersion}
               currentProjectPath={currentProject.path}
               currentProjectName={currentProject.name}
               onSelectProject={onSelectProject}
@@ -1248,7 +1257,9 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                 isWebProject || customDevCommand ? () => void handleRestartDevServer() : undefined
               }
               devServerUrl={
-                isWebProject && devServerPort > 0 ? `http://localhost:${devServerPort}` : undefined
+                isWebProject && currentDevServerSnapshot.address
+                  ? `http://${currentDevServerSnapshot.address}`
+                  : undefined
               }
               isProjectDevServerRunning={isProjectDevServerRunning}
               worktrees={worktree.worktrees}
@@ -1287,6 +1298,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                       hasPreview={hasPreview}
                       projectTypeResolved={projectTypeResolved}
                       previewConnectionEnabled={knownDevServerPort !== null}
+                      serverAlreadyRunning={currentDevServerSnapshot.status === 'ready'}
+                      serverInstanceId={currentDevServerSnapshot.instanceId}
                       projectType={projectType}
                       isWebProject={isWebProject}
                       mobilePreviewAvailable={mobilePreviewAvailable}

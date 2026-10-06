@@ -185,6 +185,49 @@ describe('WorkspaceSidebar project activity indicator', () => {
     });
   });
 
+  it('shows one server light for a ready server on an idle project row', () => {
+    localStorage.setItem(EXPANDED_PROJECTS_KEY, JSON.stringify({ [PROJECT_PATH]: true }));
+    act(() => {
+      sessionRegistry.setTerminalTabs(
+        PROJECT_PATH,
+        [
+          {
+            id: 1,
+            agentId: 'claude-code',
+            sessionId: 'session-1',
+            status: 'running',
+          },
+        ],
+        0
+      );
+    });
+
+    const { container } = render(
+      <WorkspaceSidebar
+        {...sidebarProps()}
+        hasDevServer
+        devServerRunning
+        getProjectDevServerSnapshot={() => ({
+          status: 'ready',
+          address: 'localhost:3000',
+          instanceId: 1,
+        })}
+      />,
+      { wrapper: Providers }
+    );
+
+    const status = container.querySelector('.sidebar-project-status');
+    expect(status?.querySelectorAll('.sidebar-row-dot')).toHaveLength(1);
+    expect(status?.querySelector('.dot-server-ready')).toBeInTheDocument();
+    expect(status?.querySelector('.dot-idle')).not.toBeInTheDocument();
+    expect(container.querySelector('.sidebar-project-row')).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('dev server running; localhost:3000')
+    );
+    expect(screen.getByText('localhost:3000')).toBeInTheDocument();
+    expect(screen.queryByText('running')).not.toBeInTheDocument();
+  });
+
   it('keeps the project dot while expanded and shows the PixelLoader on the tab row', async () => {
     localStorage.setItem(EXPANDED_PROJECTS_KEY, JSON.stringify({ [PROJECT_PATH]: true }));
 
@@ -281,6 +324,42 @@ describe('WorkspaceSidebar project activity indicator', () => {
     await user.click(screen.getByRole('menuitem', { name: 'Stop dev server' }));
 
     expect(onStopDevServer).toHaveBeenCalledWith(PROJECT_PATH);
+  });
+
+  it('keeps a background server address visible in the collapsed row and its expanded section', async () => {
+    const projectPath = '/tmp/background-project';
+    const backgroundProject = pinnedRow(projectPath, 'background-project');
+    const getProjectDevServerSnapshot = vi.fn(() => ({
+      status: 'ready' as const,
+      address: 'localhost:4321',
+      instanceId: 7,
+    }));
+    const { container } = render(
+      <WorkspaceSidebar
+        {...sidebarProps()}
+        projects={[backgroundProject]}
+        currentProjectPath="/tmp/current-project"
+        currentProjectName="current-project"
+        terminalTabs={[]}
+        getProjectDevServerSnapshot={getProjectDevServerSnapshot}
+      />,
+      { wrapper: Providers }
+    );
+
+    const projectRow = container.querySelector<HTMLElement>('.sidebar-project-row');
+    expect(projectRow).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('dev server running; localhost:4321')
+    );
+    expect(projectRow?.querySelector('.dot-server-ready')).toBeInTheDocument();
+
+    const expandButton = projectRow?.querySelector<HTMLButtonElement>('.sidebar-project-chevron');
+    expect(expandButton).not.toBeNull();
+    act(() => {
+      fireEvent.click(expandButton!);
+    });
+    expect(await screen.findByText('localhost:4321')).toBeInTheDocument();
+    expect(screen.getByText('running')).toBeInTheDocument();
   });
 
   it('opens project settings for the sidebar project', async () => {
@@ -477,7 +556,7 @@ describe('WorkspaceSidebar project activity indicator', () => {
       expect(firstRow?.firstElementChild).toBe(handle);
       expect(handle).toHaveClass('drag-sort__handle', 'sidebar-project-drag-handle');
       expect(handle).toHaveAttribute('data-drag-sort-handle-visibility', 'hover');
-      expect(firstRow).toHaveAttribute('aria-label', 'alpha');
+      expect(firstRow).toHaveAttribute('aria-label', expect.stringContaining('alpha; closed'));
       expect(firstRow).not.toHaveAttribute('title');
       expect(handle).not.toHaveAttribute('title');
       expect(firstRow?.querySelectorAll('[title]')).toHaveLength(0);

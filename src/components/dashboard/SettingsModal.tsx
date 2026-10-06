@@ -45,6 +45,7 @@ import {
   setThumbnailsEnabled,
   getSpotifyWidgetEnabled,
   setSpotifyWidgetEnabled,
+  setKeepDevServersRunning,
   SPOTIFY_WIDGET_ENABLED_CHANGED_EVENT,
   getProjectsRoot,
   isCustomProjectsRoot,
@@ -59,6 +60,7 @@ import { isMac } from '../../lib/setup';
 import { MoveToFolderIcon } from '@/components/icons';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
 import { useOpenModal } from '../../contexts/ModalContext';
+import { useKeepDevServersRunning } from '../../hooks/useKeepDevServersRunning';
 
 const errMsg = (err: unknown) => formatCommandError(asCommandError(err));
 
@@ -95,6 +97,7 @@ export function SettingsModal({
   // Projects folder is per-workspace; reflect the active one in the label.
   const { activeAccount, accounts } = useActiveAccount();
   const multipleWorkspaces = accounts.length > 1;
+  const keepDevServersRunning = useKeepDevServersRunning() ?? false;
 
   const [analyticsEnabled, setLocalAnalyticsEnabled] = useState(true);
   const [dashboardHeaderVisible, setLocalDashboardHeaderVisible] = useState(true);
@@ -365,6 +368,16 @@ export function SettingsModal({
       $screen_name: 'Settings',
     });
   }, [spotifyWidgetEnabled]);
+
+  const handleKeepDevServersRunningToggle = useCallback(() => {
+    const enabled = !keepDevServersRunning;
+    void setKeepDevServersRunning(enabled);
+    void trackEvent('setting_changed', {
+      setting: 'keep_dev_servers_running',
+      value: enabled,
+      $screen_name: 'Settings',
+    });
+  }, [keepDevServersRunning]);
 
   // Persist a new projects root, then offer to move existing projects over.
   const applyNewRoot = useCallback(
@@ -816,7 +829,28 @@ export function SettingsModal({
             <div className="settings-modal-body">
               <div className="settings-section">
                 <div className="settings-group">
-                  {isMac() ? (
+                  <div className="settings-row">
+                    <div className="settings-row-info">
+                      <span className="settings-row-label">Keep dev servers running</span>
+                      <span className="settings-row-description">
+                        Keep previews ready while you switch views or projects. Servers stop when
+                        you stop them, close their project window, or quit Ship Studio.
+                      </span>
+                    </div>
+                    <button
+                      className={`settings-toggle ${keepDevServersRunning ? 'on' : 'off'}`}
+                      onClick={handleKeepDevServersRunningToggle}
+                      disabled={loading}
+                      role="switch"
+                      aria-label="Keep dev servers running"
+                      aria-checked={keepDevServersRunning}
+                    >
+                      <span className="settings-toggle-track">
+                        <span className="settings-toggle-thumb" />
+                      </span>
+                    </button>
+                  </div>
+                  {isMac() && (
                     <div className="settings-row">
                       <div className="settings-row-info">
                         <span className="settings-row-label">Spotify controls</span>
@@ -838,10 +872,6 @@ export function SettingsModal({
                         </span>
                       </button>
                     </div>
-                  ) : (
-                    <p className="settings-empty-note">
-                      Nothing experimental for this platform yet.
-                    </p>
                   )}
                 </div>
               </div>

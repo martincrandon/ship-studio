@@ -13,9 +13,9 @@
  * `startServerForProject` (skipped when a hot session's server is reused) →
  * background GitHub status / screenshots / plugin suggestion.
  *
- * `handleBackToProjects` is a *view switch*, not a teardown: dev server, PTYs,
- * and session-registry entry stay alive (hot-session contract); only the
- * sidebar close button or app quit stops a session.
+ * `handleBackToProjects` is a view switch, not a terminal teardown. Terminal
+ * PTYs and the session-registry entry stay alive; background dev-server
+ * retention is controlled by the Experimental preference in App.tsx.
  *
  * Exposes auto-accept mode, create/import modal state, the monorepo picker,
  * the install-overlay terminal config, and publishing flags — all consumed by
@@ -98,6 +98,8 @@ export interface UseProjectLifecycleParams {
     windowLabel: string
   ) => Promise<ProjectType>;
   isServerRunning: (projectPath: string) => boolean;
+  /** True while detection or a spawn is already in flight for this project. */
+  isServerStarting?: (projectPath: string) => boolean;
   restartDevServer: (projectPath: string, portOverride?: number) => Promise<void>;
   /** Drop the dependency-install gate on a project's dev server. Called after
    *  a successful pnpm/npm install so a follow-up startServer actually spawns. */
@@ -145,6 +147,7 @@ export function useProjectLifecycle({
   setDevServerPort,
   startServerForProject,
   isServerRunning,
+  isServerStarting = () => false,
   restartDevServer,
   clearNeedsInstall,
   pasteToActiveTerminal,
@@ -396,13 +399,14 @@ export function useProjectLifecycle({
     // The initial Workspace pageview is fired by useWorkspaceLayout's
     // workspaceTab effect once the resolved tab is known.
 
-    // Every active session is hot: once a project has a dev server, it
-    // stays alive until the user explicitly closes it via the sidebar (or
-    // quits the app). Pinning is orthogonal — it persists the project in
-    // the sidebar across launches, nothing more.
+    // Existing dev servers may be reused when the project is reopened. The
+    // App-level Experimental preference decides whether background servers
+    // survive project/view changes. Pinning only persists a project in the
+    // sidebar across launches.
     const outgoingProjectPath = currentProject?.path ?? null;
     const incomingAlreadyRunning = isServerRunning(project.path);
-    const reuseIncomingServer = incomingAlreadyRunning;
+    const incomingStartInFlight = isServerStarting(project.path);
+    const reuseIncomingServer = incomingAlreadyRunning || incomingStartInFlight;
 
     // Save the OUTGOING project's terminal state before we clobber it. This
     // is what lets switching A → B → A restore A's tab layout and resume
@@ -568,10 +572,8 @@ export function useProjectLifecycle({
     try {
       await registerProjectSession(project.path, windowLabel);
       sessionRegistry.getOrCreate(project.path);
-      // Slice 4 — every active session stays hot (dev server + PTYs all
-      // running) until the user explicitly closes. Just resume the one
-      // we're switching to; other sessions keep their 'active' status
-      // because their processes are still alive in the background.
+      // Resume this session's terminal tabs. The App-level dev-server policy
+      // separately decides whether background web servers stay alive.
       sessionRegistry.resume(project.path);
     } catch (e) {
       // Backend may reject with Validation if another window owns this
@@ -581,9 +583,8 @@ export function useProjectLifecycle({
       logger.warn('[OpenProject] Failed to register project session', { error: e });
     }
 
-    // We never stop the outgoing project's dev server on switch — that's
-    // the hot-session contract. Only an explicit close button / app quit
-    // tears a session down.
+    // App.tsx reconciles the outgoing dev server with the Experimental
+    // background-retention preference after navigation settles.
     logger.info(
       `[OpenProject] Step 1: Outgoing session preserved (${outgoingProjectPath ?? 'none'}) - ${Math.round(performance.now() - stepStart)}ms`
     );
@@ -618,8 +619,8 @@ export function useProjectLifecycle({
     // NOTE: we intentionally no longer call `kill_window_pty` or
     // `cleanup_orphaned_processes` on switch. Those kill *every* PTY in
     // the window, which would tear down sibling hot projects' dev servers.
-    // PTYs get reaped per-project by `stopServer(path)` on explicit close,
-    // and by `stopAllServers()` on window unload.
+    // Project PTYs get reaped per-project by explicit close and by
+    // `stopAllServers()` on window unload.
 
     // Check if navigation was superseded during cleanup
     if (navigationVersionRef.current !== navVersion) {
@@ -1066,11 +1067,11 @@ export function useProjectLifecycle({
    *  tab while nothing is running (e.g. after a manual stop or a crash).
    *  Mirrors handleSelectProject's port steps but skips all navigation and
    *  cleanup work that only applies to switching projects. No-op when a
-   *  server for this project is already tracked. */
+   *  server for this project is already running or starting. */
   const handleStartDevServer = async () => {
     if (!currentProject || startingDevServerRef.current) return;
     const path = currentProject.path;
-    if (isServerRunning(path)) return;
+    if (isServerRunning(path) || isServerStarting(path)) return;
     startingDevServerRef.current = true;
     try {
       let preferredPort = preferredPortForProject(path);

@@ -56,6 +56,7 @@ import {
 } from '../../lib/worktreeFamilies';
 import { formatRelativeTime } from '../../lib/branches';
 import type { TerminalTab } from '../../hooks/useTerminalManagement';
+import type { ProjectDevServerSnapshot } from '../../hooks/useDevServer';
 import type { PinnedProjectRow } from '../../hooks/usePinnedProjects';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
 import { useCommands } from '../../commands/useCommands';
@@ -94,7 +95,17 @@ const WORKSPACE_SWITCHER_MENU_OFFSET = 4;
 interface SidebarItem {
   key: string;
   label: string;
-  dotState: 'idle' | 'active' | 'thinking' | 'attention' | 'muted';
+  dotState:
+    | 'idle'
+    | 'active'
+    | 'thinking'
+    | 'waiting'
+    | 'attention'
+    | 'error'
+    | 'muted'
+    | 'server-starting'
+    | 'server-ready'
+    | 'server-stopped';
   onSelect?: () => void;
   onClose?: () => void;
   isActive?: boolean;
@@ -199,6 +210,10 @@ interface Props {
   isProjectDevServerRunning?: (projectPath: string) => boolean;
   /** Stop the dev server for any project represented by a sidebar row. */
   onStopDevServer?: (projectPath: string) => void | Promise<void>;
+  /** Snapshot of tracked background server state, including known address. */
+  getProjectDevServerSnapshot?: (projectPath: string) => ProjectDevServerSnapshot;
+  /** Re-render project rows when background server lifecycles change. */
+  devServerLifecycleVersion?: number;
 
   // Worktrees
   /** All worktrees of the current project's repository (`git worktree list`,
@@ -253,7 +268,8 @@ function writeProjectExpanded(state: Record<string, boolean>) {
   }
 }
 
-function formatDevServerLabel(url: string | undefined): string {
+function formatDevServerLabel(url: string | undefined, knownAddress?: string | null): string {
+  if (knownAddress) return knownAddress;
   if (!url) return 'Dev server';
   try {
     return new URL(url).host;
@@ -296,10 +312,68 @@ function workspaceInitial(name: string): string {
  */
 function tabDotState(tab: { attention?: boolean; status?: TabStatus }): SidebarItem['dotState'] {
   if (tab.attention) return 'attention';
-  if (tab.status === 'crashed') return 'attention';
+  if (tab.status === 'crashed') return 'error';
   if (tab.status === 'exited') return 'muted';
   if (tab.status === 'thinking') return 'thinking';
+  if (tab.status === 'waiting') return 'waiting';
   return 'active';
+}
+
+type ProjectActivityStatus = 'closed' | 'idle' | 'working' | 'waiting' | 'error';
+
+function projectActivityStatus(
+  row: PinnedProjectRow,
+  tabs: ReadonlyArray<SessionTerminalTab> | undefined
+): ProjectActivityStatus {
+  const list = tabs ?? [];
+  if (row.status === 'error' || list.some((tab) => tab.status === 'crashed')) return 'error';
+  if (list.some((tab) => tab.status === 'waiting' || tab.attention)) return 'waiting';
+  if (list.some((tab) => tab.status === 'thinking')) return 'working';
+  if (row.status === 'inactive' || row.status === 'suspended') return 'closed';
+  return 'idle';
+}
+
+function projectActivityLabel(status: ProjectActivityStatus): string {
+  switch (status) {
+    case 'error':
+      return 'error';
+    case 'waiting':
+      return 'agent waiting for input';
+    case 'working':
+      return 'agent working';
+    case 'idle':
+      return 'open and idle';
+    case 'closed':
+      return 'closed';
+  }
+}
+
+function serverStatusLabel(status: ProjectDevServerSnapshot['status']): string | null {
+  switch (status) {
+    case 'starting':
+      return 'dev server starting';
+    case 'ready':
+      return 'dev server running';
+    case 'stopped':
+      return 'dev server stopped';
+    case 'not-running':
+      return null;
+  }
+}
+
+function serverStatusDot(
+  status: ProjectDevServerSnapshot['status']
+): SidebarItem['dotState'] | null {
+  switch (status) {
+    case 'starting':
+      return 'server-starting';
+    case 'ready':
+      return 'server-ready';
+    case 'stopped':
+      return 'server-stopped';
+    case 'not-running':
+      return null;
+  }
 }
 
 /**
@@ -317,12 +391,12 @@ function projectDotState(
   tabs: ReadonlyArray<SessionTerminalTab> | undefined
 ): SidebarItem['dotState'] {
   const list = tabs ?? [];
-  if (list.some((t) => t.attention)) return 'attention';
-  if (list.some((t) => t.status === 'crashed')) return 'attention';
-  if (row.status === 'error') return 'attention';
+  if (list.some((t) => t.status === 'crashed') || row.status === 'error') return 'error';
+  if (list.some((t) => t.attention || t.status === 'waiting')) return 'waiting';
   if (row.status === 'inactive' || row.status === 'suspended') return 'muted';
-  if (list.some((t) => t.status !== 'exited')) return 'active';
-  return 'muted';
+  if (list.some((t) => t.status === 'thinking')) return 'thinking';
+  if (list.some((t) => t.status === 'running' || t.status === 'starting')) return 'active';
+  return row.status === 'active' ? 'idle' : 'muted';
 }
 
 export const WorkspaceSidebar = memo(function WorkspaceSidebar({
@@ -363,6 +437,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   devServerUrl,
   isProjectDevServerRunning,
   onStopDevServer,
+  getProjectDevServerSnapshot,
   worktrees,
   onAddWorktree,
   onSwitchAccount,
@@ -399,6 +474,15 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   const showWorkspaceSwitcher = Boolean(onSwitchAccount && activeAccount && hasMultipleWorkspaces);
   const otherWorkspaces = accounts.filter((account) => account.id !== activeAccount?.id);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const currentServerSnapshot: ProjectDevServerSnapshot = currentProjectPath
+    ? (getProjectDevServerSnapshot?.(currentProjectPath) ?? {
+        status: devServerRunning ? 'ready' : 'not-running',
+        address: null,
+        instanceId: null,
+      })
+    : { status: 'not-running', address: null, instanceId: null };
+  const currentServerStatus = currentServerSnapshot.status;
+  const currentServerAddress = currentServerSnapshot.address;
 
   const handleOpenProjectSettings = useCallback(
     async (row: Pick<PinnedProjectRow, 'projectPath' | 'fallbackName'>) => {
@@ -780,10 +864,22 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     if (hasDevServer || isRestartingDevServer) {
       commands.push({
         key: 'dev-server',
-        label: formatDevServerLabel(devServerUrl),
-        dotState: isRestartingDevServer ? 'attention' : devServerRunning ? 'active' : 'idle',
+        label: formatDevServerLabel(devServerUrl, currentServerAddress),
+        dotState:
+          isRestartingDevServer || currentServerStatus === 'starting'
+            ? 'server-starting'
+            : devServerRunning
+              ? 'server-ready'
+              : currentServerStatus === 'stopped'
+                ? 'server-stopped'
+                : 'idle',
         onSelect: onOpenDevServerLogs,
-        meta: isRestartingDevServer ? 'restarting' : undefined,
+        meta:
+          isRestartingDevServer || currentServerStatus === 'starting'
+            ? 'starting'
+            : currentServerStatus === 'stopped'
+              ? 'stopped'
+              : undefined,
         onAction: onRestartDevServer,
         actionIcon: <ResetIcon size={11} />,
         actionLabel: 'Restart dev server',
@@ -817,11 +913,14 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     onOpenDevServerLogs,
     onRestartDevServer,
     devServerUrl,
+    currentServerStatus,
+    currentServerAddress,
   ]);
 
   // Worktree rows for the current project. Clicking a non-current worktree
   // performs the same in-place project switch as any other sidebar row — the
-  // previous worktree's session (PTYs + dev server) stays hot in "Active".
+  // previous worktree's terminal session stays active; dev-server retention
+  // follows the Experimental setting.
   const worktreeItems = useMemo<SidebarItem[]>(() => {
     void registryVersion;
     const list = worktrees ?? [];
@@ -1054,9 +1153,17 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
       : unpinProject
         ? (_shouldPin: boolean) => unpinProject()
         : undefined;
-    const hasRunningDevServer = isProjectDevServerRunning
-      ? isProjectDevServerRunning(row.projectPath)
-      : isCurrent && devServerRunning;
+    const serverSnapshot =
+      getProjectDevServerSnapshot?.(row.projectPath) ??
+      ({
+        status:
+          isProjectDevServerRunning?.(row.projectPath) || (isCurrent && devServerRunning)
+            ? 'ready'
+            : 'not-running',
+        address: null,
+        instanceId: null,
+      } satisfies ProjectDevServerSnapshot);
+    const hasRunningDevServer = serverSnapshot.status === 'ready';
     const stopDevServer =
       onStopDevServer && hasRunningDevServer
         ? () => {
@@ -1100,6 +1207,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         compact={!!isSidebarHidden}
         isExpanded={expanded}
         isWorking={workingProjectFamilies.has(familyRootOf(row.projectPath))}
+        serverSnapshot={serverSnapshot}
         shortcutNumber={shortcutNumberFor(row)}
         onToggleExpand={() => toggleProjectExpanded(row.projectPath)}
         onSelectProject={onSelectProject}
@@ -1170,7 +1278,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
                 snapshot={sessionRegistry.snapshot(row.projectPath)}
                 worktreeItems={familyWorktreeItems}
                 filterLower={filterLower}
-                hasLiveDevServer={isProjectDevServerRunning?.(row.projectPath) ?? false}
+                serverSnapshot={serverSnapshot}
                 onSelectTab={(sessionId) => {
                   if (onSelectProjectTab) {
                     onSelectProjectTab(row.projectPath, sessionId);
@@ -1682,8 +1790,8 @@ function SidebarGroupHeader({
 
 /**
  * Read-only view of another project's agent/terminal lists, pulled from
- * the session registry snapshot. Under Slice 4 these tabs' PTYs are STILL
- * RUNNING in the background (we keep every active session hot), so dots
+ * the session registry snapshot. These tabs' PTYs are STILL RUNNING in the
+ * background, so dots
  * render active. Clicking a tab switches to that project and focuses the
  * tab — the live Terminal just unhides, no reconnect required.
  */
@@ -1691,15 +1799,14 @@ function InactiveProjectSections({
   snapshot,
   worktreeItems,
   filterLower,
-  hasLiveDevServer,
+  serverSnapshot,
   onSelectTab,
 }: {
   snapshot: SessionSnapshot | undefined;
   /** Hot worktree sessions in this project's family (empty when none). */
   worktreeItems?: SidebarItem[];
   filterLower: string;
-  /** True if a dev server is currently tracked for this project path. */
-  hasLiveDevServer: boolean;
+  serverSnapshot: ProjectDevServerSnapshot;
   onSelectTab: (sessionId: string) => void;
 }) {
   const tabs: ReadonlyArray<SessionTerminalTab> = snapshot?.terminalTabs ?? [];
@@ -1725,12 +1832,14 @@ function InactiveProjectSections({
     else agents.push(item);
   }
 
-  const commands: SidebarItem[] = hasLiveDevServer
+  const serverLabel = serverStatusLabel(serverSnapshot.status);
+  const commands: SidebarItem[] = serverLabel
     ? [
         {
           key: 'dev-server',
-          label: 'Dev server',
-          dotState: 'active',
+          label: serverSnapshot.address ?? 'Dev server',
+          dotState: serverStatusDot(serverSnapshot.status) ?? 'idle',
+          meta: serverSnapshot.status === 'ready' ? 'running' : serverSnapshot.status,
         },
       ]
     : [];
@@ -1804,6 +1913,7 @@ function ProjectGroup({
   compact,
   isExpanded,
   isWorking,
+  serverSnapshot,
   shortcutNumber,
   onToggleExpand,
   onSelectProject,
@@ -1823,6 +1933,7 @@ function ProjectGroup({
   compact: boolean;
   isExpanded: boolean;
   isWorking: boolean;
+  serverSnapshot: ProjectDevServerSnapshot;
   /** Cmd+N shortcut badge (1..9). Null for rows beyond the shortcut range. */
   shortcutNumber: number | null;
   onToggleExpand: () => void;
@@ -1852,17 +1963,47 @@ function ProjectGroup({
   // therefore re-read on every relevant change.
   const snap = sessionRegistry.snapshot(row.projectPath);
   const baseDot = projectDotState(row, snap?.terminalTabs);
-  // Family rows can be live purely through a worktree session (the root path
-  // itself has no tabs) — the aggregated row status is authoritative then.
-  const dot = baseDot === 'muted' && row.status === 'active' ? 'active' : baseDot;
+  const snapshotActivity = projectActivityStatus(row, snap?.terminalTabs);
+  const activityStatus: ProjectActivityStatus =
+    snapshotActivity === 'idle' && isWorking ? 'working' : snapshotActivity;
+  const dot =
+    activityStatus === 'error'
+      ? 'error'
+      : activityStatus === 'waiting'
+        ? 'waiting'
+        : activityStatus === 'working'
+          ? !isExpanded && baseDot === 'thinking'
+            ? 'thinking'
+            : 'active'
+          : activityStatus === 'idle'
+            ? 'idle'
+            : 'muted';
+  const serverDot = serverStatusDot(serverSnapshot.status);
+  // A ready server is the most useful signal on an otherwise idle project
+  // row. Avoid showing the neutral agent dot beside it; attention and active
+  // work still keep their own indicator so both live states remain visible.
+  const showAgentStatus =
+    serverSnapshot.status !== 'ready' || (activityStatus !== 'idle' && activityStatus !== 'closed');
+  const accessibleStatus = [
+    projectActivityLabel(activityStatus),
+    serverStatusLabel(serverSnapshot.status),
+    serverSnapshot.address,
+  ]
+    .filter(Boolean)
+    .join('; ');
   const memoryLabel =
     row.memoryBytes > 0 ? `${Math.round(row.memoryBytes / (1024 * 1024))}MB` : null;
-  const showWorkingIndicator = !isExpanded && isWorking;
+  const showWorkingIndicator = !isExpanded && activityStatus === 'working';
   // A pin whose session has been closed. The row deliberately survives — the
   // pin is the user's standing choice — but it must not keep looking like a
   // live one, or closing it reads as "nothing happened" and the next click
   // goes looking for something else to press.
-  const isParked = isPinned && row.status === 'inactive';
+  const isParked =
+    isPinned &&
+    row.status === 'inactive' &&
+    serverSnapshot.status !== 'ready' &&
+    serverSnapshot.status !== 'starting' &&
+    serverSnapshot.status !== 'stopped';
 
   const projectContent = (
     <>
@@ -1874,7 +2015,7 @@ function ProjectGroup({
             role="button"
             tabIndex={0}
             aria-current={isCurrent ? 'true' : undefined}
-            aria-label={row.fallbackName}
+            aria-label={`${row.fallbackName}; ${accessibleStatus}${isCurrent ? '; current project' : ''}`}
             onClick={() => {
               if (!isCurrent) onSelectProject(row.projectPath);
             }}
@@ -1942,8 +2083,11 @@ function ProjectGroup({
                     size="sm"
                     label={`Working on ${row.fallbackName}`}
                   />
-                ) : (
+                ) : showAgentStatus ? (
                   <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
+                ) : null}
+                {serverDot && (
+                  <span className={`sidebar-row-dot dot-${serverDot}`} aria-hidden="true" />
                 )}
               </span>
             )}
@@ -2295,7 +2439,7 @@ function SidebarRow({ item }: { item: SidebarItem }) {
     setIsEditing(false);
   };
 
-  const isAttention = item.dotState === 'attention';
+  const isAttention = item.dotState === 'attention' || item.dotState === 'waiting';
   return (
     <li
       className={[

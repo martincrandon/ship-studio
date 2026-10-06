@@ -15,7 +15,7 @@ Ship Studio is a desktop app for web developers that provides:
 - **Site Migration** - Paste a live URL into New Project and the agent rebuilds it here, measuring every page against the original before calling it done (see `docs/site-migration.md`)
 - **Snapshots & Backups** - Create and restore project snapshots (rewind)
 - **Asset Management** - Upload, view, and delete files under a configurable assets folder (default `/public`)
-- **Multi-Window & Hot Sessions** - Open projects in separate windows; the project rail keeps background sessions (PTYs + dev server) alive when you return to the dashboard
+- **Multi-Window & Hot Sessions** - Open projects in separate windows; terminal sessions stay available when switching projects, and an Experimental setting can keep background dev servers alive too
 - **Plugins, Skills & MCP** - Extend the app with plugins; install agent skills and configure MCP servers
 - **Command Palette** - Cmd+K palette; every user-facing feature registers its actions here (see "New feature → contribute commands")
 - **IDE Integration** - Open projects in VS Code or Cursor with one click

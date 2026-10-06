@@ -36,6 +36,8 @@ export interface WorkspacePreviewPaneProps {
   hasPreview: boolean;
   projectTypeResolved: boolean;
   previewConnectionEnabled: boolean;
+  serverAlreadyRunning: boolean;
+  serverInstanceId: number | null;
   projectType: ProjectType;
   isWebProject: boolean;
   mobilePreviewAvailable: boolean;
@@ -110,6 +112,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
     hasPreview,
     projectTypeResolved,
     previewConnectionEnabled,
+    serverAlreadyRunning,
+    serverInstanceId,
     projectType,
     isWebProject,
     mobilePreviewAvailable,
@@ -209,6 +213,8 @@ export function WorkspacePreviewPane(props: WorkspacePreviewPaneProps) {
             projectPath={currentProject.path}
             isStaticProject={projectType === 'statichtml'}
             previewConnectionEnabled={previewConnectionEnabled}
+            serverAlreadyRunning={serverAlreadyRunning}
+            serverInstanceId={serverInstanceId}
             projectType={projectType}
             onServerReady={handlePreviewReady}
             onPageChange={setCurrentPreviewPage}
