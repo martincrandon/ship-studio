@@ -1979,11 +1979,19 @@ function ProjectGroup({
             ? 'idle'
             : 'muted';
   const serverDot = serverStatusDot(serverSnapshot.status);
+  const isExpandedBackgroundServerReady =
+    isExpanded && !isCurrent && serverSnapshot.status === 'ready';
+  const projectDot =
+    isExpandedBackgroundServerReady && (activityStatus === 'idle' || activityStatus === 'closed')
+      ? 'active'
+      : dot;
   // A ready server is the most useful signal on an otherwise idle project
   // row. Avoid showing the neutral agent dot beside it; attention and active
   // work still keep their own indicator so both live states remain visible.
   const showAgentStatus =
-    serverSnapshot.status !== 'ready' || (activityStatus !== 'idle' && activityStatus !== 'closed');
+    isExpandedBackgroundServerReady ||
+    serverSnapshot.status !== 'ready' ||
+    (activityStatus !== 'idle' && activityStatus !== 'closed');
   // Expanded background projects show their server status in the Dev Server
   // child row. Keep the parent indicator for collapsed rows and the current
   // project, whose selected-row treatment is intentionally different.
@@ -2088,7 +2096,7 @@ function ProjectGroup({
                     label={`Working on ${row.fallbackName}`}
                   />
                 ) : showAgentStatus ? (
-                  <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
+                  <span className={`sidebar-row-dot dot-${projectDot}`} aria-hidden="true" />
                 ) : null}
                 {showProjectServerDot && serverDot && (
                   <span className={`sidebar-row-dot dot-${serverDot}`} aria-hidden="true" />

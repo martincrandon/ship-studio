@@ -363,6 +363,7 @@ describe('WorkspaceSidebar project activity indicator', () => {
     expect(
       projectRow?.querySelector('.sidebar-project-status .dot-server-ready')
     ).not.toBeInTheDocument();
+    expect(projectRow?.querySelector('.sidebar-project-status .dot-active')).toBeInTheDocument();
     expect(
       screen.getByText('localhost:4321').closest('.sidebar-row')?.querySelector('.dot-server-ready')
     ).toBeInTheDocument();
