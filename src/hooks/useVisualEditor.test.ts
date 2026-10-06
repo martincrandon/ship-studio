@@ -131,16 +131,15 @@ beforeEach(() => {
   (listCustomClasses as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   (classifyApplyTokens as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  (resolveClassnameSource as ReturnType<typeof vi.fn>).mockImplementation(
-    (_p: string, sig: { className: string }) =>
-      Promise.resolve({
-        status: 'resolved',
-        file: 'app/page.tsx',
-        line: 1,
-        column: 1,
-        class_name: sig.className, // a fresh selection is clean (live == source)
-        confidence: 'unique',
-      })
+  vi.mocked(resolveClassnameSource).mockImplementation((_p: string, sig: { className: string }) =>
+    Promise.resolve({
+      status: 'resolved',
+      file: 'app/page.tsx',
+      line: 1,
+      column: 1,
+      class_name: sig.className, // a fresh selection is clean (live == source)
+      confidence: 'unique',
+    })
   );
   (applyClassnameEdit as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 });
@@ -352,7 +351,7 @@ describe('useVisualEditor addFirstClass (class-less elements)', () => {
   it('inserts the first class, then re-resolves so the panel gains full controls', async () => {
     // Mirror the backend: an empty className resolves to `no_class`; once a class
     // exists, it resolves normally.
-    (resolveClassnameSource as Fn).mockImplementation((_p: string, sig: { className: string }) =>
+    vi.mocked(resolveClassnameSource).mockImplementation((_p: string, sig: { className: string }) =>
       Promise.resolve(
         sig.className.trim() === ''
           ? { status: 'no_class' }

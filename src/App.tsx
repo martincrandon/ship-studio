@@ -240,7 +240,6 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   // Dev server and health check management
   const {
-    devServerRef,
     healthPanelRef,
     devServerPort,
     knownDevServerPort,
@@ -725,12 +724,15 @@ function AppContents({ initialProjectPath }: AppProps) {
   });
 
   // Plugin data for PluginSlot components (defined before early returns so all views can use them)
+  const hasCurrentProject = Boolean(currentProject);
+  const pluginProjectName = currentProject?.name ?? '';
+  const pluginProjectPath = currentProject?.path ?? '';
   const pluginProject = useMemo(
     () =>
-      currentProject
+      hasCurrentProject
         ? {
-            name: currentProject.name,
-            path: currentProject.path,
+            name: pluginProjectName,
+            path: pluginProjectPath,
             currentBranch: currentBranch || 'main',
             hasUncommittedChanges,
             devServerUrl: `http://localhost:${String(devServerPort)}`,
@@ -738,7 +740,9 @@ function AppContents({ initialProjectPath }: AppProps) {
           }
         : null,
     [
-      currentProject?.path,
+      hasCurrentProject,
+      pluginProjectName,
+      pluginProjectPath,
       currentBranch,
       hasUncommittedChanges,
       devServerPort,
@@ -850,7 +854,7 @@ function AppContents({ initialProjectPath }: AppProps) {
 
   const devServerProps = useMemo(
     () => ({
-      hasDevServer: currentProject ? isServerRunning(currentProject.path) : false,
+      hasDevServer: hasCurrentProject ? isServerRunning(pluginProjectPath) : false,
       knownDevServerPort,
       healthPanelRef,
       devServerPort,
@@ -871,8 +875,8 @@ function AppContents({ initialProjectPath }: AppProps) {
       onDevServerResize: resizeDevServer,
     }),
     [
-      devServerRef,
-      currentProject?.path,
+      hasCurrentProject,
+      pluginProjectPath,
       isServerRunning,
       knownDevServerPort,
       devServerPort,

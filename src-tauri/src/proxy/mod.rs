@@ -482,17 +482,23 @@ pub async fn start_preview_proxy(
 ) -> Result<u16, String> {
     let _start_guard = PROXY_START_LOCK.lock().await;
     let key = (window_label.clone(), project_path.clone());
-    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
-        if let Some(existing) = instances.get(&key) {
-            if existing._target_port == target_port {
-                return Ok(existing._proxy_port);
+    let previous = {
+        if let Ok(mut instances) = PROXY_INSTANCES.lock() {
+            if let Some(existing) = instances.get(&key) {
+                if existing._target_port == target_port {
+                    return Ok(existing._proxy_port);
+                }
             }
+            instances.remove(&key)
+        } else {
+            None
         }
-        if let Some(mut existing) = instances.remove(&key) {
-            if let Some(tx) = existing.shutdown_tx.take() {
-                let _ = tx.send(());
-            }
+    };
+    if let Some(mut existing) = previous {
+        if let Some(tx) = existing.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        let _ = existing._task_handle.await;
     }
 
     // Bind to a random available port on localhost
@@ -516,6 +522,11 @@ pub async fn start_preview_proxy(
 
         loop {
             tokio::select! {
+                biased;
+                _ = &mut shutdown_rx => {
+                    tracing::info!("[Proxy] Shutting down proxy on port {}", proxy_port);
+                    break;
+                }
                 result = listener.accept() => {
                     match result {
                         Ok((stream, addr)) => {
@@ -525,10 +536,6 @@ pub async fn start_preview_proxy(
                             tracing::error!("[Proxy] Accept error: {}", e);
                         }
                     }
-                }
-                _ = &mut shutdown_rx => {
-                    tracing::info!("[Proxy] Shutting down proxy on port {}", proxy_port);
-                    break;
                 }
             }
         }
@@ -556,59 +563,62 @@ pub async fn stop_preview_proxy(window_label: &str, project_path: &str) {
     // it. This makes explicit Stop authoritative when Preview unmounts or a
     // project switch races proxy binding.
     let _start_guard = PROXY_START_LOCK.lock().await;
-    stop_preview_proxy_now(window_label, project_path);
-}
-
-fn stop_preview_proxy_now(window_label: &str, project_path: &str) {
-    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
-        if let Some(mut instance) =
-            instances.remove(&(window_label.to_string(), project_path.to_string()))
-        {
-            if let Some(tx) = instance.shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            tracing::info!("[Proxy] Stopped proxy for window '{}'", window_label);
+    let instance = PROXY_INSTANCES.lock().ok().and_then(|mut instances| {
+        instances.remove(&(window_label.to_string(), project_path.to_string()))
+    });
+    if let Some(mut instance) = instance {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        let _ = instance._task_handle.await;
+        tracing::info!("[Proxy] Stopped proxy for window '{}'", window_label);
     }
 }
 
 /// Stop all project proxies owned by one closing window.
 pub async fn stop_preview_proxies_for_window(window_label: &str) {
     let _start_guard = PROXY_START_LOCK.lock().await;
-    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
+    let stopped = if let Ok(mut instances) = PROXY_INSTANCES.lock() {
         let keys: Vec<_> = instances
             .keys()
             .filter(|(label, _)| label == window_label)
             .cloned()
             .collect();
-        for key in keys {
-            if let Some(mut instance) = instances.remove(&key) {
-                if let Some(tx) = instance.shutdown_tx.take() {
-                    let _ = tx.send(());
-                }
-                tracing::info!(
-                    "[Proxy] Stopped proxy for window '{}' project '{}'",
-                    key.0,
-                    key.1
-                );
-            }
+        keys.into_iter()
+            .filter_map(|key| instances.remove(&key).map(|instance| (key, instance)))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    for (key, mut instance) in stopped {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        let _ = instance._task_handle.await;
+        tracing::info!(
+            "[Proxy] Stopped proxy for window '{}' project '{}'",
+            key.0,
+            key.1
+        );
     }
 }
 
 /// Stop all running proxies (called during app cleanup).
-pub fn stop_all_proxies() {
-    if let Ok(mut instances) = PROXY_INSTANCES.lock() {
-        for ((label, project_path), mut instance) in instances.drain() {
-            if let Some(tx) = instance.shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            tracing::info!(
-                "[Proxy] Stopped proxy for window '{}' project '{}' (cleanup)",
-                label,
-                project_path
-            );
+pub async fn stop_all_proxies() {
+    let stopped = PROXY_INSTANCES
+        .lock()
+        .map(|mut instances| instances.drain().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for ((label, project_path), mut instance) in stopped {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        let _ = instance._task_handle.await;
+        tracing::info!(
+            "[Proxy] Stopped proxy for window '{}' project '{}' (cleanup)",
+            label,
+            project_path
+        );
     }
 }
 

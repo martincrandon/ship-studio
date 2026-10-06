@@ -447,11 +447,11 @@ pub fn run() {
 
                 // Stop preview proxy and static server for this window (the
                 // agent bridge is global — it lives for the app's lifetime)
-                let proxy_window_label = label.clone();
+                let server_window_label = label.clone();
                 tauri::async_runtime::spawn(async move {
-                    proxy::stop_preview_proxies_for_window(&proxy_window_label).await;
+                    proxy::stop_preview_proxies_for_window(&server_window_label).await;
+                    static_server::stop_static_servers_for_window(&server_window_label).await;
                 });
-                static_server::stop_static_servers_for_window(&label);
 
                 // Kill PTY processes (dev server, etc.) owned by this window
                 let killed = commands::pty::kill_window_pty_sync(&label);
@@ -484,8 +484,10 @@ pub fn run() {
                     );
                     cleanup_agent_processes();
                     commands::setup::cleanup_auth_processes_sync();
-                    proxy::stop_all_proxies();
-                    static_server::stop_all_static_servers();
+                    tauri::async_runtime::spawn(async move {
+                        proxy::stop_all_proxies().await;
+                        static_server::stop_all_static_servers().await;
+                    });
                     // Mobile previews are torn down per-window above
                     // (teardown_mobile_previews_for_window_sync), so there's no
                     // global sim shutdown to do here.

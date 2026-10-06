@@ -113,7 +113,7 @@ pub async fn start_static_server(
 ) -> Result<u16, String> {
     // Re-entering the same project is idempotent. Another project in this
     // window owns a separate server and must stay alive.
-    stop_static_server(&window_label, &project_path);
+    stop_static_server(&window_label, &project_path).await;
 
     let project_root = PathBuf::from(&serve_path);
     if !project_root.exists() || !project_root.is_dir() {
@@ -154,6 +154,11 @@ pub async fn start_static_server(
 
         loop {
             tokio::select! {
+                biased;
+                _ = &mut shutdown_rx => {
+                    tracing::info!("[StaticServer] Shutting down on port {}", port);
+                    break;
+                }
                 result = listener.accept() => {
                     match result {
                         Ok((stream, addr)) => {
@@ -164,10 +169,6 @@ pub async fn start_static_server(
                             tracing::error!("[StaticServer] Accept error: {}", e);
                         }
                     }
-                }
-                _ = &mut shutdown_rx => {
-                    tracing::info!("[StaticServer] Shutting down on port {}", port);
-                    break;
                 }
             }
         }
@@ -202,69 +203,79 @@ pub async fn start_static_server(
 }
 
 /// Stop the static server for the given window.
-pub fn stop_static_server(window_label: &str, project_path: &str) {
-    if let Ok(mut instances) = STATIC_SERVER_INSTANCES.lock() {
-        if let Some(mut instance) =
+pub async fn stop_static_server(window_label: &str, project_path: &str) {
+    let instance = STATIC_SERVER_INSTANCES
+        .lock()
+        .ok()
+        .and_then(|mut instances| {
             instances.remove(&(window_label.to_string(), project_path.to_string()))
-        {
-            if let Some(tx) = instance.shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            if let Some(tx) = instance.watcher_shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            tracing::info!(
-                "[StaticServer] Stopped server for window '{}' project '{}' (port {})",
-                window_label,
-                project_path,
-                instance.port
-            );
+        });
+    if let Some(mut instance) = instance {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        if let Some(tx) = instance.watcher_shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        let _ = instance._task_handle.await;
+        tracing::info!(
+            "[StaticServer] Stopped server for window '{}' project '{}' (port {})",
+            window_label,
+            project_path,
+            instance.port
+        );
     }
 }
 
 /// Stop every static project server owned by one closing window.
-pub fn stop_static_servers_for_window(window_label: &str) {
-    if let Ok(mut instances) = STATIC_SERVER_INSTANCES.lock() {
+pub async fn stop_static_servers_for_window(window_label: &str) {
+    let stopped = if let Ok(mut instances) = STATIC_SERVER_INSTANCES.lock() {
         let keys: Vec<_> = instances
             .keys()
             .filter(|(label, _)| label == window_label)
             .cloned()
             .collect();
-        for key in keys {
-            if let Some(mut instance) = instances.remove(&key) {
-                if let Some(tx) = instance.shutdown_tx.take() {
-                    let _ = tx.send(());
-                }
-                if let Some(tx) = instance.watcher_shutdown_tx.take() {
-                    let _ = tx.send(());
-                }
-                tracing::info!(
-                    "[StaticServer] Stopped server for window '{}' project '{}' (window closed)",
-                    key.0,
-                    key.1
-                );
-            }
+        keys.into_iter()
+            .filter_map(|key| instances.remove(&key).map(|instance| (key, instance)))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    for (key, mut instance) in stopped {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        if let Some(tx) = instance.watcher_shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        let _ = instance._task_handle.await;
+        tracing::info!(
+            "[StaticServer] Stopped server for window '{}' project '{}' (window closed)",
+            key.0,
+            key.1
+        );
     }
 }
 
 /// Stop all running static servers (called during app cleanup).
-pub fn stop_all_static_servers() {
-    if let Ok(mut instances) = STATIC_SERVER_INSTANCES.lock() {
-        for (label, mut instance) in instances.drain() {
-            if let Some(tx) = instance.shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            if let Some(tx) = instance.watcher_shutdown_tx.take() {
-                let _ = tx.send(());
-            }
-            tracing::info!(
-                "[StaticServer] Stopped server for window '{}' project '{}' (cleanup)",
-                label.0,
-                label.1
-            );
+pub async fn stop_all_static_servers() {
+    let stopped = STATIC_SERVER_INSTANCES
+        .lock()
+        .map(|mut instances| instances.drain().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for ((label, project_path), mut instance) in stopped {
+        if let Some(tx) = instance.shutdown_tx.take() {
+            let _ = tx.send(());
         }
+        if let Some(tx) = instance.watcher_shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        let _ = instance._task_handle.await;
+        tracing::info!(
+            "[StaticServer] Stopped server for window '{}' project '{}' (cleanup)",
+            label,
+            project_path
+        );
     }
 }
 
@@ -722,7 +733,7 @@ mod tests {
         let b = register_test_static_server(&window, "/project/b").await;
         let c = register_test_static_server(&other_window, "/project/c").await;
 
-        stop_static_server(&window, "/project/a");
+        stop_static_server(&window, "/project/a").await;
         a.watcher_task.await.unwrap();
         wait_for_static_port(a.port, false).await;
         wait_for_static_port(b.port, true).await;
@@ -746,7 +757,7 @@ mod tests {
             );
         }
 
-        stop_static_servers_for_window(&window);
+        stop_static_servers_for_window(&window).await;
         b.watcher_task.await.unwrap();
         wait_for_static_port(b.port, false).await;
         wait_for_static_port(c.port, true).await;
@@ -756,7 +767,7 @@ mod tests {
             assert!(instances.contains_key(&(other_window.clone(), "/project/c".into())));
         }
 
-        stop_static_servers_for_window(&other_window);
+        stop_static_servers_for_window(&other_window).await;
         c.watcher_task.await.unwrap();
         wait_for_static_port(c.port, false).await;
     }

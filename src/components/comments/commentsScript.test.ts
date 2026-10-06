@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import script from '../../../src-tauri/src/proxy/comments_script.html?raw';
 
 function send(data: object, source: MessageEventSource = window) {
@@ -6,7 +7,7 @@ function send(data: object, source: MessageEventSource = window) {
     new MessageEvent('message', { source, data: { channel: 'ss:comments-host', ...data } })
   );
 }
-let posted: ReturnType<typeof vi.spyOn>;
+let posted: MockInstance<typeof window.parent.postMessage>;
 beforeAll(() => {
   Object.defineProperty(window, 'CSS', { value: { escape: (s: string) => s }, configurable: true });
   window.eval(script.replace(/^<script>/, '').replace(/<\/script>\s*$/, ''));

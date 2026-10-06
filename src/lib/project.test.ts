@@ -11,6 +11,7 @@
 
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import type { DashboardProject } from './project';
 import {
   getDashboardProjects,
@@ -46,11 +47,11 @@ vi.mock('./analytics', () => ({
 }));
 
 describe('lib/project', () => {
-  let invokeMock: ReturnType<typeof vi.fn>;
+  let invokeMock: Mock<(command: string, args?: unknown) => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    invokeMock = vi.fn();
+    invokeMock = vi.fn<(command: string, args?: unknown) => unknown>();
     mockIPC((cmd, args) => {
       if (args === undefined) {
         return invokeMock(cmd);

@@ -162,6 +162,10 @@ describe('useDevServer', () => {
       current: ReturnType<typeof useDevServer>;
     }): Promise<(data: string) => void> {
       const project = await import('../lib/project');
+      const { detectProjectType } = await import('../lib/static-server');
+      // These tests exercise the PTY output callback, so use a project type
+      // that starts a dev server instead of the mock's default `unknown`.
+      vi.mocked(detectProjectType).mockResolvedValue('nextjs');
       let onOutput: ((data: string) => void) | undefined;
       vi.mocked(project.startDevServer).mockImplementation((_cwd, _port, _label, out) => {
         onOutput = out;

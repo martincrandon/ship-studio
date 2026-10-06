@@ -39,7 +39,10 @@ pub async fn start_static_server(
 /// Stop the static file server for one project in a window.
 #[tauri::command]
 #[tracing::instrument]
-pub fn stop_static_server(window_label: String, project_path: String) -> Result<(), CommandError> {
-    crate::static_server::stop_static_server(&window_label, &project_path);
+pub async fn stop_static_server(
+    window_label: String,
+    project_path: String,
+) -> Result<(), CommandError> {
+    crate::static_server::stop_static_server(&window_label, &project_path).await;
     Ok(())
 }
