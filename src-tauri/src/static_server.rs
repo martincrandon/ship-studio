@@ -711,11 +711,10 @@ mod tests {
         TestStaticServer { port, watcher_task }
     }
 
-    async fn wait_for_static_port(port: u16, should_be_open: bool) {
+    async fn wait_for_static_port_open(port: u16) {
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                let is_open = TcpStream::connect(("127.0.0.1", port)).await.is_ok();
-                if is_open == should_be_open {
+                if TcpStream::connect(("127.0.0.1", port)).await.is_ok() {
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -735,9 +734,11 @@ mod tests {
 
         stop_static_server(&window, "/project/a").await;
         a.watcher_task.await.unwrap();
-        wait_for_static_port(a.port, false).await;
-        wait_for_static_port(b.port, true).await;
-        wait_for_static_port(c.port, true).await;
+        // The stop call awaits the listener task, so its port is released on
+        // return. A refusal probe is racy on Windows: another parallel test
+        // can bind the same ephemeral port before this test observes it.
+        wait_for_static_port_open(b.port).await;
+        wait_for_static_port_open(c.port).await;
         {
             let instances = STATIC_SERVER_INSTANCES.lock().unwrap();
             assert!(!instances.contains_key(&(window.clone(), "/project/a".into())));
@@ -759,8 +760,7 @@ mod tests {
 
         stop_static_servers_for_window(&window).await;
         b.watcher_task.await.unwrap();
-        wait_for_static_port(b.port, false).await;
-        wait_for_static_port(c.port, true).await;
+        wait_for_static_port_open(c.port).await;
         {
             let instances = STATIC_SERVER_INSTANCES.lock().unwrap();
             assert!(!instances.contains_key(&(window.clone(), "/project/b".into())));
@@ -769,7 +769,6 @@ mod tests {
 
         stop_static_servers_for_window(&other_window).await;
         c.watcher_task.await.unwrap();
-        wait_for_static_port(c.port, false).await;
     }
 
     // ===== #575: fd-pressure classification + bounded read retry =====

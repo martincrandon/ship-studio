@@ -669,7 +669,39 @@ pub async fn ensure_shipstudio_dir() -> Result<String, CommandError> {
 mod tests {
     use super::*;
     use std::process::Command;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use tempfile::TempDir;
+
+    #[derive(Clone, Default)]
+    struct IndexLockRetryCapture(Arc<AtomicUsize>);
+
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for IndexLockRetryCapture {
+        fn on_event(
+            &self,
+            event: &tracing::Event<'_>,
+            _ctx: tracing_subscriber::layer::Context<'_, S>,
+        ) {
+            struct MessageVisitor<'a>(&'a AtomicUsize);
+
+            impl tracing::field::Visit for MessageVisitor<'_> {
+                fn record_debug(
+                    &mut self,
+                    field: &tracing::field::Field,
+                    value: &dyn std::fmt::Debug,
+                ) {
+                    if field.name() == "message"
+                        && format!("{value:?}")
+                            .contains("git lost the index.lock race; retrying after backoff")
+                    {
+                        self.0.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            }
+
+            event.record(&mut MessageVisitor(&self.0));
+        }
+    }
 
     // Issue #819: every run_git_net call site — not just push_branch and
     // delete_branch — must classify a blown network budget as Expected, or
@@ -775,7 +807,10 @@ mod tests {
     async fn run_git_net_retrying_index_lock_passes_other_failures_through() {
         let tmp = TempDir::new().unwrap();
         init_repo(tmp.path());
-        let started = std::time::Instant::now();
+        let retries = IndexLockRetryCapture::default();
+        use tracing_subscriber::layer::SubscriberExt;
+        let subscriber = tracing_subscriber::registry().with(retries.clone());
+        let _subscriber_guard = tracing::subscriber::set_default(subscriber);
         let out = run_git_net_retrying_index_lock(
             &["checkout", "no-such-branch-xyz"],
             tmp.path(),
@@ -784,10 +819,9 @@ mod tests {
         .await
         .expect("git should run");
         assert!(!out.status.success());
-        // A retried run would take ≥ 600ms of backoff sleeps alone — a single
-        // un-retried git spawn stays well under that even on a slow machine.
-        assert!(
-            started.elapsed() < std::time::Duration::from_millis(500),
+        assert_eq!(
+            retries.0.load(Ordering::Relaxed),
+            0,
             "non-contention failures must not be retried"
         );
     }

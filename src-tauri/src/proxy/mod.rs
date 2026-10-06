@@ -1946,7 +1946,9 @@ mod tests {
 /// the proxy forwards, and the raw response bytes show what a webview would see.
 #[cfg(test)]
 mod e2e_tests {
-    use super::{start_preview_proxy, stop_preview_proxies_for_window, stop_preview_proxy};
+    use super::{
+        start_preview_proxy, stop_preview_proxies_for_window, stop_preview_proxy, PROXY_INSTANCES,
+    };
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::{TcpListener, TcpStream};
@@ -2213,25 +2215,38 @@ mod e2e_tests {
             .contains("project-c"));
 
         stop_preview_proxy(&window, "/project/a").await;
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
-            while TcpStream::connect(("127.0.0.1", proxy_a)).await.is_ok() {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        // stop_preview_proxy awaits the listener task, so its port is released
+        // before returning. A refusal probe is racy on Windows: another test
+        // can bind the same ephemeral port before this test observes it.
+        {
+            let instances = PROXY_INSTANCES.lock().unwrap();
+            assert!(!instances.contains_key(&(window.clone(), "/project/a".into())));
+            assert_eq!(
+                instances
+                    .get(&(window.clone(), "/project/b".into()))
+                    .unwrap()
+                    ._proxy_port,
+                proxy_b
+            );
+            assert_eq!(
+                instances
+                    .get(&(other_window.clone(), "/project/c".into()))
+                    .unwrap()
+                    ._proxy_port,
+                proxy_c
+            );
+        }
         assert!(roundtrip(proxy_b, request(proxy_b))
             .await
             .contains("project-b"));
 
         stop_preview_proxies_for_window(&window).await;
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
-            while TcpStream::connect(("127.0.0.1", proxy_b)).await.is_ok() {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
+        {
+            let instances = PROXY_INSTANCES.lock().unwrap();
+            assert!(!instances.contains_key(&(window.clone(), "/project/a".into())));
+            assert!(!instances.contains_key(&(window.clone(), "/project/b".into())));
+            assert!(instances.contains_key(&(other_window.clone(), "/project/c".into())));
+        }
         assert!(roundtrip(proxy_c, request(proxy_c))
             .await
             .contains("project-c"));

@@ -23,6 +23,15 @@
   --size-sidebar-section-row: 22px;
   --size-sidebar-shortcut: 21px;
 
+  /* Workspace sidebar status indicators keep one dot size and one ready-glow
+     profile across rows, regardless of whether the server row is current. */
+  --size-sidebar-status-indicator: var(--space-06);
+  --size-sidebar-server-glow-rest-inner-radius: var(--space-02);
+  --size-sidebar-server-glow-rest-outer-radius: var(--space-06);
+  --size-sidebar-server-glow-current-inner-radius: var(--space-04);
+  --size-sidebar-server-glow-current-outer-radius: var(--space-12);
+  --duration-sidebar-server-glow: var(--duration-loader-isolated);
+
   /* Spotify widget (workspace sidebar) — the playback-progress fill drawn
    * over the panel's own bottom border. */
   --spotify-widget-progress-height: var(--stroke-2);
