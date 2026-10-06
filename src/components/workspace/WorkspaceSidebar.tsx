@@ -1984,6 +1984,10 @@ function ProjectGroup({
   // work still keep their own indicator so both live states remain visible.
   const showAgentStatus =
     serverSnapshot.status !== 'ready' || (activityStatus !== 'idle' && activityStatus !== 'closed');
+  // Expanded background projects show their server status in the Dev Server
+  // child row. Keep the parent indicator for collapsed rows and the current
+  // project, whose selected-row treatment is intentionally different.
+  const showProjectServerDot = !isExpanded || isCurrent;
   const accessibleStatus = [
     projectActivityLabel(activityStatus),
     serverStatusLabel(serverSnapshot.status),
@@ -2086,7 +2090,7 @@ function ProjectGroup({
                 ) : showAgentStatus ? (
                   <span className={`sidebar-row-dot dot-${dot}`} aria-hidden="true" />
                 ) : null}
-                {serverDot && (
+                {showProjectServerDot && serverDot && (
                   <span className={`sidebar-row-dot dot-${serverDot}`} aria-hidden="true" />
                 )}
               </span>

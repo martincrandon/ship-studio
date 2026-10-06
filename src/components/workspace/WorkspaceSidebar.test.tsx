@@ -360,6 +360,12 @@ describe('WorkspaceSidebar project activity indicator', () => {
     });
     expect(await screen.findByText('localhost:4321')).toBeInTheDocument();
     expect(screen.getByText('running')).toBeInTheDocument();
+    expect(
+      projectRow?.querySelector('.sidebar-project-status .dot-server-ready')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('localhost:4321').closest('.sidebar-row')?.querySelector('.dot-server-ready')
+    ).toBeInTheDocument();
   });
 
   it('opens project settings for the sidebar project', async () => {
