@@ -56,10 +56,7 @@ describe('workspace chrome stacking ladder', () => {
   const floatingPanel = tokenValue('--z-floating-panel');
 
   it('keeps the dock drop indicator between pinned and floating panels', () => {
-    assert.equal(
-      zIndexOf(dockCss, '.workspace-dock__drop-line'),
-      'var(--z-dock-drop-indicator)'
-    );
+    assert.equal(zIndexOf(dockCss, '.workspace-dock__drop-line'), 'var(--z-dock-drop-indicator)');
     assert.ok(
       dockedPanel < dockDropIndicator,
       `--z-dock-drop-indicator (${dockDropIndicator}) must sit above pinned panels (${dockedPanel})`
@@ -101,7 +98,7 @@ describe('workspace chrome stacking ladder', () => {
   it('keeps the preview toolbar above the pane separators it was raised for', () => {
     const consumers = [
       readCss('src/styles/features/preview.css'),
-      readCss('src/styles/features/workspace/split-pane.css'),
+      readCss('src/styles/features/workspace/dock.css'),
     ];
     let seen = 0;
     for (const css of consumers) {
