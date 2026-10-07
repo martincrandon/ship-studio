@@ -7,7 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { clearInvokeMocks, mockInvokeResponse } from '../../test/setup';
+import { clearInvokeMocks, getInvokeCalls, mockInvokeResponse } from '../../test/setup';
 import {
   FRESH_STATUS,
   CLAUDE_ONLY_STATUS,
@@ -2079,8 +2079,6 @@ describe('OnboardingScreen', () => {
   describe('terminal cancel for auth items', () => {
     it('cancel triggers immediate status refresh', async () => {
       mockInvoke('get_full_setup_status', FRESH_STATUS);
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
@@ -2098,9 +2096,7 @@ describe('OnboardingScreen', () => {
         expect(screen.getByTestId('mock-terminal')).toBeInTheDocument();
       });
 
-      const callCountBefore = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'get_full_setup_status'
-      ).length;
+      const callCountBefore = getInvokeCalls('get_full_setup_status').length;
 
       // Cancel terminal
       act(() => {
@@ -2109,9 +2105,7 @@ describe('OnboardingScreen', () => {
 
       // Should trigger a fetch
       await waitFor(() => {
-        const callCountAfter = invokeMock.mock.calls.filter(
-          (c: string[]) => c[0] === 'get_full_setup_status'
-        ).length;
+        const callCountAfter = getInvokeCalls('get_full_setup_status').length;
         expect(callCountAfter).toBeGreaterThan(callCountBefore);
       });
     });
@@ -2124,9 +2118,6 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_full_setup_status', CLAUDE_ONLY_STATUS);
       mockInvoke('set_default_agent_id', undefined);
 
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
-
       render(<OnboardingScreen onComplete={onComplete} />);
 
       await waitFor(() => {
@@ -2134,19 +2125,14 @@ describe('OnboardingScreen', () => {
       });
 
       // Verify set_default_agent_id was called with 'claude-code'
-      const setDefaultCalls = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'set_default_agent_id'
-      );
+      const setDefaultCalls = getInvokeCalls('set_default_agent_id');
       expect(setDefaultCalls.length).toBe(1);
-      expect(setDefaultCalls[0][1]).toEqual({ agentId: 'claude-code' });
+      expect(setDefaultCalls[0].args).toEqual({ agentId: 'claude-code' });
     });
 
     it('codex-only auto-sets codex as default', async () => {
       mockInvoke('get_full_setup_status', CODEX_ONLY_STATUS);
       mockInvoke('set_default_agent_id', undefined);
-
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
@@ -2154,11 +2140,9 @@ describe('OnboardingScreen', () => {
         expect(screen.getByText("You're all set!")).toBeInTheDocument();
       });
 
-      const setDefaultCalls = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'set_default_agent_id'
-      );
+      const setDefaultCalls = getInvokeCalls('set_default_agent_id');
       expect(setDefaultCalls.length).toBe(1);
-      expect(setDefaultCalls[0][1]).toEqual({ agentId: 'codex' });
+      expect(setDefaultCalls[0].args).toEqual({ agentId: 'codex' });
     });
 
     it('both agents detected does not auto-set default (user must choose)', async () => {
@@ -2167,9 +2151,6 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_full_setup_status', BOTH_AGENTS_STATUS);
       mockInvoke('set_default_agent_id', undefined);
 
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
-
       render(<OnboardingScreen onComplete={onComplete} />);
 
       await waitFor(() => {
@@ -2177,9 +2158,7 @@ describe('OnboardingScreen', () => {
       });
 
       // With both agents, handleAllComplete doesn't call set_default_agent_id
-      const setDefaultCalls = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'set_default_agent_id'
-      );
+      const setDefaultCalls = getInvokeCalls('set_default_agent_id');
       expect(setDefaultCalls.length).toBe(0);
     });
 
@@ -2203,20 +2182,15 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_default_agent_id', null); // unset → effective default is claude-code
       mockInvoke('set_default_agent_id', undefined);
 
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
-
       render(<OnboardingScreen onComplete={onComplete} />);
 
       await waitFor(() => {
         expect(screen.getByText("You're all set!")).toBeInTheDocument();
       });
 
-      const setDefaultCalls = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'set_default_agent_id'
-      );
+      const setDefaultCalls = getInvokeCalls('set_default_agent_id');
       expect(setDefaultCalls.length).toBe(1);
-      expect(setDefaultCalls[0][1]).toEqual({ agentId: 'codex' });
+      expect(setDefaultCalls[0].args).toEqual({ agentId: 'codex' });
     });
 
     it('fast path with multiple agents keeps a persisted default that is among them', async () => {
@@ -2236,18 +2210,13 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_default_agent_id', 'opencode');
       mockInvoke('set_default_agent_id', undefined);
 
-      const { invoke } = await import('@tauri-apps/api/core');
-      const invokeMock = invoke as ReturnType<typeof vi.fn>;
-
       render(<OnboardingScreen onComplete={onComplete} />);
 
       await waitFor(() => {
         expect(screen.getByText("You're all set!")).toBeInTheDocument();
       });
 
-      const setDefaultCalls = invokeMock.mock.calls.filter(
-        (c: string[]) => c[0] === 'set_default_agent_id'
-      );
+      const setDefaultCalls = getInvokeCalls('set_default_agent_id');
       expect(setDefaultCalls.length).toBe(0);
     });
   });

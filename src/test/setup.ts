@@ -28,6 +28,7 @@ Object.defineProperty(globalThis.navigator, 'userAgent', {
 type InvokeResponse = unknown;
 const invokeResponses = new Map<string, InvokeResponse>();
 const invokeErrors = new Map<string, Error>();
+const invokeCalls: Array<{ command: string; args?: unknown }> = [];
 
 /**
  * Set a mock response for a Tauri invoke command
@@ -43,6 +44,14 @@ export function mockInvokeResponse(command: string, response: InvokeResponse) {
 export function clearInvokeMocks() {
   invokeResponses.clear();
   invokeErrors.clear();
+  invokeCalls.length = 0;
+}
+
+/**
+ * Get the mock IPC calls made during the current test, optionally filtered by command.
+ */
+export function getInvokeCalls(command?: string) {
+  return command ? invokeCalls.filter((call) => call.command === command) : [...invokeCalls];
 }
 
 /**
@@ -60,6 +69,8 @@ function installTauriMocks() {
 
   // Set up IPC mock handler
   mockIPC((cmd, args) => {
+    invokeCalls.push({ command: cmd, args });
+
     // Check for error first
     const error = invokeErrors.get(cmd);
     if (error) {
