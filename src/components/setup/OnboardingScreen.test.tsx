@@ -5,7 +5,7 @@
  * the wizard state machine transitions: loading → wizard steps → complete
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import {
   FRESH_STATUS,
@@ -155,7 +155,10 @@ describe('OnboardingScreen', () => {
   it('shows spinner while fetching status', async () => {
     mockInvoke('get_full_setup_status', undefined);
     const { invoke } = await import('@tauri-apps/api/core');
-    (invoke as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    const pendingInvoke = invoke as unknown as Mock<
+      (...args: Parameters<typeof invoke>) => Promise<unknown>
+    >;
+    pendingInvoke.mockImplementationOnce(() => new Promise<never>(() => {}));
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();
@@ -167,7 +170,10 @@ describe('OnboardingScreen', () => {
     const { invoke } = await import('@tauri-apps/api/core');
     // Hang the initial get_full_setup_status forever — the withTimeout wrapper
     // must convert this into the error + Retry UI instead of an eternal spinner.
-    (invoke as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    const pendingInvoke = invoke as unknown as Mock<
+      (...args: Parameters<typeof invoke>) => Promise<unknown>
+    >;
+    pendingInvoke.mockImplementationOnce(() => new Promise<never>(() => {}));
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();

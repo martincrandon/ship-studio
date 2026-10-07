@@ -6,7 +6,7 @@
  * the two Tauri-backed calls (resolve + write-back) are mocked.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 vi.mock('../lib/edit', async (importActual) => {
@@ -131,7 +131,7 @@ beforeEach(() => {
   (listCustomClasses as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   (classifyApplyTokens as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  (resolveClassnameSource as ReturnType<typeof vi.fn>).mockImplementation(
+  (resolveClassnameSource as Mock<typeof resolveClassnameSource>).mockImplementation(
     (_p: string, sig: { className: string }) =>
       Promise.resolve({
         status: 'resolved',
@@ -352,19 +352,20 @@ describe('useVisualEditor addFirstClass (class-less elements)', () => {
   it('inserts the first class, then re-resolves so the panel gains full controls', async () => {
     // Mirror the backend: an empty className resolves to `no_class`; once a class
     // exists, it resolves normally.
-    (resolveClassnameSource as Fn).mockImplementation((_p: string, sig: { className: string }) =>
-      Promise.resolve(
-        sig.className.trim() === ''
-          ? { status: 'no_class' }
-          : {
-              status: 'resolved',
-              file: 'app/page.tsx',
-              line: 1,
-              column: 1,
-              class_name: sig.className,
-              confidence: 'unique',
-            }
-      )
+    (resolveClassnameSource as Mock<typeof resolveClassnameSource>).mockImplementation(
+      (_p: string, sig: { className: string }) =>
+        Promise.resolve(
+          sig.className.trim() === ''
+            ? { status: 'no_class' }
+            : {
+                status: 'resolved',
+                file: 'app/page.tsx',
+                line: 1,
+                column: 1,
+                class_name: sig.className,
+                confidence: 'unique',
+              }
+        )
     );
     (insertClassAttr as Fn).mockResolvedValue({ file: 'app/page.tsx', line: 1, column: 6 });
     const { result, iframeRef } = setup();
