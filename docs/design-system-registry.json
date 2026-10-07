@@ -276,9 +276,10 @@
         "DragSortHandle",
         "DragSortHandleProps",
         "DragSortItem",
-        "DragSortItemProps"
+        "DragSortItemProps",
+        "DragSortTarget"
       ],
-      "purpose": "Dependency-free sortable item and handle primitives backed by a scoped pointer and keyboard drag-sort manager.",
+      "purpose": "Dependency-free sortable item, target, and handle primitives backed by a scoped pointer and keyboard drag-sort manager.",
       "owner": "primitives/interaction",
       "props": [
         "id",
