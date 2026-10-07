@@ -1,12 +1,13 @@
 /**
  * Integration tests for OnboardingScreen — the step-by-step wizard.
  *
- * These tests mock the Tauri IPC layer at the module level and verify
+ * These tests use the shared Tauri IPC mock and verify
  * the wizard state machine transitions: loading → wizard steps → complete
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { clearInvokeMocks, mockInvokeResponse } from '../../test/setup';
 import {
   FRESH_STATUS,
   CLAUDE_ONLY_STATUS,
@@ -24,25 +25,24 @@ import {
   HAS_CLAUDE_NO_GITHUB_STATUS,
 } from '../../test/fixtures/setup';
 
-// ============ Module-level mocks ============
-
-const invokeResults = new Map<string, { value?: unknown; error?: Error }>();
-
+// ============ Shared IPC mock helpers ============
 function mockInvoke(cmd: string, value: unknown) {
-  invokeResults.set(cmd, { value });
-}
-function mockInvokeErr(cmd: string, error: Error) {
-  invokeResults.set(cmd, { error });
+  mockInvokeResponse(cmd, value);
 }
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn((cmd: string) => {
-    const result = invokeResults.get(cmd);
-    if (result?.error) return Promise.reject(result.error);
-    if (result) return Promise.resolve(result.value);
-    return Promise.resolve(undefined);
-  }),
-}));
+function mockInvokeErr(cmd: string, error: Error) {
+  mockInvokeRejected(cmd, error);
+}
+
+function mockInvokeRejected(cmd: string, error: unknown) {
+  mockInvokeResponse(cmd, () => {
+    throw error;
+  });
+}
+
+function mockInvokePending(cmd: string) {
+  mockInvokeResponse(cmd, () => new Promise<never>(() => {}));
+}
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
@@ -145,20 +145,15 @@ describe('OnboardingScreen', () => {
   const onComplete = vi.fn();
 
   beforeEach(() => {
-    invokeResults.clear();
+    clearInvokeMocks();
     onComplete.mockReset();
     mockCheckGitHubCliStatus.mockResolvedValue({ installed: true, authenticated: true });
   });
 
   // ============ Loading state ============
 
-  it('shows spinner while fetching status', async () => {
-    mockInvoke('get_full_setup_status', undefined);
-    const { invoke } = await import('@tauri-apps/api/core');
-    const pendingInvoke = invoke as unknown as Mock<
-      (...args: Parameters<typeof invoke>) => Promise<unknown>
-    >;
-    pendingInvoke.mockImplementationOnce(() => new Promise<never>(() => {}));
+  it('shows spinner while fetching status', () => {
+    mockInvokePending('get_full_setup_status');
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();
@@ -167,13 +162,9 @@ describe('OnboardingScreen', () => {
   it('shows timeout error with Retry when the setup status check hangs', async () => {
     vi.useFakeTimers();
 
-    const { invoke } = await import('@tauri-apps/api/core');
     // Hang the initial get_full_setup_status forever — the withTimeout wrapper
     // must convert this into the error + Retry UI instead of an eternal spinner.
-    const pendingInvoke = invoke as unknown as Mock<
-      (...args: Parameters<typeof invoke>) => Promise<unknown>
-    >;
-    pendingInvoke.mockImplementationOnce(() => new Promise<never>(() => {}));
+    mockInvokePending('get_full_setup_status');
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();
@@ -1141,9 +1132,10 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_full_setup_status', status);
 
       // Mock batch install to fail
-      invokeResults.set('install_brew_packages', {
-        error: new Error('[install_brew_packages] Failed to install node: network timeout'),
-      });
+      mockInvokeErr(
+        'install_brew_packages',
+        new Error('[install_brew_packages] Failed to install node: network timeout')
+      );
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
@@ -1413,9 +1405,10 @@ describe('OnboardingScreen', () => {
       mockInvoke('get_full_setup_status', status);
 
       // Error with backend prefix like [install_brew_packages]
-      invokeResults.set('install_brew_packages', {
-        error: new Error('[install_brew_packages] brew: command not found'),
-      });
+      mockInvokeErr(
+        'install_brew_packages',
+        new Error('[install_brew_packages] brew: command not found')
+      );
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
@@ -1451,9 +1444,7 @@ describe('OnboardingScreen', () => {
         type: 'Other',
         message: 'Failed to install OpenJS.NodeJS: winget exited with status 1',
       };
-      invokeResults.set('install_brew_packages', {
-        error: commandError as unknown as Error,
-      });
+      mockInvokeRejected('install_brew_packages', commandError);
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
@@ -1481,9 +1472,7 @@ describe('OnboardingScreen', () => {
       const status = makeSetupStatus({ items, detectedAgents: [] });
       mockInvoke('get_full_setup_status', status);
 
-      invokeResults.set('install_brew_packages', {
-        error: new Error(''),
-      });
+      mockInvokeErr('install_brew_packages', new Error(''));
 
       render(<OnboardingScreen onComplete={onComplete} />);
 
