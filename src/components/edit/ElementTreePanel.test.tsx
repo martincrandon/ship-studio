@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ElementTreePanel, treePlacementForTarget } from './ElementTreePanel';
 import { projectElementTree } from '../../lib/element-tree-drag';
+import { getSnapshot } from '../../commands/registry';
+import { matchesContext } from '../../commands/types';
 
 function pointer(type: string, x: number, y: number) {
   const event = new Event(type, { bubbles: true, cancelable: true });
@@ -119,6 +121,91 @@ describe('ElementTreePanel', () => {
     expect(controls).toContainElement(screen.getByText('View only'));
     expect(header).not.toContainElement(screen.getByText('View only'));
     expect(panel.querySelector('[data-tree-id="2"]')).toHaveClass('affected');
+  });
+
+  it('collapses expanded branches in a partially expanded tree', async () => {
+    render(
+      <ElementTreePanel
+        tree={{
+          id: 1,
+          tag: 'body',
+          cls: '',
+          text: '',
+          children: [
+            {
+              id: 2,
+              tag: 'main',
+              cls: '',
+              text: '',
+              children: [
+                {
+                  id: 3,
+                  tag: 'section',
+                  cls: '',
+                  text: '',
+                  children: [
+                    {
+                      id: 4,
+                      tag: 'nav',
+                      cls: '',
+                      text: '',
+                      children: [{ id: 5, tag: 'div', cls: '', text: '', children: [] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }}
+        truncated={false}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onHover={vi.fn()}
+        projectPath="/tmp/project"
+        selectedSignature={null}
+      />
+    );
+
+    await waitFor(() => {
+      const commands = getSnapshot();
+      const expandAll = commands.find((command) => command.id === 'element.expandAll');
+      const collapseAll = commands.find((command) => command.id === 'element.collapseAll');
+      expect(expandAll).toBeDefined();
+      expect(collapseAll).toBeDefined();
+      expect(expandAll?.when).toBeTypeOf('function');
+      expect(collapseAll?.when).toBeTypeOf('function');
+      expect(matchesContext(expandAll?.when, { kind: 'project', currentProjectName: null })).toBe(
+        true
+      );
+      expect(matchesContext(collapseAll?.when, { kind: 'project', currentProjectName: null })).toBe(
+        true
+      );
+    });
+
+    const panel = screen.getByTestId('element-tree-panel');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all elements' }));
+
+    expect(screen.getByRole('button', { name: 'Expand all elements' })).toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="1"]')).toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="2"]')).toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="3"]')).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      const commands = getSnapshot();
+      const expandAll = commands.find((command) => command.id === 'element.expandAll');
+      const collapseAll = commands.find((command) => command.id === 'element.collapseAll');
+      expect(expandAll).toBeDefined();
+      expect(collapseAll).toBeDefined();
+      expect(matchesContext(expandAll?.when, { kind: 'project', currentProjectName: null })).toBe(
+        true
+      );
+      expect(matchesContext(collapseAll?.when, { kind: 'project', currentProjectName: null })).toBe(
+        false
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all elements' }));
+    expect(panel.querySelector('[data-tree-id="5"]')).toBeInTheDocument();
   });
 
   it('renders sortable rows as siblings with whole-row activation', () => {

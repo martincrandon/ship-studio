@@ -52,8 +52,7 @@ vi.mock('../lib/logger', () => ({
 describe('useDevServer', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    // clearAllMocks wipes the mockResolvedValue defaults from the factory, so
-    // re-apply the ones that the production code awaits unconditionally.
+    // Clear call history, then re-apply defaults for mocks used by most tests.
     const project = await import('../lib/project');
     vi.mocked(project.startDevServer).mockResolvedValue({
       pty: { kill: vi.fn() } as never,
@@ -162,6 +161,8 @@ describe('useDevServer', () => {
       current: ReturnType<typeof useDevServer>;
     }): Promise<(data: string) => void> {
       const project = await import('../lib/project');
+      const staticServer = await import('../lib/static-server');
+      vi.mocked(staticServer.detectProjectType).mockResolvedValue('nextjs');
       let onOutput: ((data: string) => void) | undefined;
       vi.mocked(project.startDevServer).mockImplementation((_cwd, _port, _label, out) => {
         onOutput = out;

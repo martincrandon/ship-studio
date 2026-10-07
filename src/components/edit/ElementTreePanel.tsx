@@ -504,7 +504,9 @@ export function ElementTreePanel({
   const allElementsExpanded =
     expandableElements.length > 0 &&
     expandableElements.every(({ id, depth }) => isExpanded(id, depth));
-  const hasCollapsibleElements = expandableElements.some(({ tag }) => tag.toLowerCase() !== 'body');
+  const hasExpandedCollapsibleElements = expandableElements.some(
+    ({ id, depth, tag }) => tag.toLowerCase() !== 'body' && isExpanded(id, depth)
+  );
   const setAllElementsExpanded = useCallback(
     (expanded: boolean) => {
       const next = new Set<number>();
@@ -518,8 +520,8 @@ export function ElementTreePanel({
     [expandableElements]
   );
   const toggleAllElementsExpanded = useCallback(
-    () => setAllElementsExpanded(!allElementsExpanded),
-    [allElementsExpanded, setAllElementsExpanded]
+    () => setAllElementsExpanded(!hasExpandedCollapsibleElements),
+    [hasExpandedCollapsibleElements, setAllElementsExpanded]
   );
   useCommands(() => {
     if (!tree || expandableElements.length === 0) return [];
@@ -537,15 +539,14 @@ export function ElementTreePanel({
         title: 'Collapse all elements',
         category: 'project' as const,
         keywords: ['element', 'tree', 'collapse', 'close', 'all'],
-        when: ({ kind }: PaletteCtx) =>
-          kind === 'project' && allElementsExpanded && hasCollapsibleElements,
+        when: ({ kind }: PaletteCtx) => kind === 'project' && hasExpandedCollapsibleElements,
         run: () => setAllElementsExpanded(false),
       },
     ];
   }, [
     allElementsExpanded,
     expandableElements.length,
-    hasCollapsibleElements,
+    hasExpandedCollapsibleElements,
     setAllElementsExpanded,
     tree,
   ]);
@@ -894,7 +895,9 @@ export function ElementTreePanel({
       leftIcon={<ContrastIcon size={14} />}
     />
   );
-  const treeExpansionLabel = allElementsExpanded ? 'Collapse all elements' : 'Expand all elements';
+  const treeExpansionLabel = hasExpandedCollapsibleElements
+    ? 'Collapse all elements'
+    : 'Expand all elements';
   const treeExpansionToggle = (
     <IconButton
       variant="ghost"
@@ -903,9 +906,15 @@ export function ElementTreePanel({
       onClick={toggleAllElementsExpanded}
       data-tooltip-content={treeExpansionLabel}
       aria-label={treeExpansionLabel}
-      disabled={expandableElements.length === 0 || (allElementsExpanded && !hasCollapsibleElements)}
+      disabled={
+        expandableElements.length === 0 || (allElementsExpanded && !hasExpandedCollapsibleElements)
+      }
       icon={
-        allElementsExpanded ? <ContractVerticalIcon size={14} /> : <ExpandVerticalIcon size={14} />
+        hasExpandedCollapsibleElements ? (
+          <ContractVerticalIcon size={14} />
+        ) : (
+          <ExpandVerticalIcon size={14} />
+        )
       }
     />
   );

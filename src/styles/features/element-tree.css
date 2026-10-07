@@ -137,15 +137,15 @@
 .ss-tree-panel__controls-start {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-02);
+  gap: var(--spacing-2xs);
 }
 
 .ss-tree-panel__preference-group {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-02);
-  padding: var(--stroke-1);
-  border: var(--stroke-1) solid var(--border-default);
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-3xs);
+  border: var(--border-width-default) solid var(--border-default);
   border-radius: var(--radius-control);
   background: var(--surface-control);
 }
