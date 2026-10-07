@@ -132,7 +132,13 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         if (mutation.type === 'attributes' && mutation.target instanceof Element) {
-          readTooltipContent(mutation.target);
+          const content = readTooltipContent(mutation.target);
+          if (
+            mutation.attributeName === 'data-tooltip-content' &&
+            mutation.target === anchorRef.current
+          ) {
+            setState(content ? { content } : null);
+          }
           return;
         }
 
@@ -146,7 +152,7 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['title'],
+      attributeFilter: ['title', 'data-tooltip-content'],
     });
 
     return () => observer.disconnect();
@@ -205,10 +211,12 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
           if (pendingAnchorRef.current !== anchor) return;
           pendingAnchorRef.current = null;
           showTimerRef.current = null;
+          const currentContent = readTooltipContent(anchor);
+          if (!currentContent) return;
           anchorRef.current = anchor;
           setPosition(null);
           setShown(false);
-          setState({ content });
+          setState({ content: currentContent });
         },
         chained ? 0 : readTooltipDelay(anchor)
       );
@@ -254,11 +262,25 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
       }
       hide();
     };
+    const onClick = (event: MouseEvent) => {
+      const anchor = tooltipAnchor(event.target);
+      if (!anchor || anchor !== anchorRef.current) return;
+
+      window.requestAnimationFrame(() => {
+        if (anchorRef.current !== anchor) return;
+        const content = readTooltipContent(anchor);
+        setState((current) => {
+          if (!content) return null;
+          return current?.content === content ? current : { content };
+        });
+      });
+    };
 
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
+    document.addEventListener('click', onClick, true);
     return () => {
       clearShowTimer();
       if (exitTimerRef.current !== null) {
@@ -269,6 +291,7 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('pointerout', onPointerOut, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
+      document.removeEventListener('click', onClick, true);
     };
   }, [clearShowTimer, hide, show]);
 

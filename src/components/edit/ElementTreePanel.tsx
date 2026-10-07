@@ -25,13 +25,17 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CloseIcon,
+  ContractVerticalIcon,
+  ContrastIcon,
   CopyIcon,
   CutIcon,
-  ElementsIcon,
   DuplicateIcon,
+  ExpandVerticalIcon,
+  FontIcon,
   PinIcon,
   PasteIcon,
   PlusIcon,
+  TagIconsIcon,
   TrashIcon,
 } from '@/components/icons';
 import { ElementHtmlEditor } from './ElementHtmlEditor';
@@ -128,6 +132,8 @@ interface Props {
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
 const AUTO_EXPAND_DEPTH = 3;
 const SHOW_TAG_ICONS_STORAGE_KEY = 'elementTreeShowTagIcons';
+const SHOW_TAG_SANS_SERIF_STORAGE_KEY = 'elementTreeShowTagSansSerif';
+const SHOW_TAG_COLORS_STORAGE_KEY = 'elementTreeShowTagColors';
 const TREE_INSIDE_ZONE_START = 0.35;
 const TREE_INSIDE_ZONE_END = 0.65;
 const TREE_INSIDE_HOLD_DELAY_MS = 500;
@@ -143,6 +149,16 @@ function buildAncestors(root: ElementTreeNode): Map<number, number[]> {
   };
   walk(root, []);
   return out;
+}
+
+function findExpandableElements(root: ElementTreeNode) {
+  const elements: { id: number; depth: number; tag: string }[] = [];
+  const walk = (node: ElementTreeNode, depth: number) => {
+    if (node.children.length > 0) elements.push({ id: node.id, depth, tag: node.tag });
+    node.children.forEach((child) => walk(child, depth + 1));
+  };
+  walk(root, 0);
+  return elements;
 }
 
 function findSiblings(
@@ -181,6 +197,7 @@ function RowLabel({ node, showTagIcons }: { node: ElementTreeNode; showTagIcons:
       ) : (
         <span className="ss-tree-tag">{node.tag}</span>
       )}
+      {elementIcon && !firstClass && <span className="ss-tree-tag">{node.tag}</span>}
       {firstClass && <span className="ss-tree-class">.{firstClass}</span>}
       {node.text && <span className="ss-tree-text">{node.text}</span>}
     </>
@@ -355,6 +372,14 @@ export function ElementTreePanel({
     SHOW_TAG_ICONS_STORAGE_KEY,
     false
   );
+  const [showTagSansSerif, , toggleShowTagSansSerif] = useLocalStorageFlag(
+    SHOW_TAG_SANS_SERIF_STORAGE_KEY,
+    false
+  );
+  const [showTagColors, , toggleShowTagColors] = useLocalStorageFlag(
+    SHOW_TAG_COLORS_STORAGE_KEY,
+    true
+  );
   // The insert palette is anchored to the most recent context-menu gesture.
   // The primitive owns menu state; this ref only bridges the menu item to the
   // existing InsertMenu, which opens after the context menu closes.
@@ -475,6 +500,55 @@ export function ElementTreePanel({
       (depth < AUTO_EXPAND_DEPTH ? !collapsed.has(id) : collapsed.has(id)),
     [collapsed, collapsedDragId]
   );
+  const expandableElements = useMemo(() => (tree ? findExpandableElements(tree) : []), [tree]);
+  const allElementsExpanded =
+    expandableElements.length > 0 &&
+    expandableElements.every(({ id, depth }) => isExpanded(id, depth));
+  const hasCollapsibleElements = expandableElements.some(({ tag }) => tag.toLowerCase() !== 'body');
+  const setAllElementsExpanded = useCallback(
+    (expanded: boolean) => {
+      const next = new Set<number>();
+      expandableElements.forEach(({ id, depth, tag }) => {
+        const shouldExpand = expanded || tag.toLowerCase() === 'body';
+        const defaultExpanded = depth < AUTO_EXPAND_DEPTH;
+        if (shouldExpand ? !defaultExpanded : defaultExpanded) next.add(id);
+      });
+      setCollapsed(next);
+    },
+    [expandableElements]
+  );
+  const toggleAllElementsExpanded = useCallback(
+    () => setAllElementsExpanded(!allElementsExpanded),
+    [allElementsExpanded, setAllElementsExpanded]
+  );
+  useCommands(() => {
+    if (!tree || expandableElements.length === 0) return [];
+    return [
+      {
+        id: 'element.expandAll',
+        title: 'Expand all elements',
+        category: 'project' as const,
+        keywords: ['element', 'tree', 'expand', 'open', 'all'],
+        when: ({ kind }: PaletteCtx) => kind === 'project' && !allElementsExpanded,
+        run: () => setAllElementsExpanded(true),
+      },
+      {
+        id: 'element.collapseAll',
+        title: 'Collapse all elements',
+        category: 'project' as const,
+        keywords: ['element', 'tree', 'collapse', 'close', 'all'],
+        when: ({ kind }: PaletteCtx) =>
+          kind === 'project' && allElementsExpanded && hasCollapsibleElements,
+        run: () => setAllElementsExpanded(false),
+      },
+    ];
+  }, [
+    allElementsExpanded,
+    expandableElements.length,
+    hasCollapsibleElements,
+    setAllElementsExpanded,
+    tree,
+  ]);
   const sourceVisibleRows = useMemo(
     () => (tree ? flattenElementTree(tree, isExpanded).rows : []),
     [isExpanded, tree]
@@ -788,21 +862,86 @@ export function ElementTreePanel({
     <ToggleButton
       variant="ghost"
       size="compact"
-      className="button--icon-only ss-tree-panel__tag-toggle"
+      className="button--icon-only ss-tree-panel__preference-toggle"
       onClick={toggleShowTagIcons}
-      title={showTagIcons ? 'Show tag names' : 'Show tag icons'}
-      aria-label={showTagIcons ? 'Show tag names' : 'Show tag icons'}
+      data-tooltip-content={showTagIcons ? 'Use tag names' : 'Use tag icons'}
+      aria-label={showTagIcons ? 'Use tag names' : 'Use tag icons'}
       pressed={showTagIcons}
-      leftIcon={<ElementsIcon size={14} />}
+      leftIcon={<TagIconsIcon size={14} />}
     />
   );
+  const fontToggle = (
+    <ToggleButton
+      variant="ghost"
+      size="compact"
+      className="button--icon-only ss-tree-panel__preference-toggle"
+      onClick={toggleShowTagSansSerif}
+      data-tooltip-content={showTagSansSerif ? 'Mono font on' : 'Mono font off'}
+      aria-label={showTagSansSerif ? 'Mono font on' : 'Mono font off'}
+      pressed={!showTagSansSerif}
+      leftIcon={<FontIcon size={14} />}
+    />
+  );
+  const colorToggle = (
+    <ToggleButton
+      variant="ghost"
+      size="compact"
+      className="button--icon-only ss-tree-panel__preference-toggle"
+      onClick={toggleShowTagColors}
+      data-tooltip-content={showTagColors ? 'Use shades of grey' : 'Use color-coding'}
+      aria-label={showTagColors ? 'Use shades of grey' : 'Use color-coding'}
+      pressed={showTagColors}
+      leftIcon={<ContrastIcon size={14} />}
+    />
+  );
+  const treeExpansionLabel = allElementsExpanded ? 'Collapse all elements' : 'Expand all elements';
+  const treeExpansionToggle = (
+    <IconButton
+      variant="ghost"
+      size="compact"
+      className="ss-tree-panel__preference-toggle ss-tree-panel__tree-expansion-toggle"
+      onClick={toggleAllElementsExpanded}
+      data-tooltip-content={treeExpansionLabel}
+      aria-label={treeExpansionLabel}
+      disabled={expandableElements.length === 0 || (allElementsExpanded && !hasCollapsibleElements)}
+      icon={
+        allElementsExpanded ? <ContractVerticalIcon size={14} /> : <ExpandVerticalIcon size={14} />
+      }
+    />
+  );
+  const panelControls = (
+    <div className="ss-tree-panel__controls">
+      <div className="ss-tree-panel__controls-start">
+        <div
+          className="ss-tree-panel__preference-group"
+          role="group"
+          aria-label="Element display preferences"
+        >
+          {tagToggle}
+          {fontToggle}
+          {colorToggle}
+        </div>
+        {!structure && (
+          <Tooltip content="Turn on edit mode to select and edit elements.">
+            <span className="ss-tree-panel__view-only">View only</span>
+          </Tooltip>
+        )}
+      </div>
+      <div
+        className="ss-tree-panel__preference-group"
+        role="group"
+        aria-label="Element tree expansion"
+      >
+        {treeExpansionToggle}
+      </div>
+    </div>
+  );
+  const panelClassName = `ss-tree-panel${structure ? '' : ' ss-tree-panel--view-only'}${
+    showTagSansSerif ? ' ss-tree-panel--sans-serif' : ''
+  }${showTagColors ? '' : ' ss-tree-panel--monochrome'}`;
 
   return (
-    <div
-      ref={panelRef}
-      className={`ss-tree-panel${structure ? '' : ' ss-tree-panel--view-only'}`}
-      data-testid="element-tree-panel"
-    >
+    <div ref={panelRef} className={panelClassName} data-testid="element-tree-panel">
       {structure ? (
         <Tabs value={visibleView} onValueChange={(next) => selectView(next as 'visual' | 'code')}>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
@@ -834,7 +973,7 @@ export function ElementTreePanel({
               />
             )}
           </div>
-          <div className="ss-tree-panel__controls">{tagToggle}</div>
+          {panelControls}
           <TabsPanel value={visibleView} className="ss-tree-panel__active-view">
             {visibleView === 'visual' ? (
               <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
@@ -891,9 +1030,6 @@ export function ElementTreePanel({
         <>
           <div className="ss-tree-panel__header" data-dockable-drag-handle>
             <span className="ss-tree-panel__title">Elements</span>
-            <Tooltip content="Turn on edit mode to select and edit elements.">
-              <span className="ss-tree-panel__view-only">View only</span>
-            </Tooltip>
             {onTogglePin && (
               <ToggleButton
                 variant="ghost"
@@ -917,7 +1053,7 @@ export function ElementTreePanel({
               />
             )}
           </div>
-          <div className="ss-tree-panel__controls">{tagToggle}</div>
+          {panelControls}
           <div className="ss-tree-panel__body" ref={bodyRef} onMouseLeave={() => onHover(null)}>
             {tree ? (
               renderReadOnlyNode(tree, 0)

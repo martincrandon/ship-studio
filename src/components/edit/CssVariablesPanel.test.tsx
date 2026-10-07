@@ -265,9 +265,11 @@ describe('CssVariablesPanel', () => {
     );
 
     const swatch = screen.getByRole('button', { name: 'Open color picker' });
-    expect(container.querySelector('.ss-var-row__name .ss-var-row__type-icon')).toHaveTextContent(
-      '●'
-    );
+    expect(
+      container.querySelector(
+        '.ss-var-row__name .ss-var-row__type-icon [data-icon-name="ColorIcon"]'
+      )
+    ).toBeInTheDocument();
     expect(swatch.parentElement).toHaveClass('ss-var-row__value-group');
     fireEvent.click(swatch);
     expect(screen.getByTestId('edit-popover')).toHaveAttribute('data-color-picker', 'true');

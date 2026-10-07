@@ -115,7 +115,9 @@ describe('ElementTreePanel', () => {
     const header = panel.querySelector('.ss-tree-panel__header');
     const controls = panel.querySelector('.ss-tree-panel__controls');
     expect(controls).toBe(header?.nextElementSibling);
-    expect(controls).toContainElement(screen.getByRole('button', { name: 'Show tag icons' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Use tag icons' }));
+    expect(controls).toContainElement(screen.getByText('View only'));
+    expect(header).not.toContainElement(screen.getByText('View only'));
     expect(panel.querySelector('[data-tree-id="2"]')).toHaveClass('affected');
   });
 
@@ -406,12 +408,12 @@ describe('ElementTreePanel', () => {
     );
 
     const panel = screen.getByTestId('element-tree-panel');
-    const toggle = screen.getByRole('button', { name: 'Show tag icons' });
+    const toggle = screen.getByRole('button', { name: 'Use tag icons' });
     expect(panel.querySelector('[data-tree-id="2"] .ss-tree-tag')).toHaveTextContent('div');
 
     fireEvent.click(toggle);
 
-    expect(screen.getByRole('button', { name: 'Show tag names' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Use tag names' })).toHaveAttribute(
       'aria-pressed',
       'true'
     );
@@ -449,15 +451,61 @@ describe('ElementTreePanel', () => {
     };
 
     const { unmount } = render(<ElementTreePanel {...props} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Show tag icons' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use tag icons' }));
     expect(localStorage.getItem('elementTreeShowTagIcons')).toBe('1');
 
     unmount();
     render(<ElementTreePanel {...props} />);
 
-    expect(screen.getByRole('button', { name: 'Show tag names' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Use tag names' })).toHaveAttribute(
       'aria-pressed',
       'true'
+    );
+  });
+
+  it('remembers the tag font and color preferences when the panel remounts', () => {
+    const props = {
+      tree: {
+        id: 1,
+        tag: 'body',
+        cls: 'page-shell',
+        text: '',
+        children: [],
+      },
+      truncated: false,
+      selectedId: 1,
+      onSelect: vi.fn(),
+      onHover: vi.fn(),
+      projectPath: '/tmp/project',
+      selectedSignature: null,
+    };
+
+    const { unmount } = render(<ElementTreePanel {...props} />);
+    const panel = screen.getByTestId('element-tree-panel');
+    expect(panel).not.toHaveClass('ss-tree-panel--sans-serif');
+    expect(panel).not.toHaveClass('ss-tree-panel--monochrome');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mono font off' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use shades of grey' }));
+
+    expect(panel).toHaveClass('ss-tree-panel--sans-serif');
+    expect(panel).toHaveClass('ss-tree-panel--monochrome');
+    expect(localStorage.getItem('elementTreeShowTagSansSerif')).toBe('1');
+    expect(localStorage.getItem('elementTreeShowTagColors')).toBe('0');
+
+    unmount();
+    render(<ElementTreePanel {...props} />);
+
+    const remountedPanel = screen.getByTestId('element-tree-panel');
+    expect(remountedPanel).toHaveClass('ss-tree-panel--sans-serif');
+    expect(remountedPanel).toHaveClass('ss-tree-panel--monochrome');
+    expect(screen.getByRole('button', { name: 'Mono font on' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    expect(screen.getByRole('button', { name: 'Use color-coding' })).toHaveAttribute(
+      'aria-pressed',
+      'false'
     );
   });
 

@@ -2,8 +2,10 @@ import EyeSvg from '../../assets/icons/eye.svg?react';
 import ClosedEyeSvg from '../../assets/icons/closed-eye.svg?react';
 import SidebarSvg from '../../assets/icons/sidebar.svg?react';
 import ElementsSvg from '../../assets/icons/elements.svg?react';
-import ExpandSvg from '../../assets/icons/expand.svg?react';
-import ContractSvg from '../../assets/icons/contract.svg?react';
+import ExpandDiagonalSvg from '../../assets/icons/expand-diagonal.svg?react';
+import ContractDiagonalSvg from '../../assets/icons/contract-diagonal.svg?react';
+import ExpandVerticalSvg from '../../assets/icons/expand-vertical.svg?react';
+import ContractVerticalSvg from '../../assets/icons/contract-vertical.svg?react';
 import PinSvg from '../../assets/icons/pin.svg?react';
 import ScreenshotSvg from '../../assets/icons/screenshot.svg?react';
 import ScreenshotCropSvg from '../../assets/icons/screenshot-crop.svg?react';
@@ -52,16 +54,30 @@ export const ElementsIcon = createIcon(ElementsSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
-export const ExpandIcon = createIcon(ExpandSvg, {
-  name: 'ExpandIcon',
-  source: 'icons/expand.svg',
+export const ExpandDiagonalIcon = createIcon(ExpandDiagonalSvg, {
+  name: 'ExpandDiagonalIcon',
+  source: 'icons/expand-diagonal.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',
 });
-export const CompactIcon = createIcon(ContractSvg, {
-  name: 'CompactIcon',
-  source: 'icons/contract.svg',
+export const ContractDiagonalIcon = createIcon(ContractDiagonalSvg, {
+  name: 'ContractDiagonalIcon',
+  source: 'icons/contract-diagonal.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ExpandVerticalIcon = createIcon(ExpandVerticalSvg, {
+  name: 'ExpandVerticalIcon',
+  source: 'icons/expand-vertical.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ContractVerticalIcon = createIcon(ContractVerticalSvg, {
+  name: 'ContractVerticalIcon',
+  source: 'icons/contract-vertical.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

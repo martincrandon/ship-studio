@@ -72,12 +72,12 @@ import { useElementTree } from '../../hooks/useElementTree';
 import { useElementBreadcrumbVisibility } from '../../hooks/useElementBreadcrumbVisibility';
 import { PreviewLocaleSwitcher, type PreviewLocaleConfig } from './PreviewLocaleSwitcher';
 import {
-  CompactIcon,
+  ContractDiagonalIcon,
   ChevronIcon,
   DesktopIcon,
   EditFieldIcon,
   EditIcon,
-  ExpandIcon,
+  ExpandDiagonalIcon,
   FullBreakpointIcon,
   GridIcon,
   LaptopIcon,
@@ -1648,7 +1648,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen preview'}
           aria-pressed={isFullscreen}
         >
-          {isFullscreen ? <CompactIcon size={14} /> : <ExpandIcon size={14} />}
+          {isFullscreen ? <ContractDiagonalIcon size={14} /> : <ExpandDiagonalIcon size={14} />}
         </button>
 
         <div className="preview-breakpoints" data-education-id="breakpoints">

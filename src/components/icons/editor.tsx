@@ -16,14 +16,21 @@ import DownSvg from '../../assets/icons/down.svg?react';
 import CopySvg from '../../assets/icons/copy.svg?react';
 import CutSvg from '../../assets/icons/cut.svg?react';
 import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
+import ColorSvg from '../../assets/icons/color.svg?react';
+import ContrastSvg from '../../assets/icons/contrast.svg?react';
 import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
-import ReloadSvg from '../../assets/icons/reload.svg?react';
+import FontSvg from '../../assets/icons/font.svg?react';
 import ImageSvg from '../../assets/icons/image.svg?react';
 import ImageUploadSvg from '../../assets/icons/image-upload.svg?react';
+import IconToggleSvg from '../../assets/icons/icon-toggle.svg?react';
+import ReloadSvg from '../../assets/icons/reload.svg?react';
 import SaveSvg from '../../assets/icons/save.svg?react';
 import VariablesSvg from '../../assets/icons/variables.svg?react';
+import ElementAsideSvg from '../../assets/icons/element-aside.svg?react';
 import ElementBodySvg from '../../assets/icons/element-body.svg?react';
 import ElementButtonSvg from '../../assets/icons/element-button.svg?react';
+import ElementCircleSvg from '../../assets/icons/element-circle.svg?react';
+import ElementDetailsSvg from '../../assets/icons/element-details.svg?react';
 import ElementDivSvg from '../../assets/icons/element-div.svg?react';
 import ElementFooterSvg from '../../assets/icons/element-footer.svg?react';
 import ElementHeadingSvg from '../../assets/icons/element-heading.svg?react';
@@ -31,10 +38,20 @@ import ElementHeading1Svg from '../../assets/icons/element-heading1.svg?react';
 import ElementHeading2Svg from '../../assets/icons/element-heading2.svg?react';
 import ElementHeading3Svg from '../../assets/icons/element-heading3.svg?react';
 import ElementHeadSvg from '../../assets/icons/element-head.svg?react';
+import ElementKbdSvg from '../../assets/icons/element-kbd.svg?react';
 import ElementLinkSvg from '../../assets/icons/element-link.svg?react';
 import ElementListSvg from '../../assets/icons/element-list.svg?react';
+import ElementListItemSvg from '../../assets/icons/element-list-item.svg?react';
 import ElementMainSvg from '../../assets/icons/element-main.svg?react';
 import ElementNavSvg from '../../assets/icons/element-nav.svg?react';
+import ElementPathSvg from '../../assets/icons/element-path.svg?react';
+import ElementPreSvg from '../../assets/icons/element-pre.svg?react';
+import ElementSourceSvg from '../../assets/icons/element-source.svg?react';
+import ElementSummarySvg from '../../assets/icons/element-summary.svg?react';
+import ElementSvgSvg from '../../assets/icons/element-svg.svg?react';
+import ElementToolbarSvg from '../../assets/icons/element-toolbar.svg?react';
+import ElementUnknownSvg from '../../assets/icons/element-unknown.svg?react';
+import ElementVideoSvg from '../../assets/icons/element-video.svg?react';
 import ElementParagraphSvg from '../../assets/icons/paragraph.svg?react';
 import ElementSectionSvg from '../../assets/icons/element-section.svg?react';
 import NestRuleSvg from '../../assets/icons/old-icons/nest-rule.svg?react';
@@ -163,6 +180,34 @@ export const ColorPickerIcon = createIcon(ColorPickerSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const ColorIcon = createIcon(ColorSvg, {
+  name: 'ColorIcon',
+  source: 'icons/color.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ContrastIcon = createIcon(ContrastSvg, {
+  name: 'ContrastIcon',
+  source: 'icons/contrast.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const FontIcon = createIcon(FontSvg, {
+  name: 'FontIcon',
+  source: 'icons/font.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const TagIconsIcon = createIcon(IconToggleSvg, {
+  name: 'TagIconsIcon',
+  source: 'icons/icon-toggle.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const DuplicateIcon = createIcon(DuplicateSvg, {
   name: 'DuplicateIcon',
   source: 'icons/duplicate.svg',
@@ -200,6 +245,13 @@ export const VariablesIcon = createIcon(VariablesSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const ElementAsideIcon = createIcon(ElementAsideSvg, {
+  name: 'ElementAsideIcon',
+  source: 'icons/element-aside.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const ElementBodyIcon = createIcon(ElementBodySvg, {
   name: 'ElementBodyIcon',
   source: 'icons/element-body.svg',
@@ -210,6 +262,20 @@ export const ElementBodyIcon = createIcon(ElementBodySvg, {
 export const ElementButtonIcon = createIcon(ElementButtonSvg, {
   name: 'ElementButtonIcon',
   source: 'icons/element-button.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementCircleIcon = createIcon(ElementCircleSvg, {
+  name: 'ElementCircleIcon',
+  source: 'icons/element-circle.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementDetailsIcon = createIcon(ElementDetailsSvg, {
+  name: 'ElementDetailsIcon',
+  source: 'icons/element-details.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',
@@ -263,6 +329,13 @@ export const ElementHeadIcon = createIcon(ElementHeadSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const ElementKbdIcon = createIcon(ElementKbdSvg, {
+  name: 'ElementKbdIcon',
+  source: 'icons/element-kbd.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const ElementLinkIcon = createIcon(ElementLinkSvg, {
   name: 'ElementLinkIcon',
   source: 'icons/element-link.svg',
@@ -277,6 +350,13 @@ export const ElementListIcon = createIcon(ElementListSvg, {
   defaultSize: 16,
   strokeWidth: '1px',
 });
+export const ElementListItemIcon = createIcon(ElementListItemSvg, {
+  name: 'ElementListItemIcon',
+  source: 'icons/element-list-item.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
 export const ElementMainIcon = createIcon(ElementMainSvg, {
   name: 'ElementMainIcon',
   source: 'icons/element-main.svg',
@@ -287,6 +367,62 @@ export const ElementMainIcon = createIcon(ElementMainSvg, {
 export const ElementNavIcon = createIcon(ElementNavSvg, {
   name: 'ElementNavIcon',
   source: 'icons/element-nav.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementPathIcon = createIcon(ElementPathSvg, {
+  name: 'ElementPathIcon',
+  source: 'icons/element-path.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementPreIcon = createIcon(ElementPreSvg, {
+  name: 'ElementPreIcon',
+  source: 'icons/element-pre.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementSourceIcon = createIcon(ElementSourceSvg, {
+  name: 'ElementSourceIcon',
+  source: 'icons/element-source.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementSummaryIcon = createIcon(ElementSummarySvg, {
+  name: 'ElementSummaryIcon',
+  source: 'icons/element-summary.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementSvgIcon = createIcon(ElementSvgSvg, {
+  name: 'ElementSvgIcon',
+  source: 'icons/element-svg.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementToolbarIcon = createIcon(ElementToolbarSvg, {
+  name: 'ElementToolbarIcon',
+  source: 'icons/element-toolbar.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementUnknownIcon = createIcon(ElementUnknownSvg, {
+  name: 'ElementUnknownIcon',
+  source: 'icons/element-unknown.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ElementVideoIcon = createIcon(ElementVideoSvg, {
+  name: 'ElementVideoIcon',
+  source: 'icons/element-video.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

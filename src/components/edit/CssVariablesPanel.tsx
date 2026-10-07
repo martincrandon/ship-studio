@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { MoreHorizontalIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { ColorIcon, MoreHorizontalIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { useAsyncState } from '../../hooks/useAsyncState';
 import type { CssVariableDeleteImpact } from '../../lib/edit-css';
 import type { DragSortMove } from '../../lib/drag-sort/types';
@@ -240,24 +240,22 @@ function VariableValueMarker({ value }: { value: string }) {
                 ? 'function'
                 : 'text';
   const glyph =
-    type === 'color'
-      ? '●'
-      : type === 'variable'
-        ? '◆'
-        : type === 'url'
-          ? '↗'
-          : type === 'time'
-            ? '◷'
-            : type === 'length'
-              ? '↔'
-              : type === 'number'
-                ? '#'
-                : type === 'function'
-                  ? 'ƒ'
-                  : 'T';
+    type === 'variable'
+      ? '◆'
+      : type === 'url'
+        ? '↗'
+        : type === 'time'
+          ? '◷'
+          : type === 'length'
+            ? '↔'
+            : type === 'number'
+              ? '#'
+              : type === 'function'
+                ? 'ƒ'
+                : 'T';
   return (
     <span className="ss-var-row__type-icon" role="img" aria-label={`${type} variable`}>
-      {glyph}
+      {type === 'color' ? <ColorIcon size={12} /> : glyph}
     </span>
   );
 }
