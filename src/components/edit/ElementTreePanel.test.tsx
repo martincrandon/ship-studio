@@ -424,19 +424,19 @@ describe('ElementTreePanel', () => {
     expect(
       panel.querySelector('[data-tree-id="3"] [data-icon-name="ElementMainIcon"]')
     ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="3"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="3"] .ss-tree-tag')).toHaveTextContent('main');
     expect(
       panel.querySelector('[data-tree-id="4"] [data-icon-name="ElementHeadIcon"]')
     ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="4"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="4"] .ss-tree-tag')).toHaveTextContent('header');
     expect(
       panel.querySelector('[data-tree-id="5"] [data-icon-name="ElementNavIcon"]')
     ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="5"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="5"] .ss-tree-tag')).toHaveTextContent('nav');
     expect(
       panel.querySelector('[data-tree-id="6"] [data-icon-name="ElementCodeBlockIcon"]')
     ).toBeInTheDocument();
-    expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).not.toBeInTheDocument();
+    expect(panel.querySelector('[data-tree-id="6"] .ss-tree-tag')).toHaveTextContent('code');
   });
 
   it('remembers the tag icon preference when the panel remounts', () => {
