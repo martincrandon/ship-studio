@@ -6,7 +6,8 @@ function send(data: object, source: MessageEventSource = window) {
     new MessageEvent('message', { source, data: { channel: 'ss:comments-host', ...data } })
   );
 }
-let posted: ReturnType<typeof vi.spyOn>;
+const spyOnPostedMessage = () => vi.spyOn(window.parent, 'postMessage');
+let posted: ReturnType<typeof spyOnPostedMessage>;
 beforeAll(() => {
   Object.defineProperty(window, 'CSS', { value: { escape: (s: string) => s }, configurable: true });
   window.eval(script.replace(/^<script>/, '').replace(/<\/script>\s*$/, ''));
@@ -14,7 +15,7 @@ beforeAll(() => {
 beforeEach(() => {
   document.body.innerHTML =
     '<main><section id="hero"><h1>Build great things</h1><a href="/other">Go</a></section><section id="next">Next</section></main>';
-  posted = vi.spyOn(window.parent, 'postMessage');
+  posted = spyOnPostedMessage();
 });
 afterEach(() => {
   send({ type: 'sync', enabled: false });
