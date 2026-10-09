@@ -1,6 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CascadeRuleCard } from './CascadeRuleCard';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('CascadeRuleCard', () => {
   it('renders the draft message in the properties body', () => {
@@ -64,5 +68,47 @@ describe('CascadeRuleCard', () => {
 
     expect(screen.getByText('2 properties')).toBeInTheDocument();
     expect(document.querySelector('.ss-cascade-card__body')).not.toBeInTheDocument();
+  });
+
+  it('does not apply the selected element contrast context to nested declarations', () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      }
+    );
+    vi.stubGlobal('PointerEvent', MouseEvent);
+    render(
+      <CascadeRuleCard
+        editable
+        selector=".button"
+        body={{
+          items: [
+            {
+              kind: 'rule',
+              selector: '& .icon',
+              body: {
+                items: [{ kind: 'decl', prop: 'color', value: '#000000', important: false }],
+              },
+            },
+          ],
+        }}
+        overridden={new Map()}
+        colorContrast={{
+          text: { backgroundColor: '#ffffff', category: 'normal-text' },
+          graphics: { backgroundColor: '#ffffff', category: 'graphics' },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open color picker for color' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast checker' }));
+
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'aria-label',
+      'Contrast check unavailable. Background color is unavailable for this selection.'
+    );
   });
 });

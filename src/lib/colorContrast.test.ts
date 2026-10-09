@@ -76,6 +76,21 @@ describe('color contrast calculations', () => {
     ).toBeNull();
   });
 
+  it('uses root tokens without scope and selector-scoped overrides when provided', () => {
+    const variables = [
+      { name: '--background', value: '#fff', selector: ':root' },
+      { name: '--background', value: '#000', selector: '.dark' },
+      { name: '--brand', value: 'var(--background)', selector: ':root' },
+      { name: '--brand', value: 'var(--background)', selector: '.dark' },
+    ];
+
+    expect(resolveColorVariable('var(--background)', variables)).toBe('#fff');
+    expect(resolveColorVariable('var(--brand)', variables)).toBe('#fff');
+    expect(resolveColorVariable('var(--background)', variables, '.dark')).toBe('#000');
+    expect(resolveColorVariable('var(--brand)', variables, '.dark')).toBe('#000');
+    expect(resolveColorVariable('var(--background)', variables, '.light')).toBe('#fff');
+  });
+
   it('builds text and graphic contexts from element and ancestor backgrounds', () => {
     const contexts = colorContrastContexts(
       opaquePage({

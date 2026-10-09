@@ -32,8 +32,11 @@ import {
   parseNumericValue,
 } from '../../lib/cssProperties';
 import { ScrubHorizontalIcon } from '@/components/icons';
-import type { ValueFieldVariable } from '../primitives/ValueField';
-import { resolveColorVariable, type ColorContrastContext } from '../../lib/colorContrast';
+import {
+  resolveColorVariable,
+  type ColorContrastContext,
+  type ColorVariableDefinition,
+} from '../../lib/colorContrast';
 import {
   COLOR_PICKER_GUTTER,
   COLOR_PICKER_HEIGHT,
@@ -55,7 +58,9 @@ interface Props {
   /** The edited CSS property accepts colors, so an unresolved var() can open the picker. */
   colorProperty?: boolean;
   /** Project custom properties used to resolve the displayed color value. */
-  variables?: readonly ValueFieldVariable[];
+  variables?: readonly ColorVariableDefinition[];
+  /** CSS selector whose declarations are being edited, when known. */
+  variableSelector?: string;
   projectPath?: string;
   contrastContext?: ColorContrastContext;
   placeholder?: string;
@@ -71,6 +76,7 @@ export function EditPopover({
   enableColorPicker = true,
   colorProperty = false,
   variables,
+  variableSelector,
   projectPath,
   contrastContext,
   placeholder,
@@ -93,7 +99,7 @@ export function EditPopover({
   // dockable panel of its own, so it never has to fit the value's text column.
   const importantSuffix = /\s*!\s*important\s*$/i.exec(text)?.[0] ?? '';
   const colorText = importantSuffix ? text.slice(0, -importantSuffix.length).trim() : text;
-  const resolvedText = resolveColorVariable(colorText, variables ?? []);
+  const resolvedText = resolveColorVariable(colorText, variables ?? [], variableSelector);
   const pickerValue = resolvedText && colorSwatch(resolvedText) ? resolvedText : colorText;
   const isUnknownColorVariable = /^var\(/i.test(colorText.trim());
   const isColor =
@@ -271,6 +277,7 @@ export function EditPopover({
           value={pickerValue}
           authoredValue={colorText}
           variables={variables}
+          variableSelector={variableSelector}
           projectPath={projectPath}
           contrastContext={contrastContext}
           onHeightChange={setPickerHeight}

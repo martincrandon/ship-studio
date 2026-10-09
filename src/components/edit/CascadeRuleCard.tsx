@@ -35,8 +35,7 @@ import {
   type Decl,
   type RuleBody,
 } from '../../lib/cssBody';
-import type { ValueFieldVariable } from '../primitives/ValueField';
-import type { ColorContrastContexts } from '../../lib/colorContrast';
+import type { ColorContrastContexts, ColorVariableDefinition } from '../../lib/colorContrast';
 
 interface CommonHeader {
   selector: string;
@@ -65,7 +64,7 @@ interface CommonHeader {
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   /** Resolved project token values for color display and variable authoring. */
-  colorVariables?: readonly ValueFieldVariable[];
+  colorVariables?: readonly ColorVariableDefinition[];
 }
 
 interface EditableCard extends CommonHeader {
@@ -320,6 +319,9 @@ export function CascadeRuleCard(props: Props) {
                 overridden={props.overridden.has(d.prop.toLowerCase())}
                 overriddenBy={props.overridden.get(d.prop.toLowerCase())}
                 colorVariables={props.colorVariables}
+                variableSelector={
+                  (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
+                }
               />
             ))}
             {props.readonlyReason && (
@@ -405,6 +407,9 @@ export function CascadeRuleCard(props: Props) {
               nestTargets={nested.map((r) => r.selector)}
               variables={props.variables}
               colorVariables={props.colorVariables}
+              variableSelector={
+                (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
+              }
               projectPath={props.projectPath}
               colorContrast={props.colorContrast}
               animations={props.animations}
@@ -481,7 +486,6 @@ export function CascadeRuleCard(props: Props) {
               variables={props.variables}
               colorVariables={props.colorVariables}
               projectPath={props.projectPath}
-              colorContrast={props.colorContrast}
               animations={props.animations}
               selectorSuggestions={props.selectorSuggestions}
               onChange={(nextBody) =>

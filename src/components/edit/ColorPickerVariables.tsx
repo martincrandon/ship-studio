@@ -1,16 +1,12 @@
 import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { resolveColorVariable } from '../../lib/colorContrast';
+import { resolveColorVariable, type ColorVariableDefinition } from '../../lib/colorContrast';
 import { toCss } from '../../lib/color';
 import { SearchIcon } from '@/components/icons';
 import { TextField } from '../primitives/TextField';
 
-interface PickerVariable {
-  name: string;
-  value?: string;
-}
-
 interface Props {
-  variables: readonly PickerVariable[];
+  variables: readonly ColorVariableDefinition[];
+  variableSelector?: string;
   authoredValue?: string;
   onSelect: (name: string, resolvedColor: string | null) => void;
 }
@@ -20,7 +16,12 @@ function selectedName(value: string | undefined): string | null {
   return match?.[1] ?? null;
 }
 
-export function ColorPickerVariables({ variables, authoredValue, onSelect }: Props) {
+export function ColorPickerVariables({
+  variables,
+  variableSelector,
+  authoredValue,
+  onSelect,
+}: Props) {
   const [query, setQuery] = useState('');
   const [activeSelection, setActiveSelection] = useState({ query: '', index: 0 });
   const searchRef = useRef<HTMLInputElement>(null);
@@ -39,7 +40,7 @@ export function ColorPickerVariables({ variables, authoredValue, onSelect }: Pro
         return true;
       })
       .map((variable) => {
-        const resolved = resolveColorVariable(`var(${variable.name})`, variables);
+        const resolved = resolveColorVariable(`var(${variable.name})`, variables, variableSelector);
         return { ...variable, resolvedColor: resolved ? toCss(resolved) : null };
       })
       .filter((variable) => variable.resolvedColor || variable.name === selected);
@@ -51,7 +52,7 @@ export function ColorPickerVariables({ variables, authoredValue, onSelect }: Pro
           variable.name !== selected && variable.name.toLocaleLowerCase().includes(filter)
       ),
     };
-  }, [query, selected, variables]);
+  }, [query, selected, variables, variableSelector]);
   const optionCount = options.length + (selectedOption ? 1 : 0);
   const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === 'Escape') {

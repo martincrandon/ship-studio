@@ -11,6 +11,13 @@ export interface ColorContrastContext {
   unavailableReason?: string;
 }
 
+export interface ColorVariableDefinition {
+  name: string;
+  value?: string;
+  /** Selector that scopes this definition. Missing selectors are treated as global. */
+  selector?: string;
+}
+
 /** A computed style on the selected element or one of its ancestors. */
 export interface ColorContrastLayerSnapshot {
   backgroundColor: string;
@@ -111,11 +118,29 @@ export function contrastThreshold(category: ContrastCategory, level: ContrastLev
 /** Resolve CSS custom-property references, aliases, nested functions, and fallbacks. */
 export function resolveColorVariable(
   value: string,
-  variables: readonly { name: string; value?: string }[]
+  variables: readonly ColorVariableDefinition[],
+  selector?: string
 ): string | null {
+  const hasSelectorMetadata = variables.some((variable) => variable.selector !== undefined);
+  let applicableVariables = variables;
+
+  if (hasSelectorMetadata) {
+    const globalVariables = variables.filter(
+      (variable) => variable.selector === undefined || variable.selector === ':root'
+    );
+    const scopedVariables = selector
+      ? variables.filter((variable) => variable.selector === selector)
+      : [];
+    const scopedNames = new Set(scopedVariables.map((variable) => variable.name));
+    applicableVariables = [
+      ...globalVariables.filter((variable) => !scopedNames.has(variable.name)),
+      ...scopedVariables,
+    ];
+  }
+
   const byName = new Map<string, string | undefined>();
   const ambiguousNames = new Set<string>();
-  for (const variable of variables) {
+  for (const variable of applicableVariables) {
     if (byName.has(variable.name)) {
       byName.set(variable.name, undefined);
       ambiguousNames.add(variable.name);

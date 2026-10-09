@@ -57,6 +57,7 @@ afterEach(() => {
   delete (window as EyeDropperWindow).EyeDropper;
   window.localStorage.removeItem(recentFallbackStorageKey);
   window.localStorage.removeItem(contrastCheckerStorageKey);
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -122,6 +123,30 @@ describe('ColorPicker', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Contrast settings' }));
     expect(screen.getByRole('menuitem', { name: 'AAA · Only for text' })).toBeEnabled();
+  });
+
+  it('keeps the AAA preference when switching temporarily to graphics', () => {
+    render(
+      <ColorPicker
+        value="#ffffff"
+        contrastContext={{ backgroundColor: '#000000', category: 'normal-text' }}
+        onChange={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast checker' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast settings' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'AAA · Only for text' }));
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Pass AAA, 7:1 required');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast settings' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Graphics' }));
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Pass AA, 3:1 required');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast settings' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Normal text' }));
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Pass AAA, 7:1 required');
   });
 
   it('does not infer a foreground color when an authored variable is unresolved', () => {
@@ -247,6 +272,53 @@ describe('ColorPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Color format: OKLCH' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'RGB' }));
     expect(screen.getByRole('tab', { name: 'RGB' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('scrubs OKLCH chroma with a step matched to its smaller range', () => {
+    vi.stubGlobal('PointerEvent', MouseEvent);
+    renderPicker('oklch(60% 0.05 250)');
+
+    const chroma = screen.getByLabelText('C');
+    if (!(chroma instanceof HTMLInputElement)) throw new Error('Chroma field should be an input');
+    const initial = Number(chroma.value);
+    const label = chroma
+      .closest('.ss-color-picker__field')
+      ?.querySelector('.ss-color-picker__field-label');
+    expect(label).not.toBeNull();
+
+    fireEvent.pointerDown(label!, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(label!, { clientX: 120, pointerId: 1 });
+    fireEvent.pointerUp(label!, { pointerId: 1 });
+
+    const adjustedField = screen.getByLabelText('C');
+    if (!(adjustedField instanceof HTMLInputElement)) {
+      throw new Error('Chroma field should be an input');
+    }
+    const adjusted = Number(adjustedField.value);
+    expect(adjusted).toBeGreaterThan(initial);
+    expect(adjusted - initial).toBeLessThan(0.05);
+  });
+
+  it('resolves a variable against the supplied selector when showing picker swatches', () => {
+    render(
+      <ColorPicker
+        value="var(--background)"
+        authoredValue="var(--background)"
+        variableSelector=".dark"
+        variables={[
+          { name: '--background', value: '#ffffff', selector: ':root' },
+          { name: '--background', value: '#000000', selector: '.dark' },
+        ]}
+        onChange={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Variables' }));
+    const selected = screen.getByRole('option', { name: '--background' });
+    expect(selected.querySelector('.ss-color-picker__variable-swatch')).toHaveStyle({
+      '--picker-swatch-color': 'rgb(0, 0, 0)',
+    });
   });
 
   it('clamps valid channel edits and restores invalid input', () => {

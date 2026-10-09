@@ -13,8 +13,11 @@ import { EditPopover } from './EditPopover';
 import { CssValueText } from './CssValueText';
 import { CSS_PROPERTIES, colorSwatch, suggestValues } from '../../lib/cssProperties';
 import type { Decl } from '../../lib/cssBody';
-import type { ValueFieldVariable } from '../primitives/ValueField';
-import { resolveColorVariable, type ColorContrastContexts } from '../../lib/colorContrast';
+import {
+  resolveColorVariable,
+  type ColorContrastContexts,
+  type ColorVariableDefinition,
+} from '../../lib/colorContrast';
 
 interface EditableProps {
   decl: Decl;
@@ -35,7 +38,9 @@ interface EditableProps {
   /** Project CSS variables (e.g. `--accent`) for `var(--…)` value autocomplete. */
   variables?: string[];
   /** Resolved project token values for color display and variable authoring. */
-  colorVariables?: readonly ValueFieldVariable[];
+  colorVariables?: readonly ColorVariableDefinition[];
+  /** Selector used to resolve scoped custom properties for this rule. */
+  variableSelector?: string;
   projectPath?: string;
   colorContrast?: ColorContrastContexts;
   /** Project `@keyframes` names, suggested as `animation` values. */
@@ -51,7 +56,8 @@ interface ReadonlyProps {
   overridden: boolean;
   overriddenBy?: string;
   editable: false;
-  colorVariables?: readonly ValueFieldVariable[];
+  colorVariables?: readonly ColorVariableDefinition[];
+  variableSelector?: string;
 }
 type Props = EditableProps | ReadonlyProps;
 
@@ -125,9 +131,10 @@ function contrastContextForProperty(property: string, contexts?: ColorContrastCo
 
 function resolveSwatchColor(
   value: string,
-  variables: readonly ValueFieldVariable[] | undefined
+  variables: readonly ColorVariableDefinition[] | undefined,
+  selector?: string
 ): string | null {
-  const resolved = resolveColorVariable(value, variables ?? []);
+  const resolved = resolveColorVariable(value, variables ?? [], selector);
   return colorSwatch(resolved ?? value);
 }
 
@@ -149,7 +156,7 @@ export function DeclarationRow(props: Props) {
   const { decl, overridden } = props;
   const tipProps = overriddenTooltipProps(overridden, props.overriddenBy);
   const autoEditValue = props.editable && props.autoEditValue;
-  const swatchColor = resolveSwatchColor(decl.value, props.colorVariables);
+  const swatchColor = resolveSwatchColor(decl.value, props.colorVariables, props.variableSelector);
   // Editing-flow: a newly added row mounts directly into its inline value input.
   const [editing, setEditing] = useState<null | 'prop' | 'value' | 'color'>(
     autoEditValue ? 'value' : null
@@ -222,6 +229,7 @@ export function DeclarationRow(props: Props) {
           initial={initialValue}
           options={options}
           variables={props.colorVariables}
+          variableSelector={props.variableSelector}
           projectPath={props.projectPath}
           enableColorPicker={false}
           contrastContext={contrastContextForProperty(decl.prop, props.colorContrast)}
@@ -268,6 +276,7 @@ export function DeclarationRow(props: Props) {
               initial={initialValue}
               options={options}
               variables={props.colorVariables}
+              variableSelector={props.variableSelector}
               projectPath={props.projectPath}
               enableColorPicker
               colorProperty={colorProperty}

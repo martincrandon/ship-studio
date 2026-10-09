@@ -393,6 +393,7 @@ function EditableVarRow({
             initial={variable.value}
             options={options}
             variables={colorVariables}
+            variableSelector={variable.selector}
             projectPath={projectPath}
             enableColorPicker={false}
             placeholder="value"
@@ -420,6 +421,7 @@ function EditableVarRow({
           anchor={editing.anchor}
           initial={variable.value}
           variables={colorVariables}
+          variableSelector={variable.selector}
           projectPath={projectPath}
           enableColorPicker
           placeholder="value"

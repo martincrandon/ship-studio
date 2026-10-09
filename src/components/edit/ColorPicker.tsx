@@ -26,6 +26,7 @@ import {
   contrastRatio,
   contrastThreshold,
   resolveColorVariable,
+  type ColorVariableDefinition,
   type ColorContrastContext,
   type ContrastCategory,
   type ContrastLevel,
@@ -78,6 +79,7 @@ interface ChannelDefinition {
   id: ChannelId;
   label: string;
   value: string;
+  step?: number;
   suffix?: string;
   ariaLabel?: string;
 }
@@ -99,7 +101,9 @@ interface Props {
   /** Background and semantic target supplied by the active editor selection. */
   contrastContext?: ColorContrastContext;
   /** Authored project color tokens; unresolved values remain unavailable. */
-  variables?: readonly { name: string; value?: string }[];
+  variables?: readonly ColorVariableDefinition[];
+  /** CSS selector whose declarations are being edited, when known. */
+  variableSelector?: string;
   /** Used to keep recent colors isolated to the active project. */
   projectPath?: string;
   /** Original authored CSS syntax, retained when it is a color variable. */
@@ -113,7 +117,7 @@ type CategorySelection = 'auto' | ContrastCategory;
 type AuthoredOverride = { value: string | null };
 type DisplayOverride = { value: string | null };
 
-const EMPTY_VARIABLES: readonly { name: string; value?: string }[] = [];
+const EMPTY_VARIABLES: readonly ColorVariableDefinition[] = [];
 
 const CATEGORY_LABELS: Record<ContrastCategory, string> = {
   'normal-text': 'Normal text',
@@ -138,14 +142,15 @@ function inferColorFormat(value: string | undefined): ColorFormat {
 function resolvePickerValue(
   value: string,
   authoredValue: string | undefined,
-  variables: readonly { name: string; value?: string }[]
+  variables: readonly ColorVariableDefinition[],
+  selector?: string
 ): string | null {
   const resolvedValue = toCss(value);
   if (resolvedValue) return resolvedValue;
 
   const authored = authoredValue?.trim();
   if (authored && isVariableValue(authored)) {
-    const resolved = resolveColorVariable(authored, variables);
+    const resolved = resolveColorVariable(authored, variables, selector);
     return resolved ? toCss(resolved) : null;
   }
   if (authored) {
@@ -157,11 +162,14 @@ function resolvePickerValue(
 
 function resolveContrastColor(
   value: string | undefined,
-  variables: readonly { name: string; value?: string }[]
+  variables: readonly ColorVariableDefinition[],
+  selector?: string
 ): string | null {
   if (!value?.trim()) return null;
   const trimmed = value.trim();
-  const resolved = isVariableValue(trimmed) ? resolveColorVariable(trimmed, variables) : trimmed;
+  const resolved = isVariableValue(trimmed)
+    ? resolveColorVariable(trimmed, variables, selector)
+    : trimmed;
   // Preserve fractional computed RGB channels. Canonicalizing through toCss()
   // rounds them to integer channels before WCAG luminance is calculated.
   return resolved && parse(resolved) ? resolved : null;
@@ -268,7 +276,7 @@ function channelDefinitions(
       value: round(clamp(oklch.l ?? 0, 0, 1) * 100, 1),
       suffix: '%',
     },
-    { id: 'c', label: 'C', value: round(clamp(oklch.c ?? 0, 0, 0.4), 3) },
+    { id: 'c', label: 'C', value: round(clamp(oklch.c ?? 0, 0, 0.4), 3), step: 0.001 },
     { id: 'h', label: 'H', value: round(normalizeHue(oklch.h ?? 0), 1) },
     { id: 'a', label: 'A', ariaLabel: 'Alpha', value: alpha, suffix: '%' },
   ];
@@ -369,7 +377,7 @@ function ChannelField({
     const parsed = parseNumericValue(channel.value);
     if (!parsed) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     drag.current = {
       x: event.clientX,
       num: parsed.num,
@@ -385,9 +393,9 @@ function ChannelField({
     const delta = event.clientX - start.x;
     if (delta === start.lastDelta) return;
     start.lastDelta = delta;
-    const base = 1;
+    const base = channel.step ?? 1;
     const step = event.shiftKey ? base * 10 : event.altKey ? base / 10 : base;
-    const stepDecimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    const stepDecimals = Math.max(0, (step.toString().split('.')[1] ?? '').length);
     const next = start.num + delta * step;
     if (onScrub(formatNumericValue(next, '', Math.max(start.decimals, stepDecimals)))) {
       start.moved = true;
@@ -468,6 +476,7 @@ export function ColorPicker({
   onClose,
   contrastContext,
   variables: suppliedVariables,
+  variableSelector,
   projectPath,
   authoredValue,
   onHeightChange,
@@ -491,15 +500,20 @@ export function ColorPicker({
   const currentAuthoredValue = authoredOverride
     ? (authoredOverride.value ?? undefined)
     : authoredValue;
-  const baseDisplayValue = resolvePickerValue(value, currentAuthoredValue, variables);
+  const baseDisplayValue = resolvePickerValue(
+    value,
+    currentAuthoredValue,
+    variables,
+    variableSelector
+  );
   const displayValue = displayOverride ? displayOverride.value : baseDisplayValue;
   const [originalAuthoredValue] = useState(authoredValue);
   const [originalResolvedColor] = useState(() =>
-    resolvePickerValue(value, authoredValue, variables)
+    resolvePickerValue(value, authoredValue, variables, variableSelector)
   );
   const [originalHsva] = useState(() => toHsva(originalResolvedColor ?? '#000000'));
   const [hsva, setHsva] = useState(() => toHsva(displayValue ?? '#000000'));
-  const hslValuesRef = useRef(hslChannelValues(displayValue ?? '#000000'));
+  const [hslValues, setHslValues] = useState(() => hslChannelValues(displayValue ?? '#000000'));
   const [syncedPropValue, setSyncedPropValue] = useState(value);
   const [syncedValue, setSyncedValue] = useState(displayValue);
   const [syncedAuthoredValue, setSyncedAuthoredValue] = useState(authoredValue);
@@ -509,7 +523,6 @@ export function ColorPicker({
   const visualRef = useRef<HTMLDivElement>(null);
   const pointerSessionRef = useRef(false);
   const keyboardSessionRef = useRef(false);
-  const latestColorRef = useRef<string | null>(displayValue);
   const { colors: recentColors, recordColor } = useColorPickerRecent(projectPath);
   const visibleRecentColors = recentColors.length > 0 ? recentColors : DEFAULT_RECENT_COLORS;
 
@@ -527,7 +540,6 @@ export function ColorPicker({
 
   if (syncedValue !== displayValue) {
     setSyncedValue(displayValue);
-    latestColorRef.current = displayValue;
     if (displayValue) {
       const external = toRgba(displayValue);
       const current = toRgba(hsvaToCss(hsva));
@@ -538,7 +550,7 @@ export function ColorPicker({
         external.a !== current.a
       ) {
         setHsva(toHsva(displayValue));
-        hslValuesRef.current = hslChannelValues(displayValue);
+        setHslValues(hslChannelValues(displayValue));
       }
     }
   }
@@ -547,9 +559,7 @@ export function ColorPicker({
   const rgba = toRgba(localValue);
   const originalRgba = toRgba(hsvaToCss(originalHsva));
   const hasResolvedColor = displayValue !== null;
-  const channels = hasResolvedColor
-    ? channelDefinitions(localValue, format, hsva, hslValuesRef.current)
-    : [];
+  const channels = hasResolvedColor ? channelDefinitions(localValue, format, hsva, hslValues) : [];
   const eyeDropper = eyeDropperConstructor();
   const { data: nativeSamplerSupport, isLoading: isCheckingNativeSampler } = useAsyncState(
     getColorSamplerSupport,
@@ -571,8 +581,13 @@ export function ColorPicker({
 
   const backgroundColor = useMemo(() => {
     if (contrastContext?.unavailableReason) return null;
-    return resolveContrastColor(contrastContext?.backgroundColor, variables);
-  }, [contrastContext?.backgroundColor, contrastContext?.unavailableReason, variables]);
+    return resolveContrastColor(contrastContext?.backgroundColor, variables, variableSelector);
+  }, [
+    contrastContext?.backgroundColor,
+    contrastContext?.unavailableReason,
+    variableSelector,
+    variables,
+  ]);
   const foregroundColor = hasResolvedColor ? toCss(localValue) : null;
   const contrastValue =
     foregroundColor && backgroundColor ? contrastRatio(foregroundColor, backgroundColor) : null;
@@ -604,13 +619,9 @@ export function ColorPicker({
   const selectedFormatLabel = COLOR_FORMATS.find((option) => option.id === format)?.label ?? format;
   const currentAuthoredIsVariable = isVariableValue(currentAuthoredValue);
 
-  useEffect(() => {
-    if (level === 'AAA' && !aaaAllowed) setLevel('AA');
-  }, [aaaAllowed, level]);
-
   const recordCurrentColor = useCallback(() => {
-    if (latestColorRef.current) recordColor(latestColorRef.current);
-  }, [recordColor]);
+    if (displayValue) recordColor(displayValue);
+  }, [displayValue, recordColor]);
 
   const finishPointerSession = useCallback(() => {
     if (!pointerSessionRef.current) return;
@@ -639,8 +650,7 @@ export function ColorPicker({
     (next: Hsva, hslValues?: HslChannelValues) => {
       const resolved = hsvaToCss(next);
       setHsva(next);
-      hslValuesRef.current = hslValues ?? hslChannelValues(resolved);
-      latestColorRef.current = resolved;
+      setHslValues(hslValues ?? hslChannelValues(resolved));
       setDisplayOverride({ value: resolved });
       setAuthoredOverride({ value: null });
       onChange(toFormat(resolved, format));
@@ -666,7 +676,7 @@ export function ColorPicker({
       if (format === 'hsl') {
         const number = parseNumber(raw);
         if (number === null) return false;
-        const hsl = { ...hslValuesRef.current };
+        const hsl = { ...hslValues };
         if (channel === 'a') hsl.alpha = clamp(number, 0, 100) / 100;
         else if (channel === 'h') hsl.h = normalizeHue(number);
         else if (channel === 's') hsl.s = clamp(number, 0, 100) / 100;
@@ -696,7 +706,7 @@ export function ColorPicker({
       if (next) emitHsva(toHsva(next));
       return next !== null;
     },
-    [emitHsva, format, hasResolvedColor, hsva]
+    [emitHsva, format, hasResolvedColor, hsva, hslValues]
   );
 
   const handleEyeDropper = async () => {
@@ -740,11 +750,8 @@ export function ColorPicker({
     if (resolvedColor) {
       const next = toHsva(resolvedColor);
       setHsva(next);
-      hslValuesRef.current = hslChannelValues(resolvedColor);
-      latestColorRef.current = resolvedColor;
+      setHslValues(hslChannelValues(resolvedColor));
       recordColor(resolvedColor);
-    } else {
-      latestColorRef.current = null;
     }
     // Keep the CSS token authored. The resolved value is only used by the
     // visual controls and contrast calculations.
@@ -762,8 +769,7 @@ export function ColorPicker({
       setAuthoredOverride({ value: originalAuthoredValue! });
       setDisplayOverride({ value: originalResolved });
       setHsva(originalHsva);
-      hslValuesRef.current = hslChannelValues(originalResolved ?? '#000000');
-      latestColorRef.current = originalResolved;
+      setHslValues(hslChannelValues(originalResolved ?? '#000000'));
       onChange(originalAuthoredValue!);
       if (originalResolved) recordColor(originalResolved);
       return;
@@ -1245,6 +1251,7 @@ export function ColorPicker({
             {mode === 'variables' && (
               <ColorPickerVariables
                 variables={variables}
+                variableSelector={variableSelector}
                 authoredValue={currentAuthoredValue}
                 onSelect={selectVariable}
               />

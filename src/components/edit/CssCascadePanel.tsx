@@ -34,8 +34,7 @@ import { parseRuleBody, type RuleBody } from '../../lib/cssBody';
 import type { CascadeSelection } from '../../hooks/useCssCascadeEditor';
 import type { ElementSettings } from '../../hooks/useElementSettings';
 import type { useCssAnimations } from '../../hooks/useCssAnimations';
-import type { ValueFieldVariable } from '../primitives/ValueField';
-import { colorContrastContexts } from '../../lib/colorContrast';
+import { colorContrastContexts, type ColorVariableDefinition } from '../../lib/colorContrast';
 
 /** The panel's top-level view: element style/settings, or project-global animation CSS. */
 type Scope = 'style' | 'settings' | 'animations';
@@ -71,7 +70,7 @@ interface Props {
   variables: string[];
   /** Project `@keyframes` names for `animation` value autocomplete. */
   animations: string[];
-  colorVariables?: readonly ValueFieldVariable[];
+  colorVariables?: readonly ColorVariableDefinition[];
   projectPath?: string;
   settings: ElementSettings;
   /** Project-global Animations editor state (`@keyframes`). */

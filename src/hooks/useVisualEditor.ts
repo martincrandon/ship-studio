@@ -589,7 +589,10 @@ export function useVisualEditor({
       void (async () => {
         try {
           const resolution = await resolveClassnameSource(projectPath, sig);
-          setSelection({ signature: sig, resolution, instanceCount });
+          setSelection((prev) => {
+            if (!prev || prev.signature.domPath !== sig.domPath) return prev;
+            return { ...prev, resolution };
+          });
           // Best-effort scope hint: where else this component is rendered.
           if (resolution.status === 'resolved') {
             try {
@@ -608,13 +611,15 @@ export function useVisualEditor({
             error: formatCommandError(asCommandError(err)),
           });
           onToast?.(formatCommandError(asCommandError(err)), 'error');
-          setSelection({
-            signature: sig,
-            resolution: {
-              status: 'read_only',
-              reason: 'Could not resolve this element to source.',
-            },
-            instanceCount,
+          setSelection((prev) => {
+            if (!prev || prev.signature.domPath !== sig.domPath) return prev;
+            return {
+              ...prev,
+              resolution: {
+                status: 'read_only',
+                reason: 'Could not resolve this element to source.',
+              },
+            };
           });
         }
       })();

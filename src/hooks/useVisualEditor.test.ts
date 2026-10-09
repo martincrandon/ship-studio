@@ -160,6 +160,78 @@ afterEach(() => {
 });
 
 describe('useVisualEditor selection', () => {
+  it('keeps a newer contrast snapshot when source resolution finishes later', async () => {
+    const { result, iframeRef } = setup();
+    act(() => result.current.toggleEditMode());
+    const source = iframeRef.current!.contentWindow!;
+    const domPath = '/html[1]/body[1]/p[1]';
+    const selectionId = 'document-a:41';
+    const snapshot = {
+      layers: [
+        {
+          backgroundColor: 'rgba(0, 0, 0, 0)',
+          hasBackgroundImage: false,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          backgroundBlendMode: 'normal',
+          hasFilter: false,
+        },
+        {
+          backgroundColor: 'rgb(0, 0, 0)',
+          hasBackgroundImage: false,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          backgroundBlendMode: 'normal',
+          hasFilter: false,
+        },
+      ],
+      truncated: false,
+      fontSizePx: 16,
+      fontWeight: 400,
+      hasText: true,
+      groupCount: 1,
+    };
+    let finishResolution!: (value: Awaited<ReturnType<typeof resolveClassnameSource>>) => void;
+    vi.mocked(resolveClassnameSource).mockReturnValue(
+      new Promise((resolve) => {
+        finishResolution = resolve;
+      })
+    );
+    const dispatch = async (data: Record<string, unknown>) =>
+      await act(async () => {
+        window.dispatchEvent(new MessageEvent('message', { source, data }));
+        await Promise.resolve();
+      });
+
+    await dispatch({
+      type: 'ss:select',
+      selectionId,
+      signature: { className: 'text-red-500', tagName: 'p', domPath, ancestorClasses: [] },
+    });
+    await dispatch({ type: 'ss:contrastDirty', selectionId, domPath });
+    await dispatch({
+      type: 'ss:contrastSnapshot',
+      requestId: 1,
+      selectionId,
+      domPath,
+      contrastSnapshot: snapshot,
+    });
+
+    expect(result.current.selection?.signature.contrastSnapshot?.layers[1]?.backgroundColor).toBe(
+      'rgb(0, 0, 0)'
+    );
+
+    await act(async () => {
+      finishResolution({ status: 'no_class' });
+      await Promise.resolve();
+    });
+
+    expect(result.current.selection?.resolution).toEqual({ status: 'no_class' });
+    expect(result.current.selection?.signature.contrastSnapshot?.layers[1]?.backgroundColor).toBe(
+      'rgb(0, 0, 0)'
+    );
+  });
+
   it('keeps contrast refresh protocol responses tied to the current selection and request', async () => {
     const { result, iframeRef } = setup();
     act(() => result.current.toggleEditMode());
