@@ -46,11 +46,11 @@ vi.mock('./analytics', () => ({
 }));
 
 describe('lib/project', () => {
-  let invokeMock: ReturnType<typeof vi.fn>;
+  let invokeMock: ReturnType<typeof vi.fn<(cmd: string, args?: unknown) => unknown>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    invokeMock = vi.fn();
+    invokeMock = vi.fn<(cmd: string, args?: unknown) => unknown>();
     mockIPC((cmd, args) => {
       if (args === undefined) {
         return invokeMock(cmd);

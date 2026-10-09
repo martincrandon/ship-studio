@@ -186,7 +186,7 @@ describe('ColorPicker', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Hex' }));
     expect(screen.getByLabelText('Hex')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Alpha' })).toHaveValue('50');
+    expect(screen.getByRole('textbox', { name: 'Alpha' })).toHaveValue('50%');
 
     fireEvent.click(screen.getByRole('tab', { name: 'RGB' }));
     expect(screen.getByLabelText('R')).toHaveValue('10');
@@ -237,10 +237,11 @@ describe('ColorPicker', () => {
     expect(screen.getByRole('button', { name: 'Color format: OKLCH' })).toHaveTextContent('OKLCH');
     expect(screen.getAllByRole('textbox')).toHaveLength(4);
     expect(screen.getByLabelText('C')).toBeInTheDocument();
-    expect(screen.getByLabelText('L').closest('label')).toHaveTextContent('%');
+    expect(screen.getByLabelText('L')).toHaveProperty('value', expect.stringMatching(/%$/));
 
     fireEvent.change(screen.getByLabelText('L'), { target: { value: '50' } });
     fireEvent.blur(screen.getByLabelText('L'));
+    expect(screen.getByLabelText('L')).toHaveProperty('value', expect.stringMatching(/%$/));
     expect(onChange).toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Color format: OKLCH' }));
@@ -298,7 +299,7 @@ describe('ColorPicker', () => {
     const { onChange } = renderControlledPicker('#ff0000');
     fireEvent.click(screen.getByRole('tab', { name: 'HSB' }));
     expect(screen.getByLabelText('H')).toHaveValue('0');
-    expect(screen.getByLabelText('S')).toHaveValue('100');
+    expect(screen.getByLabelText('S')).toHaveValue('100%');
 
     // Brightness 0 is black, which has no recoverable hue/saturation in RGB:
     // the fields must keep showing the HSB the user is editing.
@@ -307,7 +308,7 @@ describe('ColorPicker', () => {
     fireEvent.blur(brightness);
     expect(onChange).toHaveBeenLastCalledWith('rgb(0, 0, 0)');
     expect(screen.getByLabelText('H')).toHaveValue('0');
-    expect(screen.getByLabelText('S')).toHaveValue('100');
+    expect(screen.getByLabelText('S')).toHaveValue('100%');
 
     // Typing a hue while black, then raising brightness, gives that hue back.
     const hueField = screen.getByLabelText('H');

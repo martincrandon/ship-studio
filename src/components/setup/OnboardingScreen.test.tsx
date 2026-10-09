@@ -155,7 +155,7 @@ describe('OnboardingScreen', () => {
   it('shows spinner while fetching status', async () => {
     mockInvoke('get_full_setup_status', undefined);
     const { invoke } = await import('@tauri-apps/api/core');
-    (invoke as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    vi.mocked(invoke).mockImplementationOnce(() => new Promise(() => {}));
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe('OnboardingScreen', () => {
     const { invoke } = await import('@tauri-apps/api/core');
     // Hang the initial get_full_setup_status forever — the withTimeout wrapper
     // must convert this into the error + Retry UI instead of an eternal spinner.
-    (invoke as ReturnType<typeof vi.fn>).mockImplementationOnce(() => new Promise(() => {}));
+    vi.mocked(invoke).mockImplementationOnce(() => new Promise(() => {}));
 
     render(<OnboardingScreen onComplete={onComplete} />);
     expect(screen.getByText('Checking setup status...')).toBeInTheDocument();
