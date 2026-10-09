@@ -162,6 +162,8 @@ describe('useDevServer', () => {
       current: ReturnType<typeof useDevServer>;
     }): Promise<(data: string) => void> {
       const project = await import('../lib/project');
+      const { detectProjectType } = await import('../lib/static-server');
+      vi.mocked(detectProjectType).mockResolvedValue('vite');
       let onOutput: ((data: string) => void) | undefined;
       vi.mocked(project.startDevServer).mockImplementation((_cwd, _port, _label, out) => {
         onOutput = out;
