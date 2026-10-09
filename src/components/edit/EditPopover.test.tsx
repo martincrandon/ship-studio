@@ -43,6 +43,22 @@ function renderInlineEditor(initial: string) {
 }
 
 describe('EditPopover', () => {
+  it('keeps unresolved spacing variables in the text editor', () => {
+    const anchor = document.createElement('span');
+    document.body.appendChild(anchor);
+    render(
+      <EditPopover
+        anchor={anchor}
+        initial="var(--space-panel)"
+        onCommit={() => undefined}
+        onClose={() => undefined}
+      />
+    );
+
+    expect(document.querySelector('.ss-value-pop')).toBeInTheDocument();
+    expect(document.querySelector('.ss-color-picker')).not.toBeInTheDocument();
+  });
+
   it('keeps the body-portalled editor out of document flow', () => {
     const { input } = renderPopover('12px');
     expect(input.closest('.ss-value-pop')).toHaveStyle({ position: 'fixed' });

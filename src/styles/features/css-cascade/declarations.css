@@ -28,6 +28,14 @@
   overflow-wrap: anywhere;
   padding: var(--space-02) var(--space-08);
 }
+.ss-decl.is-readonly .ss-decl__value > .ss-decl__swatch {
+  display: inline-block;
+  margin-inline-end: var(--spacing-xs);
+  vertical-align: middle;
+}
+.ss-decl.is-readonly .ss-decl__value > .ss-css-value-text {
+  display: inline;
+}
 
 /* Clickable display text (button reset to read as plain text). */
 .ss-decl__edit {
@@ -35,7 +43,7 @@
   box-sizing: border-box;
   cursor: text;
   border-radius: var(--radius-sm);
-  padding: 2px 6px;
+  padding: var(--space-02) var(--space-06);
 }
 .ss-decl__edit:hover {
   background: var(--tint-subtle);
@@ -62,27 +70,73 @@
 
 /* Value */
 .ss-decl__value {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--spacing-xs);
+  position: relative;
+  display: block;
   min-width: 0;
   width: 100%;
   color: var(--text-primary);
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.ss-decl__value-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ss-decl__value-text > .ss-css-value-text {
+  display: inline;
+}
+.ss-decl__swatch-space {
+  display: inline-block;
+  width: calc(var(--size-icon-button) + var(--spacing-xs));
+  height: var(--size-icon-button);
+  vertical-align: middle;
+}
+.ss-decl__swatch-trigger {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  inset-block-start: var(--space-02);
+  inset-inline-start: var(--space-06);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  padding: 0;
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.ss-decl__swatch-trigger:hover:not(:disabled) {
+  background: transparent;
+}
+.ss-decl__swatch-trigger:focus-visible {
+  outline: var(--border-width-emphasis) solid var(--accent-focus);
+  outline-offset: calc(var(--border-width-emphasis) * -1);
+}
 
 .ss-decl__ph {
   color: var(--text-muted);
 }
 .ss-decl__swatch {
-  align-self: center;
-  width: 11px;
-  height: 11px;
-  border-radius: 2px; /* css-ok: tiny swatch */
-  border: 1px solid var(--border-default);
-  flex: 0 0 auto;
+  display: block;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  box-sizing: border-box;
+  background-clip: padding-box;
+  border-radius: var(--radius-sm);
+  border: var(--border-width-default) solid var(--border-default);
+  outline: none;
+  box-shadow: none;
 }
 .ss-decl__imp {
   color: var(--accent-warning);

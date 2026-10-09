@@ -35,6 +35,8 @@ import {
   type Decl,
   type RuleBody,
 } from '../../lib/cssBody';
+import type { ValueFieldVariable } from '../primitives/ValueField';
+import type { ColorContrastContexts } from '../../lib/colorContrast';
 
 interface CommonHeader {
   selector: string;
@@ -62,6 +64,8 @@ interface CommonHeader {
    *  across element switches); otherwise it manages collapse locally. */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Resolved project token values for color display and variable authoring. */
+  colorVariables?: readonly ValueFieldVariable[];
 }
 
 interface EditableCard extends CommonHeader {
@@ -88,6 +92,8 @@ interface EditableCard extends CommonHeader {
   variables?: string[];
   /** Project `@keyframes` names, suggested as `animation` values. */
   animations?: string[];
+  projectPath?: string;
+  colorContrast?: ColorContrastContexts;
   /** A not-yet-created rule (one of the element's own selectors) — shown dashed with a
    *  "new" chip; the rule is written to source on the first property. */
   draft?: boolean;
@@ -313,6 +319,7 @@ export function CascadeRuleCard(props: Props) {
                 decl={d}
                 overridden={props.overridden.has(d.prop.toLowerCase())}
                 overriddenBy={props.overridden.get(d.prop.toLowerCase())}
+                colorVariables={props.colorVariables}
               />
             ))}
             {props.readonlyReason && (
@@ -397,6 +404,9 @@ export function CascadeRuleCard(props: Props) {
               overriddenBy={overridden.get(d.prop.toLowerCase())}
               nestTargets={nested.map((r) => r.selector)}
               variables={props.variables}
+              colorVariables={props.colorVariables}
+              projectPath={props.projectPath}
+              colorContrast={props.colorContrast}
               animations={props.animations}
               autoEditValue={autoEditProp === d.prop}
               onChange={(next) => onChange(replaceItem(body, d.index, { kind: 'decl', ...next }))}
@@ -469,6 +479,9 @@ export function CascadeRuleCard(props: Props) {
               overridden={new Map()}
               body={r.body}
               variables={props.variables}
+              colorVariables={props.colorVariables}
+              projectPath={props.projectPath}
+              colorContrast={props.colorContrast}
               animations={props.animations}
               selectorSuggestions={props.selectorSuggestions}
               onChange={(nextBody) =>

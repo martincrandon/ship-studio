@@ -101,16 +101,26 @@ const advance = (ms: number) =>
 async function select(
   className: string,
   source: MessageEventSource,
-  extras: Partial<{ direction: 'ltr' | 'rtl'; writingMode: string; spacingUnit: string }> = {}
+  extras: Partial<{
+    direction: 'ltr' | 'rtl';
+    writingMode: string;
+    spacingUnit: string;
+    domPath: string;
+    contrastSnapshot: unknown;
+    selectionId: string;
+    count: number;
+  }> = {}
 ) {
+  const { selectionId, count = 1, ...signatureExtras } = extras;
   await act(async () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         source,
         data: {
           type: 'ss:select',
-          signature: { className, tagName: 'div', ancestorClasses: [], ...extras },
-          count: 1,
+          selectionId,
+          signature: { className, tagName: 'div', ancestorClasses: [], ...signatureExtras },
+          count,
         },
       })
     );
@@ -151,6 +161,120 @@ afterEach(() => {
 });
 
 describe('useVisualEditor selection', () => {
+  it('keeps contrast refresh protocol responses tied to the current selection and request', async () => {
+    const { result, iframeRef } = setup();
+    act(() => result.current.toggleEditMode());
+    const source = iframeRef.current!.contentWindow!;
+    const domPath = '/html[1]/body[1]/p[1]';
+    const snapshot = (backgroundColor: string) => ({
+      layers: [
+        {
+          backgroundColor: 'rgba(0, 0, 0, 0)',
+          hasBackgroundImage: false,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          backgroundBlendMode: 'normal',
+          hasFilter: false,
+        },
+        {
+          backgroundColor,
+          hasBackgroundImage: false,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          backgroundBlendMode: 'normal',
+          hasFilter: false,
+        },
+      ],
+      truncated: false,
+      fontSizePx: 16,
+      fontWeight: 400,
+      hasText: true,
+      groupCount: 1,
+    });
+
+    await select('text-red-500', source, {
+      domPath,
+      selectionId: 'document-a:41',
+      contrastSnapshot: snapshot('rgb(255, 255, 255)'),
+    });
+
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- inspecting the postMessage mock's calls, not invoking it bound
+    const postMessage = iframeRef.current!.contentWindow!.postMessage as Fn;
+    const requests = () =>
+      (postMessage.mock.calls as Array<[Record<string, unknown>]>).reduce<
+        Array<Record<string, unknown>>
+      >((matches, [message]) => {
+        if (message.type === 'ss:requestContrastSnapshot') matches.push(message);
+        return matches;
+      }, []);
+    const dispatch = async (data: Record<string, unknown>) =>
+      await act(async () => {
+        window.dispatchEvent(new MessageEvent('message', { source, data }));
+        await Promise.resolve();
+      });
+
+    await dispatch({ type: 'ss:contrastDirty', selectionId: 'document-old:40', domPath });
+    await dispatch({
+      type: 'ss:contrastDirty',
+      selectionId: 'document-a:41',
+      domPath: '/html[1]/body[1]/div[1]',
+    });
+    expect(requests()).toHaveLength(0);
+
+    await dispatch({ type: 'ss:contrastDirty', selectionId: 'document-a:41', domPath });
+    await select('text-blue-500', source, {
+      domPath,
+      selectionId: 'document-b:41',
+      contrastSnapshot: snapshot('rgb(0, 255, 0)'),
+    });
+
+    await dispatch({
+      type: 'ss:contrastSnapshot',
+      requestId: 1,
+      selectionId: 'document-a:41',
+      domPath,
+      contrastSnapshot: snapshot('rgb(0, 0, 0)'),
+    });
+    expect(result.current.selection?.signature.contrastSnapshot?.layers[1]?.backgroundColor).toBe(
+      'rgb(0, 255, 0)'
+    );
+
+    await dispatch({ type: 'ss:contrastDirty', selectionId: 'document-a:41', domPath });
+    await dispatch({
+      type: 'ss:contrastDirty',
+      selectionId: 'document-b:41',
+      domPath: '/html[1]/body[1]/div[1]',
+    });
+    await dispatch({ type: 'ss:contrastDirty', selectionId: 'document-b:41', domPath });
+    await dispatch({ type: 'ss:contrastDirty', selectionId: 'document-b:41', domPath });
+    expect(requests().map((message) => message.requestId)).toEqual([1, 2, 3]);
+
+    await dispatch({
+      type: 'ss:contrastSnapshot',
+      requestId: 2,
+      selectionId: 'document-b:41',
+      domPath,
+      contrastSnapshot: snapshot('rgb(0, 0, 0)'),
+    });
+    expect(result.current.selection?.signature.contrastSnapshot?.layers[1]?.backgroundColor).toBe(
+      'rgb(0, 255, 0)'
+    );
+
+    await dispatch({
+      type: 'ss:contrastSnapshot',
+      requestId: 3,
+      selectionId: 'document-b:41',
+      domPath,
+      contrastSnapshot: snapshot('rgb(0, 0, 0)'),
+      computedColor: 'rgb(255, 0, 0)',
+      computedBackgroundColor: 'rgb(0, 0, 0)',
+    });
+    expect(result.current.selection?.signature.contrastSnapshot?.layers[1]?.backgroundColor).toBe(
+      'rgb(0, 0, 0)'
+    );
+    expect(result.current.selection?.signature.computedBackgroundColor).toBe('rgb(0, 0, 0)');
+  });
+
   it('lets the selection go when the frame reports it was dropped', async () => {
     // Clicking the canvas background deselects. Edit mode stays ON — that is
     // the whole point of it — so the panel has to stop describing an element

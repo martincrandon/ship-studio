@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ElementSignature } from '../lib/edit';
+import { validateColorContrastSnapshot } from '../lib/colorContrast';
 import {
   locateCssRules,
   applyCssRuleText,
@@ -125,6 +126,13 @@ export function useCssCascadeEditor({
   // The last selected element's signature — replayed after an HMR reload so the
   // panel re-reads the element's current source (instant sync after edits).
   const lastSignatureRef = useRef<ElementSignature | null>(null);
+  const contrastSelectionRef = useRef<{
+    selectionId: string;
+    domPath: string;
+    requestId: number;
+  } | null>(null);
+  const contrastRequestIdRef = useRef(0);
+  const selectedInstanceCountRef = useRef(1);
   // Synthetic indices for optimistically-added rules (kept clear of real cascade
   // indices, which start at 0).
   const synthIndex = useRef(1_000_000);
@@ -164,6 +172,8 @@ export function useCssCascadeEditor({
   // out of a frame the editor has since left, or the user clicked the canvas
   // background and dropped the selection.
   const forgetSelection = useCallback(() => {
+    contrastSelectionRef.current = null;
+    selectedInstanceCountRef.current = 1;
     setSelection(null);
     setRows([]);
     setBodies({});
@@ -228,12 +238,100 @@ export function useCssCascadeEditor({
       const d = e.data as {
         type?: string;
         signature?: ElementSignature;
+        selectionId?: string;
+        domPath?: string;
+        requestId?: number;
+        contrastSnapshot?: unknown;
+        computedColor?: string;
+        computedBackgroundColor?: string;
         count?: number;
         rules?: MatchedRule[];
       } | null;
       if (!d) return;
 
+      if (d.type === 'ss:contrastDirty') {
+        const current = contrastSelectionRef.current;
+        if (
+          !current ||
+          d.selectionId !== current.selectionId ||
+          d.domPath !== current.domPath ||
+          lastSignatureRef.current?.domPath !== current.domPath
+        ) {
+          return;
+        }
+        const requestId = ++contrastRequestIdRef.current;
+        current.requestId = requestId;
+        post({
+          type: 'ss:requestContrastSnapshot',
+          selectionId: current.selectionId,
+          domPath: current.domPath,
+          requestId,
+        });
+        return;
+      }
+
+      if (d.type === 'ss:contrastSnapshot') {
+        const current = contrastSelectionRef.current;
+        const lastSignature = lastSignatureRef.current;
+        if (
+          !current ||
+          !lastSignature ||
+          d.requestId !== current.requestId ||
+          d.selectionId !== current.selectionId ||
+          d.domPath !== current.domPath ||
+          lastSignature.domPath !== current.domPath
+        ) {
+          return;
+        }
+        const contrastSnapshot = validateColorContrastSnapshot(d.contrastSnapshot);
+        if (!contrastSnapshot) return;
+        selectedInstanceCountRef.current =
+          contrastSnapshot.groupCount ?? selectedInstanceCountRef.current;
+        const nextSignature = {
+          ...lastSignature,
+          contrastSnapshot: {
+            ...contrastSnapshot,
+            groupCount: selectedInstanceCountRef.current,
+          },
+          computedColor:
+            typeof d.computedColor === 'string' ? d.computedColor : lastSignature.computedColor,
+          computedBackgroundColor:
+            typeof d.computedBackgroundColor === 'string'
+              ? d.computedBackgroundColor
+              : lastSignature.computedBackgroundColor,
+        };
+        lastSignatureRef.current = nextSignature;
+        setSelection((prev) =>
+          prev && prev.signature.domPath === current.domPath
+            ? {
+                ...prev,
+                signature: {
+                  ...prev.signature,
+                  contrastSnapshot: nextSignature.contrastSnapshot,
+                  computedColor: nextSignature.computedColor,
+                  computedBackgroundColor: nextSignature.computedBackgroundColor,
+                },
+              }
+            : prev
+        );
+        return;
+      }
+
       if (d.type === 'ss:select' && d.signature) {
+        const instanceCount = d.count ?? 1;
+        selectedInstanceCountRef.current = instanceCount;
+        const rawSnapshot = validateColorContrastSnapshot(d.signature.contrastSnapshot);
+        const signature: ElementSignature = {
+          ...d.signature,
+          contrastSnapshot: rawSnapshot ? { ...rawSnapshot, groupCount: instanceCount } : undefined,
+        };
+        contrastSelectionRef.current =
+          typeof d.selectionId === 'string' &&
+          d.selectionId.length > 0 &&
+          d.selectionId.length <= 128 &&
+          typeof signature.domPath === 'string'
+            ? { selectionId: d.selectionId, domPath: signature.domPath, requestId: 0 }
+            : null;
         // Is this the SAME element re-selected (e.g. the iframe re-arms after an HMR
         // reload), or a genuinely different element? On a re-select we must NOT wipe the
         // optimistic state: a freshly-created rule lives only in `createdRowsRef` until
@@ -246,17 +344,17 @@ export function useCssCascadeEditor({
         // so a genuine re-select still counts as the same element. (Fall back to
         // tag+class only if the walker didn't report a path.)
         const prevPath = (prev as { domPath?: string } | null)?.domPath;
-        const nextPath = (d.signature as { domPath?: string }).domPath;
+        const nextPath = signature.domPath;
         const sameElement =
           !!prev &&
           (prevPath != null || nextPath != null
             ? prevPath === nextPath
-            : prev.tagName === d.signature.tagName && prev.className === d.signature.className);
-        lastSignatureRef.current = d.signature;
+            : prev.tagName === signature.tagName && prev.className === signature.className);
+        lastSignatureRef.current = signature;
         ++selTokenRef.current;
         clearTimers();
         post({ type: 'ss:clearRulePreview' });
-        setSelection({ signature: d.signature, instanceCount: d.count ?? 1 });
+        setSelection({ signature, instanceCount });
         if (!sameElement) {
           createdRowsRef.current = new Map();
           draftIndexRef.current = new Map();

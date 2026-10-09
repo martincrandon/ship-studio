@@ -779,6 +779,12 @@
   width: 100%;
   min-width: calc(var(--spacing-2xl) * 3);
 }
+.ss-color-field .value-field--variable:not(.value-field--invalid) {
+  padding: 0;
+}
+.ss-color-field .value-field--variable .value-field__input {
+  padding-inline: var(--space-06) var(--space-04);
+}
 
 .ss-color-field__value .value-field__unit {
   min-width: var(--spacing-xl);

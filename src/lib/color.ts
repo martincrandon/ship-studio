@@ -17,12 +17,22 @@ export const COLOR_FORMATS: { id: ColorFormat; label: string }[] = [
   { id: 'oklch', label: 'OKLCH' },
 ];
 
-/** Fixed dimensions used by all three colour-picker entry points. */
+/** Original picker dimensions; added controls grow beyond this base height. */
 export const COLOR_PICKER_WIDTH = 320;
 export const COLOR_PICKER_HEIGHT = 510;
 export const COLOR_PICKER_GUTTER = 8;
 export const COLOR_PICKER_POSITION_KEY = 'colorPickerFloatingPosition';
 export const COLOR_PICKER_SIZE_KEY = 'colorPickerFloatingSize';
+
+/** Keep the measured picker height within the current viewport gutter. */
+export function colorPickerFloatingHeight(contentHeight: number): number {
+  const intrinsicHeight = Math.max(
+    COLOR_PICKER_HEIGHT,
+    Number.isFinite(contentHeight) ? Math.ceil(contentHeight) : 0
+  );
+  if (typeof window === 'undefined') return intrinsicHeight;
+  return Math.min(intrinsicHeight, Math.max(0, window.innerHeight - COLOR_PICKER_GUTTER * 2));
+}
 
 /** react-colorful's RGBA shape (r/g/b 0–255, a 0–1). */
 export type Rgba = { r: number; g: number; b: number; a: number };

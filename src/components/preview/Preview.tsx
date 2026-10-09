@@ -2146,6 +2146,8 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
             selectorSuggestions={cssEditor.classSuggestions.map((c) => `.${c}`)}
             existingSelectors={cssEditor.existingSelectors}
             variables={cssEditor.variableSuggestions}
+            colorVariables={cssVariables.variables}
+            projectPath={projectPath}
             animations={cssEditor.animationSuggestions}
             settings={elementSettings}
             animationsState={cssAnimations}
@@ -2175,6 +2177,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           >
             <VariablesPanel
               variablesState={cssVariables}
+              projectPath={projectPath}
               pinned={variablesPanelDocked}
               onTogglePin={onToggleVariablesPanelPin}
               onClose={onCloseVariablesPanel}

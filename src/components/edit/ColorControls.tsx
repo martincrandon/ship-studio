@@ -23,6 +23,7 @@ import {
   COLOR_PICKER_POSITION_KEY,
   COLOR_PICKER_SIZE_KEY,
   COLOR_PICKER_WIDTH,
+  colorPickerFloatingHeight,
   hasColorTransparency,
   rgbaToCss,
   toHex,
@@ -32,12 +33,9 @@ import {
 import { ColorPicker } from './ColorPicker';
 import { ResettableLabel } from './ResettableLabel';
 import { DockablePanel } from '../primitives/DockablePanel';
-import {
-  parseValueFieldVariable,
-  ValueField,
-  type ValueFieldVariable,
-} from '../primitives/ValueField';
+import { ValueField, type ValueFieldVariable } from '../primitives/ValueField';
 import { toCss, toFormat, type ColorFormat } from '../../lib/color';
+import { resolveColorVariable, type ColorContrastContext } from '../../lib/colorContrast';
 
 interface Props {
   currentClass: string;
@@ -55,6 +53,7 @@ interface Props {
   inherited?: InheritedProp | null;
   projectPath?: string;
   onOpenInCode?: (file: string, line: number) => void;
+  contrastContext?: ColorContrastContext;
 }
 
 function formatForValue(value: string): ColorFormat {
@@ -65,25 +64,13 @@ function formatForValue(value: string): ColorFormat {
   return 'hex';
 }
 
-/** Resolve a simple color custom-property reference from the Variables panel's
- * authoritative source values. Aliases are followed recursively and cycles fail
- * closed so an unresolved token never becomes a misleading black swatch. */
+/** Backwards-compatible parsed-color wrapper around the shared variable resolver. */
 export function resolveVariableColor(
   value: string,
-  variables: ValueFieldVariable[] | undefined
+  variables: readonly ValueFieldVariable[] | undefined
 ): string | null {
-  let current = value.trim();
-  const seen = new Set<string>();
-
-  while (true) {
-    const name = parseValueFieldVariable(current);
-    if (!name) return toHex(current) ? current : null;
-    if (seen.has(name)) return null;
-    seen.add(name);
-    const resolved = variables?.find((variable) => variable.name === name)?.value?.trim();
-    if (!resolved) return null;
-    current = resolved;
-  }
+  const resolved = resolveColorVariable(value, variables ?? []);
+  return resolved && toHex(resolved) ? resolved : null;
 }
 
 /** One color control (text / background / border …): a swatch + popover picker.
@@ -101,6 +88,7 @@ export function ColorField({
   inherited = null,
   projectPath,
   onOpenInCode,
+  contrastContext,
 }: {
   label: string;
   css: string;
@@ -113,7 +101,10 @@ export function ColorField({
   );
   const computedRaw = computed?.[css];
   const resolvedExplicit = explicit ? resolveVariableColor(explicit, variables) : null;
-  const seed = resolvedExplicit ?? computedRaw ?? '#000000';
+  // Keep an unknown value unknown in the picker. A synthetic black here would
+  // look like a real foreground color and could produce a misleading contrast
+  // result for unresolved variables or empty controls.
+  const seed = resolvedExplicit ?? computedRaw ?? '';
   // A parent-renderable color for the chip (alpha-aware): the explicit value if
   // parseable or resolvable through project variables, else the element's visible
   // computed color.
@@ -132,6 +123,7 @@ export function ColorField({
 
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<{ top: number; left: number } | null>(null);
+  const [pickerHeight, setPickerHeight] = useState(COLOR_PICKER_HEIGHT);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
 
@@ -140,7 +132,7 @@ export function ColorField({
     if (!el) return;
     const r = el.getBoundingClientRect();
     const W = COLOR_PICKER_WIDTH;
-    const H = COLOR_PICKER_HEIGHT;
+    const H = colorPickerFloatingHeight(pickerHeight);
     const M = COLOR_PICKER_GUTTER;
     // Prefer opening to the LEFT of the swatch (panel hugs the right edge); fall
     // back to the right, then clamp fully inside the viewport on both axes.
@@ -150,7 +142,7 @@ export function ColorField({
     const maxTop = Math.max(M, window.innerHeight - H - M);
     const top = Math.min(Math.max(M, r.top), maxTop);
     setRect({ top, left });
-  }, []);
+  }, [pickerHeight]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -276,14 +268,20 @@ export function ColorField({
           ariaLabel="Color picker"
           positionKey={COLOR_PICKER_POSITION_KEY}
           sizeKey={COLOR_PICKER_SIZE_KEY}
-          floatingSize={{ width: COLOR_PICKER_WIDTH, height: COLOR_PICKER_HEIGHT }}
+          floatingSize={{ width: COLOR_PICKER_WIDTH, height: pickerHeight }}
           initialPosition={() => ({ left: rect.left, top: rect.top })}
           resizable={false}
+          keepWithinViewport
           surfaceClassName="ss-color-picker__floating-surface"
         >
           <div ref={popRef} className="ss-color-picker__floating-content">
             <ColorPicker
               value={seed}
+              authoredValue={explicit ?? undefined}
+              variables={variables}
+              projectPath={projectPath}
+              contrastContext={contrastContext}
+              onHeightChange={setPickerHeight}
               onChange={handlePick}
               onClose={() => {
                 setOpen(false);

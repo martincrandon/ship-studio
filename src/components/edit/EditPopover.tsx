@@ -25,14 +25,22 @@ import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePoint
 import { DockablePanel } from '../primitives/DockablePanel';
 import { ColorPicker } from './ColorPicker';
 import { CssValueText } from './CssValueText';
-import { colorSwatch, parseNumericValue, formatNumericValue } from '../../lib/cssProperties';
+import {
+  colorSwatch,
+  formatNumericValue,
+  magnitudeStep,
+  parseNumericValue,
+} from '../../lib/cssProperties';
 import { ScrubHorizontalIcon } from '@/components/icons';
+import type { ValueFieldVariable } from '../primitives/ValueField';
+import { resolveColorVariable, type ColorContrastContext } from '../../lib/colorContrast';
 import {
   COLOR_PICKER_GUTTER,
   COLOR_PICKER_HEIGHT,
   COLOR_PICKER_POSITION_KEY,
   COLOR_PICKER_SIZE_KEY,
   COLOR_PICKER_WIDTH,
+  colorPickerFloatingHeight,
 } from '../../lib/color';
 
 interface Props {
@@ -44,6 +52,12 @@ interface Props {
   options?: string[];
   /** Keep color values in the text editor instead of opening the picker. */
   enableColorPicker?: boolean;
+  /** The edited CSS property accepts colors, so an unresolved var() can open the picker. */
+  colorProperty?: boolean;
+  /** Project custom properties used to resolve the displayed color value. */
+  variables?: readonly ValueFieldVariable[];
+  projectPath?: string;
+  contrastContext?: ColorContrastContext;
   placeholder?: string;
   onCommit: (value: string) => void;
   onClose: () => void;
@@ -55,6 +69,10 @@ export function EditPopover({
   initial,
   options,
   enableColorPicker = true,
+  colorProperty = false,
+  variables,
+  projectPath,
+  contrastContext,
   placeholder,
   onCommit,
   onClose,
@@ -63,6 +81,7 @@ export function EditPopover({
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
+  const [pickerHeight, setPickerHeight] = useState(COLOR_PICKER_HEIGHT);
   const listId = useId();
   const optionId = (i: number) => `${listId}-opt-${i}`;
   const textRef = useRef(text);
@@ -72,7 +91,15 @@ export function EditPopover({
 
   // A color value opens the floating picker even in inline mode — the picker is a
   // dockable panel of its own, so it never has to fit the value's text column.
-  const isColor = enableColorPicker && colorSwatch(initial) !== null;
+  const importantSuffix = /\s*!\s*important\s*$/i.exec(text)?.[0] ?? '';
+  const colorText = importantSuffix ? text.slice(0, -importantSuffix.length).trim() : text;
+  const resolvedText = resolveColorVariable(colorText, variables ?? []);
+  const pickerValue = resolvedText && colorSwatch(resolvedText) ? resolvedText : colorText;
+  const isUnknownColorVariable = /^var\(/i.test(colorText.trim());
+  const isColor =
+    enableColorPicker &&
+    (colorSwatch(pickerValue) !== null ||
+      (isUnknownColorVariable && (colorProperty || contrastContext !== undefined)));
   const width = isColor ? COLOR_PICKER_WIDTH : 220;
 
   // Filter the options by what's typed; hide the menu when the sole match is exactly
@@ -114,7 +141,7 @@ export function EditPopover({
       );
       const maxTop = Math.max(
         COLOR_PICKER_GUTTER,
-        window.innerHeight - COLOR_PICKER_HEIGHT - COLOR_PICKER_GUTTER
+        window.innerHeight - colorPickerFloatingHeight(pickerHeight) - COLOR_PICKER_GUTTER
       );
       const top = Math.min(Math.max(COLOR_PICKER_GUTTER, r.top), maxTop);
       return { top, left };
@@ -125,7 +152,7 @@ export function EditPopover({
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
     const top = Math.min(rect.bottom + 4, window.innerHeight - 60);
     return { top, left };
-  }, [anchor, width, isColor, inline]);
+  }, [anchor, width, isColor, inline, pickerHeight]);
 
   // Focus + select the current value on open (text mode).
   useEffect(() => {
@@ -233,17 +260,24 @@ export function EditPopover({
       ariaLabel="Color picker"
       positionKey={COLOR_PICKER_POSITION_KEY}
       sizeKey={COLOR_PICKER_SIZE_KEY}
-      floatingSize={{ width: COLOR_PICKER_WIDTH, height: COLOR_PICKER_HEIGHT }}
+      floatingSize={{ width: COLOR_PICKER_WIDTH, height: pickerHeight }}
       initialPosition={() => ({ left: pos.left, top: pos.top })}
       resizable={false}
+      keepWithinViewport
       surfaceClassName="ss-color-picker__floating-surface"
     >
       <div ref={popRef} className="ss-color-picker__floating-content">
         <ColorPicker
-          value={text}
+          value={pickerValue}
+          authoredValue={colorText}
+          variables={variables}
+          projectPath={projectPath}
+          contrastContext={contrastContext}
+          onHeightChange={setPickerHeight}
           onChange={(c) => {
-            setText(c);
-            onCommit(c); // live-apply as you drag
+            const next = `${c}${importantSuffix}`;
+            setText(next);
+            onCommit(next); // live-apply as you drag
           }}
           onClose={() => {
             onClose();
@@ -352,16 +386,6 @@ export function EditPopover({
   // The color editor is always a floating panel, so it portals out of the row even
   // when the text editor for that row would have rendered in flow.
   return inline && !isColor ? editor : createPortal(editor, document.body);
-}
-
-/** Per-pixel step scaled to the value's magnitude, so big numbers (700) move fast and
- *  small ones (1, 20, 50) stay gentle. Roughly 1% of the order of magnitude. */
-function magnitudeStep(v: number): number {
-  const a = Math.abs(v);
-  if (a < 10) return 0.1; // 0–9    → 0.1 / px
-  if (a < 100) return 1; //  10–99  → 1 / px
-  if (a < 1000) return 10; // 100–999 → 10 / px
-  return 100; //              1000+   → 100 / px
 }
 
 /** One keyboard step of a numeric value: the magnitude-aware base step with

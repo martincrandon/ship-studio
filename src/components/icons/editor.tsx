@@ -16,6 +16,7 @@ import DownSvg from '../../assets/icons/down.svg?react';
 import CopySvg from '../../assets/icons/copy.svg?react';
 import CutSvg from '../../assets/icons/cut.svg?react';
 import ColorPickerSvg from '../../assets/icons/color-picker.svg?react';
+import ContrastSvg from '../../assets/icons/contrast.svg?react';
 import DuplicateSvg from '../../assets/icons/duplicate.svg?react';
 import ReloadSvg from '../../assets/icons/reload.svg?react';
 import ImageSvg from '../../assets/icons/image.svg?react';
@@ -159,6 +160,13 @@ export const CutIcon = createIcon(CutSvg, {
 export const ColorPickerIcon = createIcon(ColorPickerSvg, {
   name: 'ColorPickerIcon',
   source: 'icons/color-picker.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const ContrastIcon = createIcon(ContrastSvg, {
+  name: 'ContrastIcon',
+  source: 'icons/contrast.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

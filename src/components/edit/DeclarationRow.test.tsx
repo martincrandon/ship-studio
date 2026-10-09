@@ -27,10 +27,11 @@ function renderRow(value: string) {
 }
 
 describe('DeclarationRow', () => {
-  it('opens the color picker for a color declaration', () => {
+  it('keeps color declaration values in the text editor', () => {
     renderRow('#ff0000');
     fireEvent.click(screen.getByRole('button', { name: /#ff0000/ }));
-    expect(screen.getByRole('dialog', { name: 'Color picker' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Color picker' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
   it('keeps the text editor for a non-color value', () => {

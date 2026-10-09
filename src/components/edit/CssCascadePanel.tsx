@@ -8,7 +8,7 @@
  * editor panels.
  */
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { PinIcon } from '@/components/icons';
 import { CloseIcon, CheckIcon } from '@/components/icons';
 import { PlusIcon } from '@/components/icons';
@@ -34,6 +34,8 @@ import { parseRuleBody, type RuleBody } from '../../lib/cssBody';
 import type { CascadeSelection } from '../../hooks/useCssCascadeEditor';
 import type { ElementSettings } from '../../hooks/useElementSettings';
 import type { useCssAnimations } from '../../hooks/useCssAnimations';
+import type { ValueFieldVariable } from '../primitives/ValueField';
+import { colorContrastContexts } from '../../lib/colorContrast';
 
 /** The panel's top-level view: element style/settings, or project-global animation CSS. */
 type Scope = 'style' | 'settings' | 'animations';
@@ -69,6 +71,8 @@ interface Props {
   variables: string[];
   /** Project `@keyframes` names for `animation` value autocomplete. */
   animations: string[];
+  colorVariables?: readonly ValueFieldVariable[];
+  projectPath?: string;
   settings: ElementSettings;
   /** Project-global Animations editor state (`@keyframes`). */
   animationsState: ReturnType<typeof useCssAnimations>;
@@ -97,6 +101,8 @@ export function CssCascadePanel({
   existingSelectors,
   variables,
   animations,
+  colorVariables,
+  projectPath,
   settings,
   animationsState,
   onClose,
@@ -105,6 +111,10 @@ export function CssCascadePanel({
   scope: controlledScope,
   onScopeChange,
 }: Props) {
+  const colorContrast = useMemo(
+    () => colorContrastContexts(selection?.signature.contrastSnapshot),
+    [selection?.signature.contrastSnapshot]
+  );
   const [localScope, setLocalScope] = useState<Scope>('style');
   const scope = controlledScope ?? localScope;
   const setScope = onScopeChange ?? setLocalScope;
@@ -225,6 +235,9 @@ export function CssCascadePanel({
           onRenameAtRule={row.draft || insideMedia ? undefined : (m) => onRenameAtRule(key, m)}
           selectorSuggestions={selectorSuggestions}
           variables={variables}
+          colorVariables={colorVariables}
+          projectPath={projectPath}
+          colorContrast={colorContrast}
           animations={animations}
           collapsed={collapsed}
           onToggleCollapse={onToggleCollapse}
@@ -248,6 +261,7 @@ export function CssCascadePanel({
         inactive={insideMedia ? false : row.inactiveMedia}
         overridden={row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())}
         readonlyReason={row.readonlyReason}
+        colorVariables={colorVariables}
         decls={row.declarations.map((d) => ({
           prop: d.prop,
           value: d.value,
@@ -411,6 +425,9 @@ export function CssCascadePanel({
                               onDelete={() => deleteDraftMediaSelector(id, selector)}
                               selectorSuggestions={selectorSuggestions}
                               variables={variables}
+                              colorVariables={colorVariables}
+                              projectPath={projectPath}
+                              colorContrast={colorContrast}
                               animations={animations}
                               pendingReason="Complete the media query before editing properties."
                             />

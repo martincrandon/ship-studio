@@ -8,6 +8,7 @@ import { CssVariablesPanel } from './CssVariablesPanel';
 
 interface VariablesPanelProps {
   variablesState: ReturnType<typeof useCssVariables>;
+  projectPath?: string;
   onClose: () => void;
   pinned?: boolean;
   onTogglePin?: () => void;
@@ -16,6 +17,7 @@ interface VariablesPanelProps {
 /** Shared panel chrome for the project-wide Variables editor. */
 export function VariablesPanel({
   variablesState,
+  projectPath,
   onClose,
   pinned = false,
   onTogglePin,
@@ -69,6 +71,7 @@ export function VariablesPanel({
             variablesState.deleteVariable(variable.name, variable.value, impact)
           }
           onReorderVariables={variablesState.reorderVariables}
+          projectPath={projectPath}
         />
       </div>
     </div>

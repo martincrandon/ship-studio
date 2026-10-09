@@ -18,11 +18,14 @@ import {
 } from '../../lib/edit';
 import type { Decl } from '../../lib/cssBody';
 import type { ValueFieldVariable } from '../primitives/ValueField';
+import type { ColorContrastContexts } from '../../lib/colorContrast';
 
 interface Props {
   currentClass: string;
   layer: LayerContext;
   variables?: ValueFieldVariable[];
+  projectPath?: string;
+  colorContrast?: ColorContrastContexts;
   onApplyEnum: (token: string, style: Record<string, string>) => void;
   onReset: (spec: ResetSpec) => void;
 }
@@ -35,7 +38,15 @@ function customRowKey(row: CustomCssRow, editingToken: string | null): string {
   return `${row.token}${editingToken === row.token || row.draft ? ':editing' : ''}`;
 }
 
-export function CustomCssBox({ currentClass, layer, variables, onApplyEnum, onReset }: Props) {
+export function CustomCssBox({
+  currentClass,
+  layer,
+  variables,
+  projectPath,
+  colorContrast,
+  onApplyEnum,
+  onReset,
+}: Props) {
   // Arbitrary properties set at the active breakpoint layer (so md edits show under md).
   const scoped = tokensForVariant(currentClass, layer.bp.prefix, layer.known);
   const props = listArbitraryProps(scoped);
@@ -116,6 +127,9 @@ export function CustomCssBox({ currentClass, layer, variables, onApplyEnum, onRe
               nestTargets={[]}
               onNest={() => {}}
               variables={variableNames}
+              colorVariables={variables}
+              projectPath={projectPath}
+              colorContrast={colorContrast}
               autoEditValue={row.draft || editingToken === row.token}
               onChange={(next) => commit(row, next)}
               onEditClose={() => closeEditor(row)}

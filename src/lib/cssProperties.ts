@@ -469,6 +469,15 @@ export function parseNumericValue(
   return { num, unit: m[2], decimals };
 }
 
+/** Per-pixel drag step used by numeric value fields. */
+export function magnitudeStep(value: number): number {
+  const magnitude = Math.abs(value);
+  if (magnitude < 10) return 0.1;
+  if (magnitude < 100) return 1;
+  if (magnitude < 1000) return 10;
+  return 100;
+}
+
 /** Format a scrubbed number back to a CSS value, trimming float noise to `decimals`
  *  places (min 0) and re-attaching the unit. */
 export function formatNumericValue(num: number, unit: string, decimals: number): string {

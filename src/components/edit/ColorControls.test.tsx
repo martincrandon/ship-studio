@@ -49,9 +49,10 @@ describe('ColorField', () => {
     });
 
     fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom' }));
     await waitFor(() =>
       expect(document.querySelector('.ss-color-picker__preview-original')).toHaveStyle({
-        backgroundColor: 'rgba(255, 0, 0, 0.8)',
+        '--picker-swatch-color': 'rgba(255, 0, 0, 0.8)',
       })
     );
   });
@@ -188,5 +189,35 @@ describe('ColorField', () => {
 
     const swatch = screen.getByRole('button', { name: 'Text color' });
     expect(swatch.querySelector('.ss-color-swatch__chip--checkerboard')).not.toBeInTheDocument();
+  });
+
+  it('keeps unresolved authored variables unavailable in the picker contrast check', async () => {
+    render(
+      <ColorField
+        label="Text"
+        css="color"
+        prefix="text"
+        currentClass="text-[var(--missing-foreground)]"
+        layer={LAYER}
+        onApplyEnum={vi.fn()}
+        onReset={vi.fn()}
+        contrastContext={{ backgroundColor: '#ffffff', category: 'normal-text' }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Text color' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contrast checker' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('status', { name: /Contrast check unavailable/ })).toHaveAttribute(
+        'aria-label',
+        'Contrast check unavailable. Foreground color is unavailable.'
+      );
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom' }));
+    expect(screen.getByRole('slider', { name: 'Color' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Contrast color pair, \d/ })
+    ).not.toBeInTheDocument();
   });
 });

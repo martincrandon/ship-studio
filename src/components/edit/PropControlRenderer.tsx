@@ -24,6 +24,7 @@ import type {
 } from '../../lib/edit';
 import type { RegistryControl } from '../../lib/editControls';
 import type { ValueFieldVariable } from '../primitives/ValueField';
+import type { ColorContrastContexts } from '../../lib/colorContrast';
 
 /** Everything a control row needs to read its value and apply/reset edits. Built
  *  once by the panel and passed to every row. */
@@ -38,6 +39,7 @@ export interface ControlRenderCtx {
   /** Rendered colors (getComputedStyle) keyed by CSS prop, to seed color pickers. */
   computed?: Record<string, string | undefined>;
   variables?: ValueFieldVariable[];
+  colorContrast?: ColorContrastContexts;
   /** Values this element INHERITS from ancestor elements' styles, keyed by CSS
    *  prop (typography + text color only). Controls surface them when nothing is
    *  set locally across the cascade. */
@@ -171,6 +173,9 @@ export function PropControlRenderer({
           onReset={ctx.onReset}
           computed={ctx.computed}
           variables={ctx.variables}
+          contrastContext={
+            control.prefix === 'text' ? ctx.colorContrast?.text : ctx.colorContrast?.graphics
+          }
           {...inheritLabelProps(ctx, control.prefix === 'text' ? 'color' : null)}
         />
       );
@@ -195,6 +200,8 @@ export function PropControlRenderer({
           currentClass={ctx.currentClass}
           layer={ctx.layer}
           variables={ctx.variables}
+          projectPath={ctx.projectPath}
+          colorContrast={ctx.colorContrast}
           onApplyEnum={ctx.onApplyEnum}
           onReset={ctx.onReset}
         />

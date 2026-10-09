@@ -90,6 +90,7 @@ import { logger } from '../lib/logger';
 import { isExpectedStructuralRefusal } from './useElementStructure';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
+import { validateColorContrastSnapshot } from '../lib/colorContrast';
 
 /**
  * What the style controls currently edit:
@@ -279,6 +280,16 @@ export function useVisualEditor({
   }, []);
 
   const [selection, setSelection] = useState<Selection | null>(null);
+  // The signature of the current selection, mirrored so class and contrast
+  // refresh callbacks read the current source identity without re-subscribing.
+  const selectedSigRef = useRef<ElementSignature | null>(null);
+  const selectedInstanceCountRef = useRef(1);
+  const contrastSelectionRef = useRef<{
+    selectionId: string;
+    domPath: string;
+    requestId: number;
+  } | null>(null);
+  const contrastRequestIdRef = useRef(0);
   // Where the selected element's component is used project-wide (scope hint).
   // Best-effort, fetched after a single-location resolve. Token guards staleness.
   const [usage, setUsage] = useState<UsageReport | null>(null);
@@ -306,6 +317,8 @@ export function useVisualEditor({
   const [multiTarget, setMultiTargetState] = useState<'all' | number>('all');
   const multiTargetRef = useRef<'all' | number>('all');
   const setMultiTarget = useCallback((t: 'all' | number) => {
+    // This selects source locations, not rendered instances, so it cannot make a
+    // multi-instance contrast snapshot safe to treat as selected-only.
     multiTargetRef.current = t;
     setMultiTargetState(t);
   }, []);
@@ -313,10 +326,6 @@ export function useVisualEditor({
   // Inline text editing lives in the shared `useTextEditing` hook (mounted once in
   // Preview.tsx, active for either styling editor) — it owns the ss:textInfo gating
   // and ss:textCommit write-back. This hook keeps only the class/image concerns.
-
-  // The signature of the current selection, mirrored so the class commit/structural
-  // gestures read the live source-className baseline without re-subscribing.
-  const selectedSigRef = useRef<ElementSignature | null>(null);
 
   // Image src editing: the resolved src target for the current selection (null when
   // the element isn't an image or its src isn't a static literal). Mirrored into a
@@ -430,6 +439,8 @@ export function useVisualEditor({
   // frame (the breakpoint canvas), where nothing is marked, or the user clicked
   // the canvas background and dropped the selection.
   const forgetSelection = useCallback(() => {
+    contrastSelectionRef.current = null;
+    selectedInstanceCountRef.current = 1;
     setSelection(null);
     setLiveClass('');
     setImageTarget(null);
@@ -463,16 +474,108 @@ export function useVisualEditor({
       const d = e.data as {
         type?: string;
         signature?: ElementSignature;
+        selectionId?: string;
+        domPath?: string;
+        requestId?: number;
+        contrastSnapshot?: unknown;
+        computedColor?: string;
+        computedBackgroundColor?: string;
         count?: number;
         leafText?: boolean;
       } | null;
       if (!d) return;
 
+      if (d.type === 'ss:contrastDirty') {
+        const current = contrastSelectionRef.current;
+        if (
+          !current ||
+          d.selectionId !== current.selectionId ||
+          d.domPath !== current.domPath ||
+          selectedSigRef.current?.domPath !== current.domPath
+        ) {
+          return;
+        }
+        const requestId = ++contrastRequestIdRef.current;
+        current.requestId = requestId;
+        post({
+          type: 'ss:requestContrastSnapshot',
+          selectionId: current.selectionId,
+          domPath: current.domPath,
+          requestId,
+        });
+        return;
+      }
+
+      if (d.type === 'ss:contrastSnapshot') {
+        const current = contrastSelectionRef.current;
+        const selectedSignature = selectedSigRef.current;
+        if (
+          !current ||
+          !selectedSignature ||
+          d.requestId !== current.requestId ||
+          d.selectionId !== current.selectionId ||
+          d.domPath !== current.domPath ||
+          selectedSignature.domPath !== current.domPath
+        ) {
+          return;
+        }
+        const snapshot = validateColorContrastSnapshot(d.contrastSnapshot);
+        if (!snapshot) return;
+        const affectedInstanceCount = snapshot.groupCount ?? selectedInstanceCountRef.current;
+        selectedInstanceCountRef.current = affectedInstanceCount;
+        const contrastSnapshot = {
+          ...snapshot,
+          groupCount: affectedInstanceCount,
+        };
+        const computedColor =
+          typeof d.computedColor === 'string' ? d.computedColor : selectedSignature.computedColor;
+        const computedBackgroundColor =
+          typeof d.computedBackgroundColor === 'string'
+            ? d.computedBackgroundColor
+            : selectedSignature.computedBackgroundColor;
+        selectedSigRef.current = {
+          ...selectedSignature,
+          contrastSnapshot,
+          computedColor,
+          computedBackgroundColor,
+        };
+        setSelection((prev) =>
+          prev && prev.signature.domPath === current.domPath
+            ? {
+                ...prev,
+                signature: {
+                  ...prev.signature,
+                  contrastSnapshot,
+                  computedColor,
+                  computedBackgroundColor,
+                },
+              }
+            : prev
+        );
+        return;
+      }
+
       // Text-edit messages (ss:textBlocked / ss:textCommit) are handled by the
       // shared useTextEditing hook, not here.
       if (d.type !== 'ss:select' || !d.signature) return;
-      const sig = d.signature;
       const instanceCount = d.count ?? 1;
+      const rawSnapshot = validateColorContrastSnapshot(d.signature.contrastSnapshot);
+      const sig: ElementSignature = {
+        ...d.signature,
+        contrastSnapshot: rawSnapshot ? { ...rawSnapshot, groupCount: instanceCount } : undefined,
+      };
+      contrastSelectionRef.current =
+        typeof d.selectionId === 'string' &&
+        d.selectionId.length > 0 &&
+        d.selectionId.length <= 128 &&
+        typeof sig.domPath === 'string'
+          ? {
+              selectionId: d.selectionId,
+              domPath: sig.domPath,
+              requestId: 0,
+            }
+          : null;
+      selectedInstanceCountRef.current = instanceCount;
       selectedSigRef.current = sig;
       setSelection({ signature: sig, resolution: null, instanceCount });
       setLiveClass(sig.className);

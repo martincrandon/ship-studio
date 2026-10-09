@@ -61,6 +61,7 @@ import type {
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import type { Selection } from '../../hooks/useVisualEditor';
 import { SLACK_INVITE_URL } from '../../lib/links';
+import { colorContrastContexts } from '../../lib/colorContrast';
 
 /** Build a ready-to-paste request for the coding agent to change text that's rendered
  *  from code/data (so it can't be edited inline). The user pastes it into the terminal
@@ -410,6 +411,11 @@ export function VisualEditorPanel({
   const controlsVisible =
     !!selection && resolution?.status !== 'read_only' && resolution?.status !== 'no_class';
 
+  const colorContrast = useMemo(
+    () => colorContrastContexts(selection?.signature.contrastSnapshot),
+    [selection?.signature.contrastSnapshot]
+  );
+
   // Cascade-resolution context for the active breakpoint, threaded to each control
   // so they show the effective value at this layer and which breakpoint set it.
   const layer = useMemo<LayerContext>(
@@ -446,6 +452,7 @@ export function VisualEditorPanel({
       onSetPositionSide,
       onStepGap,
       variables,
+      colorContrast,
       computed: {
         color: selection?.signature.computedColor,
         'background-color': selection?.signature.computedBackgroundColor,
@@ -464,6 +471,7 @@ export function VisualEditorPanel({
       onStepGap,
       selection,
       variables,
+      colorContrast,
       projectPath,
       onOpenInCode,
     ]

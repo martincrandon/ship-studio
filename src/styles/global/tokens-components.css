@@ -96,7 +96,12 @@
 
   --size-color-picker-width: 320px;
   --size-color-picker-height: 510px;
+  --size-color-picker-hit-area: 40px;
+  --size-color-picker-swatch: 22px;
+  --size-color-picker-hue-pointer: var(--space-06);
   --size-color-picker-header: var(--panel-header-h);
+  --z-color-picker-contrast: calc(var(--z-dropdown) + 1);
+  --z-color-picker-controls: calc(var(--z-dropdown) + 2);
 
   --size-source-control-popover: 320px;
   --size-source-control-branch: 140px;

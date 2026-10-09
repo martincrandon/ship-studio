@@ -8,10 +8,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { CloseIcon, NestRuleIcon, PlusIcon } from '@/components/icons';
+import { Button } from '../primitives/Button';
 import { EditPopover } from './EditPopover';
 import { CssValueText } from './CssValueText';
 import { CSS_PROPERTIES, colorSwatch, suggestValues } from '../../lib/cssProperties';
 import type { Decl } from '../../lib/cssBody';
+import type { ValueFieldVariable } from '../primitives/ValueField';
+import { resolveColorVariable, type ColorContrastContexts } from '../../lib/colorContrast';
 
 interface EditableProps {
   decl: Decl;
@@ -31,6 +34,10 @@ interface EditableProps {
   showNest?: boolean;
   /** Project CSS variables (e.g. `--accent`) for `var(--…)` value autocomplete. */
   variables?: string[];
+  /** Resolved project token values for color display and variable authoring. */
+  colorVariables?: readonly ValueFieldVariable[];
+  projectPath?: string;
+  colorContrast?: ColorContrastContexts;
   /** Project `@keyframes` names, suggested as `animation` values. */
   animations?: string[];
   /** Open the value editor automatically on mount — for the editing flow (right after
@@ -44,6 +51,7 @@ interface ReadonlyProps {
   overridden: boolean;
   overriddenBy?: string;
   editable: false;
+  colorVariables?: readonly ValueFieldVariable[];
 }
 type Props = EditableProps | ReadonlyProps;
 
@@ -52,21 +60,101 @@ function overriddenTooltipProps(overridden: boolean, by?: string) {
   return overridden ? { 'data-tooltip-content': `Overridden by ${by || 'a later rule'}` } : {};
 }
 
-/** A color swatch chip when the value is a color. */
-function Swatch({ value }: { value: string }) {
-  const c = colorSwatch(value);
-  if (!c) return null;
-  return <span className="ss-decl__swatch" style={{ background: c }} aria-hidden="true" />;
+const TEXT_COLOR_PROPERTIES = new Set([
+  'color',
+  '-webkit-text-fill-color',
+  'text-decoration-color',
+  'text-emphasis-color',
+]);
+
+const COLOR_VALUE_PROPERTIES = new Set([
+  ...TEXT_COLOR_PROPERTIES,
+  'accent-color',
+  'background',
+  'background-color',
+  'border',
+  'border-block',
+  'border-block-color',
+  'border-block-end',
+  'border-block-end-color',
+  'border-block-start',
+  'border-block-start-color',
+  'border-bottom',
+  'border-bottom-color',
+  'border-color',
+  'border-inline',
+  'border-inline-color',
+  'border-inline-end',
+  'border-inline-end-color',
+  'border-inline-start',
+  'border-inline-start-color',
+  'border-left',
+  'border-left-color',
+  'border-right',
+  'border-right-color',
+  'border-top',
+  'border-top-color',
+  'box-shadow',
+  'caret-color',
+  'column-rule',
+  'column-rule-color',
+  'fill',
+  'flood-color',
+  'lighting-color',
+  'outline',
+  'outline-color',
+  'scrollbar-color',
+  'stop-color',
+  'stroke',
+  'text-decoration',
+  'text-emphasis',
+  'text-shadow',
+  '-webkit-text-stroke',
+  '-webkit-text-stroke-color',
+]);
+
+function isColorValueProperty(property: string): boolean {
+  return COLOR_VALUE_PROPERTIES.has(property.trim().toLowerCase());
+}
+
+function contrastContextForProperty(property: string, contexts?: ColorContrastContexts) {
+  const normalized = property.trim().toLowerCase();
+  if (TEXT_COLOR_PROPERTIES.has(normalized)) return contexts?.text;
+  return isColorValueProperty(normalized) ? contexts?.graphics : undefined;
+}
+
+function resolveSwatchColor(
+  value: string,
+  variables: readonly ValueFieldVariable[] | undefined
+): string | null {
+  const resolved = resolveColorVariable(value, variables ?? []);
+  return colorSwatch(resolved ?? value);
+}
+
+/** A color swatch chip for literal colors and resolvable color variables. */
+function Swatch({ color }: { color: string | null }) {
+  if (!color) return null;
+  return <span className="ss-decl__swatch" style={{ background: color }} aria-hidden="true" />;
+}
+
+function valueText(value: string) {
+  return value ? <CssValueText value={value} /> : <span className="ss-decl__ph">value</span>;
+}
+
+function colorPickerTitle(property: string) {
+  return `Open color picker for ${property}`;
 }
 
 export function DeclarationRow(props: Props) {
   const { decl, overridden } = props;
   const tipProps = overriddenTooltipProps(overridden, props.overriddenBy);
   const autoEditValue = props.editable && props.autoEditValue;
+  const swatchColor = resolveSwatchColor(decl.value, props.colorVariables);
   // Editing-flow: a newly added row mounts directly into its inline value input.
-  const [editing, setEditing] = useState<null | 'prop' | 'value'>(autoEditValue ? 'value' : null);
-  // The clicked value button, so a color value's floating picker opens beside the
-  // row it belongs to (and clicking the button again closes it).
+  const [editing, setEditing] = useState<null | 'prop' | 'value' | 'color'>(
+    autoEditValue ? 'value' : null
+  );
+  // The clicked value or swatch button anchors its editor or color picker.
   const [valueAnchor, setValueAnchor] = useState<HTMLElement | null>(null);
 
   if (!props.editable) {
@@ -75,7 +163,7 @@ export function DeclarationRow(props: Props) {
         <span className="ss-decl__prop">{decl.prop}</span>
         <span className="ss-decl__colon">:</span>
         <span className="ss-decl__value">
-          <Swatch value={decl.value} />
+          <Swatch color={swatchColor} />
           <CssValueText value={decl.value} />
           {decl.important && <span className="ss-decl__imp"> !important</span>}
         </span>
@@ -84,6 +172,22 @@ export function DeclarationRow(props: Props) {
   }
 
   const { onChange, onRemove, onNest, nestTargets } = props;
+  const colorProperty = isColorValueProperty(decl.prop);
+  const initialValue = decl.important ? `${decl.value} !important` : decl.value;
+  const options = suggestValues(decl.prop, props.variables ?? [], props.animations ?? []);
+  const commitValue = (raw: string) => {
+    // `!important` is typed inline (no toggle button) — split it back out.
+    const m = /\s*!\s*important\s*$/i.exec(raw);
+    onChange(
+      m
+        ? { ...decl, value: raw.slice(0, m.index).trim(), important: true }
+        : { ...decl, value: raw.trim(), important: false }
+    );
+  };
+  const closeValueEditor = () => {
+    setEditing(null);
+    props.onEditClose?.();
+  };
 
   return (
     <div className={`ss-decl${overridden ? ' is-overridden' : ''}`} {...tipProps}>
@@ -115,40 +219,65 @@ export function DeclarationRow(props: Props) {
         <EditPopover
           inline
           anchor={valueAnchor}
-          initial={decl.important ? `${decl.value} !important` : decl.value}
-          options={suggestValues(decl.prop, props.variables ?? [], props.animations ?? [])}
+          initial={initialValue}
+          options={options}
+          variables={props.colorVariables}
+          projectPath={props.projectPath}
+          enableColorPicker={false}
+          contrastContext={contrastContextForProperty(decl.prop, props.colorContrast)}
           placeholder="value"
-          onCommit={(raw) => {
-            // `!important` is typed inline (no toggle button) — split it back out.
-            const m = /\s*!\s*important\s*$/i.exec(raw);
-            onChange(
-              m
-                ? { ...decl, value: raw.slice(0, m.index).trim(), important: true }
-                : { ...decl, value: raw.trim(), important: false }
-            );
-          }}
-          onClose={() => {
-            setEditing(null);
-            props.onEditClose?.();
-          }}
+          onCommit={commitValue}
+          onClose={closeValueEditor}
         />
       ) : (
-        <button
-          type="button"
-          className="ss-decl__value ss-decl__edit"
-          onClick={(e) => {
-            setValueAnchor(e.currentTarget);
-            setEditing('value');
-          }}
-        >
-          <Swatch value={decl.value} />
-          {decl.value ? (
-            <CssValueText value={decl.value} />
-          ) : (
-            <span className="ss-decl__ph">value</span>
+        <div className="ss-decl__value">
+          <Button
+            className="ss-decl__edit ss-decl__value-text"
+            size="compact"
+            variant="ghost"
+            onClick={(event) => {
+              setValueAnchor(event.currentTarget);
+              setEditing('value');
+            }}
+          >
+            {swatchColor && <span className="ss-decl__swatch-space" aria-hidden="true" />}
+            {valueText(decl.value)}
+            {decl.important && <span className="ss-decl__imp"> !important</span>}
+          </Button>
+          {swatchColor && (
+            <Button
+              className="ss-decl__swatch-trigger"
+              size="compact"
+              variant="ghost"
+              aria-label={colorPickerTitle(decl.prop)}
+              title={colorPickerTitle(decl.prop)}
+              aria-haspopup="dialog"
+              aria-expanded={editing === 'color'}
+              onClick={(event) => {
+                setValueAnchor(event.currentTarget);
+                setEditing((current) => (current === 'color' ? null : 'color'));
+              }}
+            >
+              <Swatch color={swatchColor} />
+            </Button>
           )}
-          {decl.important && <span className="ss-decl__imp"> !important</span>}
-        </button>
+          {editing === 'color' && (
+            <EditPopover
+              inline
+              anchor={valueAnchor}
+              initial={initialValue}
+              options={options}
+              variables={props.colorVariables}
+              projectPath={props.projectPath}
+              enableColorPicker
+              colorProperty={colorProperty}
+              contrastContext={contrastContextForProperty(decl.prop, props.colorContrast)}
+              placeholder="value"
+              onCommit={commitValue}
+              onClose={closeValueEditor}
+            />
+          )}
+        </div>
       )}
 
       <span className="ss-decl__actions">

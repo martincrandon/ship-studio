@@ -9,6 +9,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type { TailwindVersion } from './customClasses';
+import type { ColorContrastSnapshot } from './colorContrast';
 
 /** A CSS property whose effective value on the selected element is INHERITED from
  *  an ancestor element's own styles (detected by the selection script's computed
@@ -75,6 +76,8 @@ export interface ElementSignature {
   writingMode?: string;
   /** Resolved Tailwind v4 `--spacing` value when the preview exposes it. */
   spacingUnit?: string;
+  /** Rendered backgrounds and typography captured for WCAG contrast evaluation. */
+  contrastSnapshot?: ColorContrastSnapshot;
 }
 
 /** A source location of a className literal. */
