@@ -1,0 +1,370 @@
+/* Rows within a section */
+.sidebar-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: 0;
+  height: var(--size-sidebar-section-row);
+  padding: 0 0 0 var(--space-08);
+  cursor: pointer;
+  border-left: none;
+  border-radius: var(--radius-4);
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.sidebar-row:hover {
+  background: var(--surface-control);
+}
+
+.sidebar-row:focus-visible {
+  outline: none;
+  background: var(--surface-control);
+}
+
+.sidebar-row.is-active {
+  background: var(--surface-control);
+}
+
+/* Agent/terminal row needs user attention — the label goes green (success)
+ * so a user scanning the sidebar from any project can spot a tab they need
+ * to check. The dot keeps its amber pulse from `.dot-attention` as the
+ * urgency cue; the label color is the "come-look-at-me" affordance.
+ * Scoped to non-active rows because the active row is where the user
+ * already is (attention clears on activate). */
+.sidebar-row.is-attention .sidebar-row-label {
+  color: var(--accent-success);
+  font-weight: 600;
+}
+
+.sidebar-row-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+/* Both the ordinary dot and the pixel loader share this fixed status slot, so
+ * switching states cannot move the row label. The wrapper owns the gap so it
+ * remains identical for either indicator. */
+.sidebar-row-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--pixel-loader-size-sm);
+  height: var(--pixel-loader-size-sm);
+  margin-right: var(--button-gap);
+  flex-shrink: 0;
+}
+
+.sidebar-row-pixel-loader {
+  color: var(--accent-success);
+}
+
+.sidebar-row-dot.dot-idle {
+  background: var(--text-muted);
+}
+
+.sidebar-row-dot.dot-muted {
+  background: var(--border-default);
+}
+
+.sidebar-row-dot.dot-active {
+  background: var(--accent-success);
+  box-shadow: 0 0 0 2px rgba(var(--accent-success-rgb), 0.15);
+}
+
+.sidebar-row-dot.dot-attention {
+  background: var(--accent-warning);
+  box-shadow: 0 0 0 2px rgba(var(--accent-warning-rgb), 0.2);
+  animation: sidebar-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes sidebar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.sidebar-row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-12);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Suppress the browser-default text selection on double-click — the
+     selection flashes for one frame before the rename input mounts. */
+  user-select: none;
+  -webkit-user-select: none;
+  margin-right: var(--space-06);
+}
+
+/* Inline rename input that replaces the label while editing. Sized to fill
+   the same flex slot so the row layout doesn't jump. */
+.sidebar-row-rename {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  margin: 0;
+  font-size: var(--font-size-body-md);
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-control);
+  border: 1px solid var(--accent-active);
+  border-radius: var(--radius-sm);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  margin-right: var(--space-06);
+}
+
+.sidebar-row-meta {
+  font-size: var(--font-size-badge);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--space-06);
+}
+
+.sidebar-row-close {
+  width: var(--size-icon-md);
+  min-width: var(--size-icon-md);
+  height: var(--size-icon-md);
+  min-height: var(--size-icon-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-subhead);
+  line-height: 1;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+
+.sidebar-row:hover .sidebar-row-close,
+.sidebar-row:focus-within .sidebar-row-close,
+.sidebar-row-close:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-row-close:hover:not(:disabled) {
+  background: var(--button-surface-hover);
+  color: var(--text-primary);
+}
+
+/* Inline action button (e.g. restart dev server). Unlike the close
+   button, this stays visible so users can discover the action without
+   hovering, but dims until the row is hovered/focused. No bg change on
+   hover — just the icon going fully white. */
+.sidebar-row-action {
+  width: var(--size-icon-md);
+  min-width: var(--size-icon-md);
+  height: var(--size-icon-md);
+  min-height: var(--size-icon-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  opacity: 0.55;
+  transition:
+    opacity var(--transition),
+    color var(--transition);
+  flex-shrink: 0;
+}
+
+/* Sidebar actions use the icon's authored size rather than the generic
+ * 16px Button primitive wrapper. Keeping the wrapper content-sized also
+ * centers text glyphs such as the plus and close controls in their slots. */
+.workspace-sidebar .sidebar-section-add .button__icon,
+.workspace-sidebar .sidebar-row-action .button__icon,
+.workspace-sidebar .sidebar-row-close .button__icon {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+}
+
+.workspace-sidebar .sidebar-row-action .button__icon > svg {
+  width: auto;
+  height: auto;
+}
+
+.sidebar-row-control-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon-md);
+  height: var(--size-icon-md);
+}
+
+/* Empty action/close slots should not reserve trailing space. Rows that have
+ * a control keep the fixed icon-sized slot, while metadata can reach the
+ * right edge on rows such as Worktrees that have no actions. */
+.sidebar-row-control-slot:empty {
+  display: none;
+}
+
+.sidebar-row:hover .sidebar-row-action,
+.sidebar-row:focus-within .sidebar-row-action,
+.sidebar-row-action:focus-visible {
+  opacity: 1;
+}
+
+.sidebar-row-action:hover:not(:disabled) {
+  background: var(--button-surface-hover);
+  color: var(--text-inverse);
+}
+
+.sidebar-row-action:disabled {
+  cursor: progress;
+  opacity: 0.35;
+}
+
+/* Trailing slot hosts the BrowserDropdown on the Dev server row. Needs to
+   be display:flex + shrink:0 so the 18px icon button inside (styled via
+   `.sidebar-row-action`) keeps its square footprint, and stopPropagation
+   on the wrapper prevents the row's own onClick from firing when the
+   user clicks the dropdown. */
+.sidebar-row-trailing {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Footer is the button itself — no inner outline, no padding gap. */
+.workspace-sidebar-footer {
+  --workspace-sidebar-footer-fade-height: calc(var(--space-32) + var(--space-16));
+  position: relative;
+  z-index: var(--z-dropdown);
+  flex-shrink: 0;
+  margin-top: calc(-1 * var(--workspace-sidebar-footer-fade-height));
+  padding: calc(var(--workspace-sidebar-footer-fade-height) + var(--space-08)) var(--space-08)
+    var(--space-08);
+  border-top: 0;
+  overflow: visible;
+}
+
+.workspace-sidebar-footer-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--button-gap);
+}
+
+.workspace-sidebar-footer-actions > * {
+  position: relative;
+}
+
+/* Keep the fade attached to the fixed action group so it stays at the bottom
+ * while the sidebar content scrolls behind it. The gradient reaches full
+ * opacity exactly at the scroll area's clip line (fade height minus the 8px
+ * gap between them), so rows are fully invisible before they're cut off, then
+ * stay solid behind the buttons and the footer's bottom padding. */
+.workspace-sidebar-footer-actions::before {
+  position: absolute;
+  inset-inline: calc(-1 * var(--space-08));
+  top: calc(-1 * var(--workspace-sidebar-footer-fade-height));
+  bottom: calc(-1 * var(--space-08));
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--surface-panel) calc(var(--workspace-sidebar-footer-fade-height) - var(--space-08))
+  );
+  content: '';
+  pointer-events: none;
+}
+
+/* Belt-and-suspenders against a horizontal scrollbar appearing inside a
+ * project body when a long tab title would otherwise force it. The row
+ * labels already ellipsize, but if a future descendant forgets min-width: 0
+ * in a flex chain, this caps the damage. */
+.workspace-sidebar .sidebar-project-body,
+.workspace-sidebar .sidebar-project-body-inner,
+.workspace-sidebar .sidebar-section-list {
+  overflow-x: hidden;
+}
+
+/* The Open project action is a full-bleed row, matching the project cards
+ * above it. Its own content padding remains so the icon and label stay
+ * comfortably spaced. */
+.workspace-sidebar-active-actions {
+  width: 100%;
+  margin-top: 0;
+  padding: 0;
+}
+
+.workspace-sidebar-add-project {
+  min-width: 0;
+  width: 100%;
+  height: var(--size-sidebar-project-row);
+  min-height: var(--size-sidebar-project-row);
+  border-radius: 0;
+  color: var(--text-faint);
+  justify-content: center;
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-active-actions {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.workspace-sidebar.is-hidden .workspace-sidebar-add-project {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--control-height-standard);
+  min-height: var(--control-height-standard);
+  flex: 0 0 var(--control-height-standard);
+  padding: 0;
+}
+
+.workspace-sidebar-support,
+.workspace-sidebar-settings {
+  flex: 0 0 var(--control-height-standard);
+}
+
+/* Project picker styles removed — replaced by the command palette (⌘O). */
+
+/* PROTOTYPE (workflows/inbox): the Inbox nav button carries an unread badge.
+   The wrapper exists only to anchor the badge to the icon button. */
+.workspace-sidebar-inbox {
+  position: relative;
+  display: inline-flex;
+}
+
+.workspace-sidebar-inbox-badge {
+  position: absolute;
+  top: calc(var(--spacing-2xs) * -1);
+  right: calc(var(--spacing-2xs) * -1);
+  min-width: var(--spacing-md);
+  height: var(--spacing-md);
+  padding: 0 var(--spacing-2xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent-error);
+  color: var(--text-white);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-label);
+  line-height: 1;
+  pointer-events: none;
+}

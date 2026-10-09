@@ -783,7 +783,7 @@
   padding: 0;
 }
 .ss-color-field .value-field--variable .value-field__input {
-  padding-inline: var(--space-06) var(--space-04);
+  padding-inline: var(--spacing-tight) var(--spacing-xs);
 }
 
 .ss-color-field__value .value-field__unit {

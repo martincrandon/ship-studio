@@ -43,7 +43,7 @@
   box-sizing: border-box;
   cursor: text;
   border-radius: var(--radius-sm);
-  padding: var(--space-02) var(--space-06);
+  padding: var(--spacing-2xs) var(--spacing-tight);
 }
 .ss-decl__edit:hover {
   background: var(--tint-subtle);
@@ -100,8 +100,8 @@
   all: unset;
   box-sizing: border-box;
   position: absolute;
-  inset-block-start: var(--space-02);
-  inset-inline-start: var(--space-06);
+  inset-block-start: var(--spacing-2xs);
+  inset-inline-start: var(--spacing-tight);
   z-index: 1;
   display: grid;
   place-items: center;
