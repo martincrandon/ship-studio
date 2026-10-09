@@ -138,6 +138,12 @@ function validateAssets({ iconsDirectory = iconsRoot, graphicsDirectory = graphi
 
   for (const file of files) {
     errors.push(...validateSvg(file));
+    // The archived icon tree preserves separate source folders, where repeated
+    // basenames do not collide with the metadata-backed shared icon exports.
+    const isArchivedIcon =
+      path.relative(iconsDirectory, file).split(path.sep)[0] === 'old-icons';
+    if (isArchivedIcon) continue;
+
     const key = path.basename(file).slice(0, -4);
     const previous = basenames.get(key);
     if (previous) {

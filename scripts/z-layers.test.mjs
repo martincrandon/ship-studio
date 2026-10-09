@@ -101,7 +101,7 @@ describe('workspace chrome stacking ladder', () => {
   it('keeps the preview toolbar above the pane separators it was raised for', () => {
     const consumers = [
       readCss('src/styles/features/preview.css'),
-      readCss('src/styles/features/workspace/split-pane.css'),
+      readCss('src/styles/features/workspace/dock.css'),
     ];
     let seen = 0;
     for (const css of consumers) {
