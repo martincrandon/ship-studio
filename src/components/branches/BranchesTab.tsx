@@ -64,6 +64,7 @@ import {
   isRecognizedGitFailure,
 } from '../../lib/errors';
 import { logger } from '../../lib/logger';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 
 /** A Tauri-rejected `CommandError` is an object — `String(err)` renders it as
  *  "[object Object]". Format it to the real human message (the git stderr). */
@@ -138,7 +139,7 @@ interface BranchesTabProps {
   /** Callback to refresh branch list */
   onRefresh: () => void;
   /** Paste a prompt into the agent terminal (used to hand off a merge conflict). */
-  onSendToAgent?: (prompt: string) => void;
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
   /** Current `git worktree list` for this repository (main worktree first). */
   worktrees?: WorktreeInfo[];
   /** Switch the workspace to a worktree's path (in-place, session stays hot). */

@@ -14,6 +14,12 @@ import { getThumbnailsEnabled, setThumbnailsEnabled } from '../lib/settings';
 import { decideAutoCapture, isPermissionDenialError } from '../lib/thumbnailGate';
 import { asCommandError, formatCommandError, isProjectFolderGoneError } from '../lib/errors';
 import { captureThumbnailFromPreview } from '../lib/previewSnapshot';
+import { getAgentWorkspaceView } from '../lib/agentChatPreferences';
+import {
+  getAgentChatCaptureTarget,
+  stageCapturedAttachment,
+  type AgentChatCaptureTarget,
+} from '../lib/agentChatStore';
 
 /** Backend rejection meaning a capture for this project is already running
  *  (the backend's per-project in-flight guard, issue #387). Not a failure —
@@ -34,6 +40,7 @@ const SCREENSHOT_INTERVAL_MS = 5 * 60 * 1000;
 
 interface UseScreenshotManagementParams {
   previewRef: RefObject<PreviewHandle | null>;
+  currentProjectPath: string | null;
   /** The current project's dev-server port, or null when no port is
    *  affirmatively known for it. Capture writes into the project's own
    *  `.shipstudio/thumbnail.png`, so a guessed/fallback port here would
@@ -42,13 +49,21 @@ interface UseScreenshotManagementParams {
   devServerPort: number | null;
   pasteToActiveTerminal: (text: string) => void;
   currentProjectPathRef: RefObject<string | null>;
+  showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
+
+type CaptureDestination =
+  | { kind: 'terminal'; projectPath: string }
+  | { kind: 'chat'; target: AgentChatCaptureTarget }
+  | { kind: 'blocked'; reason: string };
 
 export function useScreenshotManagement({
   previewRef,
+  currentProjectPath,
   devServerPort,
   pasteToActiveTerminal,
   currentProjectPathRef,
+  showToast = () => undefined,
 }: UseScreenshotManagementParams) {
   // Read the port through a ref at capture time. The 5-minute interval and
   // its retry timers hold long-lived closures — a closed-over port would go
@@ -58,7 +73,11 @@ export function useScreenshotManagement({
   devServerPortRef.current = devServerPort;
   // Capture state
   const [isCapturing, setIsCapturing] = useState(false);
-  const [isCropMode, setIsCropMode] = useState(false);
+  const [cropMode, setCropModeState] = useState(() => ({
+    projectPath: currentProjectPath,
+    enabled: false,
+  }));
+  const isCropMode = cropMode.projectPath === currentProjectPath && cropMode.enabled;
   const [isCropCapturing, setIsCropCapturing] = useState(false);
   const [isFullPageCapturing, setIsFullPageCapturing] = useState(false);
 
@@ -80,63 +99,173 @@ export function useScreenshotManagement({
   // Dismissing the explainer without answering (ESC / overlay click) defers
   // the question for this session instead of nagging every 5 minutes.
   const consentDeferredThisSessionRef = useRef(false);
+  const cropDestinationRef = useRef<CaptureDestination | null>(null);
 
-  // Capture viewport screenshot and paste path into terminal
+  const resolveCaptureDestination = useCallback((): CaptureDestination => {
+    const projectPath = currentProjectPathRef.current;
+    if (!projectPath) {
+      return { kind: 'blocked', reason: 'Open a project before capturing a screenshot.' };
+    }
+    if (getAgentWorkspaceView(projectPath) !== 'chat') {
+      return { kind: 'terminal', projectPath };
+    }
+
+    const target = getAgentChatCaptureTarget(projectPath);
+    if (!target) {
+      return {
+        kind: 'blocked',
+        reason: 'The Chat draft is not ready for screenshot attachments yet.',
+      };
+    }
+    if (target.checkoutPath !== projectPath) {
+      return {
+        kind: 'blocked',
+        reason: `The selected Chat target runs in ${target.checkoutPath}. Its checkout differs from this Preview; attach an existing file to continue.`,
+      };
+    }
+    return { kind: 'chat', target };
+  }, [currentProjectPathRef]);
+
+  const routeCapturedFile = useCallback(
+    async (destination: CaptureDestination, filePath: string) => {
+      if (destination.kind === 'blocked') {
+        showToast(destination.reason, 'info');
+        return;
+      }
+      if (destination.kind === 'chat') {
+        try {
+          const attachment = await stageCapturedAttachment(destination.target, filePath);
+          if (!attachment) {
+            showToast(
+              'That Chat conversation is no longer available. Select it and capture again.',
+              'error'
+            );
+          }
+        } catch (error) {
+          showToast(
+            `Screenshot captured, but Chat could not attach it: ${error instanceof Error ? error.message : String(error)}`,
+            'error'
+          );
+        }
+        return;
+      }
+
+      if (currentProjectPathRef.current !== destination.projectPath) {
+        showToast(
+          'Project changed during capture. The screenshot was saved but not pasted.',
+          'info'
+        );
+        return;
+      }
+      const quotedPath = filePath.includes(' ') ? `"${filePath}"` : filePath;
+      pasteToActiveTerminal(quotedPath);
+    },
+    [currentProjectPathRef, pasteToActiveTerminal, showToast]
+  );
+
+  const setIsCropMode = useCallback(
+    (mode: boolean) => {
+      if (mode) {
+        const destination = resolveCaptureDestination();
+        if (destination.kind === 'blocked') {
+          showToast(destination.reason, 'info');
+          return;
+        }
+        cropDestinationRef.current = destination;
+      } else {
+        cropDestinationRef.current = null;
+      }
+      setCropModeState({ projectPath: currentProjectPath, enabled: mode });
+    },
+    [currentProjectPath, resolveCaptureDestination, showToast]
+  );
+
+  // Capture the viewport and route it to the selected Chat draft or terminal.
   const handleCaptureScreenshot = useCallback(async () => {
     if (isCapturing || !previewRef.current) return;
+    const destination = resolveCaptureDestination();
+    if (destination.kind === 'blocked') {
+      showToast(destination.reason, 'info');
+      return;
+    }
 
     setIsCapturing(true);
     try {
       const filePath = await previewRef.current.captureForClaude();
       if (filePath) {
-        const quotedPath = filePath.includes(' ') ? `"${filePath}"` : filePath;
-        pasteToActiveTerminal(quotedPath);
         setScreenshotPreviewPath(filePath);
+        await routeCapturedFile(destination, filePath);
       }
     } finally {
       setIsCapturing(false);
     }
-  }, [isCapturing, previewRef, pasteToActiveTerminal]);
+  }, [isCapturing, previewRef, resolveCaptureDestination, routeCapturedFile, showToast]);
 
-  // Capture full page screenshot
+  // Capture a full page and route it to the view that initiated the action.
   const handleCaptureFullPage = useCallback(async () => {
     if (isFullPageCapturing || !previewRef.current) return;
+    const destination = resolveCaptureDestination();
+    if (destination.kind === 'blocked') {
+      showToast(destination.reason, 'info');
+      return;
+    }
 
     setIsFullPageCapturing(true);
     try {
       const filePath = await previewRef.current.captureFullPage();
       if (filePath) {
-        const quotedPath = filePath.includes(' ') ? `"${filePath}"` : filePath;
-        pasteToActiveTerminal(quotedPath);
         setScreenshotPreviewPath(filePath);
+        await routeCapturedFile(destination, filePath);
       }
     } finally {
       setIsFullPageCapturing(false);
     }
-  }, [isFullPageCapturing, previewRef, pasteToActiveTerminal]);
+  }, [isFullPageCapturing, previewRef, resolveCaptureDestination, routeCapturedFile, showToast]);
 
   // Crop mode handlers
   const handleCropStart = useCallback(() => {
-    setIsCropMode(false);
+    setCropModeState({ projectPath: currentProjectPath, enabled: false });
     setIsCropCapturing(true);
-  }, []);
+  }, [currentProjectPath]);
 
   const handleCropComplete = useCallback(
     (filePath: string | null) => {
       setIsCropCapturing(false);
+      const destination = cropDestinationRef.current;
+      cropDestinationRef.current = null;
       if (filePath) {
-        const quotedPath = filePath.includes(' ') ? `"${filePath}"` : filePath;
-        pasteToActiveTerminal(quotedPath);
         setScreenshotPreviewPath(filePath);
+        if (!destination) {
+          showToast(
+            'The original screenshot target is no longer available. The screenshot was saved but not attached.',
+            'info'
+          );
+          return;
+        }
+        if (destination.kind === 'blocked') {
+          showToast(destination.reason, 'info');
+          return;
+        }
+        const destinationProjectPath =
+          destination.kind === 'chat' ? destination.target.projectPath : destination.projectPath;
+        if (currentProjectPathRef.current !== destinationProjectPath) {
+          showToast(
+            'Project changed during crop. The screenshot was saved but not attached.',
+            'info'
+          );
+          return;
+        }
+        void routeCapturedFile(destination, filePath);
       }
     },
-    [pasteToActiveTerminal]
+    [currentProjectPathRef, routeCapturedFile, showToast]
   );
 
   const handleCropCancel = useCallback(() => {
-    setIsCropMode(false);
+    setCropModeState({ projectPath: currentProjectPath, enabled: false });
+    cropDestinationRef.current = null;
     setIsCropCapturing(false);
-  }, []);
+  }, [currentProjectPath]);
 
   // Background thumbnail capture with retry logic
   const captureScreenshot = useCallback(

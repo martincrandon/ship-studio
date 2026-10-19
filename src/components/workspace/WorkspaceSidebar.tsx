@@ -88,6 +88,25 @@ import {
   setActiveProjectOrder,
   subscribeActiveProjectOrder,
 } from '../../lib/activeProjectOrder';
+import {
+  getAgentChatSnapshot,
+  loadAgentChatDrafts,
+  loadAgentChatProject,
+  subscribeAgentChat,
+  type AgentChatProjectSnapshot,
+} from '../../lib/agentChatStore';
+import {
+  agentChatDraftInboxTitle,
+  agentChatInboxDotState,
+  agentChatThreadInboxStatus,
+  agentChatThreadInboxTitle,
+  getAgentChatInboxEntries,
+} from '../../lib/agentChatInbox';
+import {
+  requestAgentWorkspaceNavigation,
+  type AgentWorkspaceNavigationTarget,
+} from '../../lib/agentWorkspaceNavigation';
+import type { AgentWorkspaceView } from '../../lib/agentChatPreferences';
 
 export type ToggleProjectPinHandler = (
   projectPath: string,
@@ -161,6 +180,16 @@ interface Props {
   projects: PinnedProjectRow[];
   currentProjectPath: string | null;
   currentProjectName: string | null;
+  /** Live Agent Chat activity for the current project, including when its panel is hidden. */
+  agentChatActivity?: 'idle' | 'active' | 'thinking';
+  /** Current project Chat selection, independent of the Terminal tab selection. */
+  agentChatView?: AgentWorkspaceView;
+  /** Current project's hydrated Chat inbox snapshot. */
+  agentChatSnapshot?: AgentChatProjectSnapshot;
+  /** Select one exact Chat conversation or draft in the current project. */
+  onSelectChatTarget?: (
+    target: Extract<AgentWorkspaceNavigationTarget, { kind: 'chat-thread' | 'chat-draft' }>
+  ) => void;
   onSelectProject: (projectPath: string) => void;
   /** Close an active session: stop its dev server, tear down the registry
    *  entry, and (if it was the current project) route back to home. Called
@@ -395,11 +424,14 @@ function serverStatusDot(
  */
 function projectDotState(
   row: PinnedProjectRow,
-  tabs: ReadonlyArray<SessionTerminalTab> | undefined
+  tabs: ReadonlyArray<SessionTerminalTab> | undefined,
+  chatActivity: 'idle' | 'active' | 'thinking' = 'idle'
 ): SidebarItem['dotState'] {
   const list = tabs ?? [];
   if (list.some((t) => t.status === 'crashed') || row.status === 'error') return 'error';
   if (list.some((t) => t.attention || t.status === 'waiting')) return 'waiting';
+  if (chatActivity === 'thinking') return 'thinking';
+  if (chatActivity === 'active') return 'active';
   if (row.status === 'inactive' || row.status === 'suspended') return 'muted';
   if (list.some((t) => t.status === 'thinking')) return 'thinking';
   if (list.some((t) => t.status === 'running' || t.status === 'starting')) return 'active';
@@ -420,6 +452,10 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   projects,
   currentProjectPath,
   currentProjectName,
+  agentChatActivity = 'idle',
+  agentChatView = 'terminal',
+  agentChatSnapshot,
+  onSelectChatTarget,
   onSelectProject,
   onCloseProject,
   onUnpinProject,
@@ -846,7 +882,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     for (const tab of terminalTabs) {
       const agent = getAgentById(tab.agentId);
       const isShell = agent.id === 'terminal';
-      const isActive = tab.id === activeTerminalTab;
+      const isActive = agentChatView === 'terminal' && tab.id === activeTerminalTab;
       const hasAttention = attentionTabs.has(tab.id);
       const regTab = currentRegistryTabs.get(tab.id);
 
@@ -868,6 +904,40 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
 
       if (isShell) terms.push(item);
       else agents.push(item);
+    }
+
+    if (agentChatSnapshot) {
+      for (const entry of getAgentChatInboxEntries(agentChatSnapshot)) {
+        const dotState = agentChatInboxDotState(entry, agentChatSnapshot.threadErrors);
+        if (entry.kind === 'thread') {
+          const { thread } = entry;
+          const status = agentChatThreadInboxStatus(thread);
+          agents.push({
+            key: `chat-thread-${thread.id}`,
+            label: agentChatThreadInboxTitle(thread),
+            meta: `Chat · ${status}`,
+            dotState,
+            isActive: agentChatView === 'chat' && agentChatSnapshot.selectedThreadId === thread.id,
+            onSelect: () => onSelectChatTarget?.({ kind: 'chat-thread', threadId: thread.id }),
+          });
+          continue;
+        }
+
+        const draftError = agentChatSnapshot.threadErrors[entry.draftId];
+        agents.push({
+          key: `chat-draft-${entry.draftId}`,
+          label: agentChatDraftInboxTitle(entry.text),
+          meta: draftError ? 'Chat draft · Save failed' : 'Chat draft',
+          dotState,
+          isActive: agentChatView === 'chat' && agentChatSnapshot.selectedDraftId === entry.draftId,
+          onSelect: () =>
+            onSelectChatTarget?.({
+              kind: 'chat-draft',
+              draftId: entry.draftId,
+              checkoutPath: entry.checkoutPath,
+            }),
+        });
+      }
     }
 
     const commands: SidebarItem[] = [];
@@ -925,6 +995,9 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
     devServerUrl,
     currentServerStatus,
     currentServerAddress,
+    agentChatView,
+    agentChatSnapshot,
+    onSelectChatTarget,
   ]);
 
   // Worktree rows for the current project. Clicking a non-current worktree
@@ -966,10 +1039,19 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
   const filterLower = filter.trim().toLowerCase();
   const matchesFilter = (label: string) =>
     !filterLower || label.toLowerCase().includes(filterLower);
+  const matchesItem = (item: SidebarItem) =>
+    matchesFilter(item.label) || Boolean(item.meta && matchesFilter(item.meta));
 
-  const filteredAgents = agentItems.filter((i) => matchesFilter(i.label));
-  const filteredTerminals = terminalItems.filter((i) => matchesFilter(i.label));
-  const filteredCommands = commandItems.filter((i) => matchesFilter(i.label));
+  const filteredAgents = agentItems.filter(matchesItem);
+  const filteredTerminals = terminalItems.filter(matchesItem);
+  const filteredCommands = commandItems.filter(matchesItem);
+  const agentEmptyHint = filter
+    ? 'No matches'
+    : agentChatSnapshot?.loading
+      ? 'Loading agents…'
+      : agentChatSnapshot?.error && agentItems.length === 0
+        ? 'Chat list unavailable'
+        : 'No agents running';
 
   const atMaxTabs = terminalTabs.length >= maxTabs;
 
@@ -1055,9 +1137,12 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         families.add(familyRootOf(snapshot.projectPath));
       }
     }
+    if (agentChatActivity === 'thinking' && currentProjectPath) {
+      families.add(familyRootOf(currentProjectPath));
+    }
     return families;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- registryVersion/familiesVersion are change counters that force re-derivation from the mutable sessionRegistry; they aren't read in the body by design
-  }, [registryVersion, familiesVersion]);
+  }, [registryVersion, familiesVersion, agentChatActivity, currentProjectPath]);
 
   // Edge case: current project isn't in pinned or active (e.g. the session
   // registry hasn't picked it up yet during the initial open). Synthesize
@@ -1288,6 +1373,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
         isExpanded={expanded}
         isWorking={workingProjectFamilies.has(familyRootOf(row.projectPath))}
         serverSnapshot={serverSnapshot}
+        chatActivity={row.isCurrent ? (agentChatActivity ?? 'idle') : 'idle'}
         shortcutNumber={shortcutNumberFor(row)}
         onToggleExpand={() => toggleProjectExpanded(row.projectPath)}
         onSelectProject={onSelectProject}
@@ -1329,7 +1415,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
                 addShortcut={kbd('mod', 'T')}
                 addFooterLabel={atMaxTabs ? undefined : 'Add new agent'}
                 items={filteredAgents}
-                emptyHint={filter ? 'No matches' : 'No agents running'}
+                emptyHint={agentEmptyHint}
               />
               <SidebarSection
                 id="terminals"
@@ -1355,16 +1441,25 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
           ) : (
             <div key="inactive-body" className="sidebar-project-body-inner">
               <InactiveProjectSections
+                projectPath={row.projectPath}
                 snapshot={sessionRegistry.snapshot(row.projectPath)}
                 worktreeItems={familyWorktreeItems}
                 filterLower={filterLower}
                 serverSnapshot={serverSnapshot}
                 onSelectTab={(sessionId) => {
+                  requestAgentWorkspaceNavigation(row.projectPath, {
+                    kind: 'terminal-tab',
+                    sessionId,
+                  });
                   if (onSelectProjectTab) {
                     onSelectProjectTab(row.projectPath, sessionId);
                   } else {
                     onSelectProject(row.projectPath);
                   }
+                }}
+                onSelectChatTarget={(target) => {
+                  requestAgentWorkspaceNavigation(row.projectPath, target);
+                  onSelectProject(row.projectPath);
                 }}
               />
             </div>
@@ -2002,6 +2097,39 @@ function SidebarGroupHeader({
   );
 }
 
+function useInactiveAgentChatSnapshot(projectPath: string): AgentChatProjectSnapshot {
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeAgentChat(projectPath, listener),
+    [projectPath]
+  );
+  const getSnapshot = useCallback(() => getAgentChatSnapshot(projectPath), [projectPath]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  useEffect(() => {
+    void loadAgentChatProject(projectPath);
+    void loadAgentChatDrafts(projectPath, projectPath);
+  }, [projectPath]);
+
+  const checkoutPaths = useMemo(
+    () => [
+      ...new Set([
+        projectPath,
+        snapshot.selectedCheckoutPath,
+        ...snapshot.threads.map((thread) => thread.checkoutPath),
+        ...snapshot.savedDrafts.map((draft) => draft.checkoutPath),
+      ]),
+    ],
+    [projectPath, snapshot.selectedCheckoutPath, snapshot.threads, snapshot.savedDrafts]
+  );
+  useEffect(() => {
+    checkoutPaths.forEach((checkoutPath) => {
+      void loadAgentChatDrafts(projectPath, checkoutPath);
+    });
+  }, [projectPath, checkoutPaths]);
+
+  return snapshot;
+}
+
 /**
  * Read-only view of another project's agent/terminal lists, pulled from
  * the session registry snapshot. These tabs' PTYs are STILL RUNNING in the
@@ -2010,21 +2138,31 @@ function SidebarGroupHeader({
  * tab — the live Terminal just unhides, no reconnect required.
  */
 function InactiveProjectSections({
+  projectPath,
   snapshot,
   worktreeItems,
   filterLower,
   serverSnapshot,
   onSelectTab,
+  onSelectChatTarget,
 }: {
+  projectPath: string;
   snapshot: SessionSnapshot | undefined;
   /** Hot worktree sessions in this project's family (empty when none). */
   worktreeItems?: SidebarItem[];
   filterLower: string;
   serverSnapshot: ProjectDevServerSnapshot;
   onSelectTab: (sessionId: string) => void;
+  onSelectChatTarget: (
+    target: Extract<AgentWorkspaceNavigationTarget, { kind: 'chat-thread' | 'chat-draft' }>
+  ) => void;
 }) {
+  const chatSnapshot = useInactiveAgentChatSnapshot(projectPath);
   const tabs: ReadonlyArray<SessionTerminalTab> = snapshot?.terminalTabs ?? [];
-  const matches = (label: string) => !filterLower || label.toLowerCase().includes(filterLower);
+  const matchesItem = (item: SidebarItem) =>
+    !filterLower ||
+    item.label.toLowerCase().includes(filterLower) ||
+    Boolean(item.meta?.toLowerCase().includes(filterLower));
   const agentCounts = new Map<string, number>();
 
   const agents: SidebarItem[] = [];
@@ -2035,7 +2173,6 @@ function InactiveProjectSections({
     agentCounts.set(agent.id, count);
     const title = tab.title?.trim();
     const label = title && title.length > 0 ? title : `${agent.displayName} ${count}`;
-    if (!matches(label)) continue;
     const item: SidebarItem = {
       key: `bg-${tab.sessionId}`,
       label,
@@ -2046,6 +2183,37 @@ function InactiveProjectSections({
     else agents.push(item);
   }
 
+  const chatItems: SidebarItem[] = getAgentChatInboxEntries(chatSnapshot).map((entry) => {
+    const dotState = agentChatInboxDotState(entry, chatSnapshot.threadErrors);
+    if (entry.kind === 'thread') {
+      const { thread } = entry;
+      const status = agentChatThreadInboxStatus(thread);
+      return {
+        key: `chat-thread-${thread.id}`,
+        label: agentChatThreadInboxTitle(thread),
+        meta: `Chat · ${status}`,
+        dotState,
+        onSelect: () => onSelectChatTarget({ kind: 'chat-thread', threadId: thread.id }),
+      };
+    }
+
+    const draftError = chatSnapshot.threadErrors[entry.draftId];
+    return {
+      key: `chat-draft-${entry.draftId}`,
+      label: agentChatDraftInboxTitle(entry.text),
+      meta: draftError ? 'Chat draft · Save failed' : 'Chat draft',
+      dotState,
+      onSelect: () =>
+        onSelectChatTarget({
+          kind: 'chat-draft',
+          draftId: entry.draftId,
+          checkoutPath: entry.checkoutPath,
+        }),
+    };
+  });
+  const allAgents = [...agents, ...chatItems];
+  const filteredAgents = allAgents.filter(matchesItem);
+  const filteredTerminals = terminals.filter(matchesItem);
   const serverLabel = serverStatusLabel(serverSnapshot.status);
   const commands: SidebarItem[] = serverLabel
     ? [
@@ -2067,18 +2235,26 @@ function InactiveProjectSections({
           total={worktreeItems.length}
           collapsed={false}
           onToggle={() => {}}
-          items={worktreeItems.filter((i) => matches(i.label))}
+          items={worktreeItems.filter(matchesItem)}
           emptyHint={filterLower ? 'No matches' : 'No worktrees'}
         />
       )}
       <SidebarSection
         id="agents"
         label="Agents"
-        total={agents.length}
+        total={allAgents.length}
         collapsed={false}
         onToggle={() => {}}
-        items={agents}
-        emptyHint={filterLower ? 'No matches' : 'No agents running'}
+        items={filteredAgents}
+        emptyHint={
+          filterLower
+            ? 'No matches'
+            : chatSnapshot.loading
+              ? 'Loading agents…'
+              : chatSnapshot.error && allAgents.length === 0
+                ? 'Chat list unavailable'
+                : 'No agents running'
+        }
       />
       <SidebarSection
         id="terminals"
@@ -2086,7 +2262,7 @@ function InactiveProjectSections({
         total={terminals.length}
         collapsed={false}
         onToggle={() => {}}
-        items={terminals}
+        items={filteredTerminals}
         emptyHint={filterLower ? 'No matches' : 'No terminals'}
       />
       <SidebarSection
@@ -2095,7 +2271,7 @@ function InactiveProjectSections({
         total={commands.length}
         collapsed={false}
         onToggle={() => {}}
-        items={commands}
+        items={commands.filter(matchesItem)}
         emptyHint={filterLower ? 'No matches' : 'Not running'}
       />
     </>
@@ -2128,6 +2304,7 @@ function ProjectGroup({
   isExpanded,
   isWorking,
   serverSnapshot,
+  chatActivity,
   shortcutNumber,
   onToggleExpand,
   onSelectProject,
@@ -2148,6 +2325,7 @@ function ProjectGroup({
   isExpanded: boolean;
   isWorking: boolean;
   serverSnapshot: ProjectDevServerSnapshot;
+  chatActivity: 'idle' | 'active' | 'thinking';
   /** Cmd+N shortcut badge (1..9). Null for rows beyond the shortcut range. */
   shortcutNumber: number | null;
   onToggleExpand: () => void;
@@ -2176,7 +2354,7 @@ function ProjectGroup({
   // Parent WorkspaceSidebar subscribes to the registry; this snapshot is
   // therefore re-read on every relevant change.
   const snap = sessionRegistry.snapshot(row.projectPath);
-  const baseDot = projectDotState(row, snap?.terminalTabs);
+  const baseDot = projectDotState(row, snap?.terminalTabs, chatActivity);
   const snapshotActivity = projectActivityStatus(row, snap?.terminalTabs);
   const activityStatus: ProjectActivityStatus =
     snapshotActivity === 'idle' && isWorking ? 'working' : snapshotActivity;
@@ -2190,7 +2368,9 @@ function ProjectGroup({
             ? 'thinking'
             : 'active'
           : activityStatus === 'idle'
-            ? 'idle'
+            ? chatActivity === 'active'
+              ? 'active'
+              : 'idle'
             : 'muted';
   const serverDot = serverStatusDot(serverSnapshot.status);
   const isExpandedBackgroundServerReady =
@@ -2205,13 +2385,15 @@ function ProjectGroup({
   const showAgentStatus =
     isExpandedBackgroundServerReady ||
     serverSnapshot.status !== 'ready' ||
-    (activityStatus !== 'idle' && activityStatus !== 'closed');
+    (activityStatus !== 'idle' && activityStatus !== 'closed') ||
+    chatActivity !== 'idle';
   // Expanded background projects show their server status in the Dev Server
   // child row. Keep the parent indicator for collapsed rows and the current
   // project, whose selected-row treatment is intentionally different.
   const showProjectServerDot = !isExpanded || isCurrent;
   const accessibleStatus = [
     projectActivityLabel(activityStatus),
+    chatActivity === 'thinking' ? 'chat working' : chatActivity === 'active' ? 'chat active' : null,
     serverStatusLabel(serverSnapshot.status),
     serverSnapshot.address,
   ]

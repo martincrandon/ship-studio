@@ -143,6 +143,10 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
+            let chat_service = commands::agent_chat::AgentChatService::new(_app.handle().clone());
+            chat_service.install_global();
+            _app.manage(chat_service);
+
             // Teach the user's own agent about workflows, and start the tick
             // that fires the armed ones. The skill install is the discovery
             // path for the whole feature (see commands::workflows::skill); it
@@ -932,6 +936,31 @@ pub fn run() {
             // Clipboard (Windows terminal paste)
             commands::clipboard::read_clipboard_text,
             commands::clipboard::stage_clipboard_image,
+            // Transient Codex chat threads
+            commands::agent_chat::commands::agent_chat_list,
+            commands::agent_chat::commands::agent_chat_list_drafts,
+            commands::agent_chat::commands::agent_chat_save_project_draft,
+            commands::agent_chat::commands::agent_chat_delete_project_draft,
+            commands::agent_chat::commands::agent_chat_promote_draft,
+            commands::agent_chat::commands::agent_chat_list_unlinked_projects,
+            commands::agent_chat::commands::agent_chat_storage_status,
+            commands::agent_chat::commands::agent_chat_create,
+            commands::agent_chat::commands::agent_chat_models,
+            commands::agent_chat::commands::agent_chat_send,
+            commands::agent_chat::commands::agent_chat_interrupt,
+            commands::agent_chat::commands::agent_chat_respond,
+            commands::agent_chat::commands::agent_chat_discard,
+            commands::agent_chat::commands::agent_chat_save_draft,
+            commands::agent_chat::commands::agent_chat_save_settings,
+            commands::agent_chat::commands::agent_chat_rename,
+            commands::agent_chat::commands::agent_chat_mark_read,
+            commands::agent_chat::commands::agent_chat_settle,
+            commands::agent_chat::commands::agent_chat_reopen,
+            commands::agent_chat::commands::agent_chat_resume_check,
+            commands::agent_chat::commands::agent_chat_relink_checkout,
+            commands::agent_chat::commands::agent_chat_relink_project,
+            commands::agent_chat::commands::agent_chat_stage_attachment,
+            commands::agent_chat::commands::agent_chat_recheck_attachments,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -942,6 +971,7 @@ pub fn run() {
                 // This is the only hook that fires for every shutdown — dev
                 // servers and agent PTYs must die here or they outlive the app
                 // and keep their ports (issue #229: EADDRINUSE on relaunch).
+                commands::agent_chat::shutdown_all_on_exit();
                 let ptys = commands::pty::kill_all_pty_sync();
                 let sessions = commands::pty_session::kill_all_sessions_sync();
                 tracing::info!(ptys, sessions, "App exit: killed tracked PTY processes");

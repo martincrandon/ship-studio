@@ -18,6 +18,11 @@ import { abortMerge } from '../../lib/conflicts';
 import { humanizeGitError } from '../../lib/errors';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface MergeConflictModalProps {
   /** Project path for the abort/merge operations. */
@@ -30,8 +35,8 @@ interface MergeConflictModalProps {
   sourceBranch: string | null;
   /** Paths of the files with unresolved conflicts. */
   files: string[];
-  /** Paste the fix prompt into the agent terminal (auto-paste on "Copy & Fix"). */
-  onSendToAgent?: (prompt: string) => void;
+  /** Place the fix prompt in the selected agent surface for explicit review. */
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult | void;
   /** Called after the merge is aborted, to refresh branch state and close. */
   onAborted: () => void;
   /** Close the modal without doing anything. */
@@ -70,8 +75,13 @@ export function MergeConflictModal({
 
   const handleCopyAndFix = () => {
     void copy(fixPrompt);
-    onSendToAgent?.(fixPrompt);
-    onToast('Copied and sent to your agent', 'success');
+    const result = onSendToAgent?.(fixPrompt);
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Copied and pasted into the agent terminal. Press Enter to continue.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    onToast(message ?? 'Prompt copied to clipboard.', 'success');
     onClose();
   };
 

@@ -438,13 +438,23 @@ pub async fn remove_worktree(
     let list_output = run_worktree_git(&validated_path, &["worktree", "list", "--porcelain"])?;
     if list_output.status.success() {
         let stdout = String::from_utf8_lossy(&list_output.stdout);
-        if let Some(main) = parse_worktree_porcelain(&stdout).first() {
+        let worktrees = parse_worktree_porcelain(&stdout);
+        if let Some(main) = worktrees.first() {
             if canon(&main.path) == canon(&validated_worktree.to_string_lossy()) {
                 return Err(CommandError::Validation {
                     field: "worktree_path".to_string(),
                     reason: "Cannot remove the main worktree".to_string(),
                 });
             }
+        }
+        if !worktrees
+            .iter()
+            .any(|worktree| canon(&worktree.path) == canon(&validated_worktree.to_string_lossy()))
+        {
+            return Err(CommandError::Validation {
+                field: "worktree_path".to_string(),
+                reason: "The selected path is not an existing worktree of this project".to_string(),
+            });
         }
     }
 
@@ -457,6 +467,7 @@ pub async fn remove_worktree(
     args.push(&worktree_str);
 
     info!(force, "Removing git worktree");
+    crate::commands::agent_chat::stop_before_worktree_removal(&worktree_str).await;
     let output = run_worktree_git(&validated_path, &args)?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -475,6 +486,7 @@ pub async fn remove_worktree(
         return Err(process_error(&args, &output));
     }
 
+    crate::commands::agent_chat::mark_worktree_removed(&worktree_str);
     GIT_CACHE.invalidate(&project_path);
     GIT_CACHE.invalidate(&worktree_path);
     Ok(())

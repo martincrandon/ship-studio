@@ -34,6 +34,11 @@ import { TextButton } from '../primitives/TextButton';
 import { Spinner } from '../primitives/Spinner';
 import { GitHubIcon, WarningIcon } from '@/components/icons';
 import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface SubmitReviewModalProps {
   /** Project path for PR operations */
@@ -49,7 +54,7 @@ interface SubmitReviewModalProps {
   /** Callback when the local branch was switched (e.g. after merge cleanup) */
   onBranchSwitch?: (branchName: string) => void;
   /** Paste a prompt into the active agent terminal (e.g. to ask Claude to fix conflicts) */
-  onSendToAgent?: (prompt: string) => void;
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
   /** Open the in-app conflict resolution UI for a head/base branch pair */
   onResolveConflicts?: (headBranch: string, baseBranch: string) => void;
   /** Callback to close modal */
@@ -257,9 +262,15 @@ export function SubmitReviewModal({
 
   const handleAskAgentToResolve = () => {
     if (!onSendToAgent) return;
-    onSendToAgent(buildConflictPrompt(branchName, baseBranch));
+    const result = onSendToAgent(buildConflictPrompt(branchName, baseBranch));
+    if (result === false) return;
     void trackEvent('pr_conflict_sent_to_agent', { $screen_name: 'Submit Review' });
-    onToast?.('Asked the agent to resolve conflicts', 'success');
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Asked the agent to resolve conflicts. Review the prompt in the terminal.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) onToast?.(message, 'success');
     onClose();
   };
 

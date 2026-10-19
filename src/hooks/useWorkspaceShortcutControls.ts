@@ -2,12 +2,19 @@ import { listen } from '@tauri-apps/api/event';
 import { useEffect, type RefObject } from 'react';
 import type { PreviewHandle } from '../components/preview/Preview';
 import { isMac } from '../lib/setup';
-import type { WorkspaceTab } from '../components/workspace/workspaceViewState';
+import { defaultWorkspaceTab, type WorkspaceTab } from '../components/workspace/workspaceViewState';
 
 interface Params {
   previewRef: RefObject<PreviewHandle | null>;
   hasPreview: boolean;
   projectTypeResolved: boolean;
+  currentProjectPath: string;
+  previewVisible: boolean;
+  isCapturing: boolean;
+  isCropMode: boolean;
+  isCropCapturing: boolean;
+  handleCaptureScreenshot: () => Promise<void>;
+  setIsCropMode: (mode: boolean) => void;
   setIsPreviewHidden: (hidden: boolean) => void;
   setIsAgentPanelHidden: (hidden: boolean) => void;
   setWorkspaceTab: (tab: WorkspaceTab) => void;
@@ -53,12 +60,49 @@ export function useWorkspaceShortcutControls({
   previewRef,
   hasPreview,
   projectTypeResolved,
+  currentProjectPath,
+  previewVisible,
+  isCapturing,
+  isCropMode,
+  isCropCapturing,
+  handleCaptureScreenshot,
+  setIsCropMode,
   setIsPreviewHidden,
   setIsAgentPanelHidden,
   setWorkspaceTab,
   togglePreviewLogs,
   onSelectPreview,
 }: Params): void {
+  // Native accelerators continue to work while the cross-origin preview owns
+  // focus. Keep these listeners with the workspace keyboard controls.
+  useEffect(() => {
+    if (!previewVisible) return;
+    const unlistenScreenshot = listen('capture-screenshot', () => {
+      if (!isCapturing && !isCropMode) void handleCaptureScreenshot();
+    });
+    const unlistenCrop = listen('toggle-crop', () => {
+      if (!isCapturing && !isCropCapturing) setIsCropMode(!isCropMode);
+    });
+    return () => {
+      void unlistenScreenshot.then((fn) => fn());
+      void unlistenCrop.then((fn) => fn());
+    };
+  }, [
+    handleCaptureScreenshot,
+    isCapturing,
+    isCropCapturing,
+    isCropMode,
+    previewVisible,
+    setIsCropMode,
+  ]);
+
+  // Project changes reset preview-side navigation without reverting a user's
+  // current tab on ordinary renders.
+  useEffect(() => {
+    setWorkspaceTab(defaultWorkspaceTab(hasPreview, projectTypeResolved));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectPath, hasPreview, projectTypeResolved]);
+
   useEffect(() => {
     const mac = isMac();
 

@@ -4,6 +4,7 @@
 
 pub mod accounts;
 pub mod agent_bridge;
+pub mod agent_chat;
 pub mod ai;
 pub mod analytics;
 pub mod assets;
@@ -52,6 +53,7 @@ pub mod workflows;
 
 // Re-export all commands for easy access in lib.rs
 pub use accounts::*;
+pub use agent_chat::*;
 pub use ai::*;
 pub use analytics::*;
 pub use assets::*;

@@ -38,6 +38,11 @@ import { fileExtensionForAnalytics } from '../../lib/code';
 import { CodeFileEditor } from './CodeFileEditor';
 import { basename } from '../../lib/paths';
 import type { SaveResult } from '../../hooks/useFileTree';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface CodeViewerProps {
   projectPath: string;
@@ -45,7 +50,7 @@ interface CodeViewerProps {
   fileContent: FileContent | null;
   isLoading: boolean;
   error: string | null;
-  onSendToAgent?: (text: string) => void;
+  onSendToAgent?: (text: string) => AgentPromptHandoffResult;
   /** A 1-based line to highlight + scroll into view (jump-to-code). */
   revealLine?: number | null;
   // Inline editing (Code tab). When `isEditing`, the read-only view is replaced
@@ -195,8 +200,13 @@ export function CodeViewer({
         char_count: formatted.length,
         had_question: question.trim().length > 0,
       });
-      onSendToAgent(formatted);
-      onToast?.('Sent to agent', 'success');
+      const result = onSendToAgent(formatted);
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to send.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) onToast?.(message, 'success');
     } else {
       void copy(formatted);
     }

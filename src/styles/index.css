@@ -69,6 +69,8 @@
 @import './features/preview-size.css';
 @import './features/preview-canvas.css';
 @import './features/agent-activity.css';
+@import './features/workspace-agent-view.css';
+@import './features/agent-chat.css';
 @import './features/thumbnail-consent.css';
 @import './features/visual-editor/panel.css';
 @import './features/visual-editor/controls.css';

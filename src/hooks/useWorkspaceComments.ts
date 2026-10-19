@@ -20,6 +20,8 @@ interface Params {
   /** Terminals a comment can be handed to. */
   agents: CommentAgent[];
   activeAgentId: number | null;
+  chatSelected?: boolean;
+  showChatDraft?: () => void;
   isWebProject: boolean;
   previewRunning: boolean;
   setIsPreviewHidden: (hidden: boolean) => void;
@@ -31,6 +33,8 @@ export function useWorkspaceComments({
   project,
   agents,
   activeAgentId,
+  chatSelected = false,
+  showChatDraft,
   isWebProject,
   previewRunning,
   setIsPreviewHidden,
@@ -44,7 +48,13 @@ export function useWorkspaceComments({
     : !previewRunning
       ? 'Start the preview to comment on an element. Comments you already left are here.'
       : null;
-  const team = useTeamWorkspace(project, { agents, activeAgentId, pickerHint });
+  const team = useTeamWorkspace(project, {
+    agents,
+    activeAgentId,
+    chatSelected,
+    showChatDraft,
+    pickerHint,
+  });
   const active = team.commentsActive;
   const wasActive = useRef(false);
 

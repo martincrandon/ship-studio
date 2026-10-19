@@ -61,6 +61,7 @@ import { MoveToFolderIcon } from '@/components/icons';
 import { useActiveAccount } from '../../hooks/useActiveAccount';
 import { useOpenModal } from '../../contexts/ModalContext';
 import { useKeepDevServersRunning } from '../../hooks/useKeepDevServersRunning';
+import { AgentChatDefaultViewSetting } from './AgentChatDefaultViewSetting';
 
 const errMsg = (err: unknown) => formatCommandError(asCommandError(err));
 
@@ -829,6 +830,7 @@ export function SettingsModal({
             <div className="settings-modal-body">
               <div className="settings-section">
                 <div className="settings-group">
+                  <AgentChatDefaultViewSetting />
                   <div className="settings-row">
                     <div className="settings-row-info">
                       <span className="settings-row-label">Keep dev servers running</span>

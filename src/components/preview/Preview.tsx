@@ -24,6 +24,11 @@ import {
 } from 'react';
 import { usePreviewConnection, SERVER_MAX_RETRIES } from '../../hooks/usePreviewConnection';
 import { useAgentBridge } from '../../hooks/useAgentBridge';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+} from '../../lib/agentPromptHandoff';
 import { AgentActivityOverlay } from './AgentActivityOverlay';
 import { PreviewSizeControl } from './PreviewSizeControl';
 import { PreviewCanvas, type CanvasZoom } from './PreviewCanvas';
@@ -203,7 +208,7 @@ interface PreviewProps {
   /** Detected project type; gates the visual editor to Next.js for v1. */
   projectType?: ProjectType;
   /** Callback to send prompt to Claude terminal */
-  onSendToClaude?: (prompt: string) => void;
+  onSendToClaude?: (prompt: string) => AgentPromptHandoffResult;
   /** Plugin components rendered in the preview toolbar */
   previewPlugins?: React.ReactNode;
   /** Whether the dev server logs panel is open */
@@ -1309,7 +1314,13 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           `port ${port} — Ship Studio starts and manages the dev server on that port ` +
           `itself, and a second unmanaged server will fight it.`;
       }
-      onSendToClaude(prompt);
+      const result = onSendToClaude(prompt);
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to send.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) showToast(message, 'success');
       void trackEvent('preview_fix_with_agent', {
         has_logs: !!logs,
         is_static: isStaticProject,
@@ -1324,6 +1335,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     port,
     serverProcessGone,
     devServerUnexpectedExit,
+    showToast,
   ]);
 
   const breadcrumbSignature =

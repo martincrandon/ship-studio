@@ -51,14 +51,20 @@ import { Spinner } from '../primitives/Spinner';
 import { BuildTerminal } from '../terminal/BuildTerminal';
 import { AndroidMirrorStage } from './AndroidMirrorStage';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface DeviceMirrorProps {
   /** Project name, for guidance copy. */
   projectName: string;
   /** Absolute project path — used to start/key the backend preview session. */
   projectPath: string;
-  /** Hand a prompt to the embedded Claude agent (powers "Fix with AI"). */
-  onSendToAgent?: (text: string) => void;
+  /** Place a prompt in the selected agent surface for explicit review. */
+  onSendToAgent?: (text: string) => AgentPromptHandoffResult | void;
 }
 
 type InputChannel = ReturnType<typeof connectInputChannel>;
@@ -129,6 +135,7 @@ const HEAL_BASE_DELAY_MS = 1500;
 const HEAL_STABLE_MS = 5000;
 
 export function DeviceMirror({ projectName, projectPath, onSendToAgent }: DeviceMirrorProps) {
+  const { showToast } = useOptionalToast();
   // Which platforms the project targets, which this machine can actually preview, and
   // which one we're showing. Platform stays null until detection resolves (so we don't
   // connect to a platform the project can't build or the machine can't run) — and
@@ -487,16 +494,28 @@ export function DeviceMirror({ projectName, projectPath, onSendToAgent }: Device
       'Build output:\n```\n' +
       (log || '(no build output captured)') +
       '\n```';
-    onSendToAgent?.(prompt);
-  }, [projectPath, projectName, buildCommand, onSendToAgent, platform]);
+    const result = onSendToAgent?.(prompt);
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted into the agent terminal. Press Enter to send.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) showToast(message, 'success');
+  }, [projectPath, projectName, buildCommand, onSendToAgent, platform, showToast]);
 
   // Hand the toolchain setup for a platform to the embedded agent — the heavy,
   // nuanced work (installers, SDKs, AVDs, env) the user shouldn't have to do by hand.
   const handleAgentSetup = useCallback(
     (p: Platform) => {
-      onSendToAgent?.(MOBILE_SETUP[p].prompt);
+      const result = onSendToAgent?.(MOBILE_SETUP[p].prompt);
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to send.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) showToast(message, 'success');
     },
-    [onSendToAgent]
+    [onSendToAgent, showToast]
   );
 
   // Map a pointer event to normalized 0..1 coords over the streamed image.

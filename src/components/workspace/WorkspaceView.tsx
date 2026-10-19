@@ -15,8 +15,6 @@ export type { WorkspaceViewProps } from './workspaceViewTypes';
 
 import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { logger } from '../../lib/logger';
-import { setTerminalState } from '../../lib/project';
 import type { InspectTab } from '../preview/Preview';
 import { CompactWorkspace } from './CompactWorkspace';
 import { MainBranchBanner } from '../branches/MainBranchBanner';
@@ -38,17 +36,23 @@ import { useWorkspaceCommands } from '../../commands/useWorkspaceCommands';
 import { useSnapshots } from '../../hooks/useSnapshots';
 import { useWorktreeWorkflow } from '../../hooks/useWorktreeWorkflow';
 import { WorkspacePluginsSlot } from '../plugins/WorkspacePluginsSlot';
+import { getAgentById } from '../../lib/agent';
 import { useShopifyTheme } from '../../hooks/useShopifyTheme';
 import { isMac } from '../../lib/setup';
 import { kbd } from '../../lib/shortcuts';
 import { useModal } from '../../contexts/ModalContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
-import { defaultWorkspaceTab, workspacePreviewCapabilities } from './workspaceViewState';
+import { workspacePreviewCapabilities } from './workspaceViewState';
 import { useWorkspaceShortcutControls } from '../../hooks/useWorkspaceShortcutControls';
+import { useWorkspaceTerminalTabTitles } from '../../hooks/useWorkspaceTerminalTabTitles';
 import { useWorkspacePanelCommands } from '../../hooks/useWorkspacePanelCommands';
 import { useWorkspaceComments } from '../../hooks/useWorkspaceComments';
 import { useWorkspaceVariablesPanel } from '../../hooks/useWorkspaceVariablesPanel';
 import { useWorkspaceTerminalShortcuts } from '../../hooks/useWorkspaceTerminalShortcuts';
+import { useAgentChatWorkspace } from '../../hooks/useAgentChatWorkspace.tsx';
+import { getAgentWorkspaceView } from '../../lib/agentChatPreferences';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
+import { subscribeChatDraftReview } from '../../lib/agentPromptHandoff';
 import '../../styles/features/notifications.css';
 
 /**
@@ -212,11 +216,13 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     isCropMode,
     setIsCropMode,
     isCropCapturing,
+    isFullPageCapturing,
     screenshotPreviewPath,
     setScreenshotPreviewPath,
     showScreenshotModal,
     setShowScreenshotModal,
     handleCaptureScreenshot,
+    handleCaptureFullPage,
     handleCropStart,
     handleCropComplete,
     handleCropCancel,
@@ -320,7 +326,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     handleStartDevServer,
     handleGitHubStatusChange,
     handlePreviewReady,
-    sendToClaude,
+    sendToClaude: sendPromptToSelectedAgent,
     handleTerminalExit,
     handleToolbarAutoAcceptToggle,
     handleAutoAcceptWarningAccept,
@@ -342,96 +348,45 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   // with no preview at all.
   const previewVisible = isWebProject && workspaceTab === 'preview' && !isPreviewHidden;
 
-  // Listen for native menu accelerators (Cmd+Shift+S / Cmd+Shift+C).
-  // Native accelerators work even when the cross-origin preview iframe has focus,
-  // unlike window keydown listeners which the iframe swallows.
-  useEffect(() => {
-    if (!previewVisible) return;
-    const unlistenScreenshot = listen('capture-screenshot', () => {
-      if (!isCapturing && !isCropMode) {
-        void handleCaptureScreenshot();
-      }
-    });
-    const unlistenCrop = listen('toggle-crop', () => {
-      if (!isCapturing && !isCropCapturing) {
-        setIsCropMode(!isCropMode);
-      }
-    });
-    return () => {
-      void unlistenScreenshot.then((f) => f());
-      void unlistenCrop.then((f) => f());
-    };
-  }, [
-    previewVisible,
-    isCapturing,
-    isCropMode,
-    isCropCapturing,
-    handleCaptureScreenshot,
-    setIsCropMode,
-  ]);
-
-  // Reset the preview-side tab to its default whenever the user switches
-  // projects. While detection is pending, stay on Preview so the workspace
-  // does not flash Code before the dev server capability is known. Once
-  // resolved, generic/unknown projects land on Code (no preview available).
-  // Without this, switching from a web project while on Branches/PRs would
-  // land you on Branches/PRs in the next project too, which reads as "sticky
-  // state from the wrong place".
-  useEffect(() => {
-    setWorkspaceTab(defaultWorkspaceTab(hasPreview, projectTypeResolved));
-    // Only re-fire on project path change. We deliberately *don't* depend
-    // on `workspaceTab` here — that would force-revert every user click.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject.path, hasPreview, projectTypeResolved]);
-
-  // Track terminal tab titles from PTY title changes. Titles live in the
-  // session registry so (a) they're scoped per-project (tab ids are
-  // per-project counters and would collide as a flat numeric map — that
-  // collision is what made switching projects reset every tab's title) and
-  // (b) background projects keep their titles visible in the sidebar.
-  const handleTabTitleChange = useCallback(
-    (projectPath: string, tabId: number) => (title: string) => {
-      sessionRegistry.setTerminalTabTitle(projectPath, tabId, title);
-    },
-    []
-  );
-
-  // Manual rename from the sidebar's double-click → input flow. Updates the
-  // registry (which becomes the display source of truth via `tabTitles`)
-  // and writes the full tab list back to .shipstudio/project.json so the
-  // rename survives across launches. An empty `name` clears the custom
-  // title — useful for "undo my rename, go back to the agent name".
-  const handleRenameTab = useCallback(
-    (tabId: number, name: string) => {
-      const projectPath = currentProject.path;
-      sessionRegistry.setTerminalTabCustomTitle(projectPath, tabId, name || null);
-      const customTitles = sessionRegistry.getCustomTitles(projectPath);
-      const activeIdx = Math.max(
-        0,
-        terminalTabs.findIndex((t) => t.id === activeTerminalTab)
-      );
-      void setTerminalState(projectPath, {
-        tabs: terminalTabs.map((t) => ({
-          agent_id: t.agentId,
-          session_id: t.sessionId,
-          custom_title: customTitles.get(t.id),
-        })),
-        active_tab_index: activeIdx,
-      }).catch((err) => {
-        logger.warn('[RenameTab] Failed to persist custom title', {
-          error: String(err),
-          tabId,
-        });
-      });
-    },
-    [currentProject.path, terminalTabs, activeTerminalTab]
-  );
+  const { handleTabTitleChange, handleRenameTab } = useWorkspaceTerminalTabTitles({
+    projectPath: currentProject.path,
+    terminalTabs,
+    activeTerminalTab,
+  });
   // Naming note: `showPreviewLogs` is the legacy state for the inspect panel
   // (which hosts dev-server logs + browser tools). The event keeps the
   // generic name so future inspect-only telemetry doesn't have to migrate.
   const [showPreviewLogs, setShowPreviewLogs] = useState(false);
   const [inspectTab, setInspectTabRaw] = useState<InspectTab>('logs');
   const [isAgentPanelHidden, setIsAgentPanelHidden] = useState(false);
+  useEffect(() => subscribeChatDraftReview(() => setIsAgentPanelHidden(false)), []);
+  const selectTerminalNavigationTarget = useCallback(
+    (sessionId: string): 'selected' | 'pending' | 'missing' => {
+      const tab = terminalTabs.find((candidate) => candidate.sessionId === sessionId);
+      if (!tab) return terminalTabs.length === 0 ? 'pending' : 'missing';
+      setShowHealthLogs(false);
+      setActiveTerminalTab(tab.id);
+      setAttentionTabs((previous) => {
+        const next = new Set(previous);
+        next.delete(tab.id);
+        return next;
+      });
+      sessionRegistry.setTerminalTabAttention(currentProject.path, tab.id, false);
+      return 'selected';
+    },
+    [currentProject.path, setActiveTerminalTab, setAttentionTabs, setShowHealthLogs, terminalTabs]
+  );
+  const sendToClaude = useCallback(
+    (prompt: string): AgentPromptHandoffResult => {
+      const result = sendPromptToSelectedAgent(prompt);
+      if (result === 'chat-draft') {
+        setIsAgentPanelHidden(false);
+        return result;
+      }
+      return result === 'terminal' || result === false ? result : false;
+    },
+    [sendPromptToSelectedAgent]
+  );
   const [forceBranchesOpen, setForceBranchesOpen] = useState(false);
   const [createBranchRequest, setCreateBranchRequest] = useState(0);
   // Where the panels are. `useLocalStorageFlag('agentPanelPinned')` and its four
@@ -479,6 +434,23 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     }
     setIsAgentPanelHidden(!isAgentPanelHidden);
   }, [isAgentPanelHidden, setIsPreviewHidden]);
+
+  const agentChat = useAgentChatWorkspace({
+    projectPath: currentProject.path,
+    autoAcceptMode,
+    worktrees: worktree.worktrees,
+    onCreateWorktree: worktree.openCreate,
+    setAgentPanelHidden: setIsAgentPanelHidden,
+    setPreviewHidden: setIsPreviewHidden,
+    showToast,
+    onOpenNotificationSettings: () => setShowNotificationSettings(true),
+    canToggleApprovalMode:
+      getAgentWorkspaceView(currentProject.path) === 'chat'
+        ? getAgentById('codex').autoAcceptFlag !== null
+        : getActiveTabAgent().autoAcceptFlag !== null,
+    onToggleApprovalMode: handleToolbarAutoAcceptToggle,
+    onSelectTerminalTarget: selectTerminalNavigationTarget,
+  });
   const handleSelectPreview = useCallback(() => {
     void handleStartDevServer();
   }, [handleStartDevServer]);
@@ -513,6 +485,13 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     previewRef,
     hasPreview,
     projectTypeResolved,
+    currentProjectPath: currentProject.path,
+    previewVisible,
+    isCapturing,
+    isCropMode,
+    isCropCapturing,
+    handleCaptureScreenshot,
+    setIsCropMode,
     setIsPreviewHidden,
     setIsAgentPanelHidden,
     setWorkspaceTab,
@@ -626,6 +605,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     project: currentProject,
     agents: agentsForComments,
     activeAgentId: activeTerminalTab,
+    chatSelected: agentChat.view === 'chat',
+    showChatDraft: () => setIsAgentPanelHidden(false),
     isWebProject,
     previewRunning: knownDevServerPort !== null,
     setIsPreviewHidden,
@@ -828,6 +809,10 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
               devServerLifecycleVersion={devServerLifecycleVersion}
               currentProjectPath={currentProject.path}
               currentProjectName={currentProject.name}
+              agentChatActivity={agentChat.sidebarActivity}
+              agentChatView={agentChat.view}
+              agentChatSnapshot={agentChat.chatSnapshot}
+              onSelectChatTarget={agentChat.selectSidebarTarget}
               onSelectProject={onSelectProject}
               onSelectProjectTab={onSelectProjectTab}
               terminalTabs={terminalTabs}
@@ -837,6 +822,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
               maxTabs={maxTerminalTabs}
               onSelectTab={(tabId) => {
                 setShowHealthLogs(false);
+                agentChat.onViewChange('terminal');
+                setIsAgentPanelHidden(false);
                 setActiveTerminalTab(tabId);
                 setAttentionTabs((prev) => {
                   const next = new Set(prev);
@@ -1016,10 +1003,13 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                     isWebProject={isWebProject}
                     isPreviewCaptureAvailable={previewVisible}
                     isCapturing={isCapturing}
+                    isFullPageCapturing={isFullPageCapturing}
                     isCropMode={isCropMode}
                     isCropCapturing={isCropCapturing}
                     setIsCropMode={setIsCropMode}
                     handleCaptureScreenshot={handleCaptureScreenshot}
+                    handleCaptureFullPage={handleCaptureFullPage}
+                    agentChat={agentChat}
                     onNotificationSettings={() => setShowNotificationSettings(true)}
                     onSkills={skillsModal.open}
                     onMcp={mcpModal.open}
@@ -1158,6 +1148,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
             onPluginTerminalExit: handlePluginTerminalExit,
           }}
         />
+        {agentChat.commandDialogs}
       </div>
     </>
   );

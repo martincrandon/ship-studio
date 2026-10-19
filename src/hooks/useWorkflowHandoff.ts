@@ -19,15 +19,20 @@
  * @module hooks/useWorkflowHandoff
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   consumeHandoff,
+  getHandoffRevision,
   peekHandoff,
   peekHandoffFinding,
+  subscribeHandoff,
   trackFindingFix,
   type HandoffFinding,
 } from '../lib/workflowHandoff';
 import { logger } from '../lib/logger';
+import { getAgentWorkspaceView } from '../lib/agentChatPreferences';
+import { getAgentChatCaptureTarget, stagePrompt } from '../lib/agentChatStore';
+import { requestChatDraftReview } from '../lib/agentPromptHandoff';
 import type { ToastAction, ToastOptions, ToastType } from './useToasts';
 
 const RETRY_MS = 400;
@@ -57,18 +62,23 @@ export const HANDOFF_FAILED_MESSAGE =
  */
 export const HANDOFF_NO_ROOM_MESSAGE =
   'That project already has the maximum number of agent tabs. Close one and send this again.';
+export const HANDOFF_CHAT_UNAVAILABLE_MESSAGE =
+  'The selected Chat conversation uses a different checkout. Select this project’s checkout and retry the handoff.';
+
+type HandoffStartResult = boolean | 'drafted' | 'chat-unavailable';
 
 interface HandoffDelivery {
   /**
    * Open a new agent tab for `projectPath` whose CLI starts with `prompt`.
    * Returns false while the project's terminal system is not ready yet.
    */
-  startAgentWithPrompt: (projectPath: string, prompt: string) => boolean;
+  startAgentWithPrompt: (projectPath: string, prompt: string) => HandoffStartResult;
   /** Both callbacks receive the finding behind the prompt, for reporting. */
   onDelivered?: (finding: HandoffFinding | null) => void;
-  onFailed?: (finding: HandoffFinding | null) => void;
+  onDrafted?: (finding: HandoffFinding | null) => void;
+  onFailed?: (finding: HandoffFinding | null, reason?: 'chat-unavailable') => void;
   /** Stop immediately instead of retrying — the blocker will not clear itself. */
-  failFast?: boolean;
+  failFast?: boolean | (() => boolean);
 }
 
 /** The subset of the workspace's terminal bundle this needs. */
@@ -102,10 +112,16 @@ export function useFindingHandoff(
 ): void {
   const terminalTabCount = terminalTabs.length;
   const startAgentWithPrompt = useCallback(
-    (projectPath: string, prompt: string): boolean => {
+    (projectPath: string, prompt: string): HandoffStartResult => {
       // Not ready until the project is the open one and its tabs are seeded —
       // the Inbox asks for this in the same breath as opening the project.
-      if (currentProjectPath !== projectPath || terminalTabCount === 0) return false;
+      if (currentProjectPath !== projectPath) return false;
+      if (getAgentWorkspaceView(projectPath) === 'chat') {
+        const target = getAgentChatCaptureTarget(projectPath);
+        if (!target || target.checkoutPath !== projectPath) return 'chat-unavailable';
+        return stagePrompt(projectPath, prompt) ? 'drafted' : 'chat-unavailable';
+      }
+      if (terminalTabCount === 0) return false;
       // A new tab, so an in-flight conversation is never interrupted.
       addTerminalTab(undefined, { initialPrompt: prompt, projectPath });
       return true;
@@ -127,31 +143,57 @@ export function useFindingHandoff(
     [showToast]
   );
   const onFailed = useCallback(
-    (finding: HandoffFinding | null) => {
-      trackFindingFix(finding, atCapacity ? 'no_room' : 'failed');
+    (finding: HandoffFinding | null, reason?: 'chat-unavailable') => {
+      trackFindingFix(finding, !reason && atCapacity ? 'no_room' : 'failed');
       // Being out of tabs is the app enforcing its own cap and telling the
       // user how to proceed — a refusal, not a fault, so it shows like an
       // error without being filed as one (issue #920). A handoff that failed
       // for any other reason genuinely did go wrong.
-      showToast(atCapacity ? HANDOFF_NO_ROOM_MESSAGE : HANDOFF_FAILED_MESSAGE, 'error', undefined, {
-        expected: atCapacity,
-      });
+      const message = reason
+        ? HANDOFF_CHAT_UNAVAILABLE_MESSAGE
+        : atCapacity
+          ? HANDOFF_NO_ROOM_MESSAGE
+          : HANDOFF_FAILED_MESSAGE;
+      showToast(message, 'error', undefined, { expected: atCapacity || !!reason });
     },
     [showToast, atCapacity]
+  );
+
+  const onDrafted = useCallback(
+    (finding: HandoffFinding | null) => {
+      requestChatDraftReview();
+      trackFindingFix(finding, 'drafted');
+      showToast('Prompt added to Chat. Review it, then press Send.', 'success');
+    },
+    [showToast]
+  );
+  const shouldFailFast = useCallback(
+    () =>
+      atCapacity &&
+      currentProjectPath !== null &&
+      getAgentWorkspaceView(currentProjectPath) !== 'chat',
+    [atCapacity, currentProjectPath]
   );
 
   useWorkflowHandoff(currentProjectPath, {
     startAgentWithPrompt,
     onDelivered,
+    onDrafted,
     onFailed,
-    failFast: atCapacity,
+    failFast: shouldFailFast,
   });
 }
 
 export function useWorkflowHandoff(
   projectPath: string | null,
-  { startAgentWithPrompt, onDelivered, onFailed, failFast = false }: HandoffDelivery
+  { startAgentWithPrompt, onDelivered, onDrafted, onFailed, failFast = false }: HandoffDelivery
 ): void {
+  const handoffRevision = useSyncExternalStore(
+    subscribeHandoff,
+    getHandoffRevision,
+    getHandoffRevision
+  );
+
   useEffect(() => {
     if (!projectPath || peekHandoff(projectPath) === null) return;
 
@@ -167,16 +209,24 @@ export function useWorkflowHandoff(
       if (prompt === null) return;
       const finding = peekHandoffFinding(projectPath);
 
-      if (failFast) {
+      if (typeof failFast === 'function' ? failFast() : failFast) {
         consumeHandoff();
         logger.warn('[Workflows] Cannot hand a finding over right now', { projectPath });
         onFailed?.(finding);
         return;
       }
 
-      if (startAgentWithPrompt(projectPath, prompt)) {
+      const result = startAgentWithPrompt(projectPath, prompt);
+      if (result === 'chat-unavailable') {
         consumeHandoff();
-        onDelivered?.(finding);
+        logger.warn('[Workflows] Chat draft target is unavailable for a finding', { projectPath });
+        onFailed?.(finding, 'chat-unavailable');
+        return;
+      }
+      if (result) {
+        consumeHandoff();
+        if (result === 'drafted') onDrafted?.(finding);
+        else onDelivered?.(finding);
         return;
       }
       if (Date.now() > deadline) {
@@ -195,5 +245,5 @@ export function useWorkflowHandoff(
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [projectPath, startAgentWithPrompt, onDelivered, onFailed, failFast]);
+  }, [projectPath, startAgentWithPrompt, onDelivered, onFailed, failFast, handoffRevision]);
 }

@@ -28,6 +28,11 @@ import { trackEvent } from '../../lib/analytics';
 import { stripAnsi } from '../../lib/ansi';
 import { createTerminalOptions } from './terminalTheme';
 import '@xterm/xterm/css/xterm.css';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 /* Tail-limit the full-buffer send so we don't fire 3k+ lines of HMR
    chatter at the agent. 500 lines ≈ ~40KB of typical Next.js output —
@@ -71,7 +76,7 @@ interface DevServerLogsProps {
   /** Version number that changes when output updates (triggers re-render) */
   outputVersion: number;
   /** Pipe the current server logs into the agent terminal. */
-  onSendToAgent?: (text: string) => void;
+  onSendToAgent?: (text: string) => AgentPromptHandoffResult;
   /** Forward keystrokes into the dev-server PTY (interactive prompts). */
   onInput?: (data: string) => void;
   /** Mirror the terminal's cols/rows to the dev-server PTY. */
@@ -291,6 +296,8 @@ export function DevServerLogs({
   const handleSendFullBuffer = useCallback(() => {
     if (!onSendToAgent) return;
     const text = formatServerLogsForAgent(output);
+    const result = onSendToAgent(text);
+    if (result === false) return;
     void trackEvent('logs_sent_to_agent', {
       source: 'full_buffer',
       char_count: text.length,
@@ -298,20 +305,31 @@ export function DevServerLogs({
       // the metric is comparable to the selection branch below.
       line_count: output.split('\n').length,
     });
-    onSendToAgent(text);
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted into the agent terminal. Press Enter to send.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) showToast(message, 'success');
   }, [onSendToAgent, output]);
 
   const handleSendSelection = useCallback(() => {
     if (!onSendToAgent || !selectionInfo) return;
     const text = formatSelectionForAgent(selectionInfo.text, question);
+    const result = onSendToAgent(text);
+    if (result === false) return;
     void trackEvent('logs_sent_to_agent', {
       source: 'selection',
       char_count: text.length,
       line_count: selectionInfo.text.split('\n').length,
       had_question: question.trim().length > 0,
     });
-    onSendToAgent(text);
-    showToast('Sent to agent', 'success');
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted into the agent terminal. Press Enter to send.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) showToast(message, 'success');
     dismissPopover();
   }, [onSendToAgent, selectionInfo, question, showToast, dismissPopover]);
 

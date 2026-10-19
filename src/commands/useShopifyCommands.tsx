@@ -10,6 +10,11 @@ import {
 import type { ProjectType } from '../lib/static-server';
 import { asCommandError, formatCommandError } from '../lib/errors';
 import { ShopifyBagIcon } from '@/components/icons';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../lib/agentPromptHandoff';
 
 /**
  * Palette commands for Shopify theme projects. Called from `WorkspaceView`
@@ -19,7 +24,7 @@ import { ShopifyBagIcon } from '@/components/icons';
 export interface UseShopifyCommandsParams {
   projectType: ProjectType;
   projectPath: string;
-  onSendToAgent: (prompt: string) => void;
+  onSendToAgent: (prompt: string) => AgentPromptHandoffResult;
   showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -42,8 +47,13 @@ export function useShopifyCommands({
         when: ({ kind }) => kind === 'project' && isTheme,
         keywords: ['shopify', 'liquid', 'section', 'block'],
         run: () => {
-          onSendToAgent(buildSectionPrompt());
-          showToast('Prompt pasted — press Enter in the terminal to run it', 'success');
+          const result = onSendToAgent(buildSectionPrompt());
+          const message = promptHandoffSuccessMessage(
+            result,
+            'Prompt pasted — press Enter in the terminal to run it',
+            CHAT_PROMPT_STAGED_MESSAGE
+          );
+          if (message) showToast(message, 'success');
         },
       },
       {
@@ -60,8 +70,13 @@ export function useShopifyCommands({
               showToast('Connect a Shopify store first (see the preview pane)', 'error');
               return;
             }
-            onSendToAgent(buildPushPrompt(store));
-            showToast('Prompt pasted — press Enter in the terminal to run it', 'success');
+            const result = onSendToAgent(buildPushPrompt(store));
+            const message = promptHandoffSuccessMessage(
+              result,
+              'Prompt pasted — press Enter in the terminal to run it',
+              CHAT_PROMPT_STAGED_MESSAGE
+            );
+            if (message) showToast(message, 'success');
           } catch (err) {
             showToast(formatCommandError(asCommandError(err)), 'error');
           }

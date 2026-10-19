@@ -1505,6 +1505,15 @@ else if(d.type==='ss:deleteRulePreview'){var dl=findRuleOwner(d.selector,d.media
    candidate set can't keep showing the old image until then. */
 else if(d.type==='ss:setSrc'){if(typeof d.value==='string'){for(var i=0;i<selectedSet.length;i++){var el=selectedSet[i];if(!el||el.tagName!=='IMG')continue;el.setAttribute('src',d.value);if(el.hasAttribute('srcset'))el.setAttribute('srcset','');}}placeSet();ssScheduleContrastRefresh();}
 
+/* Text Settings writes plain text after the source has been saved. Mutate only a
+   single direct text node; never assign innerHTML/textContent or flatten children. */
+else if(d.type==='ss:setText'){if(typeof d.value==='string'){for(var i=0;i<selectedSet.length;i++){var el=selectedSet[i];if(!el||!el.isConnected)continue;var nodes=Array.prototype.slice.call(el.childNodes),texts=nodes.filter(function(n){return n.nodeType===3;});if(texts.length!==1||nodes.some(function(n){return n.nodeType!==3&&n.nodeType!==8;}))continue;texts[0].nodeValue=d.value;}}placeSet();ssScheduleContrastRefresh();}
+
+/* Tag Settings changes are limited by the host to compatible native text/container
+   tags. Rebuild the selected elements with identical attributes and moved child
+   nodes so source markup and nested content stay intact in the live preview. */
+else if(d.type==='ss:setTag'){var tagName=typeof d.value==='string'?d.value.toLowerCase():'';if(/^(h[1-6]|p|span|div|section|article|nav|header|footer|aside|main|a)$/.test(tagName)){var before=selectedSet.slice(),after=[];for(var i=0;i<before.length;i++){var el=before[i];if(!el||!el.isConnected||!el.parentNode){after.push(el);continue;}var replacement=document.createElement(tagName);for(var ai=0;ai<el.attributes.length;ai++){var attr=el.attributes[ai];if(attr.namespaceURI)replacement.setAttributeNS(attr.namespaceURI,attr.name,attr.value);else replacement.setAttribute(attr.name,attr.value);}while(el.firstChild)replacement.appendChild(el.firstChild);el.parentNode.replaceChild(replacement,el);after.push(replacement);if(selPrimary===el)selPrimary=replacement;}selectedSet=after;}placeSet();ssScheduleContrastRefresh();}
+
 /* Variables editor live preview: set a custom property so every var() consumer updates
    instantly. Prefer editing the live :root rule in the CSSOM (HMR replaces the sheet and
    supersedes it cleanly); fall back to an inline style on the root element when there's no :root

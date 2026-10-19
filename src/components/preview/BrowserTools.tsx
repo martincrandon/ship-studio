@@ -25,12 +25,18 @@ import {
 import { trackEvent } from '../../lib/analytics';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { Button } from '../primitives/Button';
+import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 type InnerTab = 'console' | 'network' | 'elements';
 
 interface BrowserToolsProps {
-  /** Pipe the currently active tab's serialized content into the agent terminal. */
-  onSendToAgent?: (text: string) => void;
+  /** Place the currently active tab's serialized content in the selected agent surface. */
+  onSendToAgent?: (text: string) => AgentPromptHandoffResult | void;
   /** Whether this panel is actually visible (panel open AND Browser tab
    *  selected). BrowserTools stays mounted in a hidden slot, so visibility
    *  must come from the parent — it gates the live DOM subscription. */
@@ -39,6 +45,7 @@ interface BrowserToolsProps {
 
 export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps) {
   const [tab, setTab] = useState<InnerTab>('console');
+  const { showToast } = useOptionalToast();
 
   const consoleEntries = useSyncExternalStore(
     inspectStore.subscribe,
@@ -92,7 +99,13 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
       had_data: tab === 'elements' ? domSnapshot !== null : (entryCount ?? 0) > 0,
       char_count: prompt.length,
     });
-    onSendToAgent(prompt);
+    const result = onSendToAgent(prompt);
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted into the agent terminal. Press Enter to send.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) showToast(message, 'success');
   };
 
   const sendDisabled =
@@ -116,7 +129,7 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
                 size="compact"
                 onClick={handleSendToAgent}
                 disabled={sendDisabled}
-                title={`Send current ${tab} contents to the active agent`}
+                title={`Add current ${tab} contents to the selected agent`}
               >
                 Send to agent
               </Button>

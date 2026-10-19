@@ -17,9 +17,47 @@ import type { PreviewHandle } from '../components/preview/Preview';
 import { getThumbnailsEnabled, setThumbnailsEnabled } from '../lib/settings';
 
 const invokeMock = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>();
+const chatCaptureState = vi.hoisted(() => ({
+  workspaceView: 'terminal' as 'terminal' | 'chat',
+  target: null as
+    | { kind: 'thread'; projectPath: string; threadId: string; checkoutPath: string }
+    | { kind: 'draft'; projectPath: string; draftId: string; checkoutPath: string }
+    | null,
+  stageAttachment: vi.fn<
+    (
+      target: unknown,
+      path: string
+    ) => Promise<{
+      id: string;
+      name: string;
+      path: string;
+      mimeType: string;
+      size: number;
+      kind: 'image' | 'file';
+    }>
+  >(),
+}));
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => invokeMock(cmd, args),
 }));
+
+vi.mock('../lib/agentChatPreferences', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../lib/agentChatPreferences')>();
+  return {
+    ...original,
+    getAgentWorkspaceView: () => chatCaptureState.workspaceView,
+  };
+});
+
+vi.mock('../lib/agentChatStore', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../lib/agentChatStore')>();
+  return {
+    ...original,
+    getAgentChatCaptureTarget: () => chatCaptureState.target,
+    stageCapturedAttachment: (target: unknown, path: string) =>
+      chatCaptureState.stageAttachment(target, path),
+  };
+});
 
 vi.mock('../lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -41,6 +79,7 @@ function makeParams() {
     previewRef: {
       current: { isServerReady: () => true },
     } as unknown as RefObject<PreviewHandle | null>,
+    currentProjectPath: PROJECT,
     devServerPort: 3000,
     pasteToActiveTerminal: vi.fn(),
     currentProjectPathRef: { current: PROJECT } as unknown as RefObject<string | null>,
@@ -62,6 +101,9 @@ describe('useScreenshotManagement auto-capture consent gate', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     invokeMock.mockResolvedValue('/thumb.png');
+    chatCaptureState.workspaceView = 'terminal';
+    chatCaptureState.target = null;
+    chatCaptureState.stageAttachment.mockReset();
   });
 
   afterEach(() => {
@@ -247,5 +289,95 @@ describe('useScreenshotManagement auto-capture consent gate', () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes a pending screenshot to its captured draft after the view and project change', async () => {
+    const originalTarget = {
+      kind: 'draft' as const,
+      projectPath: PROJECT,
+      draftId: 'draft-original',
+      checkoutPath: PROJECT,
+    };
+    const laterTarget = {
+      kind: 'thread' as const,
+      projectPath: '/Users/test/ShipStudio/other',
+      threadId: 'thread-later',
+      checkoutPath: '/Users/test/ShipStudio/other',
+    };
+    chatCaptureState.workspaceView = 'chat';
+    chatCaptureState.target = originalTarget;
+    chatCaptureState.stageAttachment.mockResolvedValue({
+      id: 'capture',
+      name: 'capture.png',
+      path: '/capture.png',
+      mimeType: 'image/png',
+      size: 1,
+      kind: 'image',
+    });
+
+    let finishCapture!: (path: string) => void;
+    const params = makeParams();
+    const terminalPaste = params.pasteToActiveTerminal;
+    params.previewRef = {
+      current: {
+        captureForClaude: () => new Promise<string>((resolve) => (finishCapture = resolve)),
+      },
+    } as unknown as RefObject<PreviewHandle | null>;
+    const projectPathRef = { current: PROJECT } as unknown as RefObject<string | null>;
+    const { result, rerender } = renderHook(
+      ({ projectPath }) =>
+        useScreenshotManagement({
+          ...params,
+          currentProjectPath: projectPath,
+          currentProjectPathRef: projectPathRef,
+        }),
+      { initialProps: { projectPath: PROJECT } }
+    );
+
+    let capturePromise = Promise.resolve();
+    act(() => {
+      capturePromise = result.current.handleCaptureScreenshot();
+    });
+
+    chatCaptureState.workspaceView = 'terminal';
+    chatCaptureState.target = laterTarget;
+    projectPathRef.current = laterTarget.projectPath;
+    rerender({ projectPath: laterTarget.projectPath });
+    await act(async () => {
+      finishCapture('/capture.png');
+      await capturePromise;
+    });
+
+    expect(chatCaptureState.stageAttachment).toHaveBeenCalledWith(originalTarget, '/capture.png');
+    expect(terminalPaste).not.toHaveBeenCalled();
+  });
+
+  it('does not route a crop to a newly selected target when its original target is missing', () => {
+    const showToast = vi.fn();
+    const params = makeParams();
+    const { result } = renderHook(() => useScreenshotManagement({ ...params, showToast }));
+
+    // A crop callback can still arrive after cancellation cleared its pinned
+    // destination. Even if a new Chat target is now selected, do not reuse it.
+    act(() => {
+      result.current.handleCropStart();
+    });
+    chatCaptureState.workspaceView = 'chat';
+    chatCaptureState.target = {
+      kind: 'draft',
+      projectPath: PROJECT,
+      draftId: 'draft-new',
+      checkoutPath: PROJECT,
+    };
+    act(() => {
+      result.current.handleCropComplete('/crop.png');
+    });
+
+    expect(chatCaptureState.stageAttachment).not.toHaveBeenCalled();
+    expect(params.pasteToActiveTerminal).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      'The original screenshot target is no longer available. The screenshot was saved but not attached.',
+      'info'
+    );
   });
 });

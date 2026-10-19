@@ -12,6 +12,11 @@ import { ModalFrame } from '../primitives/ModalFrame';
 import { Button } from '../primitives/Button';
 import { describeClipboardError, useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface GitErrorHandlerProps {
   /** Type of git error */
@@ -22,8 +27,8 @@ interface GitErrorHandlerProps {
   branchName: string;
   /** Callback to close the modal */
   onClose: () => void;
-  /** Callback to send prompt to Claude (paste into terminal) */
-  onSendToClaude?: (prompt: string) => void;
+  /** Hand the prompt to the selected agent surface for explicit review. */
+  onSendToClaude?: (prompt: string) => AgentPromptHandoffResult | void;
   /** Callback to open conflict resolution UI (only for merge_conflict type) */
   onResolveConflicts?: () => void;
 }
@@ -95,7 +100,14 @@ Please help me understand what went wrong and how to fix it.`,
 
   const handleSendToClaude = () => {
     if (onSendToClaude) {
-      onSendToClaude(errorInfo.claudePrompt);
+      const result = onSendToClaude(errorInfo.claudePrompt);
+      if (result === false) return;
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to send.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) showToast(message, 'success');
       onClose();
     }
   };
