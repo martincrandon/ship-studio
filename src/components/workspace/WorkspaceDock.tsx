@@ -85,6 +85,23 @@ export function WorkspaceDock({ preview, previewHidden = false, children }: Work
     if (panels.length > 0) renderColumns.push({ sourceIndex, column, panels });
   }
 
+  // Visibility is owned by each panel, outside the layout model. Closing one
+  // can therefore remove a preceding column without changing the layout key
+  // or the surviving panel's slot element or size. Broadcast after the rail's
+  // rendered slot structure changes so body-portaled surfaces remeasure their
+  // new viewport positions before paint.
+  const geometryKey = renderColumns
+    .map((column) =>
+      'preview' in column
+        ? `preview:${column.sourceIndex}`
+        : `${column.sourceIndex}:${column.panels.map((placement) => placement.panel).join(',')}`
+    )
+    .join(';');
+
+  useLayoutEffect(() => {
+    slots.pingGeometry();
+  }, [geometryKey, slots]);
+
   useEffect(() => {
     measureRef.current = () => {
       const rail = railRef.current;
