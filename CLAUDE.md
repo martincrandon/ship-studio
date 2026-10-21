@@ -20,6 +20,7 @@ Ship Studio is a desktop app for web developers that provides:
 - **Command Palette** - Cmd+K palette; every user-facing feature registers its actions here (see "New feature → contribute commands")
 - **IDE Integration** - Open projects in VS Code or Cursor with one click
 - **Hosting Status** - After a push, see whether *that commit* deployed on Vercel, Cloudflare Pages or Netlify, with the build error when it didn't (see "Hosting Flow")
+- **Remote Access** - Drive Ship Studio from any MCP-capable AI assistant (Grok, Claude, ChatGPT, Cursor…) on your phone: continue agent conversations, start and close agents, get progress as HD screenshots, push behind a PIN. Your own Mac does the work over your own Tailscale Funnel, so it has to stay on — see "Remote Access Flow"
 - **Auto-Updates** - Automatic update detection and installation
 
 ## Core Principles
@@ -90,6 +91,7 @@ Single-file domains:
 - `pty_session.rs` - Long-lived backend-owned PTY sessions (e.g. mobile builds)
 - `publishing.rs` - Pushing the current branch to origin, and the git-push error taxonomy
 - `pull_requests.rs` - PR listing and creation via `gh` CLI
+- `remote_access.rs` - The Remote access modal's commands (status, enable, projects, push PIN, copy link from Rust, audit). The server itself is `src-tauri/src/remote_access/`
 - `settings.rs` - App-level settings persistence
 - `snapshots.rs` - Project snapshots / backups (rewind)
 - `static_server.rs` - Static file server for plain HTML projects
@@ -125,6 +127,7 @@ Single-file domains:
 - `workflows/` - Workflows list, row, editor, template picker, run history
 - `inbox/` - Findings list and the report reader
 - `migration/` - Site migration: the URL tab in New Project, the phase rail, the four-part status, the fidelity matrix and the comparison viewer
+- `remote/` - Remote access: the modal (five-step setup, then the live view) and the sidebar indicator
 - `shopify/` - Shopify theme setup and store modal
 - `primitives/`, `icons/`, `setup/`, `edit/`, `support/`, `CommandPalette/`, `import-project/` - pre-existing groups
 - Root holds only cross-cutting files: ErrorBoundary, UpdateBanner, EducationOverlay, ConnectOverlay, AppGlobalModals, HelpModal
@@ -163,6 +166,7 @@ Key modules in `src/lib/` (not exhaustive — `ls src/lib` for the full list):
 - `logger.ts` - Structured frontend logging
 - `mcp.ts` / `skills.ts` / `plugins.ts` / `plugin-loader.ts` - Agent extensions and the plugin system
 - `migration.ts` - Site migration: the phase/status model the panel renders, the fidelity types mirroring the capture script's report, and the prompts handed to the agent at creation and on resume
+- `remoteAccess.ts` - Remote access: TS mirror of the status, the stay-on checklist, setup steps, live state and audit wording
 - `mobile.ts` / `androidMirror.ts` - Mobile app preview and device mirror
 - `workspaceLayout.ts` / `workspaceLayoutStore.ts` / `dockDrag.ts` - Flexible panels: the layout model and its pure moves, the per-project + default persistence, and the pointer-to-drop-target maths — see `docs/flexible-panels.md`
 - `previewCanvas.ts` - Breakpoint-canvas geometry and zoom maths (layout, fit scale, device heights, mount window, pointer anchoring) — see `docs/breakpoint-canvas.md`
@@ -445,6 +449,18 @@ rebuild still look like the site?**
 
 Full design, the trial results, and the bugs each rule came from:
 [docs/site-migration.md](docs/site-migration.md).
+
+### Remote Access Flow
+
+Answers: **can I keep my agents going from my phone, and pick up exactly where they left off?**
+
+1. An MCP server (`src-tauri/src/remote_access/`) binds loopback and is published by Tailscale Funnel on the user's *own* account at `/shipstudio` — nothing passes through infrastructure we run. It is a separate server from the agent bridge, which must never be internet-reachable
+2. Tools act on the *existing* agent tabs (backend PTY sessions, rendered through `vt100`) — not a parallel shell — so the conversation is waiting when the user is back. New work starts via `remote-start-agent` → `useRemoteAgentStart` (spawn-with-prompt, never paste)
+3. The computer must stay on, and the UI says so first: keep-awake (`caffeinate -w`), opt-in lid-closed mode (`pmset disablesleep`), reopen-at-login, quit warning, and a sidebar indicator that turns amber on battery
+4. Security rules — don't weaken without updating docs/remote-access.md: the token never enters the webview (masked; copied from Rust); text goes only to agent tabs, never shells, with `!`, non-allowlisted `/` commands and control characters refused; opening prompts can't start with `-` (`agentPromptArgs`); pushing needs a PIN the assistant never sees, with a lockout; every action is audited
+5. Setup is complete when an assistant has *actually connected* (`ever_connected`), not when a link exists
+
+Full design, the threat model, and what is and isn't verified: [docs/remote-access.md](docs/remote-access.md).
 
 ### Breakpoint Canvas Flow
 

@@ -171,7 +171,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     projectType,
     projectTypeResolved,
     isRestartingDevServer,
-    customDevCommand,
+    devCommands,
     devServerOutput,
     devServerOutputVersion,
     healthOutput,
@@ -328,12 +328,13 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   } = lifecycle;
 
   // Web frameworks always receive the iframe preview. Generic projects only
-  // receive it when they have a configured dev command (#691); native mobile
+  // receive it when they have a dev command to run — a configured custom one
+  // (#691) or their package.json `dev` script (#1105); native mobile
   // projects use the device mirror when the platform supports it.
   const { mobilePreviewAvailable, isWebProject, hasPreview } = workspacePreviewCapabilities(
     projectType,
     isMac(),
-    customDevCommand
+    devCommands.generic
   );
 
   // Cmd+Shift+S — capture viewport screenshot, Cmd+Shift+C — toggle crop mode
@@ -861,7 +862,9 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                   : undefined
               }
               onRestartDevServer={
-                isWebProject || customDevCommand ? () => void handleRestartDevServer() : undefined
+                isWebProject || devCommands.generic
+                  ? () => void handleRestartDevServer()
+                  : undefined
               }
               devServerUrl={
                 isWebProject && currentDevServerSnapshot.address
@@ -1136,7 +1139,10 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
             onCloseInstallTerminal,
             onInstallTerminalExit,
           }}
-          devCommand={{ customDevCommand, onSaveDevCommand: handleSaveDevCommand }}
+          devCommand={{
+            customDevCommand: devCommands.custom,
+            onSaveDevCommand: handleSaveDevCommand,
+          }}
           projectSettings={{
             devServerPort,
             onSavePort: lifecycle.handleSavePort,

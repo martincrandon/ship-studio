@@ -154,6 +154,61 @@ pub(crate) fn push_unresolvable_branch_error(stderr: &str, branch: &str) -> Opti
 }
 
 /// Publish (push) the current branch to origin
+/// Map a failed `git push`'s stderr to the error the user should see.
+/// `None` means it wasn't really a failure ("Everything up-to-date").
+/// Shared by the Push button and remote access's confirmed push, so both
+/// explain the same failure the same way.
+pub(crate) fn classify_push_failure(
+    stderr: &str,
+    branch: &str,
+    exit_code: Option<i32>,
+) -> Option<CommandError> {
+    // Pre-receive declines (GH001 large file, GH005 ref too long) contain
+    // the word "rejected" but are NOT the concurrent-push race — check
+    // them first or the frontend shows the "someone else pushed, pull
+    // first" modal for a problem pulling can't fix (issues #626/#636).
+    if let Some(err) = push_pre_receive_error(stderr) {
+        warn!(error = %stderr, branch = %branch, "Push declined by GitHub pre-receive check");
+        return Some(err);
+    }
+    // GitHub-side 5xx: "! [remote rejected] … (Internal Server Error)"
+    // contains "rejected" but isn't the concurrent-push race — must run
+    // before that arm or the user gets pull-first advice for a transient
+    // GitHub outage (issue #678).
+    if let Some(err) = push_transient_server_error(stderr) {
+        warn!(error = %stderr, branch = %branch, "Push failed on a GitHub server error");
+        return Some(err);
+    }
+    if stderr.contains("rejected") || stderr.contains("non-fast-forward") {
+        warn!(error = %stderr, branch = %branch, "Push rejected");
+        // Someone else pushed first — an anticipated race the frontend
+        // already handles via the PUSH_REJECTED sentinel (GitErrorHandler's
+        // push_rejected case). Expected serializes identically to Other on
+        // the wire, so the substring match keeps working (issue #617).
+        return Some(CommandError::expected(format!("PUSH_REJECTED:{stderr}")));
+    }
+    if let Some(err) = push_auth_error(stderr) {
+        error!(error = %stderr, branch = %branch, "Authentication error");
+        return Some(err);
+    }
+    if let Some(err) = push_missing_remote_error(stderr) {
+        return Some(err);
+    }
+    if let Some(err) = push_unresolvable_branch_error(stderr, branch) {
+        warn!(error = %stderr, branch = %branch, "Push refspec did not resolve");
+        return Some(err);
+    }
+    if stderr.contains("Everything up-to-date") {
+        return None;
+    }
+    error!(error = %stderr, branch = %branch, "Push failed");
+    Some(CommandError::Process {
+        cmd: "git push".to_string(),
+        exit_code: exit_code.unwrap_or(-1),
+        stderr: stderr.to_string(),
+    })
+}
+
 #[tauri::command]
 #[instrument(name = "publish_branch", skip(project_path, commit_message), fields(project = %project_path))]
 pub async fn publish_branch(
@@ -211,49 +266,8 @@ pub async fn publish_branch(
 
     if !push_output.status.success() {
         let stderr = String::from_utf8_lossy(&push_output.stderr);
-        // Pre-receive declines (GH001 large file, GH005 ref too long) contain
-        // the word "rejected" but are NOT the concurrent-push race — check
-        // them first or the frontend shows the "someone else pushed, pull
-        // first" modal for a problem pulling can't fix (issues #626/#636).
-        if let Some(err) = push_pre_receive_error(&stderr) {
-            warn!(error = %stderr, branch = %branch, "Push declined by GitHub pre-receive check");
+        if let Some(err) = classify_push_failure(&stderr, &branch, push_output.status.code()) {
             return Err(err);
-        }
-        // GitHub-side 5xx: "! [remote rejected] … (Internal Server Error)"
-        // contains "rejected" but isn't the concurrent-push race — must run
-        // before that arm or the user gets pull-first advice for a transient
-        // GitHub outage (issue #678).
-        if let Some(err) = push_transient_server_error(&stderr) {
-            warn!(error = %stderr, branch = %branch, "Push failed on a GitHub server error");
-            return Err(err);
-        }
-        // Check for common errors
-        if stderr.contains("rejected") || stderr.contains("non-fast-forward") {
-            warn!(error = %stderr, branch = %branch, "Push rejected");
-            // Someone else pushed first — an anticipated race the frontend
-            // already handles via the PUSH_REJECTED sentinel (GitErrorHandler's
-            // push_rejected case). Expected serializes identically to Other on
-            // the wire, so the substring match keeps working (issue #617).
-            return Err(CommandError::expected(format!("PUSH_REJECTED:{stderr}")));
-        }
-        if let Some(err) = push_auth_error(&stderr) {
-            error!(error = %stderr, branch = %branch, "Authentication error");
-            return Err(err);
-        }
-        if let Some(err) = push_missing_remote_error(&stderr) {
-            return Err(err);
-        }
-        if let Some(err) = push_unresolvable_branch_error(&stderr, &branch) {
-            warn!(error = %stderr, branch = %branch, "Push refspec did not resolve");
-            return Err(err);
-        }
-        if !stderr.contains("Everything up-to-date") {
-            error!(error = %stderr, branch = %branch, "Push failed");
-            return Err(CommandError::Process {
-                cmd: "git push".to_string(),
-                exit_code: push_output.status.code().unwrap_or(-1),
-                stderr: stderr.to_string(),
-            });
         }
     }
 

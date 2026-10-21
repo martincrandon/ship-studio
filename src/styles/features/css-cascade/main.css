@@ -27,6 +27,30 @@
   flex: 0 0 auto;
   min-width: 0;
   width: 100%;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: var(--border-width-default) solid var(--border-default);
+}
+
+.ss-cascade-toolbar {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  padding: 0;
+}
+
+.ss-cascade-toolbar__search-trigger {
+  flex: 0 0 auto;
+}
+
+.ss-cascade-toolbar__order {
+  flex: 0 0 auto;
+}
+
+.ss-cascade-toolbar__collapse {
+  flex: 0 0 auto;
 }
 
 .ss-cascade-panel .ss-cascade-content {
@@ -41,15 +65,69 @@
 }
 
 /* ── Selected-element header ── */
-.ss-cascade-target {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.ss-cascade-header {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-xs);
+}
+
+.ss-cascade-header + .tabs > .ss-cascade-scope {
+  margin-top: var(--spacing-xs);
+}
+
+.ss-cascade-header__main {
+  display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
-  border-bottom: 1px solid var(--border-default);
+  min-width: 0;
+}
+
+.ss-cascade-header__search {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.ss-cascade-target {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
   font-family: var(--font-code);
   font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-control);
+}
+
+.ss-cascade-target__tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--tag-text);
+  font-family: var(--font-code);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ss-cascade-target__tag-icon {
+  display: inline-flex;
+  flex: 0 0 var(--size-icon-button);
+  align-items: center;
+  justify-content: center;
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  color: var(--tag-text);
+}
+
+.ss-cascade-target__tag-icon > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .ss-cascade-target__selector {
@@ -70,6 +148,21 @@
 
 .ss-cascade-target__class {
   overflow-wrap: anywhere;
+  font-family: var(--font-code);
+}
+
+.ss-cascade-target--sans-serif .ss-cascade-target__tag,
+.ss-cascade-target--sans-serif .ss-cascade-target__class {
+  font-family: var(--font-ui);
+}
+
+.ss-cascade-target--monochrome .ss-cascade-target__tag,
+.ss-cascade-target--monochrome .ss-cascade-target__tag-icon {
+  color: var(--text-secondary);
+}
+
+.ss-cascade-target--monochrome .ss-cascade-target__classes {
+  color: var(--text-muted);
 }
 
 .ss-cascade-target__count {
@@ -79,7 +172,15 @@
 }
 
 .ss-cascade-target__copy {
-  white-space: nowrap;
+  flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ss-cascade-header__main:hover .ss-cascade-target__copy,
+.ss-cascade-target:focus-within .ss-cascade-target__copy {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ========================================================================
@@ -87,17 +188,17 @@
   * =======================================================================
 */
 
-/* The Button primitive owns the action styling; this only places it in the panel. */
+/* Cascade Add actions share the same inline TextButton treatment as Add property. */
 .ss-cascade-action {
-  width: calc(100% - (2 * var(--editor-panel-inline-pad)));
-  margin: var(--spacing-sm) var(--editor-panel-inline-pad) 0;
+  width: 100%;
+  margin: 0;
 }
 
 /* Opening the action adds a real card-shaped selector composer while the action
    itself remains available in its original position. */
 .ss-cascade-selector-composer {
-  width: calc(100% - (2 * var(--editor-panel-inline-pad)));
-  margin: var(--spacing-sm) var(--editor-panel-inline-pad) 0;
+  width: 100%;
+  margin: 0;
   border-style: dashed;
 }
 
@@ -176,13 +277,10 @@
   padding: var(--spacing-sm);
 }
 
-.ss-media-query-group__source-row {
-  position: relative;
+.ss-media-query-group__warning-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   min-height: var(--spacing-md);
-  padding-block: var(--spacing-xs);
 }
 
 .ss-media-query-group__incomplete {
@@ -204,57 +302,59 @@
   flex: 0 1 auto;
   max-width: 100%;
   min-width: 0;
-  margin-inline-start: auto;
+  margin: 0;
 }
 
 .ss-cascade-card__trash.ss-media-query-group__trash {
   position: absolute;
+  inset-block-start: 50%;
   inset-inline-end: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
-.ss-media-query-group:hover .ss-media-query-group__trash {
+.ss-media-query-group__query-card:hover .ss-media-query-group__trash,
+.ss-media-query-group__query-card:focus-within .ss-media-query-group__trash {
   opacity: 1;
+  pointer-events: auto;
 }
 
-.ss-media-query-group:has(.ss-media-query-group__trash):hover .ss-media-query-group__source {
+.ss-media-query-group__query-card:has(.ss-media-query-group__trash):is(:hover, :focus-within)
+  .ss-media-query-group__source {
   opacity: 0;
 }
 
 .ss-media-query-group__query-row {
   display: grid;
-  grid-template-columns: var(--spacing-md) minmax(0, 1fr);
+  grid-template-columns: var(--cascade-rail) minmax(0, 1fr);
   align-items: start;
-  gap: var(--spacing-sm);
+  gap: var(--spacing-xs);
   width: 100%;
   min-width: 0;
 }
 
-.ss-media-query-group__collapse {
-  all: unset;
-  display: inline-flex;
+.ss-media-query-group__source-row {
+  position: relative;
+  display: flex;
+  flex: 0 0 var(--size-control-compact);
   align-items: center;
-  justify-content: center;
-  width: var(--spacing-md);
-  min-height: var(--size-control-medium);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition:
-    color var(--transition-interaction-fast),
-    transform var(--transition-interaction-fast);
+  justify-content: flex-end;
+  block-size: var(--cascade-metadata-size);
+  margin-block-start: var(--spacing-xs);
+  min-width: var(--size-control-compact);
+  pointer-events: none;
 }
 
-.ss-media-query-group__collapse.is-collapsed {
-  transform: rotate(-90deg);
-}
-
-.ss-media-query-group__collapse:hover {
-  color: var(--text-secondary);
+.ss-media-query-group__source-row.has-source {
+  flex: 0 1 45%;
+  max-width: 45%;
 }
 
 .ss-media-query-group__query-card {
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  position: relative;
+  align-items: flex-start;
   gap: var(--spacing-xs);
   align-self: stretch;
   width: 100%;
@@ -397,7 +497,7 @@
 .ss-cascade-selector-display__label {
   color: var(--text-muted);
   font-family: var(--font-code);
-  font-size: var(--font-size-11);
+  font-size: var(--cascade-metadata-size);
   font-weight: var(--font-weight-regular);
 }
 .ss-cascade-selector-display[role='button'] {
@@ -459,6 +559,14 @@
 }
 .ss-cascade-card__collapse:hover {
   color: var(--text-secondary);
+}
+
+/* `all: unset` on the shared collapse control resets its box sizing. Restore the
+   first-row alignment with a more specific media-query rule after that reset. */
+.ss-media-query-group .ss-media-query-group__collapse {
+  align-self: start;
+  block-size: var(--cascade-chip-row-min-height);
+  margin-block-start: calc(var(--spacing-sm) + var(--border-width-default) - var(--spacing-2xs));
 }
 
 /* Main class tag */
@@ -619,6 +727,22 @@
 .ss-cascade-card__body {
   padding: 6px var(--spacing-sm) var(--spacing-sm); /* css-ok: tight body top */
 }
+.ss-cascade-filtered {
+  display: contents;
+}
+
+.ss-cascade-filtered.is-dimmed > * {
+  opacity: var(--button-disabled-opacity);
+}
+
+.ss-cascade-card__search-actions {
+  display: flex;
+  padding-block: var(--spacing-2xs);
+  padding-inline-start: var(--spacing-sm);
+}
+.ss-cascade-card__search-actions--readonly {
+  padding-inline-start: calc(var(--spacing-sm) + var(--spacing-2xs));
+}
 .ss-cascade-card__draft-row {
   display: flex;
   align-items: center;
@@ -644,21 +768,38 @@
   min-height: var(--spacing-md);
   margin-top: var(--spacing-xs);
   /* Align the add control with the declaration text inside each row. */
-  padding-inline-start: calc(var(--space-02) + var(--space-06));
+  padding-inline-start: var(--spacing-sm);
 }
-.ss-cascade-card__add {
+.ss-cascade-card__add,
+.ss-cascade-card__add.button {
   all: unset;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-muted);
+  font-family: var(--font-ui);
   font-size: var(--font-size-body-sm);
+  line-height: var(--line-height-control);
+  text-decoration: none;
   transition: color var(--transition-fast);
 }
-.ss-cascade-card__add:hover,
+
+.ss-cascade-card__add:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ss-cascade-card__add.button.text-button:hover:not(:disabled),
+.ss-cascade-card__add:hover:not(:disabled),
 .ss-cascade-card__add.is-open {
   color: var(--text-primary);
+  text-decoration: none;
 }
 .ss-cascade-card__src-chip {
   position: absolute;

@@ -8,7 +8,15 @@
  * editor panels.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { PinIcon } from '@/components/icons';
 import { CloseIcon, CheckIcon } from '@/components/icons';
 import { PlusIcon } from '@/components/icons';
@@ -19,6 +27,8 @@ import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { TextButton } from '../primitives/TextButton';
 import { IconButton } from '../primitives/IconButton';
+import { SearchField } from '../primitives/SearchField';
+import { Tooltip } from '../primitives/Tooltip';
 import { ToggleButton } from '../primitives/ToggleButton';
 import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
 import { CascadeRuleCard } from './CascadeRuleCard';
@@ -26,15 +36,28 @@ import { ElementSettingsPanel } from './ElementSettingsPanel';
 import { CssAnimationsPanel } from './CssAnimationsPanel';
 import { MediaQueryGroupCard } from './MediaQueryGroupCard';
 import { CascadeChip } from './CascadeChip';
+import { CascadeToolbar } from './CascadeToolbar';
 import { SuggestionPopover, suggestionOptionId, type Suggestion } from './SuggestionPopover';
 import { WRAP_ITEMS, searchStructures, parseRulePrelude } from '../../lib/cssStructures';
 import { isMediaQueryComplete } from '../../lib/mediaQueries';
 import { groupCascadeRows, rowKey, type CascadeRow } from '../../lib/cssCascade';
+import { searchCascadeRow } from '../../lib/cascadeSearch';
+import {
+  cascadeMediaCollapseKey,
+  CASCADE_DISPLAY_ORDER_PREFERENCE_KEY,
+  cascadeRuleCollapseKey,
+  collectNestedCollapseKeys,
+  orderCascadeRowsForDisplay,
+  type CascadeDisplayOrder,
+} from '../../lib/cascadePresentation';
 import { parseRuleBody, type RuleBody } from '../../lib/cssBody';
 import type { CascadeSelection } from '../../hooks/useCssCascadeEditor';
 import type { ElementSettings } from '../../hooks/useElementSettings';
 import type { useCssAnimations } from '../../hooks/useCssAnimations';
 import { colorContrastContexts, type ColorVariableDefinition } from '../../lib/colorContrast';
+import { useLocalStorageFlag } from '../../hooks/useLocalStorageFlag';
+import { useElementDisplayPreferences } from '../../hooks/useElementDisplayPreferences';
+import { getElementIcon } from './element-icons';
 
 /** The panel's top-level view: element style/settings, or project-global animation CSS. */
 type Scope = 'style' | 'settings' | 'animations';
@@ -60,7 +83,7 @@ interface Props {
   onWrapRule: (key: string, atPrelude: string) => void;
   onRenameRule: (key: string, newSelector: string) => void;
   onRenameAtRule: (key: string, newMedia: string) => void;
-  onAddSelector: (selector: string, atPrelude?: string) => void;
+  onAddSelector: (selector: string, atPrelude?: string) => void | Promise<void>;
   /** `.class` suggestions for the selector autocomplete. */
   selectorSuggestions: string[];
   /** Full text of every existing rule selector (`.card`, `@keyframes reveal`) — shown
@@ -122,20 +145,78 @@ export function CssCascadePanel({
   useEffect(() => {
     if (scope === 'animations') void reloadAnimations();
   }, [scope, reloadAnimations]);
-  // "Copy id": the element's selector (tag + classes), so you can paste it to your agent
+  // Copy ID: the element's selector (tag + classes), so you can paste it to your agent
   // and describe the change you want ("make a .button--secondary hover state pop").
   const { showToast } = useOptionalToast();
   const { copy: copyElementId, isCopied: idCopied } = useCopyToClipboard({
     onCopy: () => showToast('Element id copied — paste it to your agent', 'success'),
   });
+  const { showTagIcons, showTagSansSerif, showTagColors } = useElementDisplayPreferences();
   // Collapse state keyed by rule identity (selector + media), not the per-element row
   // key — so minimizing a shared rule like `*` keeps it minimized across element
   // switches. Lives on the panel (which stays mounted), so it survives reselection.
   const [collapsedRules, setCollapsedRules] = useState<Set<string>>(() => new Set());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [newestAtBottom, setNewestAtBottom] = useLocalStorageFlag(
+    CASCADE_DISPLAY_ORDER_PREFERENCE_KEY,
+    false
+  );
+  const displayOrder: CascadeDisplayOrder = newestAtBottom ? 'newest-bottom' : 'newest-top';
+  const setDisplayOrder = useCallback(
+    (order: CascadeDisplayOrder) => setNewestAtBottom(order === 'newest-bottom'),
+    [setNewestAtBottom]
+  );
+  const [searchCollapsedOverrides, setSearchCollapsedOverrides] = useState<Map<string, boolean>>(
+    () => new Map()
+  );
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const searchFieldId = useId();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchFocusTargetRef = useRef<'input' | 'button' | null>(null);
   // A newly-composed media query has no selector (and therefore no cascade row) yet.
   // Keep it as an empty normal group until the user adds its first selector.
   const [draftMediaQueries, setDraftMediaQueries] = useState<DraftMediaQuery[]>([]);
   const draftMediaIndex = useRef(0);
+  const query = searchTerm.trim();
+  const normalizedQuery = query.toLocaleLowerCase();
+  const searchActive = normalizedQuery.length > 0;
+  const changeSearch = useCallback((next: string) => {
+    setSearchTerm(next);
+    setSearchCollapsedOverrides(new Map());
+  }, []);
+  const openSearch = useCallback(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+      return;
+    }
+    searchFocusTargetRef.current = 'input';
+    setSearchOpen(true);
+  }, [searchOpen]);
+  const closeSearch = useCallback(() => {
+    changeSearch('');
+    searchFocusTargetRef.current = 'button';
+    setSearchOpen(false);
+  }, [changeSearch]);
+  const toggleSearch = useCallback(() => {
+    if (searchOpen) closeSearch();
+    else openSearch();
+  }, [closeSearch, openSearch, searchOpen]);
+  useEffect(() => {
+    const target = searchFocusTargetRef.current;
+    if (target === 'input' && searchOpen) {
+      searchInputRef.current?.focus();
+      searchFocusTargetRef.current = null;
+    } else if (target === 'button' && !searchOpen) {
+      searchButtonRef.current?.focus();
+      searchFocusTargetRef.current = null;
+    }
+  }, [searchOpen]);
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    closeSearch();
+  };
   const toggleCollapsed = useCallback((ruleKey: string) => {
     setCollapsedRules((prev) => {
       const next = new Set(prev);
@@ -144,7 +225,168 @@ export function CssCascadePanel({
       return next;
     });
   }, []);
+  const toggleSearchCollapsed = useCallback((ruleKey: string, collapsed: boolean) => {
+    setSearchCollapsedOverrides((previous) => new Map(previous).set(ruleKey, collapsed));
+  }, []);
+  const allCollapseKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const item of groupCascadeRows(rows)) {
+      if (item.kind === 'media') keys.add(cascadeMediaCollapseKey(item.key));
+      const itemRows = item.kind === 'media' ? item.rows : [item.row];
+      for (const row of itemRows) {
+        const ruleKey = cascadeRuleCollapseKey(row.selector ?? '', row.mediaText ?? '');
+        keys.add(ruleKey);
+        const body = bodies[rowKey(row)];
+        if (body)
+          collectNestedCollapseKeys(body, ruleKey).forEach((nestedKey) => keys.add(nestedKey));
+      }
+    }
+    for (const { id, selectors } of draftMediaQueries) {
+      const mediaKey = `draft-media:${id}`;
+      keys.add(mediaKey);
+      selectors.forEach((selector) => keys.add(`${mediaKey}|${selector}`));
+    }
+    return [...keys];
+  }, [bodies, draftMediaQueries, rows]);
+  const animationCollapseKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const animation of animationsState.animations) {
+      const ruleKey = cascadeRuleCollapseKey(animation.selector);
+      keys.add(ruleKey);
+      collectNestedCollapseKeys(animation.body, ruleKey).forEach((nestedKey) =>
+        keys.add(nestedKey)
+      );
+    }
+    return [...keys];
+  }, [animationsState.animations]);
+  const activeCollapseKeys = scope === 'animations' ? animationCollapseKeys : allCollapseKeys;
+  const collapseAll = useCallback(() => {
+    if (searchActive) {
+      setSearchCollapsedOverrides(new Map(activeCollapseKeys.map((key) => [key, true])));
+      return;
+    }
+    setCollapsedRules(new Set(activeCollapseKeys));
+  }, [activeCollapseKeys, searchActive]);
+  const expandAll = useCallback(() => {
+    if (searchActive) {
+      setSearchCollapsedOverrides(new Map(activeCollapseKeys.map((key) => [key, false])));
+      return;
+    }
+    setCollapsedRules(new Set());
+  }, [activeCollapseKeys, searchActive]);
+  const allCollapsed =
+    activeCollapseKeys.length > 0 &&
+    activeCollapseKeys.every((key) =>
+      searchActive ? searchCollapsedOverrides.get(key) === true : collapsedRules.has(key)
+    );
+  const collapseControl = useMemo(
+    () => ({
+      collapsedKeys: collapsedRules,
+      searchCollapsedOverrides,
+      toggle: toggleCollapsed,
+      toggleSearch: toggleSearchCollapsed,
+    }),
+    [collapsedRules, searchCollapsedOverrides, toggleCollapsed, toggleSearchCollapsed]
+  );
+  const displayRows = useMemo(
+    () => orderCascadeRowsForDisplay(rows, displayOrder),
+    [displayOrder, rows]
+  );
+  const displayItems = useMemo(() => {
+    return groupCascadeRows(displayRows);
+  }, [displayRows]);
+  const orderedDraftMediaQueries = useMemo(
+    () => (displayOrder === 'newest-top' ? draftMediaQueries : [...draftMediaQueries].reverse()),
+    [displayOrder, draftMediaQueries]
+  );
+  const visibleDraftMediaQueries = useMemo(() => {
+    if (!searchActive) return orderedDraftMediaQueries;
+    return orderedDraftMediaQueries.flatMap((draft) => {
+      const conditionMatches = draft.condition.toLocaleLowerCase().includes(normalizedQuery);
+      const selectors = conditionMatches
+        ? draft.selectors
+        : draft.selectors.filter((selector) =>
+            selector.toLocaleLowerCase().includes(normalizedQuery)
+          );
+      return conditionMatches || selectors.length > 0 ? [{ ...draft, selectors }] : [];
+    });
+  }, [normalizedQuery, orderedDraftMediaQueries, searchActive]);
+  const hasVisibleCascadeItems =
+    visibleDraftMediaQueries.length > 0 ||
+    displayItems.some((item) =>
+      item.kind === 'rule'
+        ? !searchActive ||
+          searchCascadeRow(item.row, bodies[rowKey(item.row)], normalizedQuery).matches
+        : item.condition.toLocaleLowerCase().includes(normalizedQuery) ||
+          item.rows.some(
+            (row) => searchCascadeRow(row, bodies[rowKey(row)], normalizedQuery).matches
+          )
+    );
   const classes = (selection?.signature.className ?? '').split(/\s+/).filter(Boolean);
+  const selectedSelector = selection
+    ? `${selection.signature.tagName}${classes.map((className) => `.${className}`).join('')}`
+    : '';
+  const copyIdValue =
+    selection && settings.location
+      ? `${settings.location.file}:${settings.location.line} (${selectedSelector})`
+      : selectedSelector;
+  const targetClassName = [
+    'ss-cascade-target',
+    showTagSansSerif && 'ss-cascade-target--sans-serif',
+    !showTagColors && 'ss-cascade-target--monochrome',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const selectedTagIcon =
+    selection && showTagIcons ? getElementIcon(selection.signature.tagName) : undefined;
+  const selectedTarget = selection ? (
+    <div className={targetClassName}>
+      {selectedTagIcon ? (
+        <span className="ss-cascade-target__tag-icon" title={`<${selection.signature.tagName}>`}>
+          {selectedTagIcon}
+        </span>
+      ) : (
+        <span className="ss-cascade-target__tag" data-tone="tag">
+          {selection.signature.tagName}
+        </span>
+      )}
+      {selectedTagIcon && classes.length === 0 && (
+        <span className="ss-cascade-target__tag" data-tone="tag">
+          {selection.signature.tagName}
+        </span>
+      )}
+      <span className="ss-cascade-target__selector">
+        {classes.length > 0 && (
+          <span className="ss-cascade-target__classes">
+            {classes.map((c) => (
+              <span key={c} className="ss-cascade-target__class">
+                .{c}
+              </span>
+            ))}
+          </span>
+        )}
+        {selection.instanceCount > 1 && (
+          <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
+        )}
+      </span>
+      <Tooltip
+        content={
+          <>
+            Copy ID &amp; Location: <code className="ss-tooltip__value">{copyIdValue}</code>
+          </>
+        }
+      >
+        <IconButton
+          className="ss-cascade-target__copy"
+          variant="ghost"
+          size="compact"
+          icon={idCopied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+          aria-label={idCopied ? 'Element ID copied' : 'Copy ID'}
+          onClick={() => void copyElementId(copyIdValue)}
+        />
+      </Tooltip>
+    </div>
+  ) : null;
   // The element's own classes lead the "Add selector" suggestions (so a class you
   // just added in Settings is one click away from getting a rule), then the rest of
   // the project's classes, then every existing rule selector (incl. `@keyframes …`)
@@ -164,12 +406,14 @@ export function CssCascadePanel({
         : [{ id: ++draftMediaIndex.current, condition: next, selectors: [] }, ...current];
     });
   };
-  const renameDraftMediaQuery = (id: number, next: string) => {
+  const renameDraftMediaQuery = async (id: number, next: string) => {
     const value = next.trim();
     const draft = draftMediaQueries.find((query) => query.id === id);
     if (draft && isMediaQueryComplete(value) && draft.selectors.length > 0) {
       setDraftMediaQueries((queries) => queries.filter((query) => query.id !== id));
-      for (const selector of draft.selectors) onAddSelector(selector, `@media ${value}`);
+      for (const selector of draft.selectors) {
+        await onAddSelector(selector, `@media ${value}`);
+      }
       return;
     }
     setDraftMediaQueries((queries) =>
@@ -200,11 +444,23 @@ export function CssCascadePanel({
     );
   };
 
-  const renderRuleCard = (row: CascadeRow, insideMedia = false) => {
+  const renderRuleCard = (
+    row: CascadeRow,
+    insideMedia = false,
+    enclosingConditionMatches = false
+  ) => {
     const key = rowKey(row);
-    const collapseKey = `${row.selector ?? ''}|${row.mediaText ?? ''}`;
-    const collapsed = collapsedRules.has(collapseKey);
-    const onToggleCollapse = () => toggleCollapsed(collapseKey);
+    const collapseKey = cascadeRuleCollapseKey(row.selector ?? '', row.mediaText ?? '');
+    const searchResult = searchCascadeRow(row, bodies[key], normalizedQuery);
+    const searchMatches = searchActive && (searchResult.matches || enclosingConditionMatches);
+    const searchCollapseOverride = searchCollapsedOverrides.get(collapseKey);
+    const collapsed = searchMatches
+      ? (searchCollapseOverride ?? false)
+      : collapsedRules.has(collapseKey);
+    const onToggleCollapse = () => {
+      if (searchMatches) toggleSearchCollapsed(collapseKey, !collapsed);
+      else toggleCollapsed(collapseKey);
+    };
     const mediaText = insideMedia ? null : row.mediaText;
     if (row.editable && bodies[key]) {
       return (
@@ -221,6 +477,8 @@ export function CssCascadePanel({
           inactive={insideMedia ? false : row.inactiveMedia}
           overridden={row.inactiveMedia ? new Map() : (overridden[key] ?? new Map())}
           body={bodies[key]}
+          collapseKey={collapseKey}
+          collapseControl={collapseControl}
           draft={row.draft}
           unmatched={row.unmatched}
           onChange={(b) => onChangeBody(key, b)}
@@ -240,6 +498,9 @@ export function CssCascadePanel({
           animations={animations}
           collapsed={collapsed}
           onToggleCollapse={onToggleCollapse}
+          searchTerm={searchTerm}
+          searchMatchesAll={searchResult.matchesAll || enclosingConditionMatches}
+          searchCollapseOverride={searchMatches ? searchCollapseOverride : undefined}
         />
       );
     }
@@ -249,6 +510,11 @@ export function CssCascadePanel({
         editable={false}
         collapsed={collapsed}
         onToggleCollapse={onToggleCollapse}
+        collapseKey={collapseKey}
+        collapseControl={collapseControl}
+        searchTerm={searchTerm}
+        searchMatchesAll={searchResult.matchesAll || enclosingConditionMatches}
+        searchCollapseOverride={searchMatches ? searchCollapseOverride : undefined}
         selector={row.selector ?? 'element.style'}
         file={insideMedia ? undefined : row.file}
         line={insideMedia ? undefined : row.line}
@@ -269,6 +535,162 @@ export function CssCascadePanel({
       />
     );
   };
+
+  const renderDraftMediaQuery = ({ id, condition, selectors }: DraftMediaQuery) => {
+    const groupCollapseKey = `draft-media:${id}`;
+    const conditionMatches =
+      searchActive && condition.toLocaleLowerCase().includes(normalizedQuery);
+    const groupMatches = searchActive && (conditionMatches || selectors.length > 0);
+    const searchCollapseOverride = searchCollapsedOverrides.get(groupCollapseKey);
+    const collapsed = groupMatches
+      ? (searchCollapseOverride ?? false)
+      : collapsedRules.has(groupCollapseKey);
+
+    return (
+      <MediaQueryGroupCard
+        key={groupCollapseKey}
+        condition={condition}
+        autoFocusQuery
+        commitQueryOnAppend
+        collapsed={collapsed}
+        onToggleCollapse={() => {
+          if (groupMatches) {
+            toggleSearchCollapsed(groupCollapseKey, !collapsed);
+          } else {
+            toggleCollapsed(groupCollapseKey);
+          }
+        }}
+        onRename={(next) => void renameDraftMediaQuery(id, next)}
+        onDelete={() => deleteDraftMediaQuery(id)}
+        addSelector={
+          <AddSelectorBar
+            onAddSelector={(selector, atPrelude) => {
+              if (isMediaQueryComplete(condition)) {
+                deleteDraftMediaQuery(id);
+                void onAddSelector(selector, atPrelude);
+              } else {
+                addDraftMediaSelector(id, selector);
+              }
+            }}
+            suggestions={addSelectorOptions}
+            existing={existingSelectors}
+            fixedCondition={`@media ${condition}`}
+          />
+        }
+      >
+        {selectors.map((selector) => {
+          const collapseKey = `${groupCollapseKey}|${selector}`;
+          const selectorMatches = selector.toLocaleLowerCase().includes(normalizedQuery);
+          const searchMatches = searchActive && (conditionMatches || selectorMatches);
+          const searchCollapse = searchCollapsedOverrides.get(collapseKey);
+          const selectorCollapsed = searchMatches
+            ? (searchCollapse ?? false)
+            : collapsedRules.has(collapseKey);
+
+          return (
+            <CascadeRuleCard
+              key={selector}
+              editable
+              draft
+              selector={selector}
+              body={parseRuleBody('')}
+              overridden={new Map()}
+              onChange={() => undefined}
+              onDelete={() => deleteDraftMediaSelector(id, selector)}
+              selectorSuggestions={selectorSuggestions}
+              variables={variables}
+              colorVariables={colorVariables}
+              projectPath={projectPath}
+              colorContrast={colorContrast}
+              animations={animations}
+              pendingReason="Complete the media query before editing properties."
+              collapsed={selectorCollapsed}
+              onToggleCollapse={() => {
+                if (searchMatches) {
+                  toggleSearchCollapsed(collapseKey, !selectorCollapsed);
+                } else {
+                  toggleCollapsed(collapseKey);
+                }
+              }}
+              collapseKey={collapseKey}
+              collapseControl={collapseControl}
+              searchTerm={searchTerm}
+              searchMatchesAll={conditionMatches}
+              searchCollapseOverride={searchMatches ? searchCollapse : undefined}
+            />
+          );
+        })}
+      </MediaQueryGroupCard>
+    );
+  };
+
+  const scopeHeader =
+    scope === 'animations' ? (
+      <div className="ss-cascade-header">
+        <div className="ss-cascade-header__main">
+          {selectedTarget}
+          <CascadeToolbar
+            kind="animations"
+            searchOpen={searchOpen}
+            searchButtonRef={searchButtonRef}
+            searchFieldId={searchFieldId}
+            onSearchOpen={openSearch}
+            onSearchToggle={toggleSearch}
+            order={displayOrder}
+            onOrderChange={setDisplayOrder}
+            allCollapsed={allCollapsed}
+            onCollapseAll={collapseAll}
+            onExpandAll={expandAll}
+          />
+        </div>
+        {searchOpen && (
+          <SearchField
+            id={searchFieldId}
+            ref={searchInputRef}
+            value={searchTerm}
+            onChange={changeSearch}
+            onKeyDown={handleSearchKeyDown}
+            aria-label="Search CSS animations, properties, and values"
+            placeholder="Search animations"
+            clearLabel="Clear CSS search"
+            className="ss-cascade-header__search"
+          />
+        )}
+      </div>
+    ) : selection ? (
+      <div className="ss-cascade-header">
+        <div className="ss-cascade-header__main">
+          {selectedTarget}
+          {scope === 'style' && (
+            <CascadeToolbar
+              searchOpen={searchOpen}
+              searchButtonRef={searchButtonRef}
+              searchFieldId={searchFieldId}
+              onSearchOpen={openSearch}
+              onSearchToggle={toggleSearch}
+              order={displayOrder}
+              onOrderChange={setDisplayOrder}
+              allCollapsed={allCollapsed}
+              onCollapseAll={collapseAll}
+              onExpandAll={expandAll}
+            />
+          )}
+        </div>
+        {scope === 'style' && searchOpen && (
+          <SearchField
+            id={searchFieldId}
+            ref={searchInputRef}
+            value={searchTerm}
+            onChange={changeSearch}
+            onKeyDown={handleSearchKeyDown}
+            aria-label="Search CSS selectors, properties, and values"
+            placeholder="Search CSS"
+            clearLabel="Clear CSS search"
+            className="ss-cascade-header__search"
+          />
+        )}
+      </div>
+    ) : null;
 
   return (
     <div
@@ -304,6 +726,7 @@ export function CssCascadePanel({
       </div>
 
       <div className="ss-edit-panel__body">
+        {scopeHeader}
         <Tabs value={scope} mode="navigation" onValueChange={(next) => setScope(next as Scope)}>
           <TabsList className="ss-cascade-scope" aria-label="CSS panel view">
             <TabsTab value="style">Style</TabsTab>
@@ -311,7 +734,6 @@ export function CssCascadePanel({
             <TabsTab value="animations">Animate</TabsTab>
           </TabsList>
         </Tabs>
-
         <div className="ss-cascade-content">
           {scope === 'animations' ? (
             <CssAnimationsPanel
@@ -323,120 +745,66 @@ export function CssCascadePanel({
               onDelete={(s) => void animationsState.remove(s)}
               onCreate={(n) => void animationsState.create(n)}
               onRename={(s, n) => void animationsState.rename(s, n)}
+              searchTerm={searchTerm}
+              displayOrder={displayOrder}
+              collapseControl={collapseControl}
+              onClearSearch={() => changeSearch('')}
             />
           ) : !selection ? (
             <p className="ss-cascade-empty">Click an element to see the CSS that styles it.</p>
           ) : (
             <>
-              <div className="ss-cascade-target">
-                <code className="ss-cascade-chip" data-tone="tag">
-                  {selection.signature.tagName}
-                </code>
-                <span className="ss-cascade-target__selector">
-                  {classes.length > 0 && (
-                    <span className="ss-cascade-target__classes">
-                      {classes.map((c) => (
-                        <code key={c} className="ss-cascade-target__class">
-                          .{c}
-                        </code>
-                      ))}
-                    </span>
-                  )}
-                  {selection.instanceCount > 1 && (
-                    <span className="ss-cascade-target__count">×{selection.instanceCount}</span>
-                  )}
-                </span>
-                <Button
-                  className="ss-cascade-target__copy"
-                  variant="ghost"
-                  size="compact"
-                  leftIcon={idCopied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-                  title={
-                    settings.location
-                      ? `Copy this element's source location (${settings.location.file}:${settings.location.line}) to paste into your agent`
-                      : "Copy this element's selector to paste into your agent"
-                  }
-                  aria-label="Copy element location"
-                  onClick={() => {
-                    const sel = `${selection.signature.tagName}${classes.map((c) => `.${c}`).join('')}`;
-                    // Prefer the element's REAL source location (file:line) so the agent can
-                    // jump straight to it; fall back to the selector when it can't be resolved.
-                    const id = settings.location
-                      ? `${settings.location.file}:${settings.location.line} (${sel})`
-                      : sel;
-                    void copyElementId(id);
-                  }}
-                >
-                  {idCopied ? 'Copied' : 'Copy id'}
-                </Button>
-              </div>
-
               {scope === 'settings' ? (
                 <ElementSettingsPanel settings={settings} />
               ) : (
                 <>
-                  <AddSelectorBar
-                    onAddSelector={onAddSelector}
-                    onAddMediaQuery={addDraftMediaQuery}
-                    suggestions={addSelectorOptions}
-                    existing={existingSelectors}
-                  />
-
                   {loading ? (
                     <div className="ss-cascade-loading">
                       <Spinner size="sm" />
                     </div>
                   ) : (
                     <div className="ss-cascade-cards">
-                      {draftMediaQueries.map(({ id, condition, selectors }) => (
-                        <MediaQueryGroupCard
-                          key={`draft-media:${id}`}
-                          condition={condition}
-                          autoFocusQuery
-                          commitQueryOnAppend
-                          onRename={(next) => renameDraftMediaQuery(id, next)}
-                          onDelete={() => deleteDraftMediaQuery(id)}
-                          addSelector={
-                            <AddSelectorBar
-                              onAddSelector={(selector, atPrelude) => {
-                                if (isMediaQueryComplete(condition)) {
-                                  deleteDraftMediaQuery(id);
-                                  onAddSelector(selector, atPrelude);
-                                } else {
-                                  addDraftMediaSelector(id, selector);
-                                }
-                              }}
-                              suggestions={addSelectorOptions}
-                              existing={existingSelectors}
-                              fixedCondition={`@media ${condition}`}
-                            />
+                      {displayOrder === 'newest-top' && (
+                        <AddSelectorBar
+                          onAddSelector={onAddSelector}
+                          onAddMediaQuery={addDraftMediaQuery}
+                          suggestions={addSelectorOptions}
+                          existing={existingSelectors}
+                        />
+                      )}
+                      {displayOrder === 'newest-top' &&
+                        visibleDraftMediaQueries.map(renderDraftMediaQuery)}
+                      {displayItems.map((item) => {
+                        if (item.kind === 'rule') {
+                          if (
+                            searchActive &&
+                            !searchCascadeRow(item.row, bodies[rowKey(item.row)], normalizedQuery)
+                              .matches
+                          ) {
+                            return null;
                           }
-                        >
-                          {selectors.map((selector) => (
-                            <CascadeRuleCard
-                              key={selector}
-                              editable
-                              draft
-                              selector={selector}
-                              body={parseRuleBody('')}
-                              overridden={new Map()}
-                              onChange={() => undefined}
-                              onDelete={() => deleteDraftMediaSelector(id, selector)}
-                              selectorSuggestions={selectorSuggestions}
-                              variables={variables}
-                              colorVariables={colorVariables}
-                              projectPath={projectPath}
-                              colorContrast={colorContrast}
-                              animations={animations}
-                              pendingReason="Complete the media query before editing properties."
-                            />
-                          ))}
-                        </MediaQueryGroupCard>
-                      ))}
-                      {groupCascadeRows(rows).map((item) => {
-                        if (item.kind === 'rule') return renderRuleCard(item.row);
+                          return renderRuleCard(item.row);
+                        }
 
-                        const groupCollapseKey = `media:${item.key}`;
+                        const conditionMatches =
+                          searchActive &&
+                          item.condition.toLocaleLowerCase().includes(normalizedQuery);
+                        const visibleRows = conditionMatches
+                          ? item.rows
+                          : item.rows.filter(
+                              (row) =>
+                                searchCascadeRow(row, bodies[rowKey(row)], normalizedQuery).matches
+                            );
+                        if (searchActive && !conditionMatches && visibleRows.length === 0)
+                          return null;
+                        const groupCollapseKey = cascadeMediaCollapseKey(item.key);
+                        const groupMatches =
+                          searchActive && (conditionMatches || visibleRows.length > 0);
+                        const searchCollapseOverride =
+                          searchCollapsedOverrides.get(groupCollapseKey);
+                        const groupCollapsed = groupMatches
+                          ? (searchCollapseOverride ?? false)
+                          : collapsedRules.has(groupCollapseKey);
                         const groupEditableRow = item.rows.find(
                           (row) => row.editable && !row.draft && bodies[rowKey(row)]
                         );
@@ -457,8 +825,14 @@ export function CssCascadePanel({
                             file={sourceFiles.length === 1 ? sourceFiles[0] : undefined}
                             sourceFiles={sourceFiles}
                             inactive={item.rows.some((row) => row.inactiveMedia)}
-                            collapsed={collapsedRules.has(groupCollapseKey)}
-                            onToggleCollapse={() => toggleCollapsed(groupCollapseKey)}
+                            collapsed={groupCollapsed}
+                            onToggleCollapse={() => {
+                              if (groupMatches) {
+                                toggleSearchCollapsed(groupCollapseKey, !groupCollapsed);
+                              } else {
+                                toggleCollapsed(groupCollapseKey);
+                              }
+                            }}
                             onRename={
                               groupEditableRow
                                 ? (condition) => onRenameAtRule(rowKey(groupEditableRow), condition)
@@ -486,13 +860,29 @@ export function CssCascadePanel({
                               ) : undefined
                             }
                           >
-                            {item.rows.map((row) => renderRuleCard(row, true))}
+                            {visibleRows.map((row) => renderRuleCard(row, true, conditionMatches))}
                           </MediaQueryGroupCard>
                         );
                       })}
+                      {displayOrder === 'newest-bottom' &&
+                        visibleDraftMediaQueries.map(renderDraftMediaQuery)}
 
-                      {rows.length === 0 && (
+                      {searchActive && !hasVisibleCascadeItems && (
+                        <p className="ss-cascade-empty" role="status">
+                          No CSS selectors or properties match “{query}”.
+                          <TextButton onClick={() => changeSearch('')}>Clear search</TextButton>
+                        </p>
+                      )}
+                      {!searchActive && rows.length === 0 && draftMediaQueries.length === 0 && (
                         <p className="ss-cascade-empty">No CSS rules match this element.</p>
+                      )}
+                      {displayOrder === 'newest-bottom' && (
+                        <AddSelectorBar
+                          onAddSelector={onAddSelector}
+                          onAddMediaQuery={addDraftMediaQuery}
+                          suggestions={addSelectorOptions}
+                          existing={existingSelectors}
+                        />
                       )}
                     </div>
                   )}
@@ -516,7 +906,7 @@ export function AddSelectorBar({
   existing,
   fixedCondition,
 }: {
-  onAddSelector: (selector: string, atPrelude?: string) => void;
+  onAddSelector: (selector: string, atPrelude?: string) => void | Promise<void>;
   /** Creates an empty media group before any selector is added to it. */
   onAddMediaQuery?: (condition: string) => void;
   suggestions: string[];
@@ -533,7 +923,7 @@ export function AddSelectorBar({
 
   const submit = (value: string) => {
     const v = value.trim();
-    if (v) onAddSelector(v, fixedCondition);
+    if (v) void onAddSelector(v, fixedCondition);
     setText('');
     setActive(0);
     setOpen(false);
@@ -609,7 +999,9 @@ export function AddSelectorBar({
     <div className={`ss-cascade-action${fixedCondition ? ' ss-cascade-action--nested' : ''}`}>
       {fixedCondition ? (
         <TextButton
-          leftIcon={<PlusIcon size={11} />}
+          className={`ss-cascade-card__add${open ? ' is-open' : ''}`}
+          leftIcon={<PlusIcon size={12} />}
+          aria-expanded={open}
           data-cascade-add-selector
           onClick={() => setOpen(true)}
         >
@@ -620,6 +1012,7 @@ export function AddSelectorBar({
           variant="default"
           width="fill"
           leftIcon={<PlusIcon size={11} />}
+          aria-expanded={open}
           data-cascade-add-selector
           onClick={() => setOpen(true)}
         >

@@ -39,7 +39,7 @@ import { useNotifications } from './hooks/useNotifications';
 import { useProjectLifecycle } from './hooks/useProjectLifecycle';
 import { useAppSetup } from './hooks/useAppSetup';
 import { AppViewRouter } from './components/AppViewRouter';
-import { useFindingHandoff } from './hooks/useWorkflowHandoff';
+import { useAgentDeliveries } from './hooks/useAgentDeliveries';
 import { useAccountSelectNavigation } from './hooks/useAccountSelectNavigation';
 import { useProjectRail } from './hooks/useProjectRail';
 import { useActiveAccount } from './hooks/useActiveAccount';
@@ -248,7 +248,7 @@ function AppContents({ initialProjectPath }: AppProps) {
     projectType,
     projectTypeResolved,
     isRestartingDevServer,
-    customDevCommand,
+    devCommands,
     devServerOutputRef,
     devServerOutputVersion,
     healthOutputRef,
@@ -844,11 +844,8 @@ function AppContents({ initialProjectPath }: AppProps) {
     handleRunInstall(currentProject.path, needsInstall.packageManager);
   }, [currentProject, needsInstall, handleRunInstall]);
 
-  // "Send to agent" from the Inbox — see hooks/useWorkflowHandoff. Null while
-  // off-workspace: the Inbox link keeps the hot project current, so the flip
-  // back to 'workspace' is what re-arms delivery of a second finding.
-  const handoffPath = view === 'workspace' ? (currentProject?.path ?? null) : null;
-  useFindingHandoff(handoffPath, terminalProps, showToast);
+  const inWorkspace = view === 'workspace';
+  useAgentDeliveries(inWorkspace, currentProject, terminalProps, showToast, handleSelectProject);
 
   const devServerProps = useMemo(
     () => ({
@@ -859,7 +856,7 @@ function AppContents({ initialProjectPath }: AppProps) {
       projectType,
       projectTypeResolved,
       isRestartingDevServer,
-      customDevCommand,
+      devCommands,
       devServerOutput: devServerOutputRef.current,
       devServerOutputVersion,
       healthOutput: healthOutputRef.current,
@@ -881,7 +878,7 @@ function AppContents({ initialProjectPath }: AppProps) {
       projectType,
       projectTypeResolved,
       isRestartingDevServer,
-      customDevCommand,
+      devCommands,
       devServerOutputRef,
       devServerOutputVersion,
       healthOutputRef,

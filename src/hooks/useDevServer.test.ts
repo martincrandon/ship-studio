@@ -8,7 +8,8 @@ vi.mock('../lib/project', () => ({
     pty: { kill: vi.fn() },
     stop: vi.fn().mockResolvedValue(undefined),
   }),
-  getCustomDevCommand: vi.fn().mockResolvedValue(null),
+  getGenericDevCommand: vi.fn().mockResolvedValue({ custom: null, packageScript: null }),
+  getPackageDevScriptCommand: vi.fn().mockResolvedValue(null),
   setCustomDevCommand: vi.fn().mockResolvedValue(undefined),
   getForceStaticServe: vi.fn().mockResolvedValue(false),
   getWorkspaceSubpath: vi.fn().mockResolvedValue(null),
@@ -58,7 +59,11 @@ describe('useDevServer', () => {
       pty: { kill: vi.fn() } as never,
       stop: vi.fn().mockResolvedValue(undefined),
     } as never);
-    vi.mocked(project.getCustomDevCommand).mockResolvedValue(null);
+    vi.mocked(project.getGenericDevCommand).mockResolvedValue({
+      custom: null,
+      packageScript: null,
+    });
+    vi.mocked(project.getPackageDevScriptCommand).mockResolvedValue(null);
     vi.mocked(project.getForceStaticServe).mockResolvedValue(false);
     vi.mocked(project.getWorkspaceSubpath).mockResolvedValue(null);
     vi.mocked(project.checkDependenciesInstalled).mockResolvedValue({
@@ -320,6 +325,119 @@ describe('useDevServer', () => {
 
       expect(result.current.projectType).toBe('generic');
       expect(startStaticServer).not.toHaveBeenCalled();
+    });
+
+    it("runs a generic project's package.json dev script when no custom command is set (#1105)", async () => {
+      // A pnpm/Turborepo root: package.json with `"dev": "turbo run dev"` but
+      // no framework config, so it detects as `generic`.
+      const { detectProjectType } = await import('../lib/static-server');
+      const { getGenericDevCommand, startDevServer } = await import('../lib/project');
+      vi.mocked(detectProjectType).mockResolvedValue('generic');
+      vi.mocked(getGenericDevCommand).mockResolvedValue({
+        custom: null,
+        packageScript: 'pnpm run dev',
+      });
+
+      const { result } = renderHook(() => useDevServer('/path/to/project'));
+      await act(async () => {
+        await result.current.startServerForProject('/path/to/project', 'my-project', 3000, 'main');
+      });
+
+      expect(getGenericDevCommand).toHaveBeenCalledWith('/path/to/project', '/path/to/project');
+      expect(startDevServer).toHaveBeenCalledWith(
+        '/path/to/project',
+        3000,
+        'main',
+        expect.any(Function),
+        'pnpm run dev'
+      );
+      expect(result.current.customDevCommand).toBeNull();
+      expect(result.current.genericDevCommand).toBe('pnpm run dev');
+    });
+
+    it('prefers a configured custom command over the dev script for generic projects', async () => {
+      const { detectProjectType } = await import('../lib/static-server');
+      const { getGenericDevCommand, startDevServer } = await import('../lib/project');
+      vi.mocked(detectProjectType).mockResolvedValue('generic');
+      vi.mocked(getGenericDevCommand).mockResolvedValue({
+        custom: 'nx serve web',
+        packageScript: null,
+      });
+
+      const { result } = renderHook(() => useDevServer('/path/to/project'));
+      await act(async () => {
+        await result.current.startServerForProject('/path/to/project', 'my-project', 3000, 'main');
+      });
+
+      expect(startDevServer).toHaveBeenCalledWith(
+        '/path/to/project',
+        3000,
+        'main',
+        expect.any(Function),
+        'nx serve web'
+      );
+      expect(result.current.customDevCommand).toBe('nx serve web');
+      expect(result.current.genericDevCommand).toBe('nx serve web');
+    });
+
+    it('starts nothing for a generic project with neither a custom command nor a dev script', async () => {
+      const { detectProjectType } = await import('../lib/static-server');
+      const { startDevServer } = await import('../lib/project');
+      vi.mocked(detectProjectType).mockResolvedValue('generic');
+
+      const { result } = renderHook(() => useDevServer('/path/to/project'));
+      await act(async () => {
+        await result.current.startServerForProject('/path/to/project', 'my-project', 3000, 'main');
+      });
+
+      expect(startDevServer).not.toHaveBeenCalled();
+      expect(result.current.genericDevCommand).toBeNull();
+    });
+
+    it('reads the dev script from the picked workspace, not the repo root', async () => {
+      const { detectProjectType } = await import('../lib/static-server');
+      const { getGenericDevCommand, getWorkspaceSubpath } = await import('../lib/project');
+      vi.mocked(detectProjectType).mockResolvedValue('generic');
+      vi.mocked(getWorkspaceSubpath).mockResolvedValue('packages/server');
+
+      const { result } = renderHook(() => useDevServer('/path/to/project'));
+      await act(async () => {
+        await result.current.startServerForProject('/path/to/project', 'my-project', 3000, 'main');
+      });
+
+      expect(getGenericDevCommand).toHaveBeenCalledWith(
+        '/path/to/project',
+        '/path/to/project/packages/server'
+      );
+    });
+
+    it('falls back to the dev script when a generic custom command is cleared', async () => {
+      const { detectProjectType } = await import('../lib/static-server');
+      const { getGenericDevCommand, getPackageDevScriptCommand, startDevServer } =
+        await import('../lib/project');
+      vi.mocked(detectProjectType).mockResolvedValue('generic');
+      vi.mocked(getGenericDevCommand).mockResolvedValue({
+        custom: 'make serve',
+        packageScript: null,
+      });
+      vi.mocked(getPackageDevScriptCommand).mockResolvedValue('pnpm run dev');
+
+      const { result } = renderHook(() => useDevServer('/path/to/project'));
+      await act(async () => {
+        await result.current.startServerForProject('/path/to/project', 'my-project', 3000, 'main');
+      });
+      vi.mocked(startDevServer).mockClear();
+
+      await act(async () => {
+        await result.current.saveCustomDevCommand('/path/to/project', null);
+      });
+
+      expect(startDevServer).toHaveBeenCalledTimes(1);
+      const call = vi.mocked(startDevServer).mock.calls[0];
+      expect(call[0]).toBe('/path/to/project');
+      expect(call[4]).toBe('pnpm run dev');
+      expect(result.current.customDevCommand).toBeNull();
+      expect(result.current.genericDevCommand).toBe('pnpm run dev');
     });
 
     it('starts dev server for non-static projects', async () => {

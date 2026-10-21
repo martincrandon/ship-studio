@@ -1,5 +1,7 @@
 import { ModalFrame } from './primitives/ModalFrame';
 import { Button } from './primitives/Button';
+import { useAsyncState } from '../hooks/useAsyncState';
+import { getRemoteAccessBrief } from '../lib/remoteAccess';
 
 interface QuitConfirmModalProps {
   onCancel: () => void;
@@ -11,6 +13,10 @@ interface QuitConfirmModalProps {
  * it lives at the component root alongside the other app-global chrome.
  */
 export function QuitConfirmModal({ onCancel, onQuit }: QuitConfirmModalProps) {
+  // Someone may be relying on this computer from their phone. Quitting is the
+  // one thing that silently cuts them off, so say so here, where it's decided.
+  const remote = useAsyncState(getRemoteAccessBrief, { immediate: true });
+  const remoteOn = remote.data?.enabled === true;
   return (
     <ModalFrame
       isOpen
@@ -25,6 +31,12 @@ export function QuitConfirmModal({ onCancel, onQuit }: QuitConfirmModalProps) {
         }}
       >
         <p>Are you sure you want to quit Ship Studio?</p>
+        {remoteOn && (
+          <p className="quit-confirm-remote">
+            Remote access is on. Quitting stops your assistant reaching this computer until Ship
+            Studio is open again.
+          </p>
+        )}
         <div className="quit-confirm-actions">
           <Button variant="secondary" onClick={onCancel}>
             Cancel

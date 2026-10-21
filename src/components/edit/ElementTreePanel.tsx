@@ -42,7 +42,7 @@ import { ElementHtmlEditor } from './ElementHtmlEditor';
 import { InsertMenu } from './InsertMenu';
 import { getElementIcon } from './element-icons';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
-import { useLocalStorageFlag } from '../../hooks/useLocalStorageFlag';
+import { useElementDisplayPreferences } from '../../hooks/useElementDisplayPreferences';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import {
   ContextMenu,
@@ -131,9 +131,6 @@ interface Props {
 
 /** Rows at depth < this start expanded so the tree isn't a single chevron. */
 const AUTO_EXPAND_DEPTH = 3;
-const SHOW_TAG_ICONS_STORAGE_KEY = 'elementTreeShowTagIcons';
-const SHOW_TAG_SANS_SERIF_STORAGE_KEY = 'elementTreeShowTagSansSerif';
-const SHOW_TAG_COLORS_STORAGE_KEY = 'elementTreeShowTagColors';
 const TREE_INSIDE_ZONE_START = 0.35;
 const TREE_INSIDE_ZONE_END = 0.65;
 const TREE_INSIDE_HOLD_DELAY_MS = 500;
@@ -368,18 +365,14 @@ export function ElementTreePanel({
     rows: readonly ElementTreeRow[];
   } | null>(null);
   const [view, setView] = useState<'visual' | 'code'>('visual');
-  const [showTagIcons, , toggleShowTagIcons] = useLocalStorageFlag(
-    SHOW_TAG_ICONS_STORAGE_KEY,
-    false
-  );
-  const [showTagSansSerif, , toggleShowTagSansSerif] = useLocalStorageFlag(
-    SHOW_TAG_SANS_SERIF_STORAGE_KEY,
-    false
-  );
-  const [showTagColors, , toggleShowTagColors] = useLocalStorageFlag(
-    SHOW_TAG_COLORS_STORAGE_KEY,
-    true
-  );
+  const {
+    showTagIcons,
+    toggleShowTagIcons,
+    showTagSansSerif,
+    toggleShowTagSansSerif,
+    showTagColors,
+    toggleShowTagColors,
+  } = useElementDisplayPreferences();
   // The insert palette is anchored to the most recent context-menu gesture.
   // The primitive owns menu state; this ref only bridges the menu item to the
   // existing InsertMenu, which opens after the context menu closes.

@@ -1,5 +1,6 @@
 /**
- * Element Settings — the CLASSES editor's two add-class paths.
+ * Element Settings source writes, their guarded preview protocols, and the
+ * CLASSES editor's two add-class paths.
  *
  * Focus: the regression where an element with NO class couldn't be styled at all —
  * `addClass` resolved via the class-literal resolver (which has nothing to anchor
@@ -20,6 +21,8 @@ vi.mock('../lib/edit', async (importActual) => {
     applyClassnameEdit: vi.fn(),
     applyClassnameEditMulti: vi.fn(),
     insertClassAttr: vi.fn(),
+    resolveTextSource: vi.fn(),
+    applyTextEdit: vi.fn(),
   };
 });
 vi.mock('../lib/edit-html', () => ({
@@ -38,9 +41,12 @@ import {
   resolveClassnameSource,
   applyClassnameEdit,
   insertClassAttr,
+  resolveTextSource,
+  applyTextEdit,
   type ElementSignature,
+  type TextResolution,
 } from '../lib/edit';
-import { resolveElementHtml } from '../lib/edit-html';
+import { resolveElementHtml, applyElementHtml } from '../lib/edit-html';
 
 type Fn = ReturnType<typeof vi.fn>;
 
@@ -61,6 +67,7 @@ function posts(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
           type?: string;
           signature?: ElementSignature;
           className?: string;
+          value?: string;
           rules?: unknown[];
         },
       ]
@@ -112,6 +119,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Attributes panel resolve is irrelevant here — let it fail (attributes hidden).
   (resolveElementHtml as Fn).mockRejectedValue(new Error('not anchored'));
+  (resolveTextSource as Fn).mockResolvedValue({
+    status: 'read_only',
+    reason: 'This element has no editable text.',
+  });
+  (applyElementHtml as Fn).mockResolvedValue(1);
+  (applyTextEdit as Fn).mockResolvedValue(undefined);
   (insertClassAttr as Fn).mockResolvedValue({ file: 'Hero.tsx', line: 3, column: 6 });
   (resolveClassnameSource as Fn).mockResolvedValue({
     status: 'resolved',
@@ -215,5 +228,190 @@ describe('useElementSettings renameClass', () => {
     expect(result.current.classes).toEqual(['content-panel']);
     const reselect = posts(iframeRef).find((message) => message.type === 'ss:reselect');
     expect(reselect?.signature?.className).toBe('content-panel');
+  });
+});
+
+describe('useElementSettings text source editing', () => {
+  it('shows the full resolved source text and encodes text safely for JSX writes', async () => {
+    const signature = { ...CLASSLESS, text: 'Shortened selection preview…' };
+    (resolveElementHtml as Fn).mockResolvedValue({
+      file: 'Hero.tsx',
+      line: 4,
+      html: '<h1 className="hero" {...props} data-note={config.title} id="main">A &amp; B</h1>',
+    });
+    (resolveTextSource as Fn).mockResolvedValue({
+      status: 'resolved',
+      file: 'Hero.tsx',
+      line: 4,
+      column: 23,
+      text: 'A &amp; B &copy;',
+      confidence: 'unique',
+    });
+    const { result, iframeRef } = setup(signature);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.text).toBe('A & B ©');
+    expect(result.current.canEditText).toBe(true);
+    expect(result.current.attributes).toEqual([
+      { name: 'data-note', value: '{config.title}' },
+      { name: 'id', value: 'main' },
+    ]);
+
+    await act(async () => {
+      await result.current.setText('A & <copy> {title}');
+    });
+
+    expect(applyTextEdit).toHaveBeenCalledWith(
+      '/proj',
+      'Hero.tsx',
+      4,
+      23,
+      'A &amp; B &copy;',
+      'A &amp; &lt;copy&gt; &#123;title&#125;'
+    );
+    expect(posts(iframeRef)).toContainEqual({
+      type: 'ss:setText',
+      value: 'A & <copy> {title}',
+    });
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:commit' });
+    const reselect = posts(iframeRef).find((message) => message.type === 'ss:reselect');
+    expect(reselect?.signature?.text).toBe('A & <copy> {title}');
+  });
+
+  it('does not let a stale resolver replace the next selected element text', async () => {
+    const oldSelection = { ...CLASSLESS, text: 'Old element text' };
+    const newSelection = { ...CLASSLESS, className: 'new', text: 'New element text' };
+    let resolveOld!: (value: TextResolution) => void;
+    const oldResolution = new Promise<TextResolution>((resolve) => {
+      resolveOld = resolve;
+    });
+    vi.mocked(resolveTextSource).mockImplementation(
+      (_projectPath: string, selected: ElementSignature) =>
+        selected === oldSelection
+          ? oldResolution
+          : Promise.resolve({ status: 'read_only', reason: 'new selection reason' })
+    );
+    const iframeRef = fakeIframeRef();
+    const onToast = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ selected }: { selected: ElementSignature }) =>
+        useElementSettings({
+          iframeRef,
+          projectPath: '/proj',
+          enabled: true,
+          signature: selected,
+          onToast,
+        }),
+      { initialProps: { selected: oldSelection } }
+    );
+
+    rerender({ selected: newSelection });
+    await act(async () => {
+      resolveOld({
+        status: 'resolved',
+        file: 'Hero.tsx',
+        line: 1,
+        column: 1,
+        text: 'Old element text',
+        confidence: 'unique',
+      });
+      await Promise.resolve();
+    });
+
+    expect(result.current.text).toBe('');
+    expect(result.current.textReason).toBe('new selection reason');
+  });
+});
+
+describe('useElementSettings tag conversion', () => {
+  it('replaces only the paired tag names and reselects the live preview node', async () => {
+    const source =
+      '<div data-note={title.includes(">") ? "yes" : "no"} className={classes}>before<div>inner</div> after</div>';
+    const signature = { ...CLASSLESS, text: 'before inner after' };
+    (resolveElementHtml as Fn).mockResolvedValue({
+      file: 'Hero.tsx',
+      line: 3,
+      html: source,
+    });
+    const { result, iframeRef } = setup(signature);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.canEditTag).toBe(true);
+
+    await act(async () => {
+      await result.current.setTag('section');
+    });
+
+    const converted =
+      '<section data-note={title.includes(">") ? "yes" : "no"} className={classes}>before<div>inner</div> after</section>';
+    expect(applyElementHtml).toHaveBeenCalledWith('/proj', signature, source, converted);
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:setTag', value: 'section' });
+    const reselect = posts(iframeRef).find((message) => message.type === 'ss:reselect');
+    expect(reselect?.signature?.tagName).toBe('section');
+  });
+
+  it('does not overwrite the next selection when an older attribute write finishes late', async () => {
+    const oldSelection = { ...CLASSLESS, className: 'old', text: 'Old selection' };
+    const newSelection = { ...CLASSLESS, className: 'new', text: 'New selection' };
+    vi.mocked(resolveElementHtml).mockImplementation(
+      (_projectPath: string, selected: ElementSignature) =>
+        Promise.resolve({
+          file: 'Hero.tsx',
+          line: 1,
+          html:
+            selected === oldSelection
+              ? '<div className="old">Old selection</div>'
+              : '<div className="new" data-new="fresh">New selection</div>',
+        })
+    );
+
+    let finishOldWrite!: () => void;
+    const oldWrite = new Promise<number>((resolve) => {
+      finishOldWrite = () => resolve(1);
+    });
+    (applyElementHtml as Fn).mockReturnValue(oldWrite);
+
+    const iframeRef = fakeIframeRef();
+    const onToast = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ selected }: { selected: ElementSignature }) =>
+        useElementSettings({
+          iframeRef,
+          projectPath: '/proj',
+          enabled: true,
+          signature: selected,
+          onToast,
+        }),
+      { initialProps: { selected: oldSelection } }
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    act(() => result.current.setAttribute('title', 'old write'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    rerender({ selected: newSelection });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.attributes).toEqual([{ name: 'data-new', value: 'fresh' }]);
+
+    await act(async () => {
+      finishOldWrite();
+      await Promise.resolve();
+    });
+
+    expect(result.current.attributes).toEqual([{ name: 'data-new', value: 'fresh' }]);
+    expect(result.current.tag).toBe('div');
   });
 });

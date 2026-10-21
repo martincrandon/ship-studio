@@ -58,3 +58,36 @@ export function decideStartupTimeoutAction(state: StartupTimeoutState): StartupT
   if (state.receivedOutput || !state.mounted) return 'none';
   return state.autoRespawnUsed ? 'error' : 'respawn';
 }
+
+export interface StartupWatchdogArmState {
+  /**
+   * True only when `pty_session_open` actually spawned a process for this
+   * mount. A remount re-attaches to the session the backend already owns —
+   * that process is not "starting up", it may simply be waiting for the
+   * user (a login screen, a prompt), and silence there is not a fault.
+   * `undefined` (an older backend that does not report it) counts as a
+   * spawn, which is the historical behaviour.
+   */
+  spawned: boolean | undefined;
+  /**
+   * Total bytes the session has ever produced, as of the attach snapshot
+   * (`AttachPtySessionResult.endOffset`). Non-zero means the process has
+   * demonstrably started, whether or not anything new arrives live.
+   */
+  outputBytesAtAttach: number;
+}
+
+/**
+ * Whether the no-output startup watchdog should be armed at all for this
+ * attach cycle (issue #1074, and the #712 family).
+ *
+ * The watchdog exists for one case: a process we just spawned that never
+ * wrote a byte. Arming it on every mount meant a live agent idling on its
+ * login screen — which prints once and then waits — looked "silent" after
+ * a remount and was killed and respawned with the same session id while
+ * the original still held it ("Session ID … is already in use").
+ */
+export function shouldArmStartupWatchdog(state: StartupWatchdogArmState): boolean {
+  if (state.spawned === false) return false;
+  return state.outputBytesAtAttach <= 0;
+}

@@ -3,6 +3,7 @@ import { ChangelogModal } from './dashboard/ChangelogModal';
 import { AttachedLibrariesModal } from './dashboard/AttachedLibrariesModal';
 import { SettingsModal } from './dashboard/SettingsModal';
 import { MigrationModals } from './migration/MigrationModals';
+import { RemoteAccessModal } from './remote/RemoteAccessModal';
 import { ToastList } from './primitives/ToastList';
 import { useModal } from '../contexts/ModalContext';
 import { usePaletteContext } from './CommandPalette/paletteContext';
@@ -37,6 +38,7 @@ function GlobalModalsBody() {
   const changelog = useModal('changelog');
   const attachedLibraries = useModal('attachedLibraries');
   const settings = useModal('settings');
+  const remoteAccess = useModal('remoteAccess');
   const { toasts, dismissToast } = useToast();
 
   return (
@@ -45,6 +47,7 @@ function GlobalModalsBody() {
       <ChangelogModal isOpen={changelog.isOpen} onClose={changelog.close} />
       <AttachedLibrariesModal isOpen={attachedLibraries.isOpen} onClose={attachedLibraries.close} />
       <SettingsModal isOpen={settings.isOpen} onClose={settings.close} />
+      <RemoteAccessModal isOpen={remoteAccess.isOpen} onClose={remoteAccess.close} />
       <IssueReportModals />
       <MigrationModals />
       <ToastList toasts={toasts} onDismiss={dismissToast} />

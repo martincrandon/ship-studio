@@ -93,6 +93,13 @@ type SessionWriter = Mutex<Option<Box<dyn std::io::Write + Send>>>;
 struct Session {
     pid: u32,
     alive: AtomicBool,
+    /// Set only by the waiter thread, once `child.wait()` has returned —
+    /// i.e. the process is really gone. Distinct from `alive`, which
+    /// `pty_session_kill` clears the moment it *asks* the child to stop
+    /// (SIGHUP on unix), long before the child has necessarily obeyed.
+    /// Respawning under the same id must wait for this, not for `alive`
+    /// (issue #1074).
+    reaped: AtomicBool,
     attached: AtomicBool,
     exit_code: Mutex<Option<i32>>,
     buffer: Mutex<SessionBuffer>,
@@ -105,6 +112,32 @@ struct Session {
     /// lets the kernel's PTY buffer fill and blocks the child's own `write`.
     /// See [`FlowControl`] and issue #910.
     flow: FlowControl,
+    /// Who this session belongs to, as the frontend told us at open time.
+    /// Remote access lists a project's agent tabs from these — the tab model
+    /// itself lives in the frontend, which may not be mounted.
+    meta: SessionMeta,
+    /// Current PTY size, so a remote reader can render the screen at the
+    /// geometry the program actually drew it for.
+    size: Mutex<(u16, u16)>,
+    /// Unix ms of the last byte read from the PTY. "Quiet for a while" is the
+    /// only honest signal a remote caller has that an agent finished a turn.
+    last_output_ms: std::sync::atomic::AtomicU64,
+}
+
+/// Open-time facts about a session that never change afterwards.
+#[derive(Clone, Default)]
+struct SessionMeta {
+    project_path: Option<String>,
+    /// The frontend's agent id (`claude`, `codex`, `terminal`, …), when given.
+    agent_id: Option<String>,
+    opened_at_ms: u64,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Backpressure between a PTY and the terminal rendering it.
@@ -208,6 +241,119 @@ impl Session {
 
 static REGISTRY: LazyLock<Mutex<HashMap<String, Arc<Session>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Sessions that `pty_session_kill` removed from [`REGISTRY`] whose child
+/// had not yet been reaped. Kept so a later `pty_session_open` under the
+/// SAME id can wait for that process to actually exit before spawning its
+/// replacement (issue #1074).
+///
+/// Why it matters: an agent tab's session id is also the agent's own
+/// conversation id (`claude --session-id <id>`). Kill only delivers SIGHUP;
+/// Claude Code can take a while to honour it. Spawning the replacement in
+/// that window started a second `claude --session-id <id>` that exited 1
+/// with "Session ID … is already in use", and the tab reset itself.
+static EXITING: LazyLock<Mutex<HashMap<String, Arc<Session>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// How long `pty_session_open` waits for a killed predecessor to exit on
+/// its own before escalating to a hard kill.
+const PREVIOUS_EXIT_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+/// How long it then waits for the hard kill to take effect before refusing
+/// to spawn a process that would collide with the old one.
+const PREVIOUS_EXIT_FORCE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Record that a session's child process has been reaped, and drop it from
+/// [`EXITING`] if it was parked there by a kill. Called by the waiter thread.
+fn mark_child_reaped(session_id: &str, session: &Arc<Session>) {
+    session.reaped.store(true, Ordering::Relaxed);
+    if let Ok(mut exiting) = EXITING.lock() {
+        if exiting
+            .get(session_id)
+            .is_some_and(|parked| Arc::ptr_eq(parked, session))
+        {
+            exiting.remove(session_id);
+        }
+    }
+}
+
+/// Poll until `session`'s child has been reaped, for at most `timeout`.
+async fn wait_until_reaped(session: &Session, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if session.reaped.load(Ordering::Relaxed) {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+}
+
+/// Hard-kill a process by PID: SIGKILL on unix, a tree kill on Windows.
+async fn force_kill_pid(pid: u32) {
+    if pid == 0 {
+        return;
+    }
+    let pid = pid.to_string();
+    #[cfg(unix)]
+    let (program, args) = ("kill", vec!["-9", pid.as_str()]);
+    #[cfg(windows)]
+    let (program, args) = ("taskkill", vec!["/F", "/T", "/PID", pid.as_str()]);
+    let mut cmd = crate::utils::create_command(program);
+    cmd.args(args);
+    let _ =
+        crate::external_command::run_with_timeout(tokio::process::Command::from(cmd), program, 5)
+            .await;
+}
+
+/// Make sure no process that previously ran under `session_id` is still
+/// alive before a new one is spawned under the same id (issue #1074).
+///
+/// Waits `grace` for a killed predecessor to exit, then hard-kills it and
+/// waits `force_wait` more. If it is somehow still running after that, the
+/// spawn is refused: a visible error beats a second process that is
+/// guaranteed to collide with the first.
+async fn ensure_previous_process_gone(
+    session_id: &str,
+    grace: std::time::Duration,
+    force_wait: std::time::Duration,
+) -> Result<(), CommandError> {
+    let previous = EXITING
+        .lock()
+        .map_err(|e| format!("pty exiting registry poisoned: {e}"))?
+        .get(session_id)
+        .cloned();
+    let Some(previous) = previous else {
+        return Ok(());
+    };
+
+    let reaped = wait_until_reaped(&previous, grace).await || {
+        tracing::warn!(
+            "[pty_session] previous process for {} (pid {}) ignored the hang-up; force-killing",
+            session_id,
+            previous.pid
+        );
+        force_kill_pid(previous.pid).await;
+        wait_until_reaped(&previous, force_wait).await
+    };
+
+    if !reaped {
+        return Err(CommandError::expected(
+            "The previous agent process for this tab is still shutting down. \
+             Wait a moment, then try again.",
+        ));
+    }
+    if let Ok(mut exiting) = EXITING.lock() {
+        if exiting
+            .get(session_id)
+            .is_some_and(|parked| Arc::ptr_eq(parked, &previous))
+        {
+            exiting.remove(session_id);
+        }
+    }
+    Ok(())
+}
 
 /// Windows system vars that cmd.exe / ConPTY / Node require. Mirrors the
 /// critical subset of `get_system_env` in `commands/pty/mod.rs` — injected
@@ -329,6 +475,12 @@ pub fn openpty_error(error: impl std::fmt::Display) -> CommandError {
 pub struct OpenSessionResult {
     pub session_id: String,
     pub pid: u32,
+    /// True when this call spawned a new process; false when it returned a
+    /// live session already registered under this id. The frontend arms its
+    /// no-output startup watchdog only for a real spawn (issue #1074): a
+    /// re-attached process is past startup and may simply be waiting for
+    /// the user.
+    pub spawned: bool,
 }
 
 #[derive(Serialize)]
@@ -363,6 +515,7 @@ pub async fn pty_session_open(
     cols: u16,
     rows: u16,
     project_path: Option<String>,
+    agent_id: Option<String>,
 ) -> Result<OpenSessionResult, CommandError> {
     // Idempotent: if a live session already exists for this id, return it.
     // If an exited session exists under this id (e.g. resume-failed retry
@@ -376,11 +529,24 @@ pub async fn pty_session_open(
                 return Ok(OpenSessionResult {
                     session_id: session_id.clone(),
                     pid: existing.pid,
+                    spawned: false,
                 });
             }
-            map.remove(&session_id);
+            if let Some(evicted) = map.remove(&session_id) {
+                // Not alive but not reaped yet either: park it so the wait
+                // below covers it like a killed session.
+                if !evicted.reaped.load(Ordering::Relaxed) {
+                    if let Ok(mut exiting) = EXITING.lock() {
+                        exiting.insert(session_id.clone(), evicted);
+                    }
+                }
+            }
         }
     }
+
+    // Never spawn over a predecessor that still holds this id (issue #1074).
+    ensure_previous_process_gone(&session_id, PREVIOUS_EXIT_GRACE, PREVIOUS_EXIT_FORCE_WAIT)
+        .await?;
 
     let (rows, cols) = clamp_pty_size(rows, cols);
     let pty_system = native_pty_system();
@@ -471,6 +637,7 @@ pub async fn pty_session_open(
     let session = Arc::new(Session {
         pid,
         alive: AtomicBool::new(true),
+        reaped: AtomicBool::new(false),
         attached: AtomicBool::new(false),
         exit_code: Mutex::new(None),
         buffer: Mutex::new(SessionBuffer::new()),
@@ -478,6 +645,13 @@ pub async fn pty_session_open(
         child_killer: Mutex::new(child_killer),
         master: Mutex::new(Some(pair.master)),
         flow: FlowControl::new(),
+        meta: SessionMeta {
+            project_path: project_path.clone(),
+            agent_id,
+            opened_at_ms: now_ms(),
+        },
+        size: Mutex::new((rows, cols)),
+        last_output_ms: std::sync::atomic::AtomicU64::new(now_ms()),
     });
 
     REGISTRY
@@ -506,6 +680,9 @@ pub async fn pty_session_open(
                     Err(_) => break,
                 };
                 let chunk = &buf[..n];
+                session_for_reader
+                    .last_output_ms
+                    .store(now_ms(), Ordering::Relaxed);
 
                 handle_dsr_intercept(
                     chunk,
@@ -558,6 +735,7 @@ pub async fn pty_session_open(
             if let Ok(mut slot) = session_for_waiter.exit_code.lock() {
                 *slot = Some(code);
             }
+            mark_child_reaped(&session_id_for_waiter, &session_for_waiter);
             // The child is gone, so nothing will read or write this PTY
             // again. Close it now instead of holding it for the (unbounded)
             // lifetime of the registry entry — the pseudo-terminal pool is
@@ -583,7 +761,11 @@ pub async fn pty_session_open(
         project_path
     );
 
-    Ok(OpenSessionResult { session_id, pid })
+    Ok(OpenSessionResult {
+        session_id,
+        pid,
+        spawned: true,
+    })
 }
 
 #[tauri::command]
@@ -690,6 +872,9 @@ pub fn pty_session_resize(session_id: String, cols: u16, rows: u16) -> Result<()
                 CommandError::from(format!("resize: {msg}"))
             }
         })?;
+    if let Ok(mut size) = session.size.lock() {
+        *size = (rows, cols);
+    }
     Ok(())
 }
 
@@ -715,6 +900,14 @@ pub fn pty_session_kill(session_id: String) -> Result<(), CommandError> {
         let _ = killer.kill();
     }
     session.alive.store(false, Ordering::Relaxed);
+    // The kill is only a request (SIGHUP on unix). Until the waiter thread
+    // reaps the child, remember it so a respawn under this same id waits for
+    // it instead of colliding with it (issue #1074).
+    if !session.reaped.load(Ordering::Relaxed) {
+        if let Ok(mut exiting) = EXITING.lock() {
+            exiting.insert(session_id.clone(), session.clone());
+        }
+    }
     // Don't wait for the waiter thread to notice: the tab is closed and the
     // registry entry is already gone, so release the pseudo-terminal now
     // (issue #540). Closing the master also hangs up anything the kill
@@ -842,9 +1035,183 @@ pub fn pty_session_set_paused(session_id: String, paused: bool) -> Result<(), Co
     Ok(())
 }
 
+// ============================================================================
+// Read-only view for remote access (see `crate::remote_access`)
+// ============================================================================
+
+/// One session as remote access sees it. Deliberately no buffer: reading
+/// output goes through [`session_snapshot`] so it is always one explicit call.
+#[derive(Debug, Clone)]
+pub struct SessionSummary {
+    pub session_id: String,
+    pub agent_id: Option<String>,
+    pub alive: bool,
+    pub opened_at_ms: u64,
+    pub last_output_ms: u64,
+}
+
+/// The sessions opened for `project_path`, oldest first.
+pub fn sessions_for_project(project_path: &str) -> Vec<SessionSummary> {
+    let Ok(map) = REGISTRY.lock() else {
+        return Vec::new();
+    };
+    let mut sessions: Vec<SessionSummary> = map
+        .iter()
+        .filter(|(_, s)| s.meta.project_path.as_deref() == Some(project_path))
+        .map(|(id, s)| SessionSummary {
+            session_id: id.clone(),
+            agent_id: s.meta.agent_id.clone(),
+            alive: s.alive.load(Ordering::Relaxed),
+            opened_at_ms: s.meta.opened_at_ms,
+            last_output_ms: s.last_output_ms.load(Ordering::Relaxed),
+        })
+        .collect();
+    sessions.sort_by_key(|s| s.opened_at_ms);
+    sessions
+}
+
+/// A session's retained output plus the geometry it was drawn at.
+pub struct SessionSnapshot {
+    pub project_path: Option<String>,
+    pub bytes: Vec<u8>,
+    pub rows: u16,
+    pub cols: u16,
+    pub alive: bool,
+    pub last_output_ms: u64,
+}
+
+pub fn session_snapshot(session_id: &str) -> Option<SessionSnapshot> {
+    let session = REGISTRY.lock().ok()?.get(session_id).cloned()?;
+    let bytes = session.buffer.lock().ok()?.ring.iter().copied().collect();
+    let (rows, cols) = session.size.lock().map(|s| *s).unwrap_or((24, 80));
+    Some(SessionSnapshot {
+        project_path: session.meta.project_path.clone(),
+        bytes,
+        rows,
+        cols,
+        alive: session.alive.load(Ordering::Relaxed),
+        last_output_ms: session.last_output_ms.load(Ordering::Relaxed),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue #1074: a respawn under the same session id must never start
+    /// while the killed predecessor is still running.
+    #[cfg(unix)]
+    mod respawn_waits_for_predecessor {
+        use super::*;
+
+        /// Register a live session around a real child running `script`,
+        /// with a waiter thread that reaps it exactly as `pty_session_open`'s
+        /// does. Returns the session so tests can watch `reaped`.
+        fn register_live(session_id: &str, script: &str) -> Arc<Session> {
+            let pair = native_pty_system()
+                .openpty(PtySize {
+                    rows: 24,
+                    cols: 80,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .expect("openpty");
+            let writer = pair.master.take_writer().expect("take_writer");
+            let mut cmd = CommandBuilder::new("/bin/sh");
+            cmd.args(["-c", script]);
+            let mut child = pair.slave.spawn_command(cmd).expect("spawn");
+            drop(pair.slave);
+            let session = Arc::new(Session {
+                pid: child.process_id().unwrap_or(0),
+                alive: AtomicBool::new(true),
+                reaped: AtomicBool::new(false),
+                attached: AtomicBool::new(false),
+                exit_code: Mutex::new(None),
+                buffer: Mutex::new(SessionBuffer::new()),
+                writer: Mutex::new(Some(writer)),
+                child_killer: Mutex::new(child.clone_killer()),
+                master: Mutex::new(Some(pair.master)),
+                flow: FlowControl::new(),
+                meta: SessionMeta::default(),
+                size: Mutex::new((24, 80)),
+                last_output_ms: std::sync::atomic::AtomicU64::new(0),
+            });
+            REGISTRY
+                .lock()
+                .unwrap()
+                .insert(session_id.to_string(), session.clone());
+            let id = session_id.to_string();
+            let for_waiter = session.clone();
+            std::thread::spawn(move || {
+                let _ = child.wait();
+                for_waiter.alive.store(false, Ordering::Relaxed);
+                mark_child_reaped(&id, &for_waiter);
+            });
+            session
+        }
+
+        fn is_parked(session_id: &str) -> bool {
+            EXITING.lock().unwrap().contains_key(session_id)
+        }
+
+        #[tokio::test]
+        async fn a_process_that_ignores_the_hangup_is_force_killed_before_respawn() {
+            let id = "test-1074-ignores-hup";
+            // Ignores SIGHUP — stands in for an agent that is slow to honour
+            // the kill (Claude Code mid-login in the issue).
+            let session = register_live(id, "trap '' HUP; sleep 30");
+            // Let the shell install its trap before we signal it.
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+            pty_session_kill(id.to_string()).expect("kill");
+            // Kill returned, but the process is still running — exactly the
+            // window in which the old code spawned the colliding respawn.
+            assert!(!session.reaped.load(Ordering::Relaxed));
+            assert!(is_parked(id), "a killed-but-running session must be parked");
+
+            ensure_previous_process_gone(
+                id,
+                std::time::Duration::from_millis(300),
+                std::time::Duration::from_secs(5),
+            )
+            .await
+            .expect("predecessor should be force-killed");
+            assert!(
+                session.reaped.load(Ordering::Relaxed),
+                "respawn may only proceed once the old process is gone"
+            );
+            assert!(!is_parked(id));
+        }
+
+        #[tokio::test]
+        async fn a_process_that_honours_the_hangup_is_waited_for_without_force() {
+            let id = "test-1074-honours-hup";
+            let session = register_live(id, "sleep 30");
+            pty_session_kill(id.to_string()).expect("kill");
+            ensure_previous_process_gone(
+                id,
+                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(1),
+            )
+            .await
+            .expect("predecessor exits on its own");
+            assert!(session.reaped.load(Ordering::Relaxed));
+            assert!(!is_parked(id));
+        }
+
+        #[tokio::test]
+        async fn an_unknown_id_does_not_wait() {
+            let started = std::time::Instant::now();
+            ensure_previous_process_gone(
+                "test-1074-never-opened",
+                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(5),
+            )
+            .await
+            .expect("nothing to wait for");
+            assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        }
+    }
 
     /// Issue #540: an exited session must not keep its pseudo-terminal open.
     /// PTYs are a small, system-wide pool (macOS `kern.tty.ptmx_max`, 511 by
@@ -853,11 +1220,15 @@ mod tests {
     mod pty_handle_release {
         use super::*;
 
-        /// Is this descriptor still open in this process? `/dev/fd/<n>` is
-        /// the portable (macOS + Linux) way to ask; it stats as a bad file
-        /// descriptor once the fd is closed.
-        fn fd_is_open(fd: std::os::unix::io::RawFd) -> bool {
-            std::fs::metadata(format!("/dev/fd/{fd}")).is_ok()
+        /// Identify the open object behind this descriptor. `/dev/fd/<n>` is
+        /// the portable (macOS + Linux) way to inspect it. Comparing identity
+        /// avoids a false failure if another parallel test reuses the number
+        /// after this test closes it.
+        fn fd_identity(fd: std::os::unix::io::RawFd) -> Option<(u64, u64, u64)> {
+            use std::os::unix::fs::MetadataExt;
+
+            let metadata = std::fs::metadata(format!("/dev/fd/{fd}")).ok()?;
+            Some((metadata.dev(), metadata.ino(), metadata.rdev()))
         }
 
         /// Build a registry `Session` around a real PTY whose child has
@@ -883,6 +1254,7 @@ mod tests {
             Arc::new(Session {
                 pid: 0,
                 alive: AtomicBool::new(false),
+                reaped: AtomicBool::new(true),
                 attached: AtomicBool::new(false),
                 exit_code: Mutex::new(Some(0)),
                 buffer: Mutex::new(SessionBuffer::new()),
@@ -890,6 +1262,9 @@ mod tests {
                 child_killer: Mutex::new(killer),
                 master: Mutex::new(Some(pair.master)),
                 flow: FlowControl::new(),
+                meta: SessionMeta::default(),
+                size: Mutex::new((24, 80)),
+                last_output_ms: std::sync::atomic::AtomicU64::new(0),
             })
         }
 
@@ -903,12 +1278,12 @@ mod tests {
                 .as_ref()
                 .and_then(|m| m.as_raw_fd())
                 .expect("a unix MasterPty exposes its fd");
-            assert!(fd_is_open(master_fd), "the PTY master starts open");
+            let master_identity = fd_identity(master_fd).expect("the PTY master starts open");
 
             session.release_pty_handles();
 
             assert!(
-                !fd_is_open(master_fd),
+                fd_identity(master_fd) != Some(master_identity),
                 "an exited session must not keep its pseudo-terminal open (issue #540)"
             );
             // The record itself survives — scrollback replay and the exit code

@@ -1,18 +1,83 @@
 /**
  * The "Settings" tab of the cascade editor (Stacki's Style/Settings split) — edits
- * the selected element's MARKUP: CLASSES (chips with add/remove) and ATTRIBUTES
- * (edit a value, remove, or add) are editable; TAG is shown for reference.
+ * the selected element's MARKUP: TEXT and TAG edits use guarded source resolvers;
+ * CLASSES and ATTRIBUTES keep their existing inline editing controls.
  */
 
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { CloseIcon } from '@/components/icons';
-import { PlusIcon } from '@/components/icons';
+import { ChevronIcon, CloseIcon, PlusIcon } from '@/components/icons';
+import { useCommands } from '../../commands/useCommands';
 import type { ElementSettings } from '../../hooks/useElementSettings';
 import { CascadeChip } from './CascadeChip';
+import { getElementIcon } from './element-icons';
+import { ContextMenuLabel } from '../primitives/ContextMenu';
+import { Dropdown, DropdownItem } from '../primitives/Dropdown';
+import { MenuButton } from '../primitives/MenuButton';
+
+const TEXT_DISPLAY_TAGS = new Set([
+  'a',
+  'abbr',
+  'b',
+  'bdi',
+  'bdo',
+  'blockquote',
+  'button',
+  'caption',
+  'cite',
+  'code',
+  'data',
+  'dd',
+  'del',
+  'dfn',
+  'dt',
+  'em',
+  'figcaption',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'i',
+  'ins',
+  'kbd',
+  'label',
+  'legend',
+  'li',
+  'mark',
+  'option',
+  'output',
+  'p',
+  'pre',
+  'q',
+  'rp',
+  'rt',
+  'ruby',
+  's',
+  'samp',
+  'small',
+  'span',
+  'strong',
+  'sub',
+  'summary',
+  'sup',
+  'td',
+  'textarea',
+  'th',
+  'time',
+  'u',
+  'var',
+]);
+
+function displaysText(tag: string): boolean {
+  const normalizedTag = tag.toLowerCase();
+  return TEXT_DISPLAY_TAGS.has(normalizedTag) || normalizedTag.includes('-');
+}
 
 export function ElementSettingsPanel({ settings }: { settings: ElementSettings }) {
   const {
     tag,
+    selectionKey,
     classes,
     attributes,
     addClass,
@@ -22,22 +87,173 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
     renameAttribute,
     removeAttribute,
     canEditAttributes,
+    tagOptions,
+    canEditTag,
+    setTag,
+    text: sourceText,
+    textReason,
+    canEditText,
+    setText,
   } = settings;
+  const showTextField = displaysText(tag);
+  type TextEditState = {
+    selectionKey: string;
+    sourceText: string;
+    draft: string;
+    original: string;
+    editing: boolean;
+  };
   const [adding, setAdding] = useState(false);
-  const [text, setText] = useState('');
+  const [classText, setClassText] = useState('');
+  const [textEditState, setTextEditState] = useState<TextEditState>(() => ({
+    selectionKey,
+    sourceText,
+    draft: sourceText,
+    original: sourceText,
+    editing: false,
+  }));
+  const currentTextEdit =
+    textEditState.selectionKey === selectionKey && textEditState.sourceText === sourceText
+      ? textEditState
+      : { selectionKey, sourceText, draft: sourceText, original: sourceText, editing: false };
+  const { draft: textDraft, editing: editingText } = currentTextEdit;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const draftSelectionKeyRef = useRef(selectionKey);
+  const textCommitRef = useRef(false);
+  const textCancelledRef = useRef(false);
 
   const submit = () => {
-    const v = text.trim();
+    const v = classText.trim();
     if (v) addClass(v);
-    setText('');
+    setClassText('');
     setAdding(false);
   };
 
+  const commitText = () => {
+    if (textCancelledRef.current) {
+      textCancelledRef.current = false;
+      return;
+    }
+    if (!editingText || textCommitRef.current) return;
+    if (draftSelectionKeyRef.current !== selectionKey) {
+      setTextEditState({
+        selectionKey,
+        sourceText,
+        draft: sourceText,
+        original: sourceText,
+        editing: false,
+      });
+      textCommitRef.current = false;
+      return;
+    }
+    const next = textDraft;
+    const original = currentTextEdit.original;
+    setTextEditState({ ...currentTextEdit, editing: false });
+    if (next === original) return;
+    textCommitRef.current = true;
+    void setText(next)
+      .then((saved) => {
+        if (!saved) {
+          setTextEditState((state) =>
+            state.selectionKey === selectionKey
+              ? {
+                  selectionKey,
+                  sourceText,
+                  draft: sourceText,
+                  original: sourceText,
+                  editing: false,
+                }
+              : state
+          );
+        }
+      })
+      .finally(() => {
+        textCommitRef.current = false;
+      });
+  };
+
+  const cancelText = () => {
+    textCancelledRef.current = true;
+    setTextEditState({
+      selectionKey,
+      sourceText,
+      draft: sourceText,
+      original: sourceText,
+      editing: false,
+    });
+    textCommitRef.current = false;
+  };
+
+  useCommands(
+    () => [
+      {
+        id: 'elementSettings.focusText',
+        title: 'Edit selected element text',
+        category: 'action',
+        when: ({ kind }) => kind === 'project' && showTextField && canEditText && !settings.busy,
+        keywords: ['content', 'copy', 'headline', 'label'],
+        run: () => textInputRef.current?.focus(),
+      },
+      {
+        id: 'elementSettings.openTagMenu',
+        title: 'Change selected element tag',
+        category: 'action',
+        when: ({ kind }) => kind === 'project' && canEditTag && !settings.busy,
+        keywords: ['element', 'heading', 'paragraph', 'link', 'tag'],
+        run: () =>
+          panelRef.current
+            ?.querySelector<HTMLButtonElement>('[aria-label="Change element tag"]')
+            ?.click(),
+      },
+    ],
+    [canEditTag, canEditText, settings.busy, showTextField]
+  );
+
   return (
-    <div className="ss-settings">
+    <div className="ss-settings" ref={panelRef}>
       <section className="ss-settings__group">
         <h4 className="ss-settings__label">Tag</h4>
-        <div className="ss-settings__tag">{tag || '—'}</div>
+        <Dropdown
+          menuClassName="ss-settings__tag-menu"
+          trigger={(props) => (
+            <MenuButton
+              ref={props.ref}
+              onClick={props.onClick}
+              aria-haspopup={props['aria-haspopup']}
+              expanded={props['aria-expanded']}
+              variant="ghost"
+              size="compact"
+              className="ss-settings__tag-trigger"
+              disabled={!canEditTag || settings.busy}
+              aria-label="Change element tag"
+              title={canEditTag ? 'Change element tag' : undefined}
+            >
+              <CascadeChip tone="selector" className="ss-settings__tag-chip">
+                <span className="ss-settings__tag-name">{tag || '—'}</span>
+                <ChevronIcon size={10} />
+              </CascadeChip>
+            </MenuButton>
+          )}
+        >
+          <ContextMenuLabel className="ss-settings__tag-menu-heading">
+            Swap tag type
+          </ContextMenuLabel>
+          {tagOptions.map((option) => (
+            <DropdownItem
+              key={option.tag}
+              active={option.tag === tag}
+              disabled={settings.busy}
+              icon={
+                getElementIcon(option.tag) ??
+                getElementIcon(/^h[4-6]$/.test(option.tag) ? 'h3' : 'unknown')
+              }
+              onSelect={() => void setTag(option.tag)}
+            >
+              {option.label}
+            </DropdownItem>
+          ))}
+        </Dropdown>
       </section>
 
       <section className="ss-settings__group">
@@ -56,15 +272,15 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
             <input
               className="ss-settings__class-input"
               autoFocus
-              value={text}
+              value={classText}
               spellCheck={false}
               autoComplete="off"
               placeholder="class name"
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => setClassText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') submit();
                 else if (e.key === 'Escape') {
-                  setText('');
+                  setClassText('');
                   setAdding(false);
                 }
               }}
@@ -82,7 +298,52 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
         </div>
       </section>
 
-      <section className="ss-settings__group">
+      {showTextField && (
+        <section className="ss-settings__group">
+          <h4 className="ss-settings__label">Text</h4>
+          <textarea
+            key={selectionKey}
+            ref={textInputRef}
+            className="ss-settings__text-input"
+            aria-label="Text content"
+            value={textDraft}
+            disabled={!canEditText || settings.busy}
+            placeholder={
+              textReason === 'Resolving selected text…' ? 'Resolving source…' : undefined
+            }
+            spellCheck
+            onFocus={() => {
+              textCancelledRef.current = false;
+              draftSelectionKeyRef.current = selectionKey;
+              setTextEditState({ ...currentTextEdit, original: sourceText, editing: true });
+            }}
+            onChange={(event) => {
+              setTextEditState({
+                ...currentTextEdit,
+                draft: event.target.value,
+                editing: true,
+              });
+            }}
+            onBlur={commitText}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelText();
+                event.currentTarget.blur();
+              } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                commitText();
+              }
+            }}
+          />
+          {textReason && <p className="ss-settings__text-reason">{textReason}</p>}
+          {canEditText && (
+            <p className="ss-settings__text-help">Cmd/Ctrl+Enter saves · Esc cancels</p>
+          )}
+        </section>
+      )}
+
+      <section className="ss-settings__group ss-settings__group--attributes">
         <h4 className="ss-settings__label">Attributes</h4>
         <ul className="ss-settings__attrs">
           {attributes.map((a) => (
@@ -90,17 +351,17 @@ export function ElementSettingsPanel({ settings }: { settings: ElementSettings }
               key={a.name}
               name={a.name}
               value={a.value}
-              editable={canEditAttributes}
+              editable={canEditAttributes && !settings.busy}
               onSetValue={(v) => setAttribute(a.name, v)}
               onRename={(n) => renameAttribute(a.name, n, a.value)}
               onRemove={() => removeAttribute(a.name)}
             />
           ))}
         </ul>
+        {canEditAttributes && <AddAttr onAdd={(name, value) => setAttribute(name, value)} />}
         {attributes.length === 0 && !canEditAttributes && (
           <p className="ss-settings__empty">No other attributes.</p>
         )}
-        {canEditAttributes && <AddAttr onAdd={(name, value) => setAttribute(name, value)} />}
       </section>
     </div>
   );

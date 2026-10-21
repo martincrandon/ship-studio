@@ -1,7 +1,9 @@
 import {
   cloneElement,
+  isValidElement,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -18,12 +20,13 @@ const TOOLTIP_DEFAULT_DELAY_MS = 1000;
 const TOOLTIP_CHAIN_MS = 250;
 /** Matches --duration-standard (the exit transition) plus a small buffer. */
 const TOOLTIP_EXIT_MS = 200;
+const richTooltipContent = new Map<string, ReactNode>();
 
 type TooltipPlacement = 'above' | 'below';
 
 interface TooltipProps {
-  /** Text shown when the trigger is hovered or focused. */
-  content: string;
+  /** Content shown when the trigger is hovered or focused. */
+  content: ReactNode;
   /** Optional delay override for contexts that need a faster tooltip. */
   delayMs?: number;
   /** One DOM element. The shared data attribute is applied to that element. */
@@ -36,12 +39,32 @@ interface TooltipProps {
  * without adding a layout wrapper.
  */
 export function Tooltip({ content, delayMs, children }: TooltipProps) {
+  const contentId = useId();
+  const isRichContent = typeof content !== 'string' && typeof content !== 'number';
+  const textContent = tooltipText(content);
+
+  useLayoutEffect(() => {
+    if (!isRichContent) return;
+    richTooltipContent.set(contentId, content);
+    return () => {
+      richTooltipContent.delete(contentId);
+    };
+  }, [content, contentId, isRichContent]);
+
   return cloneElement(children as ReactElement<Record<string, unknown>>, {
-    'data-tooltip-content': content,
+    'data-tooltip-content': textContent,
+    'data-tooltip-content-id': isRichContent ? contentId : undefined,
     'data-tooltip-delay': delayMs,
     'aria-describedby': TOOLTIP_ID,
     title: undefined,
   });
+}
+
+function tooltipText(content: ReactNode): string {
+  if (typeof content === 'string' || typeof content === 'number') return String(content);
+  if (Array.isArray(content)) return content.map(tooltipText).join('');
+  if (isValidElement<{ children?: ReactNode }>(content)) return tooltipText(content.props.children);
+  return '';
 }
 
 interface TooltipPosition {
@@ -50,7 +73,13 @@ interface TooltipPosition {
 }
 
 interface TooltipState {
-  content: string;
+  content: ReactNode;
+  text: string;
+}
+
+interface TooltipContent {
+  content: ReactNode;
+  text: string;
 }
 
 function tooltipAnchor(target: EventTarget | null): Element | null {
@@ -60,7 +89,7 @@ function tooltipAnchor(target: EventTarget | null): Element | null {
   return anchor?.closest(`#${TOOLTIP_ID}`) ? null : anchor;
 }
 
-function readTooltipContent(anchor: Element): string | null {
+function readTooltipContent(anchor: Element): TooltipContent | null {
   if (anchor.closest('[data-tooltip-disabled]')) {
     // This also prevents the browser's native title tooltip when an element
     // opts out of the shared React tooltip surface.
@@ -75,7 +104,11 @@ function readTooltipContent(anchor: Element): string | null {
     // tooltip has already claimed this anchor. Always remove it, even when
     // the shared content attribute is already present.
     if (title) anchor.removeAttribute('title');
-    return explicit;
+    const contentId = anchor.getAttribute('data-tooltip-content-id');
+    return {
+      text: explicit,
+      content: (contentId && richTooltipContent.get(contentId)) ?? explicit,
+    };
   }
   if (!title) return null;
 
@@ -85,7 +118,7 @@ function readTooltipContent(anchor: Element): string | null {
   anchor.setAttribute('data-tooltip-content', title);
   anchor.setAttribute('aria-describedby', TOOLTIP_ID);
   anchor.removeAttribute('title');
-  return title;
+  return { content: title, text: title };
 }
 
 function readTooltipDelay(anchor: Element): number {
@@ -137,7 +170,7 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
             mutation.attributeName === 'data-tooltip-content' &&
             mutation.target === anchorRef.current
           ) {
-            setState(content ? { content } : null);
+            setState(content ? { content: content.content, text: content.text } : null);
           }
           return;
         }
@@ -216,7 +249,7 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
           anchorRef.current = anchor;
           setPosition(null);
           setShown(false);
-          setState({ content: currentContent });
+          setState({ content: currentContent.content, text: currentContent.text });
         },
         chained ? 0 : readTooltipDelay(anchor)
       );
@@ -271,7 +304,9 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
         const content = readTooltipContent(anchor);
         setState((current) => {
           if (!content) return null;
-          return current?.content === content ? current : { content };
+          return current?.text === content.text && current.content === content.content
+            ? current
+            : { content: content.content, text: content.text };
         });
       });
     };

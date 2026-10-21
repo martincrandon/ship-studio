@@ -38,6 +38,31 @@
 
 use crate::errors::CommandError;
 
+#[cfg(test)]
+std::thread_local! {
+    /// Keep attribution tests independent of the user's saved app preference.
+    static TEST_ATTRIBUTION_OVERRIDE: std::cell::Cell<Option<bool>> = const {
+        std::cell::Cell::new(None)
+    };
+}
+
+#[cfg(test)]
+struct AttributionOverrideReset(Option<bool>);
+
+#[cfg(test)]
+impl Drop for AttributionOverrideReset {
+    fn drop(&mut self) {
+        TEST_ATTRIBUTION_OVERRIDE.with(|value| value.set(self.0));
+    }
+}
+
+#[cfg(test)]
+fn with_test_attribution_enabled<T>(enabled: bool, run: impl FnOnce() -> T) -> T {
+    let previous = TEST_ATTRIBUTION_OVERRIDE.with(|value| value.replace(Some(enabled)));
+    let _restore = AttributionOverrideReset(previous);
+    run()
+}
+
 /// Attribution. Mirrors what Claude Code does with `Co-Authored-By`.
 pub const MADE_WITH_TRAILER: &str = "Made-With";
 
@@ -48,6 +73,11 @@ pub const MADE_WITH_TRAILER: &str = "Made-With";
 /// twice — and the benefit is that a teammate reading the history can tell
 /// which tool wrote what.
 pub fn attribution_enabled() -> bool {
+    #[cfg(test)]
+    if let Some(enabled) = TEST_ATTRIBUTION_OVERRIDE.with(std::cell::Cell::get) {
+        return enabled;
+    }
+
     crate::commands::setup::read_app_state()
         .commit_attribution_enabled
         .unwrap_or(true)
@@ -311,64 +341,68 @@ mod tests {
     /// so. This is the only test that would notice.
     #[test]
     fn a_commit_made_by_ship_studio_is_read_back_by_the_feed() {
-        let dir = repo("roundtrip-real");
-        for args in [
-            ["config", "user.name", "Maya Reed"],
-            [
-                "config",
-                "user.email",
-                "9+mayareed@users.noreply.github.com",
-            ],
-            ["config", "commit.gpgsign", "false"],
-        ] {
+        with_test_attribution_enabled(true, || {
+            let dir = repo("roundtrip-real");
+            for args in [
+                ["config", "user.name", "Maya Reed"],
+                [
+                    "config",
+                    "user.email",
+                    "9+mayareed@users.noreply.github.com",
+                ],
+                ["config", "commit.gpgsign", "false"],
+            ] {
+                let out = std::process::Command::new("git")
+                    .args(args)
+                    .current_dir(&dir)
+                    .output()
+                    .expect("git config");
+                assert!(out.status.success());
+            }
+            std::fs::write(dir.join("a.txt"), "one\n").expect("write");
+
+            let committed = crate::commands::git::git_stage_and_commit_authored(
+                &dir,
+                "Rebuild the pricing tiers as a CSS grid",
+                Some("Claude Code"),
+            )
+            .expect("commits");
+            assert!(committed);
+
+            // Read it the way `derive::walk_commits` does — through git's own
+            // `%(trailers:…)` reader, not by grepping the message.
             let out = std::process::Command::new("git")
-                .args(args)
+                .args([
+                    "log",
+                    "-1",
+                    &format!("--format=%s|%(trailers:key={MADE_WITH_TRAILER},valueonly=true)"),
+                ])
                 .current_dir(&dir)
                 .output()
-                .expect("git config");
-            assert!(out.status.success());
-        }
-        std::fs::write(dir.join("a.txt"), "one\n").expect("write");
+                .expect("git log");
+            let line = String::from_utf8_lossy(&out.stdout);
+            let (subject, made_with) = line.trim().split_once('|').expect("both fields");
 
-        let committed = crate::commands::git::git_stage_and_commit_authored(
-            &dir,
-            "Rebuild the pricing tiers as a CSS grid",
-            Some("Claude Code"),
-        )
-        .expect("commits");
-        assert!(committed);
-
-        // Read it the way `derive::walk_commits` does — through git's own
-        // `%(trailers:…)` reader, not by grepping the message.
-        let out = std::process::Command::new("git")
-            .args([
-                "log",
-                "-1",
-                &format!("--format=%s|%(trailers:key={MADE_WITH_TRAILER},valueonly=true)"),
-            ])
-            .current_dir(&dir)
-            .output()
-            .expect("git log");
-        let line = String::from_utf8_lossy(&out.stdout);
-        let (subject, made_with) = line.trim().split_once('|').expect("both fields");
-
-        assert_eq!(
-            subject, "Rebuild the pricing tiers as a CSS grid",
-            "`git log --oneline` must read exactly as it did before"
-        );
-        assert_eq!(made_with.trim(), "Claude Code in Ship Studio");
-        let _ = std::fs::remove_dir_all(&dir);
+            assert_eq!(
+                subject, "Rebuild the pricing tiers as a CSS grid",
+                "`git log --oneline` must read exactly as it did before"
+            );
+            assert_eq!(made_with.trim(), "Claude Code in Ship Studio");
+            let _ = std::fs::remove_dir_all(&dir);
+        });
     }
 
     #[test]
     fn the_pr_footer_goes_under_the_description_never_over_it() {
-        let body = with_pr_footer("## What changed\n\nThe pricing grid.", Some("Claude Code"));
-        assert!(
-            body.starts_with("## What changed"),
-            "a reader deciding whether to approve this sees the change first"
-        );
-        assert!(body.ends_with("described by Claude Code.*"));
-        assert!(body.contains("\n\n---\n\n"));
+        with_test_attribution_enabled(true, || {
+            let body = with_pr_footer("## What changed\n\nThe pricing grid.", Some("Claude Code"));
+            assert!(
+                body.starts_with("## What changed"),
+                "a reader deciding whether to approve this sees the change first"
+            );
+            assert!(body.ends_with("described by Claude Code.*"));
+            assert!(body.contains("\n\n---\n\n"));
+        });
     }
 
     #[test]
@@ -376,31 +410,45 @@ mod tests {
         // The submit flow drops to a branch-name title whenever the agent is
         // unavailable or fails. Naming one there is the same invention the
         // commit trailer refuses to make.
-        let body = with_pr_footer("Bare description.", None);
-        assert!(body.ends_with("*Opened from [Ship Studio](https://shipstudio.dev).*"));
-        assert!(!body.contains("described by"));
+        with_test_attribution_enabled(true, || {
+            let body = with_pr_footer("Bare description.", None);
+            assert!(body.ends_with("*Opened from [Ship Studio](https://shipstudio.dev).*"));
+            assert!(!body.contains("described by"));
+        });
     }
 
     #[test]
     fn an_empty_description_gets_the_footer_alone_with_no_leading_blank() {
-        let body = with_pr_footer("", None);
-        assert!(body.starts_with("---"));
+        with_test_attribution_enabled(true, || {
+            let body = with_pr_footer("", None);
+            assert!(body.starts_with("---"));
+        });
     }
 
     #[test]
     fn editing_a_pr_never_stacks_the_footer() {
-        let once = with_pr_footer("The pricing grid.", Some("Claude Code"));
-        let twice = with_pr_footer(&once, Some("Claude Code"));
-        assert_eq!(once, twice);
-        // Including across the two variants — a body carrying the no-agent
-        // line must not later collect the with-agent one as well.
-        let mixed = with_pr_footer(&with_pr_footer("x", None), Some("Codex"));
-        assert_eq!(
-            mixed
-                .matches("Ship Studio](https://shipstudio.dev)")
-                .count(),
-            1
-        );
+        with_test_attribution_enabled(true, || {
+            let once = with_pr_footer("The pricing grid.", Some("Claude Code"));
+            let twice = with_pr_footer(&once, Some("Claude Code"));
+            assert_eq!(once, twice);
+            // Including across the two variants — a body carrying the no-agent
+            // line must not later collect the with-agent one as well.
+            let mixed = with_pr_footer(&with_pr_footer("x", None), Some("Codex"));
+            assert_eq!(
+                mixed
+                    .matches("Ship Studio](https://shipstudio.dev)")
+                    .count(),
+                1
+            );
+        });
+    }
+
+    #[test]
+    fn disabled_attribution_leaves_the_pr_description_unchanged() {
+        with_test_attribution_enabled(false, || {
+            let body = "The pricing grid.";
+            assert_eq!(with_pr_footer(body, Some("Claude Code")), body);
+        });
     }
 
     #[test]

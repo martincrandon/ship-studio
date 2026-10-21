@@ -66,7 +66,10 @@ interface DevServerProps {
   projectType: ProjectType;
   projectTypeResolved: boolean;
   isRestartingDevServer: boolean;
-  customDevCommand: string | null;
+  /** `custom`: the user-configured dev command. `generic`: what a `generic`
+   *  project actually runs — the custom command, else its package.json `dev`
+   *  script (#1105); null when it has neither. */
+  devCommands: { custom: string | null; generic: string | null };
   devServerOutput: string;
   devServerOutputVersion: number;
   healthOutput: string;

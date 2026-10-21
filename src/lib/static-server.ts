@@ -36,18 +36,19 @@ export function isMobileProjectType(type: ProjectType): boolean {
  * The rule (issue #691):
  * - Detected web frameworks (next/vite/astro/…, static HTML, Shopify themes)
  *   always have a preview.
- * - `generic` projects have a preview ONLY when a custom dev command is
- *   configured — an Nx/monorepo root (or any tooling-only package.json
- *   project) detects as `generic`, but once the user configures a dev command
- *   the dev server actually runs on the project's port, so the Preview tab
- *   must appear. Generic projects without a configured command (script
+ * - `generic` projects have a preview ONLY when they have a dev command to
+ *   run — a configured custom command (#691), or the package.json's own
+ *   `dev` script (#1105; e.g. `turbo run dev` at a pnpm/Turborepo root).
+ *   An Nx/monorepo root (or any tooling-only package.json project) detects
+ *   as `generic`, but once a dev command runs the server is live, so the
+ *   Preview tab must appear. Generic projects with neither (script
  *   collections, Rust CLIs, …) still hide the Preview.
  * - `unknown` and native mobile types never get the web preview (mobile uses
  *   the device mirror instead).
  */
-export function hasWebPreview(type: ProjectType, customDevCommand: string | null): boolean {
+export function hasWebPreview(type: ProjectType, genericDevCommand: string | null): boolean {
   if (type === 'generic') {
-    return customDevCommand !== null && customDevCommand.trim() !== '';
+    return genericDevCommand !== null && genericDevCommand.trim() !== '';
   }
   return type !== 'unknown' && !isMobileProjectType(type);
 }

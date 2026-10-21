@@ -36,6 +36,12 @@
   transform: none;
 }
 
+.ss-tooltip__value {
+  color: var(--text-muted);
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ss-tooltip {
     transition: none;

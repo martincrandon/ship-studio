@@ -684,6 +684,44 @@
       "lifecycle": "canonical"
     },
     {
+      "name": "SearchField",
+      "file": "src/components/primitives/SearchField.tsx",
+      "exports": [
+        "SearchFieldProps",
+        "SearchField"
+      ],
+      "purpose": "Shared searchable text input with a leading search icon and accessible clear action, used by file browsing and the CSS cascade.",
+      "owner": "primitives/forms",
+      "props": [
+        "value",
+        "onChange",
+        "aria-label",
+        "placeholder",
+        "clearLabel",
+        "density",
+        "className",
+        "inputClassName",
+        "native input attributes"
+      ],
+      "variants": [
+        "standard",
+        "compact"
+      ],
+      "states": [
+        "empty",
+        "query entered",
+        "focus",
+        "disabled"
+      ],
+      "accessibility": "Uses a labelled native search input, forwards the input ref, and gives the clear button its own accessible label.",
+      "style": "src/styles/components/search-field.css",
+      "example": "docs/design-system.md#searchfield",
+      "tests": [
+        "src/components/primitives/SearchField.test.tsx"
+      ],
+      "lifecycle": "canonical"
+    },
+    {
       "name": "Spinner",
       "file": "src/components/primitives/Spinner.tsx",
       "exports": [

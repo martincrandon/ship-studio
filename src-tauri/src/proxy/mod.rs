@@ -712,6 +712,19 @@ async fn proxy_http_request(
                 );
                 return Ok(dev_server_unavailable_response(target_port)?);
             }
+            if local_ports_exhausted(e.kind()) {
+                // The OS had no local port to connect from for the whole
+                // budget (issue #1124). A machine condition, not a proxy bug,
+                // so warn instead of auto-filing a report, and say what it is.
+                tracing::warn!(
+                    "[Proxy] HTTP target localhost:{} not reachable after {} connect attempts over {:?}: {} (local ports exhausted)",
+                    target_port,
+                    attempts,
+                    UPSTREAM_CONNECT_TIMEOUT,
+                    e
+                );
+                return Ok(local_ports_exhausted_response(target_port)?);
+            }
             // Genuinely unexpected connect failure (not refused/silent) —
             // keep this at error level so it still reports.
             tracing::error!(
@@ -1026,6 +1039,40 @@ fn upstream_unavailable(kind: std::io::ErrorKind) -> bool {
     )
 }
 
+/// A connect that fails with `AddrInUse` did not find the dev server's port
+/// busy — it found no free *local* port to connect from. On Windows this is
+/// `WSAEADDRINUSE` (os error 10048) when the ephemeral port range is under
+/// pressure, typically from many short-lived connections sitting in
+/// `TIME_WAIT`. It clears as those sockets age out, so the connect loop
+/// retries it like a restarting dev server; if it lasts the whole budget it is
+/// still a machine condition rather than a proxy bug, so it is logged at warn
+/// level with its own message instead of auto-filing a report (issue #1124).
+///
+/// Kept apart from [`upstream_unavailable`] on purpose: that one also feeds
+/// the post-connect classification and the "dev server restarting" message,
+/// neither of which describes this.
+fn local_ports_exhausted(kind: std::io::ErrorKind) -> bool {
+    kind == std::io::ErrorKind::AddrInUse
+}
+
+/// Connect failures worth another attempt within the connect budget.
+fn upstream_connect_retryable(kind: std::io::ErrorKind) -> bool {
+    upstream_unavailable(kind) || local_ports_exhausted(kind)
+}
+
+/// The 502 shown when the connect budget ran out on local port exhaustion.
+fn local_ports_exhausted_response(
+    target_port: u16,
+) -> Result<Response<ProxyBody>, hyper::http::Error> {
+    Response::builder()
+        .status(StatusCode::BAD_GATEWAY)
+        .header(hyper::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+        .header(hyper::header::CACHE_CONTROL, "no-store")
+        .body(full_body(Bytes::from(format!(
+            "Couldn't connect to the dev server on localhost:{target_port}: this computer has briefly run out of free local network ports, usually after a burst of short-lived connections. They free up on their own within a minute or two — reload the preview shortly."
+        ))))
+}
+
 /// The connect-time classification's post-connect twin: I/O kinds that mean
 /// the dev server went away *after* the socket was established (restarted
 /// between accept and handshake, or mid-send). Same environment condition as
@@ -1127,17 +1174,20 @@ async fn connect_upstream_with_retry(
         match attempt {
             Ok(s) => return Ok(s),
             Err(e) => {
-                let retryable = upstream_unavailable(e.kind())
+                let retryable = upstream_connect_retryable(e.kind())
                     && tokio::time::Instant::now() + std::time::Duration::from_millis(250)
                         < connect_deadline;
                 if retryable {
                     // A timed-out attempt already consumed its slice of the
-                    // budget. Refused and reset both come back instantly, so
-                    // retrying either without a pause would spin the CPU flat
-                    // out until the deadline.
+                    // budget. Refused, reset and AddrInUse all come back
+                    // instantly, so retrying without a pause would spin the
+                    // CPU flat out until the deadline (and, for AddrInUse,
+                    // give TIME_WAIT sockets no time to free a port).
                     if matches!(
                         e.kind(),
-                        std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset
+                        std::io::ErrorKind::ConnectionRefused
+                            | std::io::ErrorKind::ConnectionReset
+                            | std::io::ErrorKind::AddrInUse
                     ) {
                         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
                     }
@@ -1172,6 +1222,16 @@ async fn handle_websocket_upgrade(
                 // this must not auto-file a bug report (issue #532).
                 tracing::warn!(
                     "[Proxy] WebSocket target localhost:{} unavailable after {} connect attempts over {:?}: {}",
+                    target_port,
+                    attempts,
+                    WS_UPSTREAM_CONNECT_TIMEOUT,
+                    e
+                );
+            } else if local_ports_exhausted(e.kind()) {
+                // No local port to connect from for the whole budget (issue
+                // #1124): a machine condition, and the HMR client retries.
+                tracing::warn!(
+                    "[Proxy] WebSocket target localhost:{} not reachable after {} connect attempts over {:?}: {} (local ports exhausted)",
                     target_port,
                     attempts,
                     WS_UPSTREAM_CONNECT_TIMEOUT,
@@ -1502,8 +1562,9 @@ mod injector_tests {
 mod tests {
     use super::{
         connect_upstream_with_retry, is_auth_redirect_loop, is_document_navigation,
-        redact_handshake_values, rewrite_localhost_origin, sanitize_csp_for_preview,
-        upstream_connection_lost_kind, upstream_connection_lost_source, upstream_unavailable,
+        local_ports_exhausted, redact_handshake_values, rewrite_localhost_origin,
+        sanitize_csp_for_preview, upstream_connect_retryable, upstream_connection_lost_kind,
+        upstream_connection_lost_source, upstream_unavailable,
         websocket_retry_exhausted_is_expected,
     };
     use hyper::header::HeaderValue;
@@ -1523,6 +1584,46 @@ mod tests {
         assert!(!upstream_unavailable(std::io::ErrorKind::PermissionDenied));
         assert!(!upstream_unavailable(std::io::ErrorKind::AddrNotAvailable));
         assert!(!upstream_unavailable(std::io::ErrorKind::Other));
+    }
+
+    #[test]
+    fn addr_in_use_on_connect_is_retried_as_local_port_exhaustion() {
+        // Windows WSAEADDRINUSE (os error 10048) on a connect means no free
+        // local ephemeral port, not a busy dev server (issue #1124).
+        let wsa = std::io::Error::from(std::io::ErrorKind::AddrInUse);
+        assert!(local_ports_exhausted(wsa.kind()));
+        assert!(upstream_connect_retryable(wsa.kind()));
+        // It is not "the dev server is restarting": that message and the
+        // post-connect classification stay as they were.
+        assert!(!upstream_unavailable(std::io::ErrorKind::AddrInUse));
+        assert!(!upstream_connection_lost_kind(
+            std::io::ErrorKind::AddrInUse
+        ));
+        // Existing retryable kinds are unchanged.
+        for kind in [
+            std::io::ErrorKind::ConnectionRefused,
+            std::io::ErrorKind::TimedOut,
+            std::io::ErrorKind::ConnectionReset,
+        ] {
+            assert!(upstream_connect_retryable(kind), "{kind:?}");
+            assert!(!local_ports_exhausted(kind), "{kind:?}");
+        }
+        // Other errors still fail fast and still report.
+        for kind in [
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::AddrNotAvailable,
+            std::io::ErrorKind::Other,
+        ] {
+            assert!(!upstream_connect_retryable(kind), "{kind:?}");
+            assert!(!local_ports_exhausted(kind), "{kind:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn wsaeaddrinuse_maps_to_addr_in_use() {
+        let err = std::io::Error::from_raw_os_error(10048);
+        assert!(local_ports_exhausted(err.kind()));
     }
 
     #[test]

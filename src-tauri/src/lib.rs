@@ -19,6 +19,7 @@ pub mod errors;
 pub mod external_command;
 pub mod logging;
 pub mod proxy;
+pub mod remote_access;
 pub mod state;
 pub mod static_server;
 pub mod types;
@@ -165,6 +166,13 @@ pub fn run() {
                         tracing::error!("[AgentBridge] Failed to start global bridge: {}", e);
                     }
                 });
+            }
+
+            // Remote access: if the user left it on, bring it back — a Mac that
+            // restarted overnight should be reachable again once it's logged in.
+            {
+                let handle = _app.handle().clone();
+                tauri::async_runtime::spawn(remote_access::resume_on_launch(handle));
             }
 
             // Point the Android mirror bridge at the bundled scrcpy-server jar (its
@@ -816,6 +824,20 @@ pub fn run() {
             commands::agent_bridge::register_cursor_mcp,
             commands::agent_bridge::agent_bridge_attach,
             commands::agent_bridge::agent_bridge_respond,
+            // Remote access
+            commands::remote_access::get_remote_access_status,
+            commands::remote_access::get_remote_access_brief,
+            commands::remote_access::copy_remote_link,
+            commands::remote_access::set_remote_push_pin,
+            commands::remote_access::clear_remote_push_pin,
+            commands::remote_access::get_remote_audit,
+            commands::remote_access::set_remote_access_enabled,
+            commands::remote_access::set_remote_project,
+            commands::remote_access::reset_remote_link,
+            commands::remote_access::republish_remote_link,
+            commands::remote_access::set_lid_closed_mode,
+            commands::remote_access::set_open_at_login,
+            commands::agent_bridge::agent_bridge_respond_chunk,
             // Project Type Detection
             commands::projects::detect_project_type_command,
             commands::projects::project_path_exists,

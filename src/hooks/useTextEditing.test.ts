@@ -306,6 +306,116 @@ describe('useTextEditing', () => {
     });
   });
 
+  it('echoes the selection id on the verdict so the iframe can drop stale ones', async () => {
+    const { iframeRef } = setup();
+    await dispatch(
+      { type: 'ss:select', signature: SIG, selectionId: 's:7', leafText: true },
+      iframeRef.current!.contentWindow!
+    );
+    expect(posts(iframeRef)).toContainEqual({
+      type: 'ss:textInfo',
+      editable: true,
+      selectionId: 's:7',
+    });
+  });
+
+  it('treats a commit on data/code text as blocked, not a write-back failure (issue #1100)', async () => {
+    // Backstop: the verdict hadn't landed (or the source changed after it), so the
+    // commit-time resolve is the first to learn the text isn't a literal.
+    const READ_ONLY = {
+      status: 'read_only',
+      reason: "This text comes from data or code, so it can't be edited inline.",
+    };
+    let finishSelectResolve: (v: unknown) => void = () => undefined;
+    (resolveTextSource as Fn)
+      .mockReturnValueOnce(new Promise((r) => (finishSelectResolve = r)))
+      .mockResolvedValueOnce(READ_ONLY);
+    const { iframeRef, onToast, result } = setup();
+    const src = iframeRef.current!.contentWindow!;
+    await dispatch({ type: 'ss:select', signature: SIG, selectionId: 's:1', leafText: true }, src);
+    await dispatch(
+      { type: 'ss:textCommit', text: 'New copy', signature: SIG, selectionId: 's:1' },
+      src
+    );
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+
+    expect(applyTextEdit).not.toHaveBeenCalled();
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:textRevert' });
+    expect(onToast).toHaveBeenCalledWith(expect.stringContaining('data or code'), 'error');
+    // The dynamic-text hand-off is shown and pulsed instead of a generic failure.
+    expect(result.current.textResolution).toEqual(READ_ONLY);
+    expect(result.current.textBlockedNonce).toBe(1);
+    // Expected state — warn, never auto-file a bug report.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- asserting on the mock, not invoking it bound
+    expect(logger.error).not.toHaveBeenCalled();
+    await act(async () => {
+      finishSelectResolve(READ_ONLY);
+      await Promise.resolve();
+    });
+  });
+
+  it('saves a commit that arrives after edit mode toggled and cleared the selection (issue #1120)', async () => {
+    const iframeRef = fakeIframeRef();
+    const onToast = vi.fn();
+    const { rerender } = renderHook(
+      ({ enabled }) => useTextEditing({ iframeRef, projectPath: '/proj', enabled, onToast }),
+      { initialProps: { enabled: true } }
+    );
+    const src = iframeRef.current!.contentWindow!;
+    await dispatch({ type: 'ss:select', signature: SIG, selectionId: 's:1', leafText: true }, src);
+    // Something flips edit mode off and on while the iframe is still editing.
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    (resolveTextSource as Fn).mockClear();
+
+    const editSig = { ...SIG, text: 'Old copy' };
+    await dispatch(
+      { type: 'ss:textCommit', text: 'New copy', signature: editSig, selectionId: 's:1' },
+      src
+    );
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+
+    // Resolved from the commit's own signature rather than throwing "Lost track".
+    expect(resolveTextSource).toHaveBeenCalledWith('/proj', editSig);
+    expect(applyTextEdit).toHaveBeenCalledTimes(1);
+    expect(posts(iframeRef)).toContainEqual({ type: 'ss:commit' });
+    expect(posts(iframeRef)).not.toContainEqual({ type: 'ss:textRevert' });
+    expect(onToast).toHaveBeenCalledWith('Saved to source', 'success');
+  });
+
+  it('never saves a commit against another selection’s cached target', async () => {
+    const { iframeRef } = setup();
+    const src = iframeRef.current!.contentWindow!;
+    await dispatch({ type: 'ss:select', signature: SIG, selectionId: 's:2', leafText: true }, src);
+    (resolveTextSource as Fn).mockResolvedValueOnce({
+      status: 'resolved',
+      file: 'src/pages/other.astro',
+      line: 3,
+      column: 1,
+      text: 'Other copy',
+    });
+    const otherSig = { className: 'other', tagName: 'h2', ancestorClasses: [] };
+    await dispatch(
+      { type: 'ss:textCommit', text: 'New copy', signature: otherSig, selectionId: 's:1' },
+      src
+    );
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+    expect((applyTextEdit as Fn).mock.calls[0]).toEqual([
+      '/proj',
+      'src/pages/other.astro',
+      3,
+      1,
+      'Other copy',
+      'New copy',
+    ]);
+  });
+
   it('ignores messages that do not originate from the preview iframe', async () => {
     setup(); // registers the listener; the forged message below must be rejected
     // A forged commit from another frame must not write to the user's files.

@@ -15,6 +15,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismissOnOutsidePointer } from '../../hooks/useDismissOnOutsidePointer';
 import { PlusIcon } from '@/components/icons';
+import { TextButton } from '../primitives/TextButton';
 import { suggestProperties } from '../../lib/cssProperties';
 import {
   NEST_ITEMS,
@@ -259,10 +260,10 @@ export function AddMenu({
         : 'Add a property or nested rule (&:hover, & .child)…';
 
   const trigger = (
-    <button
+    <TextButton
       ref={btnRef}
-      type="button"
       className={`ss-cascade-card__add${open ? ' is-open' : ''}`}
+      leftIcon={<PlusIcon size={12} />}
       aria-label={
         mode === 'keyframes'
           ? 'Add a keyframe step'
@@ -279,8 +280,8 @@ export function AddMenu({
         }
       }}
     >
-      <PlusIcon size={12} /> {label}
-    </button>
+      {label}
+    </TextButton>
   );
 
   if (!open || !pos) return trigger;

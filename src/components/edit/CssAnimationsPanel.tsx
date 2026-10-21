@@ -9,7 +9,10 @@ import { useState } from 'react';
 import { PlusIcon } from '@/components/icons';
 import { Button } from '../primitives/Button';
 import { Spinner } from '../primitives/Spinner';
+import { TextButton } from '../primitives/TextButton';
 import { CascadeRuleCard } from './CascadeRuleCard';
+import { cascadeRuleCollapseKey, type CascadeDisplayOrder } from '../../lib/cascadePresentation';
+import { searchRuleBody } from '../../lib/cascadeSearch';
 import type { RuleBody } from '../../lib/cssBody';
 import type { AnimationRow } from '../../hooks/useCssAnimations';
 
@@ -22,6 +25,15 @@ interface Props {
   onDelete: (selector: string) => void;
   onCreate: (name: string) => void;
   onRename: (selector: string, newName: string) => void;
+  searchTerm: string;
+  displayOrder: CascadeDisplayOrder;
+  collapseControl: {
+    collapsedKeys: ReadonlySet<string>;
+    searchCollapsedOverrides: ReadonlyMap<string, boolean>;
+    toggle: (key: string) => void;
+    toggleSearch: (key: string, collapsed: boolean) => void;
+  };
+  onClearSearch: () => void;
 }
 
 export function CssAnimationsPanel({
@@ -33,6 +45,10 @@ export function CssAnimationsPanel({
   onDelete,
   onCreate,
   onRename,
+  searchTerm,
+  displayOrder,
+  collapseControl,
+  onClearSearch,
 }: Props) {
   if (loading && animations.length === 0) {
     return (
@@ -42,34 +58,84 @@ export function CssAnimationsPanel({
     );
   }
 
+  const query = searchTerm.trim();
+  const normalizedQuery = query.toLocaleLowerCase();
+  const searchActive = normalizedQuery.length > 0;
+  const orderedAnimations = displayOrder === 'newest-top' ? [...animations].reverse() : animations;
+  const visibleAnimations = orderedAnimations.filter(
+    (animation) =>
+      !searchActive ||
+      animation.name.toLocaleLowerCase().includes(normalizedQuery) ||
+      animation.selector.toLocaleLowerCase().includes(normalizedQuery) ||
+      searchRuleBody(animation.body, normalizedQuery).hasMatch
+  );
+  const addAnimation = (
+    <AddAnimation
+      existing={new Set(animations.map((animation) => animation.name))}
+      onCreate={onCreate}
+    />
+  );
+
   return (
     <div className="ss-anims">
-      <AddAnimation existing={new Set(animations.map((a) => a.name))} onCreate={onCreate} />
+      <div className="ss-cascade-cards">
+        {displayOrder === 'newest-top' && addAnimation}
+        {animations.length === 0 && !searchActive && (
+          <p className="ss-cascade-empty">
+            No animations yet. Create one, then reference it from an element with{' '}
+            <code>animation</code>.
+          </p>
+        )}
+        {visibleAnimations.map((animation) => {
+          const collapseKey = cascadeRuleCollapseKey(animation.selector);
+          const matchesSearch =
+            searchActive &&
+            (animation.name.toLocaleLowerCase().includes(normalizedQuery) ||
+              animation.selector.toLocaleLowerCase().includes(normalizedQuery) ||
+              searchRuleBody(animation.body, normalizedQuery).hasMatch);
+          const searchCollapseOverride = matchesSearch
+            ? collapseControl.searchCollapsedOverrides.get(collapseKey)
+            : undefined;
+          const collapsed = matchesSearch
+            ? (searchCollapseOverride ?? false)
+            : collapseControl.collapsedKeys.has(collapseKey);
 
-      {animations.length === 0 ? (
-        <p className="ss-cascade-empty">
-          No animations yet. Create one, then reference it from an element with{' '}
-          <code>animation</code>.
-        </p>
-      ) : (
-        <div className="ss-cascade-cards">
-          {animations.map((a) => (
+          return (
             <CascadeRuleCard
-              key={a.selector}
+              key={animation.selector}
               editable
-              selector={a.selector}
-              file={a.file}
+              selector={animation.selector}
+              file={animation.file}
               overridden={EMPTY}
-              body={a.body}
+              body={animation.body}
               variables={variables}
               selectorSuggestions={selectorSuggestions}
-              onChange={(b) => onChangeBody(a.selector, b)}
-              onDelete={() => onDelete(a.selector)}
-              onRenameKeyframes={(newName) => onRename(a.selector, newName)}
+              searchTerm={query}
+              searchCollapseOverride={searchCollapseOverride}
+              collapseKey={collapseKey}
+              collapseControl={collapseControl}
+              collapsed={collapsed}
+              onToggleCollapse={() => {
+                if (matchesSearch) {
+                  collapseControl.toggleSearch(collapseKey, !collapsed);
+                } else {
+                  collapseControl.toggle(collapseKey);
+                }
+              }}
+              onChange={(body) => onChangeBody(animation.selector, body)}
+              onDelete={() => onDelete(animation.selector)}
+              onRenameKeyframes={(newName) => onRename(animation.selector, newName)}
             />
-          ))}
-        </div>
-      )}
+          );
+        })}
+        {searchActive && visibleAnimations.length === 0 && (
+          <p className="ss-cascade-empty" role="status">
+            No CSS animations match “{query}”.{' '}
+            <TextButton onClick={onClearSearch}>Clear search</TextButton>
+          </p>
+        )}
+        {displayOrder === 'newest-bottom' && addAnimation}
+      </div>
     </div>
   );
 }

@@ -112,7 +112,7 @@ export interface UseTerminalManagementReturn {
   setActiveTerminalTab: (tabId: number) => void;
   addTerminalTab: (
     agentId?: string,
-    options?: { initialPrompt?: string; projectPath?: string }
+    options?: { initialPrompt?: string; projectPath?: string; sessionId?: string }
   ) => void;
   /** Forget a tab's opening prompt once its agent has spawned with it. */
   clearInitialPrompt: (tabId: number, projectPath?: string) => void;
@@ -263,7 +263,10 @@ export function useTerminalManagement(
   );
 
   const addTerminalTab = useCallback(
-    (agentId?: string, options?: { initialPrompt?: string; projectPath?: string }) => {
+    (
+      agentId?: string,
+      options?: { initialPrompt?: string; projectPath?: string; sessionId?: string }
+    ) => {
       // A caller may target a project that is still becoming current — the
       // Inbox opens a project and asks for a tab in the same breath.
       const path = options?.projectPath ?? currentPathRef.current;
@@ -275,7 +278,9 @@ export function useTerminalManagement(
       }
       s.counter += 1;
       const newTabId = s.counter;
-      const sessionId = crypto.randomUUID();
+      // A caller that needs to find this exact tab again (remote access waits
+      // for *its* agent, not whichever tab appears first) may choose the id.
+      const sessionId = options?.sessionId ?? crypto.randomUUID();
       const resolvedAgent = agentId ?? getDefaultAgentId();
       s.tabs = [
         ...s.tabs,

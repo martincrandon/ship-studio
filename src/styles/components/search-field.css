@@ -1,0 +1,62 @@
+/* Shared search control used by file browsing and the CSS cascade toolbar. */
+.ss-search-field {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  height: var(--control-height-standard);
+  padding-inline: var(--spacing-sm);
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-app);
+  color: var(--text-muted);
+}
+
+.ss-search-field:focus-within {
+  border-color: var(--accent-active);
+}
+
+.ss-search-field--compact {
+  height: var(--control-height-compact);
+}
+
+.ss-search-field__icon,
+.ss-search-field__clear {
+  flex: 0 0 auto;
+}
+
+.ss-search-field > .ss-search-field__input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-body-md);
+}
+
+.ss-search-field--compact > .ss-search-field__input {
+  font-size: var(--font-size-control);
+}
+
+.ss-search-field > .ss-search-field__input:focus {
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+.ss-search-field__input::placeholder {
+  color: var(--text-muted);
+}
+
+.ss-search-field__input::-webkit-search-cancel-button {
+  display: none;
+}

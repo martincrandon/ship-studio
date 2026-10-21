@@ -15,7 +15,7 @@ import {
   getAgentBridgeUrl,
   registerPreviewMcpServer,
   registerSharedPreviewMcpServers,
-  respondToBridgeRequest,
+  deliverBridgeResponse,
   setAgentBridgeAttached,
   type BridgeRequest,
   type ViewportPreset,
@@ -156,13 +156,8 @@ export function useAgentBridge({
             tool: request.tool,
             is_error: result.isError === true,
           });
-          try {
-            await respondToBridgeRequest(request.requestId, result);
-          } catch (err) {
-            logger.error('[AgentBridge] Failed to deliver tool response', {
-              error: formatCommandError(asCommandError(err)),
-            });
-          }
+          // Never throws; a failed delivery answers the agent in-band (#1128).
+          await deliverBridgeResponse(request.requestId, request.tool, result);
         })();
       });
       // The effect was cleaned up while `listen` was in flight.

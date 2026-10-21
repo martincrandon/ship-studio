@@ -34,6 +34,8 @@ import OverflowAutoSvg from '../../assets/icons/overflow-auto.svg?react';
 import WrapUpSvg from '../../assets/icons/wrap-up.svg?react';
 import UpSvg from '../../assets/icons/up.svg?react';
 import DownSvg from '../../assets/icons/down.svg?react';
+import SortVerticalDownSvg from '../../assets/icons/sort-vertical-down.svg?react';
+import SortVerticalUpSvg from '../../assets/icons/sort-vertical-up.svg?react';
 import LockedSvg from '../../assets/icons/locked.svg?react';
 import UnlockedSvg from '../../assets/icons/unlocked.svg?react';
 import { createIcon } from './icon-base';
@@ -286,6 +288,20 @@ export const ArrowUpIcon = createIcon(UpSvg, {
 export const ArrowDownIcon = createIcon(DownSvg, {
   name: 'ArrowDownIcon',
   source: 'icons/down.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const SortVerticalDownIcon = createIcon(SortVerticalDownSvg, {
+  name: 'SortVerticalDownIcon',
+  source: 'icons/sort-vertical-down.svg',
+  kind: 'ui',
+  defaultSize: 16,
+  strokeWidth: '1px',
+});
+export const SortVerticalUpIcon = createIcon(SortVerticalUpSvg, {
+  name: 'SortVerticalUpIcon',
+  source: 'icons/sort-vertical-up.svg',
   kind: 'ui',
   defaultSize: 16,
   strokeWidth: '1px',

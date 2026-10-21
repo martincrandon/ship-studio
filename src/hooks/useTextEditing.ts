@@ -7,10 +7,14 @@
  * once in Preview.tsx, active whenever EITHER editor's edit mode is on.
  *
  * Flow: an `ss:select` resolves the clicked leaf's text to source and posts the
- * editability verdict back (`ss:textInfo`) — the iframe gates double-click
- * editing on it. On confirm the iframe posts `ss:textCommit`; we write the new
- * text to source (`applyTextEdit`) and post `ss:commit` to re-baseline, or
- * `ss:textRevert` on failure so the optimistic edit is undone.
+ * editability verdict back (`ss:textInfo`, echoing the selection's id) — the
+ * iframe will not start a double-click edit until that verdict says editable, so
+ * data/code text never enters an edit that can only fail at save (#1100). On
+ * confirm the iframe posts `ss:textCommit` carrying the edited element's own
+ * signature and selection id; we write the new text to source (`applyTextEdit`)
+ * and post `ss:commit` to re-baseline, or `ss:textRevert` on failure so the
+ * optimistic edit is undone. Because the commit is self-describing, it can still
+ * be saved when this hook has dropped its record of the selection (#1120).
  *
  * Exposes `textResolution` (drives the Tailwind panel's read-only hint) and
  * `textBlockedNonce` (pulses the dynamic-text hand-off). The CSS cascade panel
@@ -70,6 +74,10 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
   // The signature of the current selection, mirrored for on-demand text resolution
   // if a commit arrives before the (async) select-time resolve has landed.
   const selectedSigRef = useRef<ElementSignature | null>(null);
+  // The iframe's id for the current selection (echoed on ss:textInfo so the iframe
+  // can drop a verdict meant for an older selection, and compared on ss:textCommit
+  // to decide whether the cached target belongs to the element being saved).
+  const selectionIdRef = useRef<string | null>(null);
   // Staleness guard for the select-time resolve — bumped on each new selection so a
   // fast click-through can't let an older resolve post the wrong ss:textInfo.
   const selectTokenRef = useRef(0);
@@ -84,6 +92,7 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
   useEffect(() => {
     if (enabled) return;
     selectedSigRef.current = null;
+    selectionIdRef.current = null;
     textTargetRef.current = null;
     setTextResolution(null);
   }, [enabled]);
@@ -98,6 +107,7 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
       const d = e.data as {
         type?: string;
         signature?: ElementSignature;
+        selectionId?: string;
         leafText?: boolean;
         text?: string;
       } | null;
@@ -114,21 +124,44 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
       // Inline text edit was confirmed in the iframe — write the new text to source.
       if (d.type === 'ss:textCommit' && typeof d.text === 'string') {
         const next = d.text;
-        const sig = selectedSigRef.current;
+        // Does this commit belong to the selection we're tracking? A commit with no
+        // id (older script) is assumed to. If not — e.g. edit mode toggled and
+        // cleared our refs while the iframe kept editing (#1120) — the cached target
+        // isn't this element's, so resolve from the commit's own signature and
+        // leave the current selection's state alone.
+        const ownsSelection =
+          d.selectionId === undefined || d.selectionId === selectionIdRef.current;
+        // Prefer the iframe's edit-start signature: it reflects the element's text
+        // as it was when editing began (fresher than the select-time one).
+        const sig = d.signature ?? (ownsSelection ? selectedSigRef.current : null);
         // Arm reload suppression before writing (same reasoning as a class commit).
         post({ type: 'ss:suppressReload' });
         void (async () => {
           try {
-            // The select-time resolve may not have landed yet (fast double-click →
-            // type → commit); resolve on demand so the edit is never dropped silently.
-            let target = textTargetRef.current;
+            // The select-time resolve may not have landed yet, or belongs to another
+            // selection; resolve on demand so the edit is never dropped silently.
+            let target = ownsSelection ? textTargetRef.current : null;
             if (!target) {
               if (!sig) throw new Error('Lost track of this element — reselect it and try again.');
               const res = await resolveTextSource(projectPath, sig);
-              if (res.status !== 'resolved')
-                throw new Error(res.reason || 'This text isn’t editable.');
+              if (res.status !== 'resolved') {
+                // Data/code text. The iframe no longer starts edits on it, so this is
+                // a backstop (the source changed between verdict and save). Expected
+                // state, not a bug: explain, show the agent hand-off, don't auto-file.
+                if (ownsSelection) setTextTarget(res);
+                setTextBlockedNonce((n) => n + 1);
+                logger.warn('[TextEditing] commit hit text that is not editable inline', {
+                  reason: res.reason,
+                });
+                onToast?.(
+                  `${res.reason || 'This text can’t be edited inline.'} Your edit wasn’t saved — ask your agent to change it.`,
+                  'error'
+                );
+                post({ type: 'ss:textRevert' });
+                return;
+              }
               target = { file: res.file, line: res.line, column: res.column, text: res.text };
-              textTargetRef.current = target;
+              if (ownsSelection) textTargetRef.current = target;
             }
             if (next === target.text) {
               post({ type: 'ss:commit' }); // unchanged — just re-baseline, no write
@@ -144,9 +177,10 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
             );
             // Advance the drift baseline so consecutive text edits keep working.
             target.text = next;
-            setTextResolution((prev) =>
-              prev?.status === 'resolved' ? { ...prev, text: next } : prev
-            );
+            if (ownsSelection)
+              setTextResolution((prev) =>
+                prev?.status === 'resolved' ? { ...prev, text: next } : prev
+              );
             post({ type: 'ss:commit' });
             void trackEvent('visual_edit_saved', { kind: 'text' });
             onToast?.('Saved to source', 'success');
@@ -185,17 +219,25 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
                       next
                     );
                   }
-                  textTargetRef.current = {
-                    file: res.file,
-                    line: res.line,
-                    column: res.column,
-                    text: next,
-                  };
-                  setTextResolution((prev) =>
-                    prev?.status === 'resolved'
-                      ? { ...prev, file: res.file, line: res.line, column: res.column, text: next }
-                      : prev
-                  );
+                  if (ownsSelection) {
+                    textTargetRef.current = {
+                      file: res.file,
+                      line: res.line,
+                      column: res.column,
+                      text: next,
+                    };
+                    setTextResolution((prev) =>
+                      prev?.status === 'resolved'
+                        ? {
+                            ...prev,
+                            file: res.file,
+                            line: res.line,
+                            column: res.column,
+                            text: next,
+                          }
+                        : prev
+                    );
+                  }
                   post({ type: 'ss:commit' });
                   // Recovered drift is an expected environment state, not a bug
                   // — warn, don't auto-file a report.
@@ -239,9 +281,18 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
       // The iframe gates inline editing on it (single-text-node leaves only).
       if (d.type !== 'ss:select' || !d.signature) return;
       const sig = d.signature;
+      const selectionId = typeof d.selectionId === 'string' ? d.selectionId : null;
       selectedSigRef.current = sig;
-      setTextTarget(null); // optimistic; iframe allows editing until told otherwise
+      selectionIdRef.current = selectionId;
+      setTextTarget(null); // unknown until resolved; the iframe won't edit before the verdict
       const token = ++selectTokenRef.current;
+      // Echo the selection id so the iframe applies the verdict only to this selection.
+      const verdict = (editable: boolean) =>
+        post(
+          selectionId === null
+            ? { type: 'ss:textInfo', editable }
+            : { type: 'ss:textInfo', editable, selectionId }
+        );
       if (d.leafText) {
         void (async () => {
           try {
@@ -249,13 +300,13 @@ export function useTextEditing({ iframeRef, projectPath, enabled, onToast }: Par
             // Ignore if the selection changed underneath us.
             if (selectTokenRef.current !== token) return;
             setTextTarget(textRes);
-            post({ type: 'ss:textInfo', editable: textRes.status === 'resolved' });
+            verdict(textRes.status === 'resolved');
           } catch {
-            if (selectTokenRef.current === token) post({ type: 'ss:textInfo', editable: false });
+            if (selectTokenRef.current === token) verdict(false);
           }
         })();
       } else {
-        post({ type: 'ss:textInfo', editable: false });
+        verdict(false);
       }
     };
     window.addEventListener('message', handler);

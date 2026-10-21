@@ -161,7 +161,7 @@ export const workspaceCommands: CommandMap = {
   // terminal renders its chrome, and stop there — no session is really open.
   resolve_cli_path: { path: '/opt/homebrew/bin/claude', dir: '/opt/homebrew/bin' },
   attached_library_dirs: [],
-  pty_session_open: { sessionId: 'harness-session', pid: 0 },
+  pty_session_open: { sessionId: 'harness-session', pid: 0, spawned: true },
   pty_session_attach: null,
   pty_session_resize: null,
   pty_session_write: null,

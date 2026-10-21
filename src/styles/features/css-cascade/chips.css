@@ -122,6 +122,7 @@
   align-items: center;
   flex: 1 1 auto;
   gap: var(--spacing-2xs);
+  min-block-size: var(--cascade-chip-row-min-height);
   min-width: 0;
 }
 

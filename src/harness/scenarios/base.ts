@@ -10,6 +10,7 @@
  * the wrong thing.
  */
 
+import { remoteBrief, remoteStatus } from './remote';
 import type { CommandMap } from '../types';
 
 export const HARNESS_ROOT = '/Users/harness/ShipStudio';
@@ -163,6 +164,10 @@ export const baseCommands: CommandMap = {
   get_css_variables: [],
   get_conflict_info: [],
   list_attached_libraries: [],
+  // Remote access off on a machine without Tailscale — the first-run state.
+  get_remote_access_status: remoteStatus(),
+  get_remote_access_brief: remoteBrief(),
+  get_remote_audit: [],
   list_claude_skills: [],
   list_env_files: [],
   list_mcp_servers: [],

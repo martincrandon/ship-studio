@@ -796,6 +796,85 @@ export async function getCustomDevCommand(projectPath: string): Promise<string |
 }
 
 /**
+ * The command that runs a `generic` project's own `dev` script, verbatim,
+ * through its package manager — or null when package.json declares none.
+ *
+ * A pnpm/Turborepo monorepo root has a package.json but no framework config,
+ * so it detects as `generic`; its `dev` script is typically `turbo run dev`
+ * (issue #1105). Unlike framework projects, the script is run as-is through
+ * `<pm> run dev` rather than parsed: we don't know that a generic script's
+ * binary accepts `--port` (turbo rejects it), so nothing is appended or
+ * rewritten. `PORT` is still set in the environment, and the preview adopts
+ * whatever port the server announces in its output.
+ *
+ * Only a non-empty string `scripts.dev` counts — never a guessed fallback.
+ *
+ * @param packageJsonContent - Raw package.json text
+ * @param pm - The project's package manager
+ * @returns e.g. "pnpm run dev", or null
+ */
+export function packageDevScriptCommand(
+  packageJsonContent: string,
+  pm: PackageManager
+): string | null {
+  if (hasMergeConflictMarkers(packageJsonContent)) return null;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(packageJsonContent);
+  } catch {
+    return null;
+  }
+  if (!pkg || typeof pkg !== 'object') return null;
+  const scripts = (pkg as { scripts?: unknown }).scripts;
+  if (!scripts || typeof scripts !== 'object') return null;
+  const dev = (scripts as Record<string, unknown>).dev;
+  if (typeof dev !== 'string' || dev.trim() === '') return null;
+  return `${pm} run dev`;
+}
+
+/**
+ * Read the package.json at `cwd` (the dev-server cwd — the picked workspace
+ * for monorepos) and return the command that runs its `dev` script, or null
+ * when there is no package.json or no `dev` script.
+ *
+ * @param cwd - Absolute path of the directory the dev server spawns in
+ */
+export async function getPackageDevScriptCommand(cwd: string): Promise<string | null> {
+  let content: string;
+  try {
+    content = (await readProjectFile(cwd, 'package.json')).content;
+  } catch {
+    return null;
+  }
+  let packageManager: PackageManager = 'npm';
+  try {
+    packageManager = normalizePackageManager(await detectPackageManager(cwd));
+  } catch (e) {
+    logger.warn('[DevServer] detectPackageManager failed; assuming npm', {
+      cwd,
+      error: formatCommandError(asCommandError(e)),
+    });
+  }
+  return packageDevScriptCommand(content, packageManager);
+}
+
+/**
+ * The dev command a `generic` project runs: the user's configured custom
+ * command when there is one, otherwise its package.json `dev` script.
+ *
+ * @param projectPath - Project root (where `.shipstudio/project.json` lives)
+ * @param cwd - Dev-server cwd (workspace subpath for monorepos)
+ */
+export async function getGenericDevCommand(
+  projectPath: string,
+  cwd: string
+): Promise<{ custom: string | null; packageScript: string | null }> {
+  const custom = await getCustomDevCommand(projectPath).catch(() => null);
+  if (custom && custom.trim() !== '') return { custom, packageScript: null };
+  return { custom: null, packageScript: await getPackageDevScriptCommand(cwd) };
+}
+
+/**
  * Set the custom dev command for a project (for generic projects).
  * @param projectPath - Absolute path to the project directory
  * @param command - The command to set, or null to clear

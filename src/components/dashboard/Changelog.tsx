@@ -26,6 +26,26 @@ interface ChangelogEntry {
 // Keep ~15 most recent versions for the sidebar
 const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '1.6.1', // v1.6.1
+    items: [
+      'Fixed: remote access could say “Not reachable” and never finish setting up when Tailscale was installed from its website or the App Store',
+    ],
+  },
+  {
+    version: '1.6.0', // v1.6.0
+    items: [
+      'New: Remote access — keep your agents going from your phone. Connect any AI assistant that supports MCP connectors (Grok, Claude, ChatGPT, Cursor…) and it can continue the conversations already running in your agent tabs, start or close agents, and send back sharp screenshots of what you’re building. It all happens on this computer, in the same tabs, so it’s waiting for you when you’re back. Cmd+K → Remote access, or the new item at the foot of the sidebar',
+      'Remote access is built to be safe to leave on: only the projects you tick are reachable, nothing runs in a plain shell, pushing needs a PIN your assistant never sees, every action is listed in Recent activity, and the link travels over your own Tailscale account — never through Ship Studio’s servers',
+      'Because this computer does the work, setup starts with what keeps it reachable: it stays awake while remote access is on, can keep running with the lid closed (plug it in), and can reopen Ship Studio after a restart. The sidebar turns amber if it’s running on battery',
+      'The CSS Editor’s Animate tab gets cascade controls, the selected element’s settings preview as you change them, and text settings only appear for elements that hold text',
+      'Fixed: editing text that comes from data or code could start, then throw away what you typed. Read-only text now says so before you start, and an edit can no longer lose track of its element mid-save',
+      'Fixed: a monorepo opened at its root (pnpm + Turborepo and friends) now runs its own dev script and shows a preview, instead of never starting a server',
+      'Fixed: logging in to Claude inside an agent tab no longer makes the tab restart itself with "Session ID is already in use"',
+      'Fixed: large results from the preview tools (screenshots, big page dumps) could fail to reach your agent on macOS',
+      'Fixed on Windows: the preview no longer fails with a 502 when the system briefly runs out of local network ports',
+    ],
+  },
+  {
     version: '1.5.0', // v1.5.0
     items: [
       'New: report a bug or suggest a feature without leaving the app. The Settings & Help menu, on the dashboard and in the workspace, opens a guided form that becomes a GitHub issue. You see and can edit the exact text before anything is posted, drafts are saved as you go, and nothing is filed until you press Submit',

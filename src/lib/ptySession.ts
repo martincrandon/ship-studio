@@ -29,11 +29,18 @@ export interface OpenPtySessionArgs {
   cols: number;
   rows: number;
   projectPath?: string | null;
+  /** The tab's agent id (`claude`, `codex`, …). Remote access uses it to tell
+   *  agent tabs from plain terminals. */
+  agentId?: string | null;
 }
 
 export interface OpenPtySessionResult {
   sessionId: string;
   pid: number;
+  /** True when this call spawned a new process; false when it returned the
+   *  live session already registered under this id (a remount re-attach).
+   *  Optional so an older backend without the field still type-checks. */
+  spawned?: boolean;
 }
 
 export interface AttachPtySessionResult {
@@ -74,6 +81,7 @@ export async function openPtySession(args: OpenPtySessionArgs): Promise<OpenPtyS
     cols: args.cols,
     rows: args.rows,
     projectPath: args.projectPath ?? null,
+    agentId: args.agentId ?? null,
   });
 }
 

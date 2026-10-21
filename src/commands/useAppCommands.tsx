@@ -320,6 +320,14 @@ export function useAppCommands({
         ],
         run: () => openModal('attachedLibraries'),
       },
+      {
+        id: 'modal.remoteAccess',
+        title: 'Remote access',
+        icon: <GlobeIcon size={14} />,
+        category: 'settings',
+        keywords: ['phone', 'grok', 'mobile', 'away', 'ssh', 'tailscale', 'control', 'connector'],
+        run: () => openModal('remoteAccess'),
+      },
     ],
     [
       handleCreateProject,

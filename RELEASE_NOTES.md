@@ -6,6 +6,22 @@ The latest entry is rendered inside the in-app update dialog, so write user-
 facing language — what changed, in plain English — not commit subjects.
 -->
 
+## What's New in v1.6.1
+
+- **Fixed remote access with the Tailscale app** - Remote access could show "Not reachable" and never finish setting up when Tailscale was installed from its website or the App Store
+
+
+## What's New in v1.6.0
+
+- **Remote access** - Keep your agents going from your phone with any AI assistant that supports MCP connectors (Grok, Claude, ChatGPT, Cursor). It continues the conversations already in your agent tabs, starts and closes agents, and sends back sharp screenshots — all on your own computer, over your own Tailscale. Only the projects you choose are reachable, there's no raw shell, pushing needs a PIN your assistant never sees, and every action is logged
+- **CSS Editor** - Cascade controls in the Animate tab, live preview of the selected element's settings, and text settings only for elements that hold text (Martin Crandon)
+- **Fixed** - Editing text that comes from data or code could throw away what you typed; it now says up front that it's read-only
+- **Fixed** - A pnpm/Turborepo monorepo opened at its root now runs its dev script and shows a preview
+- **Fixed** - Logging in to Claude inside an agent tab no longer restarts the tab with "Session ID is already in use"
+- **Fixed** - Large preview-tool results (screenshots, page dumps) could fail to reach your agent on macOS
+- **Fixed** - Windows: the preview no longer fails with a 502 when local network ports briefly run out
+
+
 ## What's New in v1.5.0
 
 - **Report a bug or suggest a feature from inside the app** - A new Settings & Help menu, on the dashboard and in the workspace, opens a guided form that becomes a GitHub issue. You see and can edit the exact text before anything is posted, drafts are saved as you go, and nothing is ever filed without you pressing Submit

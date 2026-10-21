@@ -214,7 +214,6 @@ describe('executeBridgeTool', () => {
     invokeMock.mockImplementation((cmd: unknown) => {
       if (cmd === 'capture_viewport_playwright')
         return Promise.resolve('/proj/.shipstudio/screenshots/s.png');
-      if (cmd === 'get_screenshot_base64') return Promise.resolve('data:image/png;base64,aGVsbG8=');
       return Promise.reject(new Error(`unexpected command ${String(cmd)}`));
     });
     await executeBridgeTool(
@@ -305,20 +304,21 @@ describe('executeBridgeTool', () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it('screenshot returns inline image content with the saved path', async () => {
+  it('screenshot references the saved file instead of inlining base64 (#1128)', async () => {
     invokeMock.mockImplementation((cmd: unknown) => {
       if (cmd === 'capture_viewport_playwright')
         return Promise.resolve('/proj/.shipstudio/screenshots/s.png');
-      if (cmd === 'get_screenshot_base64') return Promise.resolve('data:image/png;base64,aGVsbG8=');
       return Promise.reject(new Error(`unexpected command ${String(cmd)}`));
     });
     const result = await executeBridgeTool({ requestId: 8, tool: 'preview_screenshot' }, makeCtx());
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]).toMatchObject({
+    // Rust inlines the bytes from the path; no base64 crosses the IPC.
+    expect(result.content[0]).toEqual({
       type: 'image',
-      data: 'aGVsbG8=',
+      path: '/proj/.shipstudio/screenshots/s.png',
       mimeType: 'image/png',
     });
+    expect(invokeMock).not.toHaveBeenCalledWith('get_screenshot_base64', expect.anything());
     expect((result.content[1] as { text: string }).text).toContain('s.png');
   });
 
@@ -326,7 +326,6 @@ describe('executeBridgeTool', () => {
     invokeMock.mockImplementation((cmd: unknown) => {
       if (cmd === 'capture_fullpage_playwright')
         return Promise.resolve('/proj/.shipstudio/screenshots/f.png');
-      if (cmd === 'get_screenshot_base64') return Promise.resolve('data:image/png;base64,aGVsbG8=');
       return Promise.reject(new Error(`unexpected command ${String(cmd)}`));
     });
     const result = await executeBridgeTool(

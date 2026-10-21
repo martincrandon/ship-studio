@@ -22,15 +22,101 @@
   text-transform: uppercase;
 }
 
-.ss-settings__tag {
+.ss-settings__tag-trigger.button {
+  all: unset;
+  display: inline-flex;
   align-self: flex-start;
-  padding: 2px var(--spacing-sm);
+  width: fit-content;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.ss-settings__tag-trigger.button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ss-settings__tag-trigger.button:disabled {
+  cursor: not-allowed;
+  opacity: var(--button-disabled-opacity);
+}
+
+.ss-settings__tag-trigger.button--ghost:hover:not(:disabled),
+.ss-settings__tag-trigger.button--ghost[aria-expanded='true'] {
+  background: transparent;
+  color: var(--text-on-accent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ss-settings__tag-chip {
+  gap: var(--spacing-xs);
+  max-width: 100%;
+  background: var(--tag-chip-surface);
+  color: var(--tag-chip-text);
+}
+
+.ss-settings__tag-trigger:hover:not(:disabled) .ss-settings__tag-chip,
+.ss-settings__tag-trigger[aria-expanded='true'] .ss-settings__tag-chip {
+  background: var(--tag-chip-surface-hover);
+  color: var(--tag-chip-text);
+}
+
+.ss-settings__tag-chip > svg {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.ss-settings__tag-name {
+  flex: 0 0 auto;
+}
+
+.ss-settings__tag-menu {
+  width: max-content;
+  min-width: 100%;
+  max-width: calc(100vw - var(--spacing-lg));
+}
+
+.ss-settings__tag-menu-heading {
+  margin-block-end: var(--spacing-2xs);
+  border-bottom: var(--border-width-default) solid var(--border-subtle);
+}
+
+.ss-settings__text-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(var(--size-control-standard) + var(--size-control-standard));
+  max-height: 40vh;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-sm);
   background: var(--surface-control);
-  border: 1px solid var(--border-default);
   color: var(--text-primary);
-  font-family: var(--font-code);
-  font-size: var(--font-size-body-sm);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body-lg);
+  line-height: var(--line-height-reading);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
+
+.ss-settings__text-input:focus-visible {
+  border-color: var(--accent-active);
+  outline: var(--border-width-default) solid var(--accent-active);
+  outline-offset: var(--border-width-default);
+}
+
+.ss-settings__text-input:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.ss-settings__text-reason,
+.ss-settings__text-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-badge);
 }
 
 .ss-settings__classes {
@@ -58,11 +144,14 @@
   cursor: pointer;
   display: inline-flex;
   color: currentColor;
-  transition: color var(--transition-fast);
+  opacity: 0.65;
+  transition: opacity var(--transition-fast);
 }
 
-.ss-settings__class-remove:hover {
-  color: var(--accent-error);
+.ss-settings__class-chip .ss-settings__class-remove:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-white);
+  opacity: 1;
 }
 
 .ss-settings__class-add {
@@ -106,22 +195,39 @@
   font-size: var(--font-size-body-sm);
 }
 
-.ss-settings__attr {
-  display: flex;
-  align-items: baseline;
+.ss-settings__group--attributes {
   gap: var(--spacing-xs);
-  white-space: pre-wrap;
-  word-break: break-word;
+}
+
+.ss-settings__attr,
+.ss-settings__attr-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  column-gap: var(--spacing-xs);
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ss-settings__attr {
+  position: relative;
+  align-items: baseline;
+}
+
+.ss-settings__attr-add {
+  align-items: center;
 }
 
 /* Click-to-edit attribute key (button styled as the property-colored name). */
 .ss-settings__attr-key {
   all: unset;
-  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
   cursor: text;
   color: var(--property-text);
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
+  text-align: left;
 }
 .ss-settings__attr-key:hover:not(:disabled) {
   box-shadow: inset 0 0 0 1px var(--border-strong);
@@ -131,8 +237,8 @@
 }
 
 .ss-settings__attr-eq {
-  flex: 0 0 auto;
   color: var(--text-muted);
+  text-align: center;
 }
 
 .ss-settings__attr-value {
@@ -142,8 +248,10 @@
 /* Click-to-edit attribute value (button styled as plain text). */
 .ss-settings__attr-value--editable {
   all: unset;
-  flex: 1 1 auto;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
+  padding-inline-end: var(--size-control-compact);
   cursor: text;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
@@ -164,8 +272,8 @@
 .ss-settings__attr-input {
   all: unset;
   box-sizing: border-box;
-  flex: 1 1 auto;
-  min-width: 40px;
+  width: 100%;
+  min-width: 0;
   padding: 0 var(--spacing-xs);
   border: 1px solid var(--accent-active);
   border-radius: var(--radius-sm);
@@ -175,11 +283,12 @@
   font-size: var(--font-size-body-sm);
 }
 
-/* The key input stays narrow (it's an ident, not a long value). */
 .ss-settings__attr-input--name {
-  flex: 0 0 auto;
-  width: 12ch;
   color: var(--property-text);
+}
+
+.ss-settings__attr > .ss-settings__attr-input:not(.ss-settings__attr-input--name) {
+  padding-inline-end: var(--size-control-compact);
 }
 
 /* Clean "+ Add attribute" affordance — content-width (doesn't stretch the column),
@@ -190,8 +299,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
-  margin-top: var(--spacing-xs);
-  padding: 3px var(--spacing-sm); /* css-ok: compact control height */
+  margin-inline-start: calc(var(--spacing-2xs) * -1);
+  padding: var(--spacing-2xs);
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   font-size: var(--font-size-badge);
@@ -208,10 +317,16 @@
 
 .ss-settings__attr-remove {
   all: unset;
-  flex: 0 0 auto;
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  width: var(--size-control-compact);
+  height: var(--size-control-compact);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   color: var(--text-muted);
   opacity: 0;
   transition: opacity var(--transition-fast);
@@ -220,15 +335,13 @@
 .ss-settings__attr:hover .ss-settings__attr-remove {
   opacity: 1;
 }
+.ss-settings__attr-remove:focus-visible {
+  opacity: 1;
+  outline: var(--focus-ring-width) solid var(--accent-focus);
+  outline-offset: var(--focus-ring-offset);
+}
 .ss-settings__attr-remove:hover {
   color: var(--accent-error);
-}
-
-.ss-settings__attr-add {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  margin-top: var(--spacing-xs);
 }
 
 .ss-settings__empty {

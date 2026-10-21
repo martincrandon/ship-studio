@@ -167,8 +167,14 @@ export function getDefaultAgentId(): string {
  * sat unsent in the input box.
  */
 export function agentPromptArgs(agentId: string, prompt: string): string[] {
+  // A prompt that starts with "-" would be parsed by the CLI as a flag —
+  // "--dangerously-skip-permissions" as an opening prompt would switch off the
+  // agent's permission checks. Prompts arrive from places the user didn't
+  // type (inbox findings, remote access), so this is not hypothetical. A
+  // leading space keeps every argument parser treating it as text.
+  const safe = prompt.startsWith('-') ? ` ${prompt}` : prompt;
   // Opencode wants a flag; the rest take a positional argument.
-  return agentId === 'opencode' ? ['--prompt', prompt] : [prompt];
+  return agentId === 'opencode' ? ['--prompt', safe] : [safe];
 }
 
 export function getAgentById(id: string): AgentConfig {

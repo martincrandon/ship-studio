@@ -24,6 +24,9 @@ import { KeyframesNameChip, keyframesName } from './KeyframesNameChip';
 import { NestedSelectorInput } from './NestedSelectorInput';
 import { RuleContextChips } from './RuleContextChips';
 import { SelectorChip, SelectorDisplay } from './SelectorChip';
+import { TextButton } from '../primitives/TextButton';
+import { nestedRuleCollapseKey } from '../../lib/cascadePresentation';
+import { searchRuleBody } from '../../lib/cascadeSearch';
 import {
   declarations,
   nestedRules,
@@ -65,6 +68,22 @@ interface CommonHeader {
   onToggleCollapse?: () => void;
   /** Resolved project token values for color display and variable authoring. */
   colorVariables?: readonly ColorVariableDefinition[];
+  /** Stable identity used by the panel-wide collapse control for nested rules. */
+  collapseKey?: string;
+  collapseControl?: {
+    collapsedKeys: ReadonlySet<string>;
+    searchCollapsedOverrides: ReadonlyMap<string, boolean>;
+    toggle: (key: string) => void;
+    toggleSearch: (key: string, collapsed: boolean) => void;
+  };
+  /** Search terms are presentation-only: edits still target the original body indices. */
+  searchTerm?: string;
+  /** A matching root selector or enclosing condition reveals the whole card body. */
+  searchMatchesAll?: boolean;
+  /** A query-scoped collapse toggle. Undefined means matching cards start expanded. */
+  searchCollapseOverride?: boolean;
+  /** This whole card is an unmatched item exposed by its parent's Show all action. */
+  searchDimmed?: boolean;
 }
 
 interface EditableCard extends CommonHeader {
@@ -127,8 +146,53 @@ export function CascadeRuleCard(props: Props) {
   // is supplied; otherwise local (nested cards, where per-instance state is fine).
   const [localCollapsed, setLocalCollapsed] = useState(false);
   const controlled = props.onToggleCollapse != null;
-  const collapsed = controlled ? (props.collapsed ?? false) : localCollapsed;
-  const toggleCollapse = controlled ? props.onToggleCollapse! : () => setLocalCollapsed((c) => !c);
+  const storedCollapsed = controlled ? (props.collapsed ?? false) : localCollapsed;
+  const searchTerm = props.searchTerm?.trim() ?? '';
+  const normalizedSearch = searchTerm.toLocaleLowerCase();
+  const searchActive = normalizedSearch.length > 0;
+  const selectorMatches = Boolean(
+    searchActive &&
+    (props.searchMatchesAll || props.selector.toLocaleLowerCase().includes(normalizedSearch))
+  );
+  const editableBody = props.editable ? props.body : null;
+  const bodySearch = useMemo(
+    () => (editableBody && searchActive ? searchRuleBody(editableBody, normalizedSearch) : null),
+    [editableBody, normalizedSearch, searchActive]
+  );
+  const readonlyHasMatch =
+    !props.editable &&
+    searchActive &&
+    props.decls.some(
+      (decl) =>
+        decl.prop.toLocaleLowerCase().includes(normalizedSearch) ||
+        decl.value.toLocaleLowerCase().includes(normalizedSearch) ||
+        (decl.important && '!important'.includes(normalizedSearch))
+    );
+  const cardHasSearchMatch = selectorMatches || Boolean(bodySearch?.hasMatch) || readonlyHasMatch;
+  const [showAllState, setShowAllState] = useState<{ query: string; visible: boolean } | null>(
+    null
+  );
+  const showAll = Boolean(
+    searchActive && showAllState?.query === normalizedSearch && showAllState.visible
+  );
+  const [localSearchCollapse, setLocalSearchCollapse] = useState<{
+    query: string;
+    collapsed: boolean;
+  } | null>(null);
+  const searchCollapseOverride =
+    props.searchCollapseOverride ??
+    (localSearchCollapse?.query === normalizedSearch ? localSearchCollapse.collapsed : undefined);
+  const collapsed =
+    searchActive && cardHasSearchMatch ? (searchCollapseOverride ?? false) : storedCollapsed;
+  const toggleCollapse = () => {
+    if (controlled) {
+      props.onToggleCollapse?.();
+    } else if (searchActive && cardHasSearchMatch) {
+      setLocalSearchCollapse({ query: normalizedSearch, collapsed: !collapsed });
+    } else {
+      setLocalCollapsed((value) => !value);
+    }
+  };
   // Editing-flow: the property just added via "+ Add" — its row auto-opens the value
   // input so the user types the value immediately (no second click).
   const [autoEditProp, setAutoEditProp] = useState<string | null>(null);
@@ -303,27 +367,55 @@ export function CascadeRuleCard(props: Props) {
   );
 
   if (!editable) {
+    const indexedDecls = props.decls.map((decl, index) => ({ decl, index }));
+    const matchesDeclaration = (decl: Decl) =>
+      decl.prop.toLocaleLowerCase().includes(normalizedSearch) ||
+      decl.value.toLocaleLowerCase().includes(normalizedSearch) ||
+      (decl.important && '!important'.includes(normalizedSearch));
+    const hasHiddenDeclarations =
+      searchActive &&
+      !selectorMatches &&
+      indexedDecls.some(({ decl }) => !matchesDeclaration(decl));
+    const visibleDecls = indexedDecls.filter(
+      ({ decl }) => !searchActive || selectorMatches || showAll || matchesDeclaration(decl)
+    );
     return (
       <section
-        className={`ss-cascade-card is-readonly${depth ? ' is-nested' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}`}
+        className={`ss-cascade-card is-readonly${depth ? ' is-nested' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${props.searchDimmed ? ' is-search-dimmed' : ''}`}
         data-testid="cascade-card"
       >
         <header className="ss-cascade-card__head">{headerContent}</header>
         {!collapsed && (
           <div className="ss-cascade-card__body">
-            {props.decls.map((d, i) => (
-              <DeclarationRow
-                key={`${d.prop}-${i}`}
-                editable={false}
-                decl={d}
-                overridden={props.overridden.has(d.prop.toLowerCase())}
-                overriddenBy={props.overridden.get(d.prop.toLowerCase())}
-                colorVariables={props.colorVariables}
-                variableSelector={
-                  (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
-                }
-              />
-            ))}
+            {visibleDecls.map(({ decl, index }) => {
+              const dimmed = showAll && !selectorMatches && !matchesDeclaration(decl);
+              return (
+                <div
+                  key={`${decl.prop}-${index}`}
+                  className={`ss-cascade-filtered${dimmed ? ' is-dimmed' : ''}`}
+                >
+                  <DeclarationRow
+                    editable={false}
+                    decl={decl}
+                    overridden={props.overridden.has(decl.prop.toLowerCase())}
+                    overriddenBy={props.overridden.get(decl.prop.toLowerCase())}
+                    colorVariables={props.colorVariables}
+                    variableSelector={
+                      (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
+                    }
+                  />
+                </div>
+              );
+            })}
+            {hasHiddenDeclarations && (
+              <div className="ss-cascade-card__search-actions ss-cascade-card__search-actions--readonly">
+                <TextButton
+                  onClick={() => setShowAllState({ query: normalizedSearch, visible: !showAll })}
+                >
+                  {showAll ? 'Show matching properties' : 'Show all properties'}
+                </TextButton>
+              </div>
+            )}
             {props.readonlyReason && (
               <p className="ss-cascade-card__note">{props.readonlyReason}</p>
             )}
@@ -336,6 +428,36 @@ export function CascadeRuleCard(props: Props) {
   const { body, onChange, overridden } = props;
   const decls = declarations(body);
   const nested = nestedRules(body);
+  const directMatches = (index: number) =>
+    selectorMatches || Boolean(bodySearch?.declarationIndexes.has(index));
+  const nestedMatches = (index: number, selector: string) =>
+    selectorMatches ||
+    selector.toLocaleLowerCase().includes(normalizedSearch) ||
+    Boolean(bodySearch?.nestedRuleIndexes.has(index));
+  const hasHiddenContent =
+    searchActive &&
+    !selectorMatches &&
+    (decls.some((decl) => !directMatches(decl.index)) ||
+      nested.some((rule) => !nestedMatches(rule.index, rule.selector)));
+  const visibleDecls = decls.filter(
+    (decl) => !searchActive || selectorMatches || showAll || directMatches(decl.index)
+  );
+  const visibleNested = nested.filter(
+    (rule) =>
+      !searchActive || selectorMatches || showAll || nestedMatches(rule.index, rule.selector)
+  );
+  const nestedCollapseKeys = new Map<number, string>();
+  if (props.collapseKey) {
+    const occurrences = new Map<string, number>();
+    for (const rule of nested) {
+      const occurrence = occurrences.get(rule.selector) ?? 0;
+      occurrences.set(rule.selector, occurrence + 1);
+      nestedCollapseKeys.set(
+        rule.index,
+        nestedRuleCollapseKey(props.collapseKey, rule.selector, occurrence)
+      );
+    }
+  }
 
   // Accept the ghost prediction: add it (with its suggested value) — the next prediction
   // then appears, so Tab-Tab-Tab fills in companions. Dismiss just hides this one.
@@ -352,7 +474,7 @@ export function CascadeRuleCard(props: Props) {
   return (
     <section
       ref={sectionRef}
-      className={`ss-cascade-card${depth ? ' is-nested' : ''}${isStep ? ' is-keyframe-step' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${props.draft ? ' is-draft' : ''}${props.unmatched ? ' is-unmatched' : ''}`}
+      className={`ss-cascade-card${depth ? ' is-nested' : ''}${isStep ? ' is-keyframe-step' : ''}${collapsed ? ' is-collapsed' : ''}${inactive ? ' is-inactive' : ''}${props.draft ? ' is-draft' : ''}${props.unmatched ? ' is-unmatched' : ''}${props.searchDimmed ? ' is-search-dimmed' : ''}`}
       data-testid="cascade-card"
       onKeyDown={(e) => {
         // Tab accepts the ghost; Esc dismisses it. Portaled popovers (add-menu, value
@@ -397,42 +519,45 @@ export function CascadeRuleCard(props: Props) {
               — add the class in Settings, or rename it to one of the element&apos;s selectors.
             </p>
           )}
-          {decls.map((d) => (
-            <DeclarationRow
-              key={d.index}
-              editable
-              decl={{ prop: d.prop, value: d.value, important: d.important }}
-              overridden={overridden.has(d.prop.toLowerCase())}
-              overriddenBy={overridden.get(d.prop.toLowerCase())}
-              nestTargets={nested.map((r) => r.selector)}
-              variables={props.variables}
-              colorVariables={props.colorVariables}
-              variableSelector={
-                (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
-              }
-              projectPath={props.projectPath}
-              colorContrast={props.colorContrast}
-              animations={props.animations}
-              autoEditValue={autoEditProp === d.prop}
-              onChange={(next) => onChange(replaceItem(body, d.index, { kind: 'decl', ...next }))}
-              onRemove={(rowEl) => {
-                focusWithinCard(rowEl);
-                onChange(removeItem(body, d.index));
-              }}
-              onNest={(sel) => onChange(moveDeclIntoNested(body, d.index, sel))}
-            />
-          ))}
+          {visibleDecls.map((d) => {
+            const dimmed = showAll && !directMatches(d.index);
+            return (
+              <div key={d.index} className={`ss-cascade-filtered${dimmed ? ' is-dimmed' : ''}`}>
+                <DeclarationRow
+                  editable
+                  decl={{ prop: d.prop, value: d.value, important: d.important }}
+                  overridden={overridden.has(d.prop.toLowerCase())}
+                  overriddenBy={overridden.get(d.prop.toLowerCase())}
+                  nestTargets={nested.map((r) => r.selector)}
+                  variables={props.variables}
+                  colorVariables={props.colorVariables}
+                  variableSelector={
+                    (props.depth ?? 0) === 0 && !props.isStep ? props.selector : undefined
+                  }
+                  projectPath={props.projectPath}
+                  colorContrast={props.colorContrast}
+                  animations={props.animations}
+                  autoEditValue={autoEditProp === d.prop}
+                  onChange={(next) =>
+                    onChange(replaceItem(body, d.index, { kind: 'decl', ...next }))
+                  }
+                  onRemove={(rowEl) => {
+                    focusWithinCard(rowEl);
+                    onChange(removeItem(body, d.index));
+                  }}
+                  onNest={(sel) => onChange(moveDeclIntoNested(body, d.index, sel))}
+                />
+              </div>
+            );
+          })}
 
-          {!props.pendingReason && (
-            <div className="ss-cascade-card__add-row">
-              <AddMenu
-                mode={isKeyframes ? 'keyframes' : isStep ? 'props' : 'full'}
-                onAddProperty={(prop) => {
-                  onChange(addDeclaration(body, { prop, value: '', important: false }));
-                  setAutoEditProp(prop); // → the new row opens its value input
-                }}
-                onNest={(sel) => onChange(addNestedRule(body, sel))}
-              />
+          {hasHiddenContent && (
+            <div className="ss-cascade-card__search-actions">
+              <TextButton
+                onClick={() => setShowAllState({ query: normalizedSearch, visible: !showAll })}
+              >
+                {showAll ? 'Show matching properties' : 'Show all properties'}
+              </TextButton>
             </div>
           )}
 
@@ -447,7 +572,10 @@ export function CascadeRuleCard(props: Props) {
                 onClick={acceptPrediction}
                 aria-label={`Add ${prediction.prop}: ${prediction.value}`}
               >
-                <span className="ss-decl__prop">{prediction.prop}</span>
+                <span className="ss-decl__ghost-property">
+                  <kbd className="ss-decl__ghost-kbd">Tab</kbd>
+                  <span className="ss-decl__prop">{prediction.prop}</span>
+                </span>
                 <span className="ss-decl__colon">:</span>
                 <span className="ss-decl__value">
                   <CssValueText value={prediction.value} />
@@ -456,7 +584,6 @@ export function CascadeRuleCard(props: Props) {
                   )}
                 </span>
               </button>
-              <kbd className="ss-decl__ghost-kbd">Tab</kbd>
               <button
                 type="button"
                 className="ss-decl__ghost-dismiss"
@@ -474,36 +601,87 @@ export function CascadeRuleCard(props: Props) {
             </div>
           )}
 
-          {nested.map((r) => (
-            <CascadeRuleCard
-              key={r.index}
-              editable
-              depth={depth + 1}
-              isStep={isKeyframes}
-              selector={r.selector}
-              overridden={new Map()}
-              body={r.body}
-              variables={props.variables}
-              colorVariables={props.colorVariables}
-              projectPath={props.projectPath}
-              animations={props.animations}
-              selectorSuggestions={props.selectorSuggestions}
-              onChange={(nextBody) =>
-                onChange(
-                  replaceItem(body, r.index, { kind: 'rule', selector: r.selector, body: nextBody })
-                )
-              }
-              onSelectorChange={
-                isKeyframes
-                  ? undefined
-                  : (sel) =>
-                      onChange(
-                        replaceItem(body, r.index, { kind: 'rule', selector: sel, body: r.body })
-                      )
-              }
-              onDelete={() => onChange(removeItem(body, r.index))}
-            />
-          ))}
+          {!props.pendingReason && (
+            <div className="ss-cascade-card__add-row">
+              <AddMenu
+                mode={isKeyframes ? 'keyframes' : isStep ? 'props' : 'full'}
+                onAddProperty={(prop) => {
+                  onChange(addDeclaration(body, { prop, value: '', important: false }));
+                  setAutoEditProp(prop); // → the new row opens its value input
+                }}
+                onNest={(sel) => onChange(addNestedRule(body, sel))}
+              />
+            </div>
+          )}
+
+          {visibleNested.map((r) => {
+            const collapseKey = nestedCollapseKeys.get(r.index);
+            const nestedSearchMatch = nestedMatches(r.index, r.selector);
+            const nestedSearchAll = Boolean(props.searchMatchesAll || selectorMatches || showAll);
+            const nestedCollapsed =
+              searchActive && (nestedSearchMatch || nestedSearchAll)
+                ? (props.collapseControl?.searchCollapsedOverrides.get(collapseKey ?? '') ?? false)
+                : (props.collapseControl?.collapsedKeys.has(collapseKey ?? '') ?? false);
+            return (
+              <div
+                key={r.index}
+                className={`ss-cascade-filtered${showAll && !nestedSearchMatch ? ' is-dimmed' : ''}`}
+              >
+                <CascadeRuleCard
+                  editable
+                  depth={depth + 1}
+                  isStep={isKeyframes}
+                  selector={r.selector}
+                  overridden={new Map()}
+                  body={r.body}
+                  variables={props.variables}
+                  colorVariables={props.colorVariables}
+                  projectPath={props.projectPath}
+                  animations={props.animations}
+                  selectorSuggestions={props.selectorSuggestions}
+                  collapseKey={collapseKey}
+                  collapseControl={props.collapseControl}
+                  collapsed={nestedCollapsed}
+                  searchCollapseOverride={nestedCollapsed}
+                  onToggleCollapse={
+                    collapseKey && props.collapseControl
+                      ? () => {
+                          if (searchActive && (nestedSearchMatch || nestedSearchAll)) {
+                            props.collapseControl?.toggleSearch(collapseKey, !nestedCollapsed);
+                          } else {
+                            props.collapseControl?.toggle(collapseKey);
+                          }
+                        }
+                      : undefined
+                  }
+                  searchTerm={searchTerm}
+                  searchMatchesAll={nestedSearchAll}
+                  onChange={(nextBody) =>
+                    onChange(
+                      replaceItem(body, r.index, {
+                        kind: 'rule',
+                        selector: r.selector,
+                        body: nextBody,
+                      })
+                    )
+                  }
+                  onSelectorChange={
+                    isKeyframes
+                      ? undefined
+                      : (sel) =>
+                          onChange(
+                            replaceItem(body, r.index, {
+                              kind: 'rule',
+                              selector: sel,
+                              body: r.body,
+                            })
+                          )
+                  }
+                  onDelete={() => onChange(removeItem(body, r.index))}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </section>

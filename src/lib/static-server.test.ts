@@ -24,11 +24,14 @@ describe('hasWebPreview', () => {
     }
   });
 
-  it('grants generic projects a preview only with a configured dev command', () => {
+  it('grants generic projects a preview only with a dev command to run', () => {
     // The #691 case: an Nx monorepo root (workspaces + nx.json, no framework
     // config) detects as `generic`; once the user configures a dev command the
     // dev server runs, so the Preview tab must appear.
     expect(hasWebPreview('generic', 'npx nx serve web')).toBe(true);
+    // The #1105 case: a pnpm/Turborepo root whose package.json `dev` script
+    // (`turbo run dev`) runs without any custom command configured.
+    expect(hasWebPreview('generic', 'pnpm run dev')).toBe(true);
 
     // Plain script collections / Rust CLIs with a tooling-only package.json
     // must keep hiding the Preview.

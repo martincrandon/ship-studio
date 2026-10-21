@@ -26,7 +26,7 @@ registry:
 | --- | --- |
 | An action | `Button`, `IconButton`, `TextButton`, `ToggleButton`, or `MenuButton` |
 | A choice | `SegmentedControl`, `PropertyField`, or `ValueField` |
-| A field | `TextField` or `ValueField` |
+| A field | `SearchField`, `TextField`, or `ValueField` |
 | A panel | `DockablePanel`, `EmptyState`, or `PanelResizeHandle` |
 | Status or notification | `Spinner`, `EmptyState`, or `ToastList` |
 | An overlay or menu | `ModalFrame`, `Dropdown`, or `Tooltip` |
@@ -36,6 +36,9 @@ registry:
 Use the generated inventory for the exact props, states, accessibility contract, stylesheet owner,
 example, tests, and lifecycle status. Add a new row to the registry when a new public primitive
 source file is introduced.
+
+`SearchField` is the shared search control for file browsing and the CSS cascade. It wraps `TextField`
+with a leading search icon and a labelled clear action; use its compact density in dense toolbars.
 
 ## Icons and SVG graphics
 
@@ -276,6 +279,12 @@ example, tests, and lifecycle. The hand-authored registry source is
 
 Hooks that pair with them: `useModalState`,
 `useInvoke` / `useAsyncState`, `useCopyToClipboard`, `usePolling` (see CLAUDE.md).
+
+### SearchField — [SearchField.tsx](../src/components/primitives/SearchField.tsx)
+
+`SearchField` is a controlled, labelled search input for shared browsing and filtering. It wraps
+`TextField` with a search icon and a clear action that appears when the value is non-empty. Use
+`density="compact"` in toolbars; the clear button follows the input's disabled state.
 
 ### TextField — [TextField.tsx](../src/components/primitives/TextField.tsx)
 

@@ -676,12 +676,6 @@
     },
     {
       "path": "src/styles/features/css-cascade/main.css",
-      "token": "--font-size-11",
-      "count": 1,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/css-cascade/main.css",
       "token": "--font-weight-regular",
       "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
@@ -695,19 +689,13 @@
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--space-02",
-      "count": 4,
+      "count": 3,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
       "path": "src/styles/features/css-cascade/main.css",
       "token": "--space-04",
       "count": 2,
-      "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
-    },
-    {
-      "path": "src/styles/features/css-cascade/main.css",
-      "token": "--space-06",
-      "count": 1,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {
@@ -773,7 +761,7 @@
     {
       "path": "src/styles/features/css-predict.css",
       "token": "--space-02",
-      "count": 4,
+      "count": 2,
       "reason": "Transitional primitive consumer; replace with an owner-appropriate semantic or component role."
     },
     {

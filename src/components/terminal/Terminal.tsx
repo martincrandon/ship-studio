@@ -66,6 +66,7 @@ import { sanitizeTerminalTitle } from '../../lib/terminalTitle';
 import {
   decideStartupTimeoutAction,
   RESPAWN_GRACE_MS,
+  shouldArmStartupWatchdog,
   STARTUP_TIMEOUT_MS,
 } from './startupWatchdog';
 import { createTerminalOptions } from './terminalTheme';
@@ -814,6 +815,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
           cols: Math.max(term.cols, 2),
           rows: Math.max(term.rows, 2),
           projectPath,
+          agentId: agent.id,
         });
 
         if (!mounted) {
@@ -841,8 +843,10 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
 
         // Set once any live PTY event arrives for this spawn — the process
         // demonstrably produced output even if the chunk itself is dropped
-        // as snapshot-covered. (The replayed attach snapshot does NOT count
-        // as output, matching the pre-gate behavior.)
+        // as snapshot-covered. A non-empty attach snapshot counts too (set
+        // below): those bytes are output the process produced, and ignoring
+        // them is what made a re-attached agent idling on its login screen
+        // look silent (issue #1074).
         let receivedOutput = false;
         // Startup watchdog handle — armed after the snapshot replay below.
         let startupTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -1034,7 +1038,18 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         // kill the silent session and respawn once with the same config. Only
         // if the respawn is also silent do we surface the error text. Policy
         // and timings are shared with the onboarding terminal (startupWatchdog.ts).
-        startupTimeout = setTimeout(() => {
+        //
+        // Armed ONLY for a genuine spawn that has not printed yet (issue
+        // #1074). A remount re-attaches to the process the backend already
+        // owns; that process is past startup (it may be waiting on a login
+        // screen), and killing it to "respawn" under the same session id
+        // collided with itself: "Session ID … is already in use".
+        if (attach.endOffset > 0) receivedOutput = true;
+        const armWatchdog = shouldArmStartupWatchdog({
+          spawned: opened.spawned,
+          outputBytesAtAttach: attach.endOffset,
+        });
+        const onStartupTimeout = () => {
           const action = decideStartupTimeoutAction({ receivedOutput, mounted, autoRespawnUsed });
           if (action === 'none') return;
 
@@ -1083,8 +1098,18 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
             `\r\n\x1b[31m${agent.displayName} did not produce any output after 10 seconds.\x1b[0m\r\n` +
               `\x1b[33mThe process may have failed to start. Check that "${agent.binaryName}" is installed and accessible.\x1b[0m\r\n`
           );
-        }, STARTUP_TIMEOUT_MS);
-        startupTimer = startupTimeout;
+        };
+        if (armWatchdog) {
+          startupTimeout = setTimeout(onStartupTimeout, STARTUP_TIMEOUT_MS);
+          startupTimer = startupTimeout;
+        } else {
+          logger.info('[Terminal] Startup watchdog not armed (re-attach or output already seen)', {
+            agent: agent.id,
+            sessionId: backendSessionId,
+            spawned: opened.spawned,
+            outputBytesAtAttach: attach.endOffset,
+          });
+        }
 
         if (pendingExit !== null) {
           // The process exited while the snapshot was in flight — run the

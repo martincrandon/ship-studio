@@ -4,9 +4,10 @@
  * its CSS:
  *   - CLASSES: add/remove via the className resolver/editor (`lib/edit`), with a
  *     live `ss:mutate` so the page updates immediately. Fully editable.
- *   - TAG / ATTRIBUTES: read from the element's source HTML (`lib/edit-html`) and
- *     shown for reference. (Editing tag/attributes is a fast-follow — markup
- *     rewrites need care.)
+ *   - TEXT: resolves a direct static source text run, displays decoded text, and
+ *     writes entity-escaped user input through the guarded text editor API.
+ *   - TAG / ATTRIBUTES: read from and surgically update resolved source markup;
+ *     tag changes replace only the paired source tag names.
  *
  * Security: messages are posted only to the preview iframe's own contentWindow. The
  * `'*'` target origin is deliberate — the preview's origin is a per-project
@@ -22,10 +23,20 @@ import {
   applyClassnameEdit,
   applyClassnameEditMulti,
   insertClassAttr,
+  resolveTextSource,
+  applyTextEdit,
   type ElementSignature,
 } from '../lib/edit';
 import { resolveElementHtml, applyElementHtml } from '../lib/edit-html';
 import { setAttribute as setAttrInHtml } from '../lib/htmlAttrs';
+import {
+  compatibleMarkupTags,
+  decodeTextEntities,
+  directTextReason,
+  encodeDirectTextForSource,
+  replaceMarkupTagName,
+  type MarkupTagOption,
+} from '../lib/edit-markup';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { asCommandError, formatCommandError } from '../lib/errors';
@@ -66,9 +77,18 @@ export interface ElementAttr {
 }
 
 export interface ElementSettings {
+  /** Stable identity for resetting Settings drafts when preview selection changes. */
+  selectionKey: string;
   tag: string;
+  tagOptions: MarkupTagOption[];
+  canEditTag: boolean;
+  setTag: (tag: string) => Promise<boolean>;
   classes: string[];
   attributes: ElementAttr[];
+  text: string;
+  textReason: string | null;
+  canEditText: boolean;
+  setText: (text: string) => Promise<boolean>;
   addClass: (name: string) => void;
   renameClass: (oldName: string, newName: string) => void;
   removeClass: (name: string) => void;
@@ -84,21 +104,104 @@ export interface ElementSettings {
   busy: boolean;
 }
 
-/** Parse the attributes of an element's opening tag (excluding `class`, which the
- *  CLASSES editor owns). Best-effort, string/quote aware via a global regex. */
+function skipAttributeExpression(source: string, at: number): number | null {
+  let depth = 1;
+  let index = at + 1;
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === '"' || char === "'" || char === '`') {
+      const quote = char;
+      index += 1;
+      while (index < source.length) {
+        if (source[index] === '\\') index += 2;
+        else if (source[index] === quote) {
+          index += 1;
+          break;
+        } else index += 1;
+      }
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      index += 2;
+      while (index < source.length && source[index] !== '\n') index += 1;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      const close = source.indexOf('*/', index + 2);
+      if (close < 0) return null;
+      index = close + 2;
+      continue;
+    }
+    if (char === '{') depth += 1;
+    else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+    index += 1;
+  }
+  return null;
+}
+
+/** Parse literal opening-tag attributes, ignoring spreads and excluding class
+ *  names (which the CLASSES editor owns). Values stay source-backed as written. */
 function parseAttributes(html: string): ElementAttr[] {
-  const open = /^<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/.exec(html.trim());
+  const source = html.trim();
+  const open = /^<[a-zA-Z][\w:-]*/.exec(source);
   if (!open) return [];
-  const attrsPart = open[2];
-  const re = /([a-zA-Z_:][-\w:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+)))?/g;
+  let index = open[0].length;
   const out: ElementAttr[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(attrsPart)) !== null) {
-    const name = m[1];
-    if (name.toLowerCase() === 'class') continue;
-    out.push({ name, value: m[2] ?? m[3] ?? m[4] ?? '' });
+  while (index < source.length) {
+    while (/\s/.test(source[index] ?? '')) index += 1;
+    if (index >= source.length || source[index] === '>' || source[index] === '/') break;
+    if (source[index] === '{') {
+      const after = skipAttributeExpression(source, index);
+      if (after === null) break;
+      index = after;
+      continue;
+    }
+
+    const nameStart = index;
+    while (index < source.length && !/[\s=/>]/.test(source[index])) index += 1;
+    if (index === nameStart) {
+      index += 1;
+      continue;
+    }
+    const name = source.slice(nameStart, index);
+    while (/\s/.test(source[index] ?? '')) index += 1;
+    let value = '';
+    if (source[index] === '=') {
+      index += 1;
+      while (/\s/.test(source[index] ?? '')) index += 1;
+      const quote = source[index];
+      if (quote === '"' || quote === "'") {
+        const start = ++index;
+        while (index < source.length) {
+          if (source[index] === '\\') index += 2;
+          else if (source[index] === quote) break;
+          else index += 1;
+        }
+        value = source.slice(start, index);
+        if (source[index] === quote) index += 1;
+      } else if (source[index] === '{') {
+        const start = index;
+        const after = skipAttributeExpression(source, index);
+        if (after === null) break;
+        value = source.slice(start, after);
+        index = after;
+      } else {
+        const start = index;
+        while (index < source.length && !/[\s>]/.test(source[index])) index += 1;
+        value = source.slice(start, index);
+      }
+    }
+    if (!['class', 'classname'].includes(name.toLowerCase())) out.push({ name, value });
   }
   return out;
+}
+
+function ancestorTags(signature: ElementSignature): string[] {
+  return signature.elementPath?.slice(0, -1).map((item) => item.tagName) ?? [];
 }
 
 interface Params {
@@ -116,50 +219,142 @@ export function useElementSettings({
   signature,
   onToast,
 }: Params): ElementSettings {
+  const selectionKey = signature
+    ? JSON.stringify({
+        domPath: signature.domPath,
+        elementPath: signature.elementPath?.map((item) => item.domPath),
+        sourceFile: signature.sourceFile,
+        sourceLine: signature.sourceLine,
+        sourceColumn: signature.sourceColumn,
+        tagName: signature.tagName,
+        className: signature.className,
+        text: signature.text,
+      })
+    : '';
   const [classes, setClasses] = useState<string[]>([]);
   const [attributes, setAttributes] = useState<ElementAttr[]>([]);
   const [canEditAttributes, setCanEditAttributes] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [tag, setTagValue] = useState(signature?.tagName ?? '');
+  const [tagOptions, setTagOptions] = useState<MarkupTagOption[]>([]);
+  const [canEditTag, setCanEditTag] = useState(false);
+  const [text, setTextValue] = useState('');
+  const [textReason, setTextReason] = useState<string | null>(null);
+  const [canEditText, setCanEditText] = useState(false);
   // The element's resolved markup location in source (file + 1-based line), for "Copy id".
   const [location, setLocation] = useState<{ file: string; line: number } | null>(null);
 
   const sigRef = useRef<ElementSignature | null>(signature);
-  sigRef.current = signature;
   // The element's current source markup (drift-guard baseline for attribute writes).
   const htmlRef = useRef<string | null>(null);
-  const tag = signature?.tagName ?? '';
+  const textTargetRef = useRef<{
+    file: string;
+    line: number;
+    column: number;
+    text: string;
+  } | null>(null);
+  const selectionTokenRef = useRef(0);
+  const writeLockRef = useRef(false);
 
   const post = useCallback(
     (msg: unknown) => iframeRef.current?.contentWindow?.postMessage(msg, '*'),
     [iframeRef]
   );
 
-  // Seed classes from the signature; resolve the element's markup for attributes.
+  const beginWrite = useCallback(() => {
+    if (writeLockRef.current) return false;
+    writeLockRef.current = true;
+    setBusy(true);
+    return true;
+  }, []);
+
+  const endWrite = useCallback(() => {
+    writeLockRef.current = false;
+    setBusy(false);
+  }, []);
+
+  // Seed the selected source and its two independent safe edit resolutions. A
+  // generation token prevents a slow resolver for the previous selection from
+  // overwriting the current element's text, tag options, or write baseline.
   useEffect(() => {
+    const token = ++selectionTokenRef.current;
+    sigRef.current = signature;
     if (!enabled || !signature) {
       setClasses([]);
       setAttributes([]);
       setCanEditAttributes(false);
       setLocation(null);
+      setTagValue('');
+      setTagOptions([]);
+      setCanEditTag(false);
+      setTextValue('');
+      setTextReason(null);
+      setCanEditText(false);
       htmlRef.current = null;
+      textTargetRef.current = null;
       return;
     }
+    setTagValue(signature.tagName);
+    setTagOptions([{ tag: signature.tagName, label: signature.tagName }]);
+    setCanEditTag(false);
     setClasses(signature.className.split(/\s+/).filter(Boolean));
+    setAttributes([]);
+    setCanEditAttributes(false);
+    setLocation(null);
+    setTextValue('');
+    setTextReason('Resolving selected text…');
+    setCanEditText(false);
+    htmlRef.current = null;
+    textTargetRef.current = null;
     let cancelled = false;
     void resolveElementHtml(projectPath, signature)
       .then((res) => {
-        if (cancelled) return;
+        if (cancelled || token !== selectionTokenRef.current) return;
         htmlRef.current = res.html;
         setAttributes(parseAttributes(res.html));
         setCanEditAttributes(true);
         setLocation({ file: res.file, line: res.line });
+        const options = compatibleMarkupTags(res.html, signature.tagName, ancestorTags(signature));
+        setTagOptions(options);
+        setCanEditTag(options.length > 1);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || token !== selectionTokenRef.current) return;
         htmlRef.current = null;
         setAttributes([]);
         setCanEditAttributes(false);
         setLocation(null);
+        const options = compatibleMarkupTags(null, signature.tagName, ancestorTags(signature));
+        setTagOptions(options);
+        setCanEditTag(false);
+      });
+    void resolveTextSource(projectPath, signature)
+      .then((res) => {
+        if (cancelled || token !== selectionTokenRef.current) return;
+        if (res.status === 'resolved') {
+          textTargetRef.current = {
+            file: res.file,
+            line: res.line,
+            column: res.column,
+            text: res.text,
+          };
+          setTextValue(decodeTextEntities(res.text));
+          const unsafeReason = directTextReason(res.text);
+          setTextReason(unsafeReason);
+          setCanEditText(unsafeReason === null);
+        } else {
+          textTargetRef.current = null;
+          setTextValue('');
+          setTextReason(res.reason || 'This element has no safely editable static text.');
+          setCanEditText(false);
+        }
+      })
+      .catch(() => {
+        if (cancelled || token !== selectionTokenRef.current) return;
+        textTargetRef.current = null;
+        setTextValue('');
+        setTextReason('This element’s text could not be resolved in source.');
+        setCanEditText(false);
       });
     return () => {
       cancelled = true;
@@ -171,6 +366,7 @@ export function useElementSettings({
   const applyAttr = useCallback(
     async (name: string, value: string | null) => {
       const sig = sigRef.current;
+      const token = selectionTokenRef.current;
       const oldHtml = htmlRef.current;
       if (!sig || oldHtml == null) {
         onToast("Can't edit this element's attributes in source.", 'error');
@@ -178,19 +374,23 @@ export function useElementSettings({
       }
       const newHtml = setAttrInHtml(oldHtml, name, value);
       if (newHtml == null || newHtml === oldHtml) return;
-      setBusy(true);
+      if (!beginWrite()) return;
       try {
         await applyElementHtml(projectPath, sig, oldHtml, newHtml);
+        if (token !== selectionTokenRef.current) return;
         htmlRef.current = newHtml;
         setAttributes(parseAttributes(newHtml));
+        const options = compatibleMarkupTags(newHtml, sig.tagName, ancestorTags(sig));
+        setTagOptions(options);
+        setCanEditTag(options.length > 1);
         void trackEvent('visual_edit_saved', { kind: 'attribute', mode: 'css-code' });
       } catch (err) {
         reportSettingsFailure('attribute edit', err, onToast);
       } finally {
-        setBusy(false);
+        endWrite();
       }
     },
-    [projectPath, onToast]
+    [projectPath, onToast, beginWrite, endWrite]
   );
 
   /** Rename an attribute's key (remove old + add new in ONE source write so it never
@@ -198,6 +398,7 @@ export function useElementSettings({
   const renameAttr = useCallback(
     async (oldName: string, newName: string, value: string) => {
       const sig = sigRef.current;
+      const token = selectionTokenRef.current;
       const oldHtml = htmlRef.current;
       const n = newName.trim();
       if (!sig || oldHtml == null) {
@@ -208,25 +409,30 @@ export function useElementSettings({
       const without = setAttrInHtml(oldHtml, oldName, null) ?? oldHtml;
       const newHtml = setAttrInHtml(without, n, value);
       if (newHtml == null || newHtml === oldHtml) return;
-      setBusy(true);
+      if (!beginWrite()) return;
       try {
         await applyElementHtml(projectPath, sig, oldHtml, newHtml);
+        if (token !== selectionTokenRef.current) return;
         htmlRef.current = newHtml;
         setAttributes(parseAttributes(newHtml));
+        const options = compatibleMarkupTags(newHtml, sig.tagName, ancestorTags(sig));
+        setTagOptions(options);
+        setCanEditTag(options.length > 1);
         void trackEvent('visual_edit_saved', { kind: 'attribute', mode: 'css-code' });
       } catch (err) {
         reportSettingsFailure('attribute rename', err, onToast);
       } finally {
-        setBusy(false);
+        endWrite();
       }
     },
-    [projectPath, onToast]
+    [projectPath, onToast, beginWrite, endWrite]
   );
 
   /** Rewrite the element's `class` attribute in source (and live in the preview). */
   const writeClassAttr = useCallback(
     async (nextClass: string): Promise<boolean> => {
       const sig = sigRef.current;
+      const token = selectionTokenRef.current;
       if (!sig) return false;
       const res = await resolveClassnameSource(projectPath, sig);
       if (res.status !== 'resolved' && res.status !== 'multi') {
@@ -244,6 +450,7 @@ export function useElementSettings({
       } else {
         await applyClassnameEditMulti(projectPath, res.locations, prev, nextClass);
       }
+      if (token !== selectionTokenRef.current) return false;
       const nextSig = { ...sig, className: nextClass };
       sigRef.current = nextSig;
       post({ type: 'ss:mutate', className: nextClass, rules: [] });
@@ -264,9 +471,11 @@ export function useElementSettings({
   const insertFirstClass = useCallback(
     async (name: string): Promise<boolean> => {
       const sig = sigRef.current;
+      const token = selectionTokenRef.current;
       if (!sig) return false;
       post({ type: 'ss:suppressReload' });
       await insertClassAttr(projectPath, sig, name);
+      if (token !== selectionTokenRef.current) return false;
       sigRef.current = { ...sig, className: name };
       post({ type: 'ss:mutate', className: name, rules: [] });
       post({ type: 'ss:commit' });
@@ -280,7 +489,7 @@ export function useElementSettings({
     async (name: string) => {
       const n = name.trim().replace(/^\./, '');
       if (!n || classes.includes(n)) return;
-      setBusy(true);
+      if (!beginWrite()) return;
       try {
         const next = [...classes, n];
         // No existing classes → insert a fresh attribute; otherwise rewrite the
@@ -294,15 +503,15 @@ export function useElementSettings({
       } catch (err) {
         reportSettingsFailure('add class', err, onToast);
       } finally {
-        setBusy(false);
+        endWrite();
       }
     },
-    [classes, writeClassAttr, insertFirstClass, onToast]
+    [classes, writeClassAttr, insertFirstClass, onToast, beginWrite, endWrite]
   );
 
   const removeClass = useCallback(
     async (name: string) => {
-      setBusy(true);
+      if (!beginWrite()) return;
       try {
         const next = classes.filter((c) => c !== name);
         if (await writeClassAttr(next.join(' '))) {
@@ -312,10 +521,10 @@ export function useElementSettings({
       } catch (err) {
         reportSettingsFailure('remove class', err, onToast);
       } finally {
-        setBusy(false);
+        endWrite();
       }
     },
-    [classes, writeClassAttr, onToast]
+    [classes, writeClassAttr, onToast, beginWrite, endWrite]
   );
 
   const renameClass = useCallback(
@@ -330,7 +539,7 @@ export function useElementSettings({
         onToast(`.${n} is already on this element.`, 'error');
         return;
       }
-      setBusy(true);
+      if (!beginWrite()) return;
       try {
         const next = classes.map((c) => (c === oldName ? n : c));
         if (await writeClassAttr(next.join(' '))) {
@@ -342,16 +551,204 @@ export function useElementSettings({
         // ambiguity/validation refusals must not file bug reports (#818).
         reportSettingsFailure('rename class', err, onToast);
       } finally {
-        setBusy(false);
+        endWrite();
       }
     },
-    [classes, writeClassAttr, onToast]
+    [classes, writeClassAttr, onToast, beginWrite, endWrite]
+  );
+
+  /** Save a direct text literal with the source resolver's old-text drift guard.
+   *  User characters are encoded as source entities, so '<', '&', and braces
+   *  remain text in JSX/HTML rather than becoming markup or an expression. */
+  const saveText = useCallback(
+    async (nextText: string): Promise<boolean> => {
+      const sig = sigRef.current;
+      const token = selectionTokenRef.current;
+      const target = textTargetRef.current;
+      if (!sig || !target || !canEditText || directTextReason(target.text)) {
+        onToast("This element's text can't be edited safely in source.", 'info');
+        return false;
+      }
+      const sourceText = encodeDirectTextForSource(nextText);
+      if (sourceText === target.text) {
+        setTextValue(nextText);
+        return true;
+      }
+      if (!beginWrite()) return false;
+      post({ type: 'ss:suppressReload' });
+      try {
+        await applyTextEdit(
+          projectPath,
+          target.file,
+          target.line,
+          target.column,
+          target.text,
+          sourceText
+        );
+        if (token !== selectionTokenRef.current) return true;
+
+        const nextTarget = { ...target, text: sourceText };
+        const nextSig = { ...sig, text: nextText };
+        textTargetRef.current = nextTarget;
+        sigRef.current = nextSig;
+        setTextValue(nextText);
+        setTextReason(null);
+        setCanEditText(true);
+
+        // Text and markup share source. Invalidate the old HTML baseline before
+        // the refetch so a later attribute edit can never restore stale content.
+        htmlRef.current = null;
+        setCanEditAttributes(false);
+        setCanEditTag(false);
+        post({ type: 'ss:setText', value: nextText });
+        post({ type: 'ss:commit' });
+        post({ type: 'ss:reselect', signature: nextSig });
+        void trackEvent('visual_edit_saved', { kind: 'text', mode: 'css-code' });
+        onToast('Saved to source', 'success');
+
+        try {
+          const refreshed = await resolveElementHtml(projectPath, nextSig);
+          if (token !== selectionTokenRef.current) return true;
+          htmlRef.current = refreshed.html;
+          setAttributes(parseAttributes(refreshed.html));
+          setCanEditAttributes(true);
+          setLocation({ file: refreshed.file, line: refreshed.line });
+          const options = compatibleMarkupTags(
+            refreshed.html,
+            nextSig.tagName,
+            ancestorTags(nextSig)
+          );
+          setTagOptions(options);
+          setCanEditTag(options.length > 1);
+        } catch (err) {
+          if (token === selectionTokenRef.current) {
+            logger.warn(
+              '[ElementSettings] refreshed markup after text edit could not be resolved',
+              {
+                error: toastText(err),
+              }
+            );
+            htmlRef.current = null;
+            setCanEditAttributes(false);
+            setCanEditTag(false);
+            setTagOptions(compatibleMarkupTags(null, nextSig.tagName, ancestorTags(nextSig)));
+          }
+        }
+        return true;
+      } catch (err) {
+        reportSettingsFailure('text edit', err, onToast);
+        return false;
+      } finally {
+        endWrite();
+      }
+    },
+    [canEditText, projectPath, onToast, beginWrite, endWrite, post]
+  );
+
+  /** Convert the selected native text/container tag by replacing only the paired
+   *  tag-name spans in freshly resolved source markup. The ancestor path is part
+   *  of compatibility checks so links/headings cannot become invalidly nested. */
+  const changeTag = useCallback(
+    async (nextTag: string): Promise<boolean> => {
+      const sig = sigRef.current;
+      const token = selectionTokenRef.current;
+      if (!sig) return false;
+      if (nextTag.toLowerCase() === sig.tagName.toLowerCase()) return true;
+      if (!beginWrite()) return false;
+      try {
+        const fresh = await resolveElementHtml(projectPath, sig);
+        if (token !== selectionTokenRef.current) return false;
+        const options = compatibleMarkupTags(fresh.html, sig.tagName, ancestorTags(sig));
+        if (!options.some((option) => option.tag === nextTag.toLowerCase())) {
+          onToast('That tag is not compatible with this element’s source content.', 'info');
+          return false;
+        }
+        const nextHtml = replaceMarkupTagName(fresh.html, sig.tagName, nextTag);
+        if (nextHtml == null || nextHtml === fresh.html) {
+          onToast('This element’s source markup could not be safely converted.', 'info');
+          return false;
+        }
+
+        post({ type: 'ss:suppressReload' });
+        await applyElementHtml(projectPath, sig, fresh.html, nextHtml);
+        if (token !== selectionTokenRef.current) return true;
+
+        const nextSig = { ...sig, tagName: nextTag.toLowerCase() };
+        const nextToken = ++selectionTokenRef.current;
+        sigRef.current = nextSig;
+        htmlRef.current = nextHtml;
+        textTargetRef.current = null;
+        setTagValue(nextSig.tagName);
+        setTextValue('');
+        setTextReason('Resolving selected text…');
+        setCanEditText(false);
+        setAttributes(parseAttributes(nextHtml));
+        setCanEditAttributes(true);
+        setLocation({ file: fresh.file, line: fresh.line });
+        const nextOptions = compatibleMarkupTags(nextHtml, nextSig.tagName, ancestorTags(nextSig));
+        setTagOptions(nextOptions);
+        setCanEditTag(nextOptions.length > 1);
+        // The in-frame handler replaces selected nodes synchronously while
+        // preserving their attributes and children. postMessage preserves FIFO
+        // order, so re-selection sees the updated native tag without a timer.
+        post({ type: 'ss:setTag', value: nextSig.tagName });
+        post({ type: 'ss:commit' });
+        post({ type: 'ss:reselect', signature: nextSig });
+        void trackEvent('visual_edit_saved', { kind: 'tag', mode: 'css-code' });
+
+        try {
+          const textResolution = await resolveTextSource(projectPath, nextSig);
+          if (nextToken !== selectionTokenRef.current) return true;
+          if (textResolution.status === 'resolved') {
+            textTargetRef.current = {
+              file: textResolution.file,
+              line: textResolution.line,
+              column: textResolution.column,
+              text: textResolution.text,
+            };
+            setTextValue(decodeTextEntities(textResolution.text));
+            const unsafeReason = directTextReason(textResolution.text);
+            setTextReason(unsafeReason);
+            setCanEditText(unsafeReason === null);
+          } else {
+            textTargetRef.current = null;
+            setTextValue('');
+            setTextReason(
+              textResolution.reason || 'This element has no safely editable static text.'
+            );
+            setCanEditText(false);
+          }
+        } catch {
+          if (nextToken === selectionTokenRef.current) {
+            textTargetRef.current = null;
+            setTextValue('');
+            setTextReason('This element’s text could not be resolved in source.');
+            setCanEditText(false);
+          }
+        }
+        return true;
+      } catch (err) {
+        reportSettingsFailure('tag conversion', err, onToast);
+        return false;
+      } finally {
+        endWrite();
+      }
+    },
+    [projectPath, onToast, beginWrite, endWrite, post]
   );
 
   return {
+    selectionKey,
     tag,
+    tagOptions,
+    canEditTag,
+    setTag: changeTag,
     classes,
     attributes,
+    text,
+    textReason,
+    canEditText,
+    setText: saveText,
     addClass: (n) => void addClass(n),
     renameClass: (oldName, newName) => void renameClass(oldName, newName),
     removeClass: (n) => void removeClass(n),

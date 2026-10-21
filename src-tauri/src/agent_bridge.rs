@@ -358,6 +358,15 @@ pub fn resolve_bridge_request(request_id: u64, result: Value) -> bool {
     }
 }
 
+/// Whether a tool call is still waiting for the frontend's answer (false once
+/// it has been resolved or has timed out).
+pub fn is_bridge_request_pending(request_id: u64) -> bool {
+    PENDING_REQUESTS
+        .lock()
+        .map(|pending| pending.contains_key(&request_id))
+        .unwrap_or(false)
+}
+
 // ============================================================================
 // HTTP layer
 // ============================================================================
@@ -811,6 +820,21 @@ async fn dispatch_tool(
     }
 }
 
+/// Run one preview tool for `canonical_project_path` on behalf of another
+/// part of the backend (remote access), with the same routing, fail-fast
+/// checks and timeouts an agent's call gets.
+pub async fn call_preview_tool(
+    app: tauri::AppHandle,
+    canonical_project_path: &str,
+    tool_name: &str,
+    arguments: Value,
+) -> Value {
+    match TOOLS.iter().find(|t| t.name == tool_name) {
+        Some(tool) => dispatch_tool(&app, canonical_project_path, tool, arguments).await,
+        None => tool_error_result(&format!("Unknown preview tool: {tool_name}")),
+    }
+}
+
 /// Which project should an "active"-URL tool call act on?
 /// The focused Ship Studio window's project wins; with nothing focused
 /// (agent running while the user looks elsewhere), a single open project is
@@ -842,7 +866,7 @@ fn resolve_active_project(app: &tauri::AppHandle) -> Result<String, String> {
     ))
 }
 
-fn tool_error_result(message: &str) -> Value {
+pub(crate) fn tool_error_result(message: &str) -> Value {
     json!({
         "content": [{ "type": "text", "text": message }],
         "isError": true,

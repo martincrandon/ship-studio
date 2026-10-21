@@ -482,6 +482,8 @@ pub async fn capture_fullpage_playwright(
     project_path: String,
     url: String,
     width: Option<u32>,
+    height: Option<u32>,
+    scale: Option<f32>,
 ) -> Result<String, CommandError> {
     let project = validate_project_path(&project_path)?;
 
@@ -501,6 +503,11 @@ pub async fn capture_fullpage_playwright(
     // Match the preview's current viewport when given (agent bridge responsive
     // checks); clamp to sane bounds so a bad value can't wedge Chromium.
     let viewport_width = width.unwrap_or(1280).clamp(200, 3000);
+    // Height and device pixel ratio default to what this always captured
+    // (800px tall at 1x). Remote access asks for 2x/3x so a phone shows
+    // something sharp; the clamps keep a bad value from making a giant image.
+    let viewport_height = height.unwrap_or(800).clamp(200, 3000);
+    let device_scale = scale.unwrap_or(1.0).clamp(1.0, 3.0);
 
     // Ensure screenshots directory exists
     if !screenshots_dir.exists() {
@@ -534,7 +541,7 @@ const {{ chromium }} = require('playwright');
         // disable the GPU like the Chrome CLI thumbnail fallback already
         // does, and relaunch once if the fresh browser process still dies
         // (issue #558).
-        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: 800 }} }};
+        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: {viewport_height} }}, deviceScaleFactor: {device_scale} }};
         browser = await chromium.launch({{ args: ['--disable-gpu'] }});
         let page;
         try {{
@@ -606,7 +613,7 @@ const {{ chromium }} = require('playwright');
         // Capped: an infinite-scroll page would otherwise walk forever and eat
         // the whole outer budget (issue #527).
         const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight).catch(() => 0);
-        const viewportHeight = 800;
+        const viewportHeight = {viewport_height};
         const maxScrollSteps = 40;
 
         for (let step = 0, y = 0; y < scrollHeight && step < maxScrollSteps; step++, y += viewportHeight / 2) {{
@@ -707,6 +714,8 @@ pub async fn capture_viewport_playwright(
     project_path: String,
     url: String,
     width: Option<u32>,
+    height: Option<u32>,
+    scale: Option<f32>,
 ) -> Result<String, CommandError> {
     let project = validate_project_path(&project_path)?;
 
@@ -726,6 +735,11 @@ pub async fn capture_viewport_playwright(
     // Match the preview's current viewport when given (agent bridge responsive
     // checks); clamp to sane bounds so a bad value can't wedge Chromium.
     let viewport_width = width.unwrap_or(1280).clamp(200, 3000);
+    // Height and device pixel ratio default to what this always captured
+    // (800px tall at 1x). Remote access asks for 2x/3x so a phone shows
+    // something sharp; the clamps keep a bad value from making a giant image.
+    let viewport_height = height.unwrap_or(800).clamp(200, 3000);
+    let device_scale = scale.unwrap_or(1.0).clamp(1.0, 3.0);
 
     // Ensure screenshots directory exists
     if !screenshots_dir.exists() {
@@ -757,7 +771,7 @@ const {{ chromium }} = require('playwright');
         // disable the GPU like the Chrome CLI thumbnail fallback already
         // does, and relaunch once if the fresh browser process still dies
         // (issue #558).
-        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: 800 }} }};
+        const newPageOptions = {{ viewport: {{ width: {viewport_width}, height: {viewport_height} }}, deviceScaleFactor: {device_scale} }};
         browser = await chromium.launch({{ args: ['--disable-gpu'] }});
         let page;
         try {{

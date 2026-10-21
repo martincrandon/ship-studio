@@ -456,6 +456,53 @@ it('swaps the selected image src on ss:setSrc and clears a stale srcset', async 
   expect(img.getAttribute('srcset')).toBe('');
 });
 
+it('updates direct text without flattening mixed child markup on ss:setText', async () => {
+  document.body.innerHTML =
+    '<p class="settings-text">Old copy</p><p class="settings-mixed">Keep <span>formatting</span></p>';
+  send({ type: 'ss:activate' });
+  await flushMessages();
+
+  const plain = document.querySelector('.settings-text')!;
+  const selectedPlain = nextSelect();
+  plain.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await selectedPlain;
+  send({ type: 'ss:setText', value: 'A & <copy> {title}' });
+  expect(plain.textContent).toBe('A & <copy> {title}');
+
+  const mixed = document.querySelector('.settings-mixed')!;
+  const nested = mixed.querySelector('span')!;
+  const selectedMixed = nextSelect();
+  mixed.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await selectedMixed;
+  send({ type: 'ss:setText', value: 'Do not remove nested markup' });
+  expect(mixed.textContent).toBe('Keep formatting');
+  expect(mixed.querySelector('span')).toBe(nested);
+});
+
+it('replaces the selected tag while preserving its attributes and child nodes on ss:setTag', async () => {
+  document.body.innerHTML =
+    '<div class="settings-tag" data-note="keep"><span class="nested">Nested</span> tail</div>';
+  send({ type: 'ss:activate' });
+  await flushMessages();
+  const original = document.querySelector('.settings-tag')!;
+  const nested = original.querySelector('.nested')!;
+  const selected = nextSelect();
+  original.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await selected;
+
+  send({ type: 'ss:setTag', value: 'section' });
+
+  const converted = document.querySelector('section.settings-tag')!;
+  expect(converted.getAttribute('data-note')).toBe('keep');
+  expect(converted.firstElementChild).toBe(nested);
+  expect(converted.textContent).toBe('Nested tail');
+
+  // The handler updates selectedSet as well as the DOM, so later editor messages
+  // target the replacement element rather than a detached source node.
+  send({ type: 'ss:mutate', className: 'after-conversion' });
+  expect(converted.className).toBe('after-conversion');
+});
+
 /* ===== Code-first CSS editor: ss:cascade enumeration + raw-text preview ===== */
 
 interface CascadeDecl {
@@ -1025,5 +1072,106 @@ it('cancels pending selection inspection when edit mode closes', async () => {
     );
   } finally {
     post.mockRestore();
+  }
+});
+
+/* ── Inline text editing waits for the parent's verdict (#1100, #1120) ──
+   Both clicks of a double-click re-select, so the verdict is always still in
+   flight when the dblclick lands. Editing used to start optimistically anyway, and
+   data/code text could only fail at save — discarding what the user typed. */
+
+type PostedMsg = { type?: string; [k: string]: unknown };
+
+/** Click twice then double-click, the way a real double-click arrives. */
+function doubleClick(el: Element) {
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+}
+
+function postedOfType(post: { mock: { calls: unknown[][] } }, type: string): PostedMsg[] {
+  return post.mock.calls.map(([data]) => data as PostedMsg).filter((data) => data?.type === type);
+}
+
+it('never enters editing on data/code text: a double-click waits for the verdict, then bounces', async () => {
+  document.body.innerHTML = '<p class="price">$42</p>';
+  send({ type: 'ss:activate' });
+  const post = vi.spyOn(window.parent, 'postMessage');
+  try {
+    const p = document.querySelector('p')!;
+    const selected = nextSelect();
+    doubleClick(p);
+    // No verdict yet → no edit has started.
+    expect(p.hasAttribute('contenteditable')).toBe(false);
+    expect(postedOfType(post, 'ss:textBegin')).toHaveLength(0);
+
+    const { selectionId } = (await selected) as unknown as { selectionId: string };
+    send({ type: 'ss:textInfo', editable: false, selectionId });
+
+    expect(p.hasAttribute('contenteditable')).toBe(false);
+    expect(postedOfType(post, 'ss:textBegin')).toHaveLength(0);
+    expect(postedOfType(post, 'ss:textCommit')).toHaveLength(0);
+    // The parent is told so it can pulse the dynamic-text hand-off.
+    expect(postedOfType(post, 'ss:textBlocked')).toHaveLength(1);
+
+    // A later double-click on the known read-only element still never edits.
+    p.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(p.hasAttribute('contenteditable')).toBe(false);
+    expect(postedOfType(post, 'ss:textBlocked')).toHaveLength(2);
+  } finally {
+    send({ type: 'ss:deactivate' });
+    post.mockRestore();
+  }
+});
+
+it('starts a parked double-click once the verdict says editable, and the commit identifies its element', async () => {
+  document.body.innerHTML = '<p class="lead">Old copy</p>';
+  send({ type: 'ss:activate' });
+  const post = vi.spyOn(window.parent, 'postMessage');
+  try {
+    const p = document.querySelector('p')!;
+    const selected = nextSelect();
+    doubleClick(p);
+    const { selectionId } = (await selected) as unknown as { selectionId: string };
+
+    // A verdict for some other (older) selection must not unlock this one.
+    send({ type: 'ss:textInfo', editable: true, selectionId: 'stale-selection' });
+    expect(p.hasAttribute('contenteditable')).toBe(false);
+
+    send({ type: 'ss:textInfo', editable: true, selectionId });
+    expect(p.getAttribute('contenteditable')).toBe('true');
+
+    p.textContent = 'New copy';
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    const commits = postedOfType(post, 'ss:textCommit');
+    expect(commits).toHaveLength(1);
+    expect(commits[0].text).toBe('New copy');
+    // Self-describing: the parent can save this even if it lost the selection.
+    expect(commits[0].selectionId).toBe(selectionId);
+    const signature = commits[0].signature as { className: string; text: string };
+    expect(signature.className).toBe('lead');
+    expect(signature.text).toBe('Old copy');
+  } finally {
+    send({ type: 'ss:deactivate' });
+    post.mockRestore();
+  }
+});
+
+it('drops a parked double-click when the selection moves on before the verdict', async () => {
+  document.body.innerHTML = '<p class="a">First</p><p class="b">Second</p>';
+  send({ type: 'ss:activate' });
+  try {
+    const firstSelect = nextSelect();
+    doubleClick(document.querySelector('.a')!);
+    const { selectionId: firstId } = (await firstSelect) as unknown as { selectionId: string };
+    const secondSelect = nextSelect();
+    document.querySelector('.b')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await secondSelect;
+    // The first selection's verdict arrives late — it must not start editing anything.
+    send({ type: 'ss:textInfo', editable: true, selectionId: firstId });
+    expect(document.querySelector('[contenteditable]')).toBeNull();
+  } finally {
+    send({ type: 'ss:deactivate' });
   }
 });

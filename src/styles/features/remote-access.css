@@ -1,0 +1,623 @@
+/* Remote access — src/components/remote/ */
+
+.remote-access-modal {
+  width: 540px;
+}
+
+.remote-intro,
+.remote-lede {
+  margin: 0 0 var(--spacing-lg);
+  font-size: var(--font-size-body-md);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.remote-lede {
+  margin-bottom: var(--spacing-md);
+}
+
+.remote-lede strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.remote-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-xl) 0;
+}
+
+.remote-note,
+.remote-hint,
+.remote-error,
+.remote-footnote {
+  margin: 0;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.remote-note {
+  color: var(--text-secondary);
+}
+
+.remote-error,
+.remote-hint--error {
+  color: var(--accent-error);
+  overflow-wrap: anywhere;
+}
+
+.remote-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-md);
+}
+
+.remote-waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.remote-waiting--warn {
+  color: var(--accent-warning);
+}
+
+.remote-onbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(var(--accent-success-rgb), 0.3);
+  background: rgba(var(--accent-success-rgb), 0.06);
+}
+
+.remote-onbar__dot {
+  flex: none;
+  width: 8px; /* css-ok: status dot */
+  height: 8px; /* css-ok: status dot */
+  border-radius: var(--radius-pill);
+  background: var(--accent-success);
+}
+
+.remote-onbar__text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+.remote-ok {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-size: var(--font-size-body-sm);
+  color: var(--accent-success);
+}
+
+/* ---- Stepper ------------------------------------------------------------ */
+
+.remote-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.remote-step {
+  position: relative;
+  padding-bottom: var(--spacing-lg);
+}
+
+/* The line joining one marker to the next. */
+.remote-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px; /* css-ok: centres the rail on the 24px step marker */
+  top: 28px; /* css-ok: starts just below the 24px step marker */
+  bottom: var(--spacing-xs);
+  width: 1px;
+  background: var(--border-default);
+}
+
+.remote-step__head {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-height: 24px; /* css-ok: matches the step marker */
+}
+
+.remote-step__marker {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; /* css-ok: step marker size */
+  height: 24px; /* css-ok: step marker size */
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-label);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  background: var(--surface-panel);
+}
+
+.remote-step--current .remote-step__marker {
+  border-color: var(--accent-active);
+  color: var(--accent-active);
+}
+
+.remote-step--done .remote-step__marker {
+  border-color: transparent;
+  background: rgba(var(--accent-success-rgb), 0.16);
+  color: var(--accent-success);
+}
+
+.remote-step__title {
+  font-size: var(--font-size-body-lg);
+  color: var(--text-muted);
+}
+
+.remote-step--current .remote-step__title {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.remote-step--done .remote-step__title {
+  color: var(--text-secondary);
+}
+
+.remote-step__summary {
+  margin-left: auto;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.remote-step__edit {
+  flex: none;
+}
+
+.remote-step__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin: var(--spacing-md) 0 0 36px; /* css-ok: aligns with the title, past the 24px marker + gap */
+}
+
+/* The body's gap does the spacing; children don't add their own on top. */
+.remote-step__body > .remote-actions,
+.remote-step__body > .remote-waiting,
+.remote-step__body > .remote-lede,
+.remote-step__body > .remote-steps-mini {
+  line-height: 1.5;
+  margin: 0;
+}
+
+.remote-steps-mini {
+  margin: var(--spacing-md) 0 0;
+  padding-left: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-body-md);
+  color: var(--text-secondary);
+}
+
+.remote-steps-mini em {
+  color: var(--text-primary);
+}
+
+/* ---- Checklist ---------------------------------------------------------- */
+
+.remote-checklist,
+.remote-projects,
+.remote-activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.remote-check {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+}
+
+.remote-check__icon {
+  display: inline-flex;
+  padding-top: var(--spacing-xs);
+}
+
+.remote-check--ok .remote-check__icon {
+  color: var(--accent-success);
+}
+
+.remote-check--warn .remote-check__icon {
+  color: var(--accent-warning);
+}
+
+.remote-check__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px; /* css-ok: hairline between a check's title and its detail */
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.remote-check__title {
+  font-size: var(--font-size-body-md);
+  color: var(--text-primary);
+}
+
+.remote-check__detail,
+.remote-toggle__hint {
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+}
+
+.remote-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-body-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.remote-toggle--row {
+  margin-top: 0;
+  align-items: center;
+}
+
+.remote-toggle__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px; /* css-ok: hairline between a toggle's label and its hint */
+  line-height: 1.4;
+}
+
+.remote-project__name {
+  color: var(--text-primary);
+}
+
+/* ---- Link --------------------------------------------------------------- */
+
+.remote-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.remote-link__row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.remote-link__url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--surface-recessed);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.remote-keynote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(var(--accent-warning-rgb), 0.3);
+  background: rgba(var(--accent-warning-rgb), 0.06);
+  color: var(--accent-warning);
+  font-size: var(--font-size-body-sm);
+  line-height: 1.5;
+}
+
+.remote-keynote > svg {
+  flex: none;
+  margin-top: 2px; /* css-ok: optical alignment with the first line of text */
+}
+
+.remote-keynote span {
+  color: var(--text-secondary);
+}
+
+.remote-keynote strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.remote-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+/* ---- PIN ---------------------------------------------------------------- */
+
+.remote-pin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.remote-pin .remote-actions {
+  margin-top: 0;
+}
+
+.remote-pin__fields {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.remote-pin__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+  font-size: var(--font-size-label);
+  color: var(--text-secondary);
+}
+
+.remote-pin__field input {
+  font-family: var(--font-code);
+  letter-spacing: 0.2em;
+}
+
+/* ---- Live view ---------------------------------------------------------- */
+
+.remote-live {
+  display: flex;
+  flex-direction: column;
+}
+
+.remote-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-default);
+  background: var(--surface-control);
+  margin-bottom: var(--spacing-sm);
+}
+
+.remote-hero--live {
+  border-color: rgba(var(--accent-success-rgb), 0.35);
+  background: rgba(var(--accent-success-rgb), 0.06);
+}
+
+.remote-hero--down {
+  border-color: rgba(var(--accent-warning-rgb), 0.35);
+  background: rgba(var(--accent-warning-rgb), 0.06);
+}
+
+.remote-hero__dot,
+.remote-indicator__dot {
+  flex: none;
+  width: 10px; /* css-ok: status dot */
+  height: 10px; /* css-ok: status dot */
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+}
+
+.remote-hero--live .remote-hero__dot,
+.remote-indicator--ok .remote-indicator__dot {
+  background: var(--accent-success);
+  box-shadow: 0 0 0 4px rgba(var(--accent-success-rgb), 0.18); /* css-ok: status halo */
+}
+
+.remote-hero--down .remote-hero__dot,
+.remote-indicator--warn .remote-indicator__dot {
+  background: var(--accent-warning);
+}
+
+.remote-indicator--down .remote-indicator__dot {
+  background: var(--accent-error);
+}
+
+.remote-hero__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.remote-hero__headline {
+  line-height: 1.2;
+  font-size: var(--font-size-subhead-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.remote-hero__sub {
+  font-size: var(--font-size-body-md);
+  color: var(--text-secondary);
+}
+
+.remote-hero__host {
+  font-family: var(--font-code);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.remote-section:first-of-type {
+  border-top: none;
+}
+
+.remote-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.remote-heading {
+  margin: 0;
+  font-size: var(--font-size-subhead);
+  color: var(--text-primary);
+}
+
+.remote-badge {
+  font-size: var(--font-size-badge);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.remote-badge--ok {
+  color: var(--accent-success);
+  background: rgba(var(--accent-success-rgb), 0.12);
+}
+
+.remote-badge--warn {
+  color: var(--accent-warning);
+  background: rgba(var(--accent-warning-rgb), 0.12);
+}
+
+.remote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.remote-row__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex: none;
+}
+
+.remote-alert {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(var(--accent-warning-rgb), 0.35);
+  background: rgba(var(--accent-warning-rgb), 0.06);
+  color: var(--accent-warning);
+}
+
+.remote-alert .remote-actions {
+  margin-top: var(--spacing-sm);
+}
+
+.remote-alert__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-body-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.remote-activity__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+.remote-activity__item--refused .remote-activity__text {
+  color: var(--accent-warning);
+}
+
+.remote-activity__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-activity__when {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.remote-footnote {
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ---- Sidebar indicator -------------------------------------------------- */
+
+.remote-indicator {
+  /* Above the sidebar footer's fade, like the update indicator beside it. */
+  position: relative;
+  z-index: var(--z-workspace-header);
+  justify-content: flex-start;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-body-sm);
+  color: var(--text-secondary);
+}
+
+.remote-indicator--compact {
+  justify-content: center;
+}
+
+.remote-indicator__line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-indicator--warn .remote-indicator__line {
+  color: var(--accent-warning);
+}
+
+.remote-indicator--down .remote-indicator__line {
+  color: var(--accent-error);
+}
+
+/* Off: present for discoverability, but quieter than anything that's on. */
+.remote-indicator--off {
+  color: var(--text-muted);
+}
+
+.remote-indicator--off .remote-indicator__dot {
+  background: transparent;
+  border: 1px solid var(--text-muted);
+}

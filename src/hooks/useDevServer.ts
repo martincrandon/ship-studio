@@ -37,7 +37,8 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import {
   startDevServer,
   DevServerHandle,
-  getCustomDevCommand,
+  getGenericDevCommand,
+  getPackageDevScriptCommand,
   setCustomDevCommand as setCustomDevCommandApi,
   getWorkspaceSubpath,
   resolveWorkspacePath,
@@ -144,6 +145,11 @@ interface ProjectServerState {
    *  still in flight without treating an unpreviewable project as a web app. */
   projectTypeResolved: boolean;
   customCommand: string | null;
+  /** `generic` projects only: the command that runs the dev-server cwd's own
+   *  package.json `dev` script (e.g. "pnpm run dev" at a Turborepo root,
+   *  issue #1105). Used when no custom command is configured; null when the
+   *  package.json declares no `dev` script. */
+  packageDevCommand: string | null;
   outputBuffer: string;
   healthBuffer: string;
   outputVersion: number;
@@ -215,6 +221,7 @@ function makeState(): ProjectServerState {
     type: 'unknown',
     projectTypeResolved: false,
     customCommand: null,
+    packageDevCommand: null,
     outputBuffer: '',
     healthBuffer: '',
     outputVersion: 0,
@@ -297,7 +304,15 @@ export function useDevServer(currentProjectPath: string | null) {
   // visible while nothing is running — so we keep the detected type and any
   // custom dev command here and fall back to them in the scalar views below.
   const lastKnownRef = useRef<
-    Map<string, { type: ProjectType; projectTypeResolved: boolean; customCommand: string | null }>
+    Map<
+      string,
+      {
+        type: ProjectType;
+        projectTypeResolved: boolean;
+        customCommand: string | null;
+        packageDevCommand: string | null;
+      }
+    >
   >(new Map());
   // Sync the ref synchronously during render so handlers that fire between
   // a `setCurrentProject(...)` state update and the next committed render
@@ -355,6 +370,14 @@ export function useDevServer(currentProjectPath: string | null) {
   const projectTypeResolved =
     activeState?.projectTypeResolved ?? lastKnown?.projectTypeResolved ?? false;
   const customDevCommand = activeState?.customCommand ?? lastKnown?.customCommand ?? null;
+  // What a `generic` project actually runs: the configured custom command, or
+  // else its own package.json `dev` script (issue #1105). Gates the Preview.
+  const genericDevCommand =
+    customDevCommand ?? activeState?.packageDevCommand ?? lastKnown?.packageDevCommand ?? null;
+  const devCommands = useMemo(
+    () => ({ custom: customDevCommand, generic: genericDevCommand }),
+    [customDevCommand, genericDevCommand]
+  );
   const needsInstall = activeState?.needsInstall ?? null;
   const devServerOutputVersion = activeState?.outputVersion ?? 0;
   const healthOutputVersion = activeState?.healthVersion ?? 0;
@@ -750,14 +773,15 @@ export function useDevServer(currentProjectPath: string | null) {
       logger.info(`[OpenProject] Detected project type: ${detectedType}`);
 
       if (detectedType === 'generic') {
-        let cmd: string | null = null;
-        try {
-          cmd = await getCustomDevCommand(projectPath);
-        } catch {
-          /* no custom command configured */
-        }
+        // A configured custom command wins; otherwise run the package.json's
+        // own `dev` script (a pnpm/Turborepo root's `turbo run dev`, issue
+        // #1105). A generic project with neither (script collections, Rust
+        // CLIs, …) still starts nothing and keeps the Preview hidden.
+        const { custom, packageScript } = await getGenericDevCommand(projectPath, cwd);
         if (!isCurrentStart()) return s.type;
-        s.customCommand = cmd;
+        s.customCommand = custom;
+        s.packageDevCommand = packageScript;
+        const cmd = custom ?? packageScript;
         bump();
 
         if (cmd) {
@@ -795,14 +819,17 @@ export function useDevServer(currentProjectPath: string | null) {
             if (!handle) return s.type;
             s.inFlightStart = null;
             bumpServerLifecycle();
-            logger.info('[OpenProject] Generic project dev server started with custom command', {
+            logger.info('[OpenProject] Generic project dev server started', {
               command: cmd,
+              source: custom ? 'custom' : 'package.json dev script',
             });
           } catch (error) {
             logger.error('Failed to start custom dev server for generic project', { error });
           }
         } else {
-          logger.info('[OpenProject] Generic project detected, no custom dev command configured');
+          logger.info(
+            '[OpenProject] Generic project detected, no custom dev command or dev script'
+          );
         }
       } else if (detectedType === 'statichtml') {
         try {
@@ -1068,6 +1095,7 @@ export function useDevServer(currentProjectPath: string | null) {
           type: s.type,
           projectTypeResolved: s.projectTypeResolved,
           customCommand: s.customCommand,
+          packageDevCommand: s.packageDevCommand,
         });
         if (statesRef.current.get(targetPath) === s) statesRef.current.delete(targetPath);
         bumpServerLifecycle();
@@ -1242,8 +1270,9 @@ export function useDevServer(currentProjectPath: string | null) {
 
       try {
         if (s.type === 'generic') {
-          if (!s.customCommand) return;
-          await stopAndRestart(s.customCommand);
+          const genericCmd = s.customCommand ?? s.packageDevCommand;
+          if (!genericCmd) return;
+          await stopAndRestart(genericCmd);
         } else if (s.type === 'shopifytheme') {
           // Themes restart through `shopify theme dev`, never the package.json
           // fallback (`npm run dev` is meaningless in a theme repo). No store
@@ -1412,7 +1441,18 @@ export function useDevServer(currentProjectPath: string | null) {
       }
       if (!isCurrentSave()) return;
 
-      if (command) {
+      const cwd = await resolveDevServerCwd(projectPath);
+      if (!isCurrentSave()) return;
+      // Clearing the custom command on a generic project falls back to its
+      // package.json `dev` script, exactly as a fresh open would (#1105).
+      if (s.type === 'generic') {
+        s.packageDevCommand = command ? null : await getPackageDevScriptCommand(cwd);
+        if (!isCurrentSave()) return;
+        bump();
+      }
+      const commandToRun = command ?? (s.type === 'generic' ? s.packageDevCommand : null);
+
+      if (commandToRun) {
         try {
           s.unexpectedExit = null;
           s.outputBuffer = '';
@@ -1420,14 +1460,12 @@ export function useDevServer(currentProjectPath: string | null) {
           s.outputVersion = 0;
           s.healthVersion = 0;
           bump();
-          const cwd = await resolveDevServerCwd(projectPath);
-          if (!isCurrentSave()) return;
           const startPromise = startDevServer(
             cwd,
             s.port,
             getWindowLabel(),
             createOutputHandler(projectPath),
-            command
+            commandToRun
           );
           const startTask = startPromise.then(async (handle) => {
             if (!isCurrentSave()) {
@@ -1480,6 +1518,8 @@ export function useDevServer(currentProjectPath: string | null) {
     setProjectType,
     isRestartingDevServer,
     customDevCommand,
+    genericDevCommand,
+    devCommands,
     setCustomDevCommand,
     devServerOutputVersion,
     healthOutputVersion,

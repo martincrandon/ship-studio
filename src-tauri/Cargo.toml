@@ -1,6 +1,6 @@
 [package]
 name = "ship-studio"
-version = "1.5.0"
+version = "1.6.1"
 description = "Ship Studio — a desktop app for shipping web projects with AI coding agents."
 authors = ["Julian Galluzzo", "Ship Studio contributors"]
 license = "MIT"
@@ -75,6 +75,11 @@ thiserror = "1"
 # Native clipboard read for Windows terminal paste (WebView2 gates keyboard
 # paste behind an async permission wait — see commands/clipboard.rs).
 arboard = "3"
+# Remote access renders an agent tab's screen as text for a phone to read
+# (src/remote_access/screen.rs).
+vt100 = "0.16"
+# Remote access tokens: 256 bits straight from the OS CSPRNG.
+getrandom = "0.2"
 tempfile = "3"
 
 [dev-dependencies]

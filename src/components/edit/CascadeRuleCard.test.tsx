@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CascadeRuleCard } from './CascadeRuleCard';
 
@@ -110,5 +110,99 @@ describe('CascadeRuleCard', () => {
       'aria-label',
       'Contrast check unavailable. Background color is unavailable for this selection.'
     );
+  });
+
+  it('filters to matching properties and dims nonmatches when Show all is selected', () => {
+    const body = {
+      items: [
+        { kind: 'decl' as const, prop: 'display', value: 'grid', important: false },
+        { kind: 'decl' as const, prop: 'font-family', value: 'Inter', important: false },
+        {
+          kind: 'rule' as const,
+          selector: '&:hover',
+          body: {
+            items: [{ kind: 'decl' as const, prop: 'color', value: 'red', important: false }],
+          },
+        },
+      ],
+    };
+
+    render(
+      <CascadeRuleCard
+        editable
+        selector=".hero-title"
+        body={body}
+        overridden={new Map()}
+        onChange={vi.fn()}
+        searchTerm="FONT-FAMILY"
+      />
+    );
+
+    const card = screen.getByTestId('cascade-card');
+    expect(card.querySelectorAll('.ss-decl:not(.ss-decl--ghost)')).toHaveLength(1);
+    expect(within(card).getByText('font-family')).toBeInTheDocument();
+    expect(within(card).queryByText('display')).not.toBeInTheDocument();
+    expect(
+      within(card).queryByRole('combobox', { name: 'Nested selector' })
+    ).not.toBeInTheDocument();
+    const matchingProperty = card.querySelector('.ss-decl');
+    const showAllAction = within(card).getByRole('button', { name: 'Show all properties' });
+    expect(matchingProperty).not.toBeNull();
+    expect(
+      matchingProperty!.compareDocumentPosition(showAllAction) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all properties' }));
+
+    expect(within(card).getByText('display')).toBeInTheDocument();
+    expect(within(card).getByRole('combobox', { name: 'Nested selector' })).toHaveValue('&:hover');
+    expect(card.querySelector('.ss-cascade-filtered.is-dimmed')).toBeInTheDocument();
+  });
+
+  it('edits a filtered declaration at its original body index and preserves hidden items', () => {
+    const body = {
+      items: [
+        { kind: 'decl' as const, prop: 'display', value: 'grid', important: false },
+        { kind: 'decl' as const, prop: 'font-family', value: 'Inter', important: false },
+        {
+          kind: 'rule' as const,
+          selector: '&:hover',
+          body: {
+            items: [{ kind: 'decl' as const, prop: 'color', value: 'red', important: false }],
+          },
+        },
+      ],
+    };
+    const onChange = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+
+    render(
+      <CascadeRuleCard
+        editable
+        selector=".hero-title"
+        body={body}
+        overridden={new Map()}
+        onChange={onChange}
+        searchTerm="font-family"
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove property' }));
+
+    expect(onChange).toHaveBeenCalledWith({
+      items: [
+        { kind: 'decl', prop: 'display', value: 'grid', important: false },
+        {
+          kind: 'rule',
+          selector: '&:hover',
+          body: {
+            items: [{ kind: 'decl', prop: 'color', value: 'red', important: false }],
+          },
+        },
+      ],
+    });
   });
 });

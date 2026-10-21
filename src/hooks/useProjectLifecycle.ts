@@ -42,8 +42,9 @@ import {
   getAutoAcceptMode,
   setAutoAcceptMode as setAutoAcceptModeApi,
   detectWorkspaces,
-  getCustomDevCommand,
+  getGenericDevCommand,
   getWorkspaceSubpath,
+  resolveWorkspacePath,
   setWorkspaceSubpath,
 } from '../lib/project';
 import type { WorkspacePick } from '../components/dashboard/MonorepoPickerModal';
@@ -735,15 +736,20 @@ export function useProjectLifecycle({
       return;
     }
 
-    // Generic projects without a configured dev command don't have a web
-    // preview — default to branches tab. A generic project WITH a custom dev
-    // command (e.g. an Nx monorepo root running `nx serve`, issue #691) does
+    // Generic projects without a dev command don't have a web preview —
+    // default to branches tab. A generic project WITH one — a custom command
+    // (e.g. an Nx root running `nx serve`, issue #691) or its package.json
+    // `dev` script (a Turborepo root's `turbo run dev`, issue #1105) — does
     // get the Preview tab, so leave it on the default. We only force this for
     // fresh starts; when reusing a pinned session we preserve whichever tab
     // the user was on.
     if (!reuseIncomingServer && detectedType === 'generic') {
-      const customCmd = await getCustomDevCommand(project.path).catch(() => null);
-      if (!customCmd) {
+      const subpath = await getWorkspaceSubpath(project.path).catch(() => null);
+      const { custom, packageScript } = await getGenericDevCommand(
+        project.path,
+        resolveWorkspacePath(project.path, subpath)
+      ).catch(() => ({ custom: null, packageScript: null }));
+      if (!custom && !packageScript) {
         setWorkspaceTab('branches');
       }
     }

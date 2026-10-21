@@ -59,8 +59,8 @@ export function MediaQueryGroupCard({
       data-testid="media-query-group"
     >
       <header className="ss-media-query-group__head">
-        <div className="ss-media-query-group__source-row">
-          {incomplete && (
+        {incomplete && (
+          <div className="ss-media-query-group__warning-row">
             <span
               className="ss-media-query-group__incomplete"
               role="status"
@@ -69,28 +69,8 @@ export function MediaQueryGroupCard({
               <WarningIcon size={11} />
               Incomplete query
             </span>
-          )}
-          {sourceLabel && (
-            <span
-              className="ss-cascade-card__src-chip ss-media-query-group__source"
-              title={sourceTitle}
-            >
-              <FileTextIcon size={11} />
-              {sourceLabel}
-            </span>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              className="ss-cascade-card__trash ss-media-query-group__trash"
-              title="Delete media query"
-              aria-label="Delete media query"
-              onClick={onDelete}
-            >
-              <TrashIcon size={12} />
-            </button>
-          )}
-        </div>
+          </div>
+        )}
         <div
           className="ss-media-query-group__query-row"
           onClick={(event) => {
@@ -103,7 +83,7 @@ export function MediaQueryGroupCard({
         >
           <button
             type="button"
-            className={`ss-media-query-group__collapse${collapsed ? ' is-collapsed' : ''}`}
+            className={`ss-cascade-card__collapse ss-media-query-group__collapse${collapsed ? ' is-collapsed' : ''}`}
             aria-expanded={!collapsed}
             aria-label={collapsed ? 'Expand media query' : 'Collapse media query'}
             onClick={toggleCollapse}
@@ -127,6 +107,32 @@ export function MediaQueryGroupCard({
               autoFocusTail={autoFocusQuery}
               commitOnAppend={commitQueryOnAppend}
             />
+            {(sourceLabel || onDelete) && (
+              <div
+                className={`ss-media-query-group__source-row${sourceLabel ? ' has-source' : ''}`}
+              >
+                {sourceLabel && (
+                  <span
+                    className="ss-cascade-card__src-chip ss-media-query-group__source"
+                    title={sourceTitle}
+                  >
+                    <FileTextIcon size={11} />
+                    {sourceLabel}
+                  </span>
+                )}
+                {onDelete && (
+                  <button
+                    type="button"
+                    className="ss-cascade-card__trash ss-media-query-group__trash"
+                    title="Delete media query"
+                    aria-label="Delete media query"
+                    onClick={onDelete}
+                  >
+                    <TrashIcon size={12} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {collapsed && (

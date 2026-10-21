@@ -41,6 +41,7 @@ import { Spinner } from '../primitives/Spinner';
 import { BrowserDropdown } from '../preview/BrowserDropdown';
 import { PixelLoaderRings } from './PixelLoaderRings';
 import { SpotifyWidget } from './SpotifyWidget';
+import { RemoteAccessIndicator } from '../remote/RemoteAccessIndicator';
 import { UpdateBanner } from '../UpdateBanner';
 import { NewAccountModal } from '../accounts/NewAccountModal';
 import { RenameProjectModal } from '../dashboard/RenameProjectModal';
@@ -1767,6 +1768,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar({
 
         <div className="workspace-sidebar-footer">
           <UpdateBanner />
+          <RemoteAccessIndicator isSidebarHidden={isSidebarHidden ?? false} />
           <div
             className={`workspace-sidebar-footer-actions has-settings-drawer${
               showWorkspaceSwitcher ? ' has-workspace-switcher' : ''

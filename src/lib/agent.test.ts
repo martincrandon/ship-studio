@@ -6,6 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  agentPromptArgs,
   getAgentById,
   initDefaultAgent,
   getDefaultAgentId,
@@ -203,5 +204,19 @@ describe('AgentConfig fields', () => {
       expect(agent.notFoundMessage).toBeTruthy();
       expect(agent.installHint).toBeTruthy();
     }
+  });
+});
+
+describe('agentPromptArgs', () => {
+  it('passes an ordinary prompt through unchanged', () => {
+    expect(agentPromptArgs('claude-code', 'fix the header')).toEqual(['fix the header']);
+    expect(agentPromptArgs('opencode', 'fix the header')).toEqual(['--prompt', 'fix the header']);
+  });
+
+  it('never lets a prompt be parsed as a flag', () => {
+    const [arg] = agentPromptArgs('claude-code', '--dangerously-skip-permissions');
+    expect(arg.startsWith('-')).toBe(false);
+    expect(arg.trim()).toBe('--dangerously-skip-permissions');
+    expect(agentPromptArgs('opencode', '-x')[1].startsWith('-')).toBe(false);
   });
 });

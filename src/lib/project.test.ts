@@ -25,6 +25,8 @@ import {
   openProjectInNewWindow,
   getCustomDevCommand,
   setCustomDevCommand,
+  getGenericDevCommand,
+  packageDevScriptCommand,
   getAutoAcceptMode,
   setAutoAcceptMode,
   getHideMainBranchWarning,
@@ -344,6 +346,66 @@ describe('lib/project', () => {
     });
   });
 
+  describe('getGenericDevCommand (#1105)', () => {
+    const route =
+      (opts: { custom: string | null; pkg?: string; pm?: string }) =>
+      (cmd: string, args?: unknown) => {
+        if (cmd === 'get_custom_dev_command') return opts.custom;
+        if (cmd === 'detect_package_manager') return opts.pm ?? 'npm';
+        if (cmd === 'read_project_file') {
+          if (opts.pkg === undefined) throw new Error('File not found: package.json');
+          return {
+            content: opts.pkg,
+            is_binary: false,
+            is_truncated: false,
+            size: opts.pkg.length,
+            language: 'json',
+          };
+        }
+        throw new Error(`unexpected ${cmd} ${JSON.stringify(args)}`);
+      };
+
+    it('runs a Turborepo root dev script through the detected package manager', async () => {
+      invokeMock.mockImplementation(
+        route({ custom: null, pkg: '{"scripts":{"dev":"turbo run dev"}}', pm: 'pnpm' })
+      );
+      await expect(getGenericDevCommand('/abs/repo', '/abs/repo')).resolves.toEqual({
+        custom: null,
+        packageScript: 'pnpm run dev',
+      });
+      expect(invokeMock).toHaveBeenCalledWith('read_project_file', {
+        projectPath: '/abs/repo',
+        filePath: 'package.json',
+      });
+    });
+
+    it('reads package.json from the dev-server cwd (workspace subpath)', async () => {
+      invokeMock.mockImplementation(route({ custom: null, pkg: '{"scripts":{"dev":"x"}}' }));
+      await getGenericDevCommand('/abs/repo', '/abs/repo/apps/api');
+      expect(invokeMock).toHaveBeenCalledWith('read_project_file', {
+        projectPath: '/abs/repo/apps/api',
+        filePath: 'package.json',
+      });
+    });
+
+    it('returns the custom command without reading package.json', async () => {
+      invokeMock.mockImplementation(route({ custom: 'nx serve web' }));
+      await expect(getGenericDevCommand('/abs/repo', '/abs/repo')).resolves.toEqual({
+        custom: 'nx serve web',
+        packageScript: null,
+      });
+      expect(invokeMock).not.toHaveBeenCalledWith('read_project_file', expect.anything());
+    });
+
+    it('returns neither when there is no package.json', async () => {
+      invokeMock.mockImplementation(route({ custom: null }));
+      await expect(getGenericDevCommand('/abs/repo', '/abs/repo')).resolves.toEqual({
+        custom: null,
+        packageScript: null,
+      });
+    });
+  });
+
   describe('setCustomDevCommand', () => {
     it('invokes "set_custom_dev_command" with projectPath + command string', async () => {
       invokeMock.mockResolvedValue(undefined);
@@ -511,5 +573,34 @@ describe('hasMergeConflictMarkers', () => {
     // e.g. a description containing arrows, or fewer than seven '<'.
     expect(hasMergeConflictMarkers('{ "description": "a <<<<<<< b" }')).toBe(false);
     expect(hasMergeConflictMarkers('<<< not a marker\n')).toBe(false);
+  });
+});
+
+describe('packageDevScriptCommand (#1105)', () => {
+  it('runs the dev script verbatim through the package manager', () => {
+    const pkg = JSON.stringify({ scripts: { dev: 'turbo run dev', build: 'turbo run build' } });
+    expect(packageDevScriptCommand(pkg, 'pnpm')).toBe('pnpm run dev');
+    expect(packageDevScriptCommand(pkg, 'npm')).toBe('npm run dev');
+    expect(packageDevScriptCommand(pkg, 'yarn')).toBe('yarn run dev');
+    expect(packageDevScriptCommand(pkg, 'bun')).toBe('bun run dev');
+  });
+
+  it('never appends or rewrites a port flag', () => {
+    const pkg = JSON.stringify({ scripts: { dev: 'next dev --port 4000' } });
+    expect(packageDevScriptCommand(pkg, 'pnpm')).toBe('pnpm run dev');
+  });
+
+  it('returns null when there is no usable dev script', () => {
+    // Only what package.json actually says counts: no `start` fallback.
+    expect(packageDevScriptCommand('{"scripts":{"start":"node index.js"}}', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('{"scripts":{"dev":""}}', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('{"scripts":{"dev":"  "}}', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('{"scripts":{"dev":42}}', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('{"name":"lib"}', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('null', 'npm')).toBeNull();
+    expect(packageDevScriptCommand('not json', 'npm')).toBeNull();
+    expect(
+      packageDevScriptCommand('{\n<<<<<<< HEAD\n"scripts":{"dev":"a"}\n=======\n}', 'npm')
+    ).toBeNull();
   });
 });

@@ -68,6 +68,33 @@ describe('Tooltip', () => {
     expect(trigger.tagName).toBe('BUTTON');
   });
 
+  it('renders rich tooltip content while keeping its text available on the trigger', () => {
+    render(
+      <TooltipProvider>
+        <Tooltip
+          content={
+            <>
+              Copy ID &amp; Location: <code className="ss-tooltip__value">src/page.tsx:12</code>
+            </>
+          }
+        >
+          <button>Copy ID</button>
+        </Tooltip>
+      </TooltipProvider>
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Copy ID' });
+    expect(trigger).toHaveAttribute('data-tooltip-content', 'Copy ID & Location: src/page.tsx:12');
+    fireEvent.pointerOver(trigger);
+    void act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip.querySelector('code')).toHaveTextContent('src/page.tsx:12');
+    expect(tooltip).toHaveTextContent('Copy ID & Location: src/page.tsx:12');
+  });
+
   it('supports a faster delay override for high-density tooltip grids', () => {
     render(
       <TooltipProvider>
