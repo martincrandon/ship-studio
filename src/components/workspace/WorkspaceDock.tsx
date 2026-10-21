@@ -44,6 +44,10 @@ interface RenderPanelColumn {
   panels: PanelPlacement[];
 }
 
+/**
+ * Render the workspace rail and keep its portaled panel surfaces aligned with
+ * the current dock geometry.
+ */
 export function WorkspaceDock({ preview, previewHidden = false, children }: WorkspaceDockProps) {
   const { layout, measureRef, previewFullscreen, setDragDisabled, slots } = usePanelDock();
   const present = usePresentPanels();
