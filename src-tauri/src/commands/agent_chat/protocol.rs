@@ -54,8 +54,16 @@ pub(super) async fn read_protocol_line<R: AsyncBufRead + Unpin>(
     }
 }
 
-pub(super) fn display_request_id(thread_id: &str, rpc_id: &Value) -> String {
-    format!("{thread_id}:{}", rpc_id)
+pub(super) fn protocol_request_id_key(rpc_id: &Value) -> Option<String> {
+    (rpc_id.is_string() || rpc_id.is_number()).then(|| rpc_id.to_string())
+}
+
+pub(super) fn display_request_id(
+    thread_id: &str,
+    runtime_generation: &str,
+    rpc_id: &Value,
+) -> String {
+    format!("{thread_id}:{runtime_generation}:{}", rpc_id)
 }
 
 pub(super) fn classify_request(method: &str, params: &Value) -> Option<(&'static str, String)> {
@@ -108,7 +116,7 @@ pub(super) fn validate_request_response(
             request,
             response,
             &["accept", "acceptForSession", "decline", "cancel"],
-            false,
+            true,
         ),
         "execCommandApproval" | "applyPatchApproval" => validate_decision(
             request,
@@ -145,26 +153,22 @@ fn validate_decision(
         });
     }
     if check_available {
-        if let Some(decisions) = request
+        let decisions = request
             .params
             .get("availableDecisions")
             .and_then(Value::as_array)
-        {
-            let offered = decisions.iter().any(|value| {
-                value.as_str() == Some(decision)
-                    || value
-                        .get("acceptWithExecpolicyAmendment")
-                        .is_some_and(|_| decision == "acceptWithExecpolicyAmendment")
-                    || value
-                        .get("applyNetworkPolicyAmendment")
-                        .is_some_and(|_| decision == "applyNetworkPolicyAmendment")
+            .ok_or_else(|| CommandError::Validation {
+                field: "response.decision".into(),
+                reason: "Codex did not provide its offered approval decisions".into(),
+            })?;
+        let offered = decisions
+            .iter()
+            .any(|value| value.as_str() == Some(decision));
+        if !offered {
+            return Err(CommandError::Validation {
+                field: "response.decision".into(),
+                reason: "Codex did not offer that approval decision".into(),
             });
-            if !offered {
-                return Err(CommandError::Validation {
-                    field: "response.decision".into(),
-                    reason: "Codex did not offer that approval decision".into(),
-                });
-            }
         }
     }
     Ok(())
@@ -285,9 +289,25 @@ pub(super) fn normalize_models(value: &Value) -> Vec<ChatModel> {
                     .get("defaultReasoningEffort")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                input_modalities: model
+                    .get("inputModalities")
+                    .and_then(Value::as_array)
+                    .and_then(|modalities| {
+                        modalities
+                            .iter()
+                            .map(|modality| modality.as_str().map(str::to_string))
+                            .collect()
+                    }),
             })
         })
         .collect()
+}
+
+pub(super) fn image_input_support(model: &ChatModel) -> Option<bool> {
+    model
+        .input_modalities
+        .as_ref()
+        .map(|modalities| modalities.iter().any(|modality| modality == "image"))
 }
 
 pub(super) fn build_turn_input(text: &str, attachments: &[ChatAttachment]) -> Vec<Value> {
@@ -354,7 +374,11 @@ pub(super) fn normalize_item(
 /// so a user echo cannot duplicate the locally accepted prompt.
 pub(super) fn normalize_history_item(item: &Value, turn_id: &str) -> Option<ChatItem> {
     if item.get("type").and_then(Value::as_str) == Some("userMessage") {
-        let id = item.get("id").and_then(Value::as_str)?;
+        let id = item
+            .get("clientId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .or_else(|| item.get("id").and_then(Value::as_str))?;
         return Some(ChatItem {
             id: id.to_string(),
             turn_id: Some(turn_id.to_string()),
@@ -569,6 +593,7 @@ mod tests {
         let item = normalize_history_item(
             &json!({
                 "id":"user-1",
+                "clientId":"attempt-1",
                 "type":"userMessage",
                 "content":[
                     {"type":"text","text":"Please review this"},
@@ -579,7 +604,7 @@ mod tests {
             "turn-1",
         )
         .unwrap();
-        assert_eq!(item.id, "user-1");
+        assert_eq!(item.id, "attempt-1");
         assert_eq!(item.kind, "user");
         assert_eq!(item.text, "Please review this");
         assert_eq!(item.turn_id.as_deref(), Some("turn-1"));
@@ -600,12 +625,60 @@ mod tests {
     #[test]
     fn maps_only_provider_models_and_reasoning_efforts() {
         let models = normalize_models(&json!({"data":[
-            {"id":"m1","displayName":"Model One","description":"desc","isDefault":true,"hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}],"defaultReasoningEffort":"low"},
+            {"id":"m1","displayName":"Model One","description":"desc","isDefault":true,"hidden":false,"supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}],"defaultReasoningEffort":"low","inputModalities":["text","image","future-modality"]},
+            {"id":"m2","displayName":"Unknown capabilities","hidden":false},
             {"id":"hidden","displayName":"Hidden","hidden":true}
         ]}));
-        assert_eq!(models.len(), 1);
+        assert_eq!(models.len(), 2);
         assert_eq!(models[0].id, "m1");
         assert_eq!(models[0].reasoning_efforts, ["low", "high"]);
+        assert_eq!(
+            models[0].input_modalities.as_deref(),
+            Some(
+                [
+                    "text".to_string(),
+                    "image".to_string(),
+                    "future-modality".to_string()
+                ]
+                .as_slice()
+            )
+        );
+        assert_eq!(models[1].input_modalities, None);
+        assert_eq!(image_input_support(&models[0]), Some(true));
+        assert_eq!(image_input_support(&models[1]), None);
+    }
+
+    #[test]
+    fn keeps_numeric_and_string_request_ids_distinct_and_runtime_scoped() {
+        let number = json!(7);
+        let string = json!("7");
+        assert_ne!(
+            protocol_request_id_key(&number),
+            protocol_request_id_key(&string)
+        );
+        assert_eq!(
+            display_request_id("thread-a", "runtime-1", &number),
+            "thread-a:runtime-1:7"
+        );
+        assert_eq!(
+            display_request_id("thread-a", "runtime-1", &string),
+            "thread-a:runtime-1:\"7\""
+        );
+        assert_ne!(
+            display_request_id("thread-a", "runtime-1", &number),
+            display_request_id("thread-a", "runtime-2", &number)
+        );
+        assert!(protocol_request_id_key(&Value::Null).is_none());
+    }
+
+    #[test]
+    fn distinguishes_explicitly_unsupported_images_from_unknown_capabilities() {
+        let models = normalize_models(&json!({"data":[
+            {"id":"text-only","displayName":"Text only","inputModalities":["text"]},
+            {"id":"unknown","displayName":"Unknown"}
+        ]}));
+        assert_eq!(image_input_support(&models[0]), Some(false));
+        assert_eq!(image_input_support(&models[1]), None);
     }
 
     #[test]
@@ -631,6 +704,45 @@ mod tests {
         };
         assert!(validate_request_response(&elicitation, &json!({"action":"accept"})).is_err());
         assert!(validate_request_response(&elicitation, &json!({"action":"decline"})).is_ok());
+    }
+
+    #[test]
+    fn approval_responses_require_an_exact_offered_base_decision() {
+        let request = ChatRequest {
+            id: "approval-1".into(),
+            method: "item/commandExecution/requestApproval".into(),
+            kind: "approval".into(),
+            title: "Approval".into(),
+            params: json!({
+                "availableDecisions": [
+                    {"acceptWithExecpolicyAmendment": {"execpolicyAmendment": []}},
+                    "decline",
+                    "cancel"
+                ]
+            }),
+        };
+        assert!(validate_request_response(&request, &json!({"decision":"decline"})).is_ok());
+        assert!(validate_request_response(&request, &json!({"decision":"cancel"})).is_ok());
+        assert!(validate_request_response(&request, &json!({"decision":"accept"})).is_err());
+        assert!(validate_request_response(
+            &request,
+            &json!({"decision":"acceptWithExecpolicyAmendment"})
+        )
+        .is_err());
+
+        let mut missing_offers = request.clone();
+        missing_offers.params = json!({});
+        assert!(
+            validate_request_response(&missing_offers, &json!({"decision":"decline"})).is_err()
+        );
+
+        let file_change = ChatRequest {
+            method: "item/fileChange/requestApproval".into(),
+            params: json!({"availableDecisions":["cancel"]}),
+            ..request
+        };
+        assert!(validate_request_response(&file_change, &json!({"decision":"cancel"})).is_ok());
+        assert!(validate_request_response(&file_change, &json!({"decision":"decline"})).is_err());
     }
 
     #[test]

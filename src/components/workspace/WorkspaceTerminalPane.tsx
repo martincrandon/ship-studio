@@ -448,6 +448,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
             >
               <AgentChatPanel
                 projectPath={currentProject.path}
+                isActive={chatPanelVisible}
                 autoAcceptMode={agentChat.approvalMode}
                 worktrees={agentChat.worktrees}
                 onCreateWorktree={agentChat.onCreateWorktree}

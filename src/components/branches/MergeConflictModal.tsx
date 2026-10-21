@@ -2,10 +2,10 @@
  * Merge conflict modal.
  *
  * Shown when a branch switch is blocked because git paused a merge with
- * unresolved conflicts. It voices the situation in plain language and gives two
- * clear ways out: hand it to the agent (copies a fix prompt and pastes it into
- * the agent terminal) or undo the merge (`git merge --abort`). No "publish" or
- * "discard" here, because neither describes what's actually happening.
+ * unresolved conflicts. It voices the situation in plain language and offers
+ * handoff to the selected agent surface (or a clipboard fallback when none is
+ * available) and merge undo (`git merge --abort`). No "publish" or "discard"
+ * here, because neither describes what's happening.
  *
  * @module components/MergeConflictModal
  */
@@ -73,15 +73,28 @@ export function MergeConflictModal({
 
   const fixPrompt = buildFixPrompt(currentBranch, sourceBranch, files);
 
-  const handleCopyAndFix = () => {
-    void copy(fixPrompt);
-    const result = onSendToAgent?.(fixPrompt);
-    const message = promptHandoffSuccessMessage(
-      result,
-      'Copied and pasted into the agent terminal. Press Enter to continue.',
-      CHAT_PROMPT_STAGED_MESSAGE
-    );
-    onToast(message ?? 'Prompt copied to clipboard.', 'success');
+  const handleCopyAndFix = async () => {
+    if (onSendToAgent) {
+      const result = onSendToAgent(fixPrompt);
+      if (result === false) return;
+
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to continue.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) onToast(message, 'success');
+      onClose();
+      return;
+    }
+
+    const copied = await copy(fixPrompt);
+    if (!copied) {
+      onToast('Could not copy the prompt to the clipboard.', 'error');
+      return;
+    }
+
+    onToast('Prompt copied to clipboard.', 'success');
     onClose();
   };
 
@@ -143,7 +156,7 @@ export function MergeConflictModal({
         <Button variant="secondary" onClick={() => void handleUndo()} disabled={isAborting}>
           {isAborting ? 'Undoing...' : 'Undo the merge'}
         </Button>
-        <Button variant="primary" onClick={handleCopyAndFix} disabled={isAborting}>
+        <Button variant="primary" onClick={() => void handleCopyAndFix()} disabled={isAborting}>
           Copy &amp; Fix
         </Button>
       </div>

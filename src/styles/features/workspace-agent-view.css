@@ -17,8 +17,10 @@
 
 .agent-panel-modebar .agent-panel-new-conversation.button--size-compact {
   flex: 0 0 auto;
-  height: calc(var(--control-height-compact) + var(--space-04) + var(--stroke-2));
-  min-height: calc(var(--control-height-compact) + var(--space-04) + var(--stroke-2));
+  height: calc(var(--control-height-compact) + var(--spacing-xs) + var(--border-width-emphasis));
+  min-height: calc(
+    var(--control-height-compact) + var(--spacing-xs) + var(--border-width-emphasis)
+  );
   margin-inline-start: auto;
   padding-block: 0;
   white-space: nowrap;

@@ -1,19 +1,38 @@
-use super::protocol::{read_protocol_line, rpc_request};
+use super::protocol::{protocol_request_id_key, read_protocol_line, rpc_request};
 use super::AgentChatService;
 use crate::errors::CommandError;
 use serde_json::Value;
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::{Arc, OnceLock};
 use tokio::io::{AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, OwnedSemaphorePermit, Semaphore};
 use tokio::time::{timeout, Duration};
 
 const PROTOCOL_LINE_LIMIT: usize = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MINIMUM_CODEX_VERSION: (u64, u64, u64) = (0, 162, 1);
+const MAX_LIVE_CODEX_PROCESSES: usize = 4;
+
+static PROCESS_LIMITER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+
+fn process_limiter() -> Arc<Semaphore> {
+    PROCESS_LIMITER
+        .get_or_init(|| Arc::new(Semaphore::new(MAX_LIVE_CODEX_PROCESSES)))
+        .clone()
+}
+
+fn reserve_process_slot(limiter: &Arc<Semaphore>) -> Result<OwnedSemaphorePermit, CommandError> {
+    limiter.clone().try_acquire_owned().map_err(|_| {
+        CommandError::expected(format!(
+            "Codex is at Ship Studio's limit of {MAX_LIVE_CODEX_PROCESSES} provider processes. Wait for another operation to finish and try again."
+        ))
+    })
+}
 
 #[derive(Clone)]
 pub(super) struct RuntimeControl {
+    pub(super) generation: String,
     pub(super) outbound: mpsc::Sender<Value>,
     stop: mpsc::Sender<StopCommand>,
     pid: Option<u32>,
@@ -70,6 +89,10 @@ pub(super) async fn spawn_process(
     checkout_path: &Path,
     preview_url: &str,
 ) -> Result<RuntimeControl, CommandError> {
+    // Reserve before even the short version probe. The same permit follows the
+    // app-server child until its monitor observes exit, covering model/history
+    // probes as well as long-lived conversations.
+    let permit = reserve_process_slot(&process_limiter())?;
     let binary = crate::commands::claude::find_validated_binary("codex", "--version")
         .ok_or_else(|| CommandError::expected("Codex app-server is unavailable"))?;
     let mut version_command = crate::utils::create_command(&binary);
@@ -219,12 +242,16 @@ pub(super) async fn spawn_process(
         }
     });
 
+    let generation = uuid::Uuid::new_v4().to_string();
     let runtime = RuntimeControl {
+        generation: generation.clone(),
         outbound,
         stop,
         pid,
     };
+    let runtime_generation = generation;
     tauri::async_runtime::spawn(async move {
+        let _process_permit: OwnedSemaphorePermit = permit;
         let mut planned_stop = false;
         let mut exit_message = "Codex app-server exited unexpectedly".to_string();
         loop {
@@ -261,7 +288,7 @@ pub(super) async fn spawn_process(
                 event = events_rx.recv() => {
                     match event {
                         Some(ServerEvent::Message(message)) => {
-                            service.route_protocol_message(&thread_id, message, event_outbound.clone()).await;
+                            service.route_protocol_message(&thread_id, &runtime_generation, message, event_outbound.clone()).await;
                         }
                         Some(ServerEvent::Failure(message)) => {
                             exit_message = message;
@@ -280,7 +307,7 @@ pub(super) async fn spawn_process(
             }
         }
         service
-            .process_exited(&thread_id, planned_stop, &exit_message)
+            .process_exited(&thread_id, &runtime_generation, planned_stop, &exit_message)
             .await;
     });
 
@@ -338,22 +365,26 @@ fn terminate_process_tree(pid: u32) {
 pub(super) async fn request(
     service: &AgentChatService,
     thread_id: &str,
-    outbound: &mpsc::Sender<Value>,
+    runtime: &RuntimeControl,
     method: &str,
     params: Value,
 ) -> Result<Value, String> {
     let id = Value::String(uuid::Uuid::new_v4().to_string());
     let (tx, rx) = oneshot::channel();
-    let key = id.as_str().unwrap_or_default().to_string();
+    let key = protocol_request_id_key(&id)
+        .ok_or_else(|| "Could not create a Codex request identifier".to_string())?;
     service
-        .register_pending_rpc(thread_id, key.clone(), tx)
+        .register_pending_rpc(thread_id, &runtime.generation, key.clone(), tx)
         .await?;
-    if outbound
+    if runtime
+        .outbound
         .send(rpc_request(id, method, params))
         .await
         .is_err()
     {
-        service.remove_pending_rpc(&key).await;
+        service
+            .remove_pending_rpc(thread_id, &runtime.generation, &key)
+            .await;
         return Err("Codex app-server is no longer available".to_string());
     }
     match timeout(REQUEST_TIMEOUT, rx).await {
@@ -363,7 +394,9 @@ pub(super) async fn request(
             Err("Codex app-server disconnected before acknowledging the request".to_string())
         }
         Err(_) => {
-            service.remove_pending_rpc(&key).await;
+            service
+                .remove_pending_rpc(thread_id, &runtime.generation, &key)
+                .await;
             Err("Codex app-server did not acknowledge the request in time".to_string())
         }
     }
@@ -371,7 +404,27 @@ pub(super) async fn request(
 
 #[cfg(test)]
 mod tests {
-    use super::supports_minimum_version;
+    use super::{reserve_process_slot, supports_minimum_version, MAX_LIVE_CODEX_PROCESSES};
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+
+    #[test]
+    fn process_reservations_allow_concurrent_threads_and_apply_a_global_cap() {
+        let limiter = Arc::new(Semaphore::new(MAX_LIVE_CODEX_PROCESSES));
+        let first = reserve_process_slot(&limiter).expect("first process slot");
+        let second = reserve_process_slot(&limiter).expect("second process slot");
+        assert!(limiter.available_permits() <= MAX_LIVE_CODEX_PROCESSES - 2);
+
+        let mut remaining = Vec::new();
+        while let Ok(permit) = reserve_process_slot(&limiter) {
+            remaining.push(permit);
+        }
+        assert_eq!(limiter.available_permits(), 0);
+        drop(first);
+        assert!(reserve_process_slot(&limiter).is_ok());
+        drop(second);
+        drop(remaining);
+    }
 
     #[test]
     fn requires_the_codex_app_server_history_baseline() {

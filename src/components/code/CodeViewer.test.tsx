@@ -1,8 +1,16 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkIdeAvailability } from '../../lib/ide';
 import type { FileContent } from '../../lib/code';
 import type { EditorSelectionInfo } from './CodeFileEditor';
 import { CodeViewer } from './CodeViewer';
+
+const { trackEventMock } = vi.hoisted(() => ({ trackEventMock: vi.fn() }));
+
+vi.mock('../../lib/analytics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/analytics')>();
+  return { ...actual, trackEvent: trackEventMock };
+});
 
 vi.mock('../../lib/ide', () => ({
   checkIdeAvailability: vi.fn().mockResolvedValue({ vscode: false, cursor: false }),
@@ -39,6 +47,10 @@ const fileContent: FileContent = {
   size: 13,
   language: 'json',
 };
+
+beforeEach(() => {
+  vi.mocked(checkIdeAvailability).mockResolvedValue({ vscode: false, cursor: false });
+});
 
 describe('CodeViewer selection reference', () => {
   it('uses right when collapsed and down when expanded', async () => {
@@ -77,5 +89,66 @@ describe('CodeViewer selection reference', () => {
     );
     expect(reference.querySelector('[data-icon-name="ChevronRightIcon"]')).not.toBeInTheDocument();
     expect(screen.getByText('selected code')).toBeInTheDocument();
+  });
+});
+
+describe('CodeViewer send to agent', () => {
+  it('keeps the selection and question when the handoff is rejected', async () => {
+    trackEventMock.mockClear();
+    const onSendToAgent = vi.fn(() => false as const);
+    await act(async () => {
+      render(
+        <CodeViewer
+          projectPath="/project"
+          filePath="package-lock.json"
+          fileContent={fileContent}
+          isLoading={false}
+          error={null}
+          onSendToAgent={onSendToAgent}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select code' }));
+    const question = screen.getByPlaceholderText('Ask about this code...');
+    fireEvent.change(question, { target: { value: 'Why is this value needed?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to agent' }));
+
+    expect(onSendToAgent).toHaveBeenCalledWith(
+      expect.stringContaining('Why is this value needed?')
+    );
+    expect(screen.getByRole('button', { name: 'package-lock.json:27-53' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Ask about this code...')).toHaveValue(
+      'Why is this value needed?'
+    );
+    expect(trackEventMock).not.toHaveBeenCalled();
+  });
+
+  it('records and clears an accepted Chat draft handoff', async () => {
+    trackEventMock.mockClear();
+    const onSendToAgent = vi.fn(() => 'chat-draft' as const);
+    await act(async () => {
+      render(
+        <CodeViewer
+          projectPath="/project"
+          filePath="package-lock.json"
+          fileContent={fileContent}
+          isLoading={false}
+          error={null}
+          onSendToAgent={onSendToAgent}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to agent' }));
+
+    expect(trackEventMock).toHaveBeenCalledWith(
+      'code_snippet_sent_to_agent',
+      expect.objectContaining({ file_extension: 'json', line_count: 27 })
+    );
+    expect(screen.queryByPlaceholderText('Ask about this code...')).not.toBeInTheDocument();
   });
 });

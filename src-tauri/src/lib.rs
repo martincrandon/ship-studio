@@ -938,6 +938,7 @@ pub fn run() {
             commands::clipboard::stage_clipboard_image,
             // Transient Codex chat threads
             commands::agent_chat::commands::agent_chat_list,
+            commands::agent_chat::commands::agent_chat_project_mode,
             commands::agent_chat::commands::agent_chat_list_drafts,
             commands::agent_chat::commands::agent_chat_save_project_draft,
             commands::agent_chat::commands::agent_chat_delete_project_draft,

@@ -59,6 +59,9 @@ function agentChatThreadFromArgs(
     titleSource: existing?.titleSource ?? 'draft',
     status,
     turnId: existing?.turnId ?? null,
+    approvalPolicy: existing?.approvalPolicy ?? null,
+    sandboxPolicy: existing?.sandboxPolicy ?? null,
+    turns: existing?.turns ?? [],
     items: existing?.items ?? [],
     requests: existing?.requests ?? [],
     draft: existing?.draft ?? { text: '', attachments: [] },
@@ -84,6 +87,7 @@ const agentChatModels: ChatModel[] = [
     isDefault: true,
     reasoningEfforts: ['low', 'medium', 'high'],
     defaultReasoningEffort: 'medium',
+    inputModalities: ['text', 'image'],
   },
 ];
 
@@ -227,9 +231,15 @@ export const workspaceCommands: CommandMap = {
   // writes return authoritative thread snapshots, as they do over Tauri IPC.
   agent_chat_list: (args: FixtureArgs) => {
     const projectPath = typeof args.projectPath === 'string' ? args.projectPath : WORKSPACE_PROJECT;
-    return [...agentChatThreads.values()].filter((thread) => thread.projectPath === projectPath);
+    return {
+      projectId: 'harness-agent-chat-project',
+      threads: [...agentChatThreads.values()].filter(
+        (thread) => thread.projectPath === projectPath
+      ),
+    };
   },
-  agent_chat_storage_status: { available: true, schemaVersion: 3, error: null },
+  agent_chat_storage_status: { available: true, schemaVersion: 7, error: null },
+  agent_chat_project_mode: { isGitRepository: true },
   agent_chat_list_unlinked_projects: [],
   agent_chat_models: agentChatModels,
   agent_chat_list_drafts: (args: FixtureArgs) => {
@@ -445,7 +455,14 @@ export const workspaceCommands: CommandMap = {
   agent_chat_send: (args: FixtureArgs) => {
     const thread = agentChatThreadFromArgs(args, 'running');
     const turnId = `turn-${thread.id}`;
+    const sendAttemptId =
+      typeof args.sendAttemptId === 'string' ? args.sendAttemptId : `attempt-${turnId}`;
     const text = typeof args.text === 'string' ? args.text : '';
+    const settings = {
+      modelId: typeof args.model === 'string' ? args.model : null,
+      reasoningEffort: typeof args.effort === 'string' ? args.effort : null,
+      autoAcceptMode: args.autoAcceptMode === true,
+    };
     const updated: ChatThread = {
       ...thread,
       turnId,
@@ -453,11 +470,24 @@ export const workspaceCommands: CommandMap = {
       activityCursor: thread.activityCursor + 1,
       latestActivityAt: Date.now(),
       providerStatus: 'active',
-      settings: {
-        modelId: typeof args.model === 'string' ? args.model : null,
-        reasoningEffort: typeof args.effort === 'string' ? args.effort : null,
-        autoAcceptMode: args.autoAcceptMode === true,
-      },
+      settings,
+      turns: [
+        ...thread.turns,
+        {
+          id: sendAttemptId,
+          providerTurnId: turnId,
+          userItemId: `user-${turnId}`,
+          outcome: 'running',
+          settings,
+          approvalPolicy: thread.approvalPolicy,
+          sandboxPolicy: thread.sandboxPolicy,
+          baselineKnown: true,
+          baselineLastItemId: thread.items[thread.items.length - 1]?.id ?? null,
+          reconciliation: null,
+          startedAt: Date.now(),
+          finishedAt: null,
+        },
+      ],
       draft: { text: '', attachments: [] },
       items: [
         {

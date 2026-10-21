@@ -60,6 +60,16 @@ pub struct ChatThread {
     pub title_source: String,
     pub status: String,
     pub turn_id: Option<String>,
+    /// Effective values returned by app-server at thread start/resume. They are
+    /// intentionally optional because older or unavailable providers may omit them.
+    #[serde(default)]
+    pub approval_policy: Option<Value>,
+    #[serde(default)]
+    pub sandbox_policy: Option<Value>,
+    /// Durable per-send records. Added with serde defaults so v7 thread JSON
+    /// remains readable without rewriting its history.
+    #[serde(default)]
+    pub turns: Vec<ChatTurnRecord>,
     pub items: Vec<ChatItem>,
     pub requests: Vec<ChatRequest>,
     pub draft: ChatDraft,
@@ -72,6 +82,48 @@ pub struct ChatThread {
     pub latest_activity_at: Option<i64>,
     pub error: Option<String>,
     pub revision: u64,
+}
+
+pub(super) fn mark_unfinished_turns_interrupted(thread: &mut ChatThread, finished_at: i64) -> bool {
+    let mut changed = false;
+    for turn in &mut thread.turns {
+        if matches!(turn.outcome.as_str(), "claimed" | "sending" | "running") {
+            turn.outcome = "interrupted".into();
+            turn.finished_at = Some(finished_at);
+            changed = true;
+        }
+    }
+    changed
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatTurnRecord {
+    /// Ship Studio's send-attempt ID; stable before Codex returns a turn ID.
+    pub id: String,
+    pub provider_turn_id: Option<String>,
+    pub user_item_id: String,
+    pub outcome: String,
+    pub settings: ChatSettings,
+    pub approval_policy: Option<Value>,
+    pub sandbox_policy: Option<Value>,
+    pub baseline_known: bool,
+    pub baseline_last_item_id: Option<String>,
+    pub reconciliation: Option<ChatSendReconciliation>,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSendReconciliation {
+    pub attempt_id: String,
+    /// confirmedPresent, confirmedAbsent, or ambiguous.
+    pub outcome: String,
+    /// A user item may be present while Codex's history still cannot prove
+    /// that every staged image/file input was accepted.
+    pub attachment_acceptance: String,
+    pub provider_turn_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -123,6 +175,7 @@ pub struct ChatModel {
     pub is_default: bool,
     pub reasoning_efforts: Vec<String>,
     pub default_reasoning_effort: Option<String>,
+    pub input_modalities: Option<Vec<String>>,
 }
 
 pub(crate) const MAX_ITEM_TEXT_BYTES: usize = 64 * 1024;

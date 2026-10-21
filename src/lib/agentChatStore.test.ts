@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatAttachment, ChatThread, SavedChatDraft } from './agentChat';
+import type {
+  ChatAttachment,
+  ChatProjectSnapshot,
+  ChatThread,
+  ChatTurnRecord,
+  SavedChatDraft,
+} from './agentChat';
 
 const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
-  listThreads: vi.fn(),
+  listThreads: vi.fn<(...args: unknown[]) => Promise<ChatProjectSnapshot>>(),
   listDrafts: vi.fn(),
   listModels: vi.fn(),
   createThread: vi.fn(),
@@ -26,6 +32,8 @@ const mocks = vi.hoisted(() => ({
   relinkCheckout: vi.fn(),
   relinkProject: vi.fn(),
 }));
+
+const FIXTURE_PROJECT_ID = 'project-agent-chat-store-fixture';
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
 vi.mock('./agentChat', () => ({
@@ -78,6 +86,9 @@ function thread(
     titleSource: 'prompt',
     status,
     turnId: null,
+    approvalPolicy: null,
+    sandboxPolicy: null,
+    turns: [],
     items: [],
     requests: [],
     draft: { text: '', attachments: [] },
@@ -91,6 +102,30 @@ function thread(
     error: null,
     revision,
   };
+}
+
+function turnRecord(
+  attemptId: string,
+  reconciliation: ChatTurnRecord['reconciliation'] = null
+): ChatTurnRecord {
+  return {
+    id: attemptId,
+    providerTurnId: null,
+    userItemId: 'local-user-item',
+    outcome: 'uncertain',
+    settings: { modelId: null, reasoningEffort: null, autoAcceptMode: false },
+    approvalPolicy: null,
+    sandboxPolicy: null,
+    baselineKnown: true,
+    baselineLastItemId: 'baseline-item',
+    reconciliation,
+    startedAt: 1000,
+    finishedAt: null,
+  };
+}
+
+function projectSnapshot(threads: ChatThread[]): ChatProjectSnapshot {
+  return { projectId: FIXTURE_PROJECT_ID, threads };
 }
 
 describe('agent chat event reconciliation', () => {
@@ -122,6 +157,7 @@ describe('agent chat event reconciliation', () => {
       .mockImplementation(
         (
           _projectPath: string,
+          _projectId: string,
           checkoutPath: string,
           draftId: string,
           draft: SavedChatDraft['draft'],
@@ -152,7 +188,7 @@ describe('agent chat event reconciliation', () => {
       );
     mocks.getStorageStatus
       .mockReset()
-      .mockResolvedValue({ available: true, schemaVersion: 3, error: null });
+      .mockResolvedValue({ available: true, schemaVersion: 7, error: null });
     mocks.listUnlinkedProjects.mockReset().mockResolvedValue([]);
     mocks.markRead.mockReset();
     mocks.settleThread.mockReset();
@@ -163,6 +199,73 @@ describe('agent chat event reconciliation', () => {
     mocks.relinkProject.mockReset();
     localStorage.clear();
     emitThread = undefined;
+  });
+
+  it('loads an empty project without local state and keeps identity verified', async () => {
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
+    mocks.listModels.mockResolvedValue([]);
+    mocks.listen.mockResolvedValue(() => undefined);
+
+    const { getAgentChatSnapshot, loadAgentChatProject } = await import('./agentChatStore');
+    const projectPath = '/projects/agent-chat-empty-first-load';
+
+    await expect(loadAgentChatProject(projectPath)).resolves.toBeUndefined();
+
+    const snapshot = getAgentChatSnapshot(projectPath);
+    expect(snapshot.identityVerified).toBe(true);
+    expect(snapshot.threads).toEqual([]);
+    expect(snapshot.selectedDraftId).toBeTruthy();
+  });
+
+  it('keeps a JSON null local-state value without crashing or clearing storage', async () => {
+    const projectPath = '/projects/agent-chat-null-local-state';
+    const key = `shipstudio.agentChat.localState:${encodeURIComponent(projectPath)}`;
+    localStorage.setItem(key, 'null');
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
+    mocks.listModels.mockResolvedValue([]);
+    mocks.listen.mockResolvedValue(() => undefined);
+
+    const { getAgentChatSnapshot, loadAgentChatProject } = await import('./agentChatStore');
+    await expect(loadAgentChatProject(projectPath)).resolves.toBeUndefined();
+
+    expect(getAgentChatSnapshot(projectPath).identityVerified).toBe(true);
+    expect(JSON.parse(localStorage.getItem(key) ?? 'null')).toMatchObject({
+      version: 5,
+      projectId: FIXTURE_PROJECT_ID,
+    });
+  });
+
+  it('restores legitimate saved composer state after verifying its project identity', async () => {
+    const projectPath = '/projects/agent-chat-matching-local-state';
+    const draftId = '00000000-0000-4000-8000-000000000099';
+    const key = `shipstudio.agentChat.localState:${encodeURIComponent(projectPath)}`;
+    const saved = {
+      version: 5,
+      projectId: FIXTURE_PROJECT_ID,
+      selectedThreadId: null,
+      selectedDraftId: draftId,
+      selectedCheckoutPath: projectPath,
+      draftCheckoutPaths: { [draftId]: projectPath },
+      draftThreadIds: {},
+      activeDraftIdsByCheckout: { [projectPath]: draftId },
+      drafts: { [draftId]: 'Keep this legitimate saved prompt' },
+      stagedAttachments: {},
+      threadSettings: {},
+      pendingSends: {},
+    };
+    localStorage.setItem(key, JSON.stringify(saved));
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
+    mocks.listModels.mockResolvedValue([]);
+    mocks.listen.mockResolvedValue(() => undefined);
+
+    const { getAgentChatSnapshot, loadAgentChatProject } = await import('./agentChatStore');
+    await loadAgentChatProject(projectPath);
+
+    const snapshot = getAgentChatSnapshot(projectPath);
+    expect(snapshot.identityVerified).toBe(true);
+    expect(snapshot.selectedDraftId).toBe(draftId);
+    expect(snapshot.drafts[draftId]).toBe('Keep this legitimate saved prompt');
+    expect(localStorage.getItem(key)).not.toBeNull();
   });
 
   it('rehydrates saved draft attachment availability without replacing dirty edits or selection', async () => {
@@ -226,7 +329,9 @@ describe('agent chat event reconciliation', () => {
     let resolveDraftPage:
       | ((page: { drafts: SavedChatDraft[]; nextOffset: number | null }) => void)
       | undefined;
-    mocks.listThreads.mockResolvedValue([thread('unrelated-thread', projectPath, 1, 'Existing')]);
+    mocks.listThreads.mockResolvedValue(
+      projectSnapshot([thread('unrelated-thread', projectPath, 1, 'Existing')])
+    );
     mocks.listModels.mockResolvedValue([]);
     mocks.listen.mockImplementation(
       (_event: string, handler: (event: { payload: ChatThread }) => void) => {
@@ -312,7 +417,7 @@ describe('agent chat event reconciliation', () => {
 
   it('subscribes before listing and keeps a newer event over a stale list result', async () => {
     const calls: string[] = [];
-    let resolveThreads: ((threads: ChatThread[]) => void) | undefined;
+    let resolveThreads: ((snapshot: ChatProjectSnapshot) => void) | undefined;
 
     mocks.listen.mockImplementation(
       (_event: string, handler: (event: { payload: ChatThread }) => void) => {
@@ -323,7 +428,7 @@ describe('agent chat event reconciliation', () => {
     );
     mocks.listThreads.mockImplementation(() => {
       calls.push('list');
-      return new Promise<ChatThread[]>((resolve) => {
+      return new Promise<ChatProjectSnapshot>((resolve) => {
         resolveThreads = resolve;
       });
     });
@@ -339,7 +444,7 @@ describe('agent chat event reconciliation', () => {
 
     expect(calls.slice(0, 2)).toEqual(['listen', 'list']);
     emitThread?.({ payload: thread('thread-1', projectPath, 2, 'newer event') });
-    resolveThreads?.([thread('thread-1', projectPath, 1, 'stale list')]);
+    resolveThreads?.(projectSnapshot([thread('thread-1', projectPath, 1, 'stale list')]));
     await loading;
 
     expect(getAgentChatSnapshot(projectPath).threads).toEqual([
@@ -360,40 +465,45 @@ describe('agent chat event reconciliation', () => {
     const projectPath = '/projects/agent-chat-interleaving-fixture';
     const first = thread('thread-a', projectPath, 1, 'Conversation A');
     const second = thread('thread-b', projectPath, 1, 'Conversation B');
-    mocks.listThreads.mockResolvedValue([first, second]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([first, second]));
     mocks.listModels.mockResolvedValue([]);
     await loadAgentChatProject(projectPath);
 
     const resolveSend = new Map<string, (result: ChatThread) => void>();
     const sentTurns: Array<[string, string]> = [];
-    mocks.send.mockImplementation((_path: string, threadId: string, text: string) => {
-      sentTurns.push([threadId, text]);
-      return new Promise<ChatThread>((resolve) => resolveSend.set(threadId, resolve));
-    });
+    mocks.send.mockImplementation(
+      (_path: string, _projectId: string, threadId: string, text: string) => {
+        sentTurns.push([threadId, text]);
+        return new Promise<ChatThread>((resolve) => resolveSend.set(threadId, resolve));
+      }
+    );
     setAgentChatDraft(projectPath, first.id, 'draft for A');
     setAgentChatDraft(projectPath, second.id, 'draft for B');
 
     const sendA = sendAgentChatTurn(projectPath, first.id, 'draft for A', false);
-    emitThread?.({ payload: thread(first.id, projectPath, 2, 'Conversation A', 'running') });
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+    emitThread?.({ payload: thread(first.id, projectPath, 3, 'Conversation A', 'running') });
     const sendB = sendAgentChatTurn(projectPath, second.id, 'draft for B', false);
-    emitThread?.({ payload: thread(second.id, projectPath, 2, 'Conversation B', 'running') });
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
+    emitThread?.({ payload: thread(second.id, projectPath, 3, 'Conversation B', 'running') });
 
     expect([...getAgentChatSnapshot(projectPath).sendingThreadIds].sort()).toEqual([
       'thread-a',
       'thread-b',
     ]);
+    expect(getAgentChatSnapshot(projectPath).drafts[second.id]).toBe('draft for B');
     expect(sentTurns).toEqual([
       ['thread-a', 'draft for A'],
       ['thread-b', 'draft for B'],
     ]);
 
-    resolveSend.get(first.id)?.(thread(first.id, projectPath, 3, 'Conversation A', 'idle'));
+    resolveSend.get(first.id)?.(thread(first.id, projectPath, 4, 'Conversation A', 'idle'));
     await sendA;
     expect(getAgentChatSnapshot(projectPath).sendingThreadIds).toEqual([second.id]);
     expect(getAgentChatSnapshot(projectPath).drafts[first.id]).toBe('');
     expect(getAgentChatSnapshot(projectPath).drafts[second.id]).toBe('draft for B');
 
-    resolveSend.get(second.id)?.(thread(second.id, projectPath, 3, 'Conversation B', 'idle'));
+    resolveSend.get(second.id)?.(thread(second.id, projectPath, 4, 'Conversation B', 'idle'));
     await sendB;
     const snapshot = getAgentChatSnapshot(projectPath);
     expect(snapshot.sendingThreadIds).toEqual([]);
@@ -410,7 +520,7 @@ describe('agent chat event reconciliation', () => {
         return Promise.resolve(() => undefined);
       }
     );
-    mocks.listThreads.mockResolvedValue([]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
     mocks.listModels.mockResolvedValue([
       {
         id: 'model-default',
@@ -419,6 +529,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: true,
         reasoningEfforts: ['low', 'high'],
         defaultReasoningEffort: 'low',
+        inputModalities: ['text', 'image'],
       },
       {
         id: 'model-selected',
@@ -427,6 +538,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: false,
         reasoningEfforts: ['low', 'high'],
         defaultReasoningEffort: 'low',
+        inputModalities: ['text', 'image'],
       },
     ]);
 
@@ -437,7 +549,8 @@ describe('agent chat event reconciliation', () => {
       setAgentChatThreadSettings,
     } = await import('./agentChatStore');
     const projectPath = '/projects/agent-chat-settings-fixture';
-    localStorage.removeItem(`shipstudio.agentChat.lastSettings:${encodeURIComponent(projectPath)}`);
+    const scopedSettingsKey = `shipstudio.agentChat.lastSettings:${encodeURIComponent(projectPath)}:${encodeURIComponent(FIXTURE_PROJECT_ID)}`;
+    localStorage.removeItem(scopedSettingsKey);
     await loadAgentChatProject(projectPath);
 
     const currentDraftId = getAgentChatSnapshot(projectPath).selectedDraftId;
@@ -445,11 +558,17 @@ describe('agent chat event reconciliation', () => {
       modelId: 'model-selected',
       reasoningEffort: 'high',
     });
+    expect(JSON.parse(localStorage.getItem(scopedSettingsKey) ?? 'null')).toEqual({
+      modelId: 'model-selected',
+      reasoningEffort: 'high',
+      autoAcceptMode: false,
+    });
     const newDraftId = selectAgentChatDraft(projectPath, `${projectPath}/worktree`);
 
     expect(getAgentChatSnapshot(projectPath).threadSettings[newDraftId]).toEqual({
       modelId: 'model-selected',
       reasoningEffort: 'high',
+      autoAcceptMode: false,
     });
 
     mocks.listDrafts.mockResolvedValue({
@@ -472,6 +591,12 @@ describe('agent chat event reconciliation', () => {
     vi.resetModules();
     const freshStore = await import('./agentChatStore');
     await freshStore.loadAgentChatProject(projectPath);
+    expect(localStorage.getItem(scopedSettingsKey)).not.toBeNull();
+    expect(freshStore.getAgentChatSnapshot(projectPath).threadSettings[newDraftId]).toEqual({
+      modelId: 'model-selected',
+      reasoningEffort: 'high',
+      autoAcceptMode: false,
+    });
     const restoredDraftId = freshStore.selectAgentChatDraft(
       projectPath,
       `${projectPath}/fresh-worktree`
@@ -479,6 +604,7 @@ describe('agent chat event reconciliation', () => {
     expect(freshStore.getAgentChatSnapshot(projectPath).threadSettings[restoredDraftId]).toEqual({
       modelId: 'model-selected',
       reasoningEffort: 'high',
+      autoAcceptMode: false,
     });
   });
 
@@ -494,7 +620,7 @@ describe('agent chat event reconciliation', () => {
       ...thread('thread-stale-model', projectPath, 1, 'Saved model conversation'),
       settings: { modelId: 'model-removed', reasoningEffort: 'high', autoAcceptMode: false },
     };
-    mocks.listThreads.mockResolvedValue([savedThread]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([savedThread]));
     mocks.listModels.mockResolvedValue([
       {
         id: 'model-current',
@@ -503,6 +629,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: true,
         reasoningEfforts: ['low', 'medium'],
         defaultReasoningEffort: 'medium',
+        inputModalities: ['text', 'image'],
       },
     ]);
 
@@ -513,6 +640,7 @@ describe('agent chat event reconciliation', () => {
     expect(getAgentChatSnapshot(projectPath).threadSettings[savedThread.id]).toEqual({
       modelId: 'model-removed',
       reasoningEffort: 'high',
+      autoAcceptMode: false,
     });
     await expect(sendAgentChatTurn(projectPath, savedThread.id, 'continue', false)).rejects.toThrow(
       'The saved model “model-removed” is unavailable.'
@@ -527,7 +655,7 @@ describe('agent chat event reconciliation', () => {
         return Promise.resolve(() => undefined);
       }
     );
-    mocks.listThreads.mockResolvedValue([]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
     mocks.listModels.mockResolvedValue([
       {
         id: 'model-before',
@@ -536,6 +664,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: false,
         reasoningEfforts: ['low'],
         defaultReasoningEffort: 'low',
+        inputModalities: ['text', 'image'],
       },
       {
         id: 'model-after',
@@ -544,6 +673,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: true,
         reasoningEfforts: ['high'],
         defaultReasoningEffort: 'high',
+        inputModalities: ['text', 'image'],
       },
     ]);
 
@@ -576,6 +706,7 @@ describe('agent chat event reconciliation', () => {
       mimeType: 'image/png',
       size: 10,
       kind: 'image' as const,
+      available: true,
     };
     mocks.stageAttachment.mockResolvedValueOnce(initialAttachment);
     await stageCapturedAttachment(capturedTarget, initialAttachment.path);
@@ -601,6 +732,7 @@ describe('agent chat event reconciliation', () => {
     mocks.send.mockImplementation(
       (
         _path: string,
+        _projectId: string,
         threadId: string,
         text: string,
         attachments: Array<{ id: string }>,
@@ -674,8 +806,10 @@ describe('agent chat event reconciliation', () => {
     expect(snapshot.selectedDraftId).toBe(nextDraftId);
     expect(snapshot.selectedThreadId).toBeNull();
     expect(snapshot.drafts[firstThread.id]).toBe('follow-up prompt');
+    expect(snapshot.threadSettings[firstThread.id]).toEqual(followUpSettings);
     expect(snapshot.stagedAttachments[firstThread.id]).toEqual([lateAttachment]);
-    expect(snapshot.stagedAttachments[nextDraftId]).toBeUndefined();
+    expect(snapshot.drafts[nextDraftId]).toBe('');
+    expect(snapshot.stagedAttachments[nextDraftId]).toEqual([]);
 
     // Sending the next draft promotes a separate saved draft.
     const secondThread = thread('thread-second-send', projectPath, 1, 'Second conversation');
@@ -711,7 +845,7 @@ describe('agent chat event reconciliation', () => {
         return Promise.resolve(() => undefined);
       }
     );
-    mocks.listThreads.mockResolvedValue([]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
     mocks.listModels.mockResolvedValue([]);
 
     const {
@@ -734,6 +868,7 @@ describe('agent chat event reconciliation', () => {
       mimeType: 'image/png',
       size: 10,
       kind: 'image' as const,
+      available: true,
     };
     mocks.stageAttachment.mockResolvedValueOnce(attachment);
     await stageCapturedAttachment(target, attachment.path);
@@ -760,7 +895,7 @@ describe('agent chat event reconciliation', () => {
         return Promise.resolve(() => undefined);
       }
     );
-    mocks.listThreads.mockResolvedValue([]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
     mocks.listModels.mockResolvedValue([]);
 
     const {
@@ -783,6 +918,7 @@ describe('agent chat event reconciliation', () => {
       mimeType: 'image/png',
       size: 10,
       kind: 'image' as const,
+      available: true,
     };
     mocks.stageAttachment.mockResolvedValueOnce(attachment);
     await stageCapturedAttachment(target, attachment.path);
@@ -813,7 +949,7 @@ describe('agent chat event reconciliation', () => {
     );
     const projectPath = '/projects/agent-chat-reconciliation-fixture';
     const savedThread = thread('thread-reconciliation', projectPath, 1, 'Saved conversation');
-    mocks.listThreads.mockResolvedValue([savedThread]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([savedThread]));
     mocks.listModels.mockResolvedValue([]);
     mocks.markRead.mockImplementation(() =>
       Promise.resolve({
@@ -838,19 +974,31 @@ describe('agent chat event reconciliation', () => {
           rejectSend = reject;
         })
     );
-    mocks.resumeCheck.mockResolvedValue({
-      ...savedThread,
-      revision: 7,
-      items: [
-        {
-          id: 'provider-user-item',
-          turnId: 'provider-turn',
-          kind: 'user',
-          text: 'uncertain prompt',
-          status: 'completed',
-          attachments: [],
-        },
-      ],
+    mocks.resumeCheck.mockImplementation(() => {
+      const attemptId = mocks.send.mock.calls[0]?.[8] as string;
+      return Promise.resolve({
+        ...savedThread,
+        revision: 7,
+        draft: { text: 'uncertain prompt', attachments: [] },
+        turns: [
+          turnRecord(attemptId, {
+            attemptId,
+            outcome: 'ambiguous',
+            attachmentAcceptance: 'notApplicable',
+            providerTurnId: null,
+          }),
+        ],
+        items: [
+          {
+            id: 'provider-user-item',
+            turnId: 'provider-turn',
+            kind: 'user',
+            text: 'uncertain prompt',
+            status: 'completed',
+            attachments: [],
+          },
+        ],
+      });
     });
 
     const {
@@ -941,11 +1089,139 @@ describe('agent chat event reconciliation', () => {
     await resumeCheckAgentChatThread(projectPath, savedThread.id);
     const safety = getAgentChatSnapshot(projectPath).sendSafety[savedThread.id];
     expect(safety?.reconciled).toBe(false);
-    expect(safety?.message).toContain('cannot confirm whether the previous prompt was accepted');
+    expect(safety?.message).toContain('could not tie this provider item to the saved send attempt');
+    expect(getAgentChatSnapshot(projectPath).drafts[savedThread.id]).toBe('uncertain prompt');
     await expect(
       sendAgentChatTurn(projectPath, savedThread.id, 'a different prompt', false)
-    ).rejects.toThrow('cannot confirm whether the previous prompt was accepted');
+    ).rejects.toThrow('could not tie this provider item to the saved send attempt');
     expect(mocks.send).toHaveBeenCalledOnce();
+  });
+
+  it('blocks the exact confirmed prompt but allows a distinct idle follow-up', async () => {
+    mocks.listen.mockImplementation(
+      (_event: string, handler: (event: { payload: ChatThread }) => void) => {
+        emitThread = handler;
+        return Promise.resolve(() => undefined);
+      }
+    );
+    const projectPath = '/projects/agent-chat-confirmed-present';
+    const savedThread = thread('thread-confirmed-present', projectPath, 1, 'Saved conversation');
+    mocks.listThreads.mockResolvedValue(projectSnapshot([savedThread]));
+    mocks.listModels.mockResolvedValue([]);
+    let rejectSend: ((error: Error) => void) | undefined;
+    let attemptId = '';
+    mocks.send.mockImplementationOnce((...args: unknown[]) => {
+      attemptId = args[8] as string;
+      return new Promise<ChatThread>((_resolve, reject) => {
+        rejectSend = reject;
+      });
+    });
+
+    const {
+      getAgentChatSnapshot,
+      loadAgentChatProject,
+      resumeCheckAgentChatThread,
+      sendAgentChatTurn,
+      setAgentChatDraft,
+    } = await import('./agentChatStore');
+    await loadAgentChatProject(projectPath);
+    setAgentChatDraft(projectPath, savedThread.id, 'accepted prompt');
+    const uncertainSend = sendAgentChatTurn(projectPath, savedThread.id, 'accepted prompt', false);
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+    rejectSend?.(new Error('send acknowledgement was lost'));
+    await expect(uncertainSend).rejects.toThrow('send acknowledgement was lost');
+
+    mocks.resumeCheck.mockResolvedValue({
+      ...savedThread,
+      revision: 5,
+      draft: { text: 'accepted prompt', attachments: [] },
+      turns: [
+        turnRecord(attemptId, {
+          attemptId,
+          outcome: 'confirmedPresent',
+          attachmentAcceptance: 'notApplicable',
+          providerTurnId: 'provider-turn',
+        }),
+      ],
+    });
+    await resumeCheckAgentChatThread(projectPath, savedThread.id);
+
+    const safety = getAgentChatSnapshot(projectPath).sendSafety[savedThread.id];
+    expect(safety?.reconciled).toBe(true);
+    expect(getAgentChatSnapshot(projectPath).drafts[savedThread.id]).toBe('accepted prompt');
+    await expect(
+      sendAgentChatTurn(projectPath, savedThread.id, 'accepted prompt', false)
+    ).rejects.toThrow('history confirms this prompt was accepted');
+    mocks.send.mockResolvedValueOnce({
+      ...savedThread,
+      revision: 6,
+      status: 'idle',
+      providerStatus: 'idle',
+    });
+    await sendAgentChatTurn(projectPath, savedThread.id, 'a distinct follow-up', false);
+    expect(mocks.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a confirmed-absent prompt for explicit retry without auto-submitting it', async () => {
+    mocks.listen.mockImplementation(
+      (_event: string, handler: (event: { payload: ChatThread }) => void) => {
+        emitThread = handler;
+        return Promise.resolve(() => undefined);
+      }
+    );
+    const projectPath = '/projects/agent-chat-confirmed-absent';
+    const savedThread = thread('thread-confirmed-absent', projectPath, 1, 'Saved conversation');
+    mocks.listThreads.mockResolvedValue(projectSnapshot([savedThread]));
+    mocks.listModels.mockResolvedValue([]);
+    let rejectSend: ((error: Error) => void) | undefined;
+    let attemptId = '';
+    mocks.send.mockImplementationOnce((...args: unknown[]) => {
+      attemptId = args[8] as string;
+      return new Promise<ChatThread>((_resolve, reject) => {
+        rejectSend = reject;
+      });
+    });
+
+    const {
+      getAgentChatSnapshot,
+      loadAgentChatProject,
+      resumeCheckAgentChatThread,
+      sendAgentChatTurn,
+      setAgentChatDraft,
+    } = await import('./agentChatStore');
+    await loadAgentChatProject(projectPath);
+    setAgentChatDraft(projectPath, savedThread.id, 'retry prompt');
+    const uncertainSend = sendAgentChatTurn(projectPath, savedThread.id, 'retry prompt', false);
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledOnce());
+    rejectSend?.(new Error('send acknowledgement was lost'));
+    await expect(uncertainSend).rejects.toThrow('send acknowledgement was lost');
+
+    mocks.resumeCheck.mockResolvedValue({
+      ...savedThread,
+      revision: 5,
+      draft: { text: 'retry prompt', attachments: [] },
+      turns: [
+        turnRecord(attemptId, {
+          attemptId,
+          outcome: 'confirmedAbsent',
+          attachmentAcceptance: 'unknown',
+          providerTurnId: null,
+        }),
+      ],
+    });
+    await resumeCheckAgentChatThread(projectPath, savedThread.id);
+
+    expect(mocks.send).toHaveBeenCalledOnce();
+    expect(getAgentChatSnapshot(projectPath).drafts[savedThread.id]).toBe('retry prompt');
+    expect(getAgentChatSnapshot(projectPath).sendSafety[savedThread.id]).toBeUndefined();
+    mocks.send.mockResolvedValueOnce({
+      ...savedThread,
+      revision: 6,
+      status: 'idle',
+      providerStatus: 'idle',
+    });
+    await sendAgentChatTurn(projectPath, savedThread.id, 'retry prompt', false);
+    expect(mocks.send).toHaveBeenCalledTimes(2);
   });
 
   it('persists before promotion and keeps edits and delayed captures on the original draft', async () => {
@@ -956,7 +1232,7 @@ describe('agent chat event reconciliation', () => {
       }
     );
     const projectPath = '/projects/agent-chat-draft-promotion-race';
-    mocks.listThreads.mockResolvedValue([]);
+    mocks.listThreads.mockResolvedValue(projectSnapshot([]));
     mocks.listModels.mockResolvedValue([
       {
         id: 'model-default',
@@ -965,6 +1241,7 @@ describe('agent chat event reconciliation', () => {
         isDefault: true,
         reasoningEfforts: ['low'],
         defaultReasoningEffort: 'low',
+        inputModalities: ['text', 'image'],
       },
     ]);
 
@@ -996,6 +1273,7 @@ describe('agent chat event reconciliation', () => {
     mocks.saveProjectDraft.mockImplementation(
       (
         _projectPath: string,
+        _projectId: string,
         checkoutPath: string,
         id: string,
         draft: SavedChatDraft['draft'],
@@ -1034,7 +1312,13 @@ describe('agent chat event reconciliation', () => {
         })
     );
     mocks.send.mockImplementation(
-      (_path: string, threadId: string, text: string, attachments: ChatAttachment[]) => {
+      (
+        _path: string,
+        _projectId: string,
+        threadId: string,
+        text: string,
+        attachments: ChatAttachment[]
+      ) => {
         calls.push('send');
         return Promise.resolve({
           ...thread(threadId, projectPath, 3, 'New conversation'),

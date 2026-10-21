@@ -124,6 +124,32 @@ const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
 
 const PREVIEW_BREAKPOINTS = Object.keys(BREAKPOINTS) as Breakpoint[];
 
+type PreviewFixReason = 'server-down' | 'blank-iframe';
+
+interface PreviewFixAnalytics {
+  has_logs: boolean;
+  is_static: boolean;
+  reason: PreviewFixReason;
+  process_gone: boolean;
+}
+
+/** Report preview recovery only after the selected agent surface accepts it. */
+export function completePreviewFixHandoff(
+  result: AgentPromptHandoffResult,
+  analytics: PreviewFixAnalytics,
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+): void {
+  const message = promptHandoffSuccessMessage(
+    result,
+    'Prompt pasted into the agent terminal. Press Enter to send.',
+    CHAT_PROMPT_STAGED_MESSAGE
+  );
+  if (!message) return;
+
+  showToast(message, 'success');
+  void trackEvent('preview_fix_with_agent', { ...analytics });
+}
+
 /** The viewport tab that means "all of them at once". Deliberately not a
  *  breakpoint name, so it cannot collide with one. */
 const CANVAS_TAB = 'canvas';
@@ -1254,7 +1280,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // by the watchdog overlay — issue #179, e.g. a Clerk dev-keys redirect loop).
   const handleFixWithAgent = useMemo(() => {
     if (!onSendToClaude) return undefined;
-    return (reason: 'server-down' | 'blank-iframe') => {
+    return (reason: PreviewFixReason) => {
       const logs = isStaticProject
         ? ''
         : stripAnsi(devServerOutput).split('\n').slice(-200).join('\n').trim();
@@ -1315,18 +1341,16 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           `itself, and a second unmanaged server will fight it.`;
       }
       const result = onSendToClaude(prompt);
-      const message = promptHandoffSuccessMessage(
+      completePreviewFixHandoff(
         result,
-        'Prompt pasted into the agent terminal. Press Enter to send.',
-        CHAT_PROMPT_STAGED_MESSAGE
+        {
+          has_logs: !!logs,
+          is_static: isStaticProject,
+          reason,
+          process_gone: serverProcessGone,
+        },
+        showToast
       );
-      if (message) showToast(message, 'success');
-      void trackEvent('preview_fix_with_agent', {
-        has_logs: !!logs,
-        is_static: isStaticProject,
-        reason,
-        process_gone: serverProcessGone,
-      });
     };
   }, [
     onSendToClaude,

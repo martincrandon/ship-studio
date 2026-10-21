@@ -193,6 +193,9 @@ export function CodeViewer({
     // recorded count is always positive.
     const lineCount = Math.abs(selectionInfo.endLine - selectionInfo.startLine) + 1;
     if (onSendToAgent) {
+      const result = onSendToAgent(formatted);
+      if (result === false) return;
+
       void trackEvent('code_snippet_sent_to_agent', {
         file_extension: fileExtensionForAnalytics(filePath),
         language: fileContent?.language ?? '',
@@ -200,7 +203,6 @@ export function CodeViewer({
         char_count: formatted.length,
         had_question: question.trim().length > 0,
       });
-      const result = onSendToAgent(formatted);
       const message = promptHandoffSuccessMessage(
         result,
         'Prompt pasted into the agent terminal. Press Enter to send.',

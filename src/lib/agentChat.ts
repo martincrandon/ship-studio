@@ -67,6 +67,9 @@ export interface ChatThread {
   titleSource: 'draft' | 'prompt' | 'manual';
   status: ChatThreadStatus;
   turnId: string | null;
+  approvalPolicy: unknown;
+  sandboxPolicy: unknown;
+  turns: ChatTurnRecord[];
   items: ChatItem[];
   requests: ChatRequest[];
   draft: { text: string; attachments: ChatAttachment[] };
@@ -81,10 +84,41 @@ export interface ChatThread {
   revision: number;
 }
 
+export interface ChatSendReconciliation {
+  attemptId: string;
+  outcome: 'confirmedPresent' | 'confirmedAbsent' | 'ambiguous';
+  attachmentAcceptance: 'notApplicable' | 'confirmed' | 'unknown';
+  providerTurnId: string | null;
+}
+
+export interface ChatTurnRecord {
+  id: string;
+  providerTurnId: string | null;
+  userItemId: string;
+  outcome: 'claimed' | 'sending' | 'running' | 'completed' | 'interrupted' | 'failed' | 'uncertain';
+  settings: { modelId: string | null; reasoningEffort: string | null; autoAcceptMode: boolean };
+  approvalPolicy: unknown;
+  sandboxPolicy: unknown;
+  baselineKnown: boolean;
+  baselineLastItemId: string | null;
+  reconciliation: ChatSendReconciliation | null;
+  startedAt: number;
+  finishedAt: number | null;
+}
+
+export interface ChatProjectSnapshot {
+  projectId: string;
+  threads: ChatThread[];
+}
+
 export interface ChatStorageStatus {
   available: boolean;
   schemaVersion: number;
   error: string | null;
+}
+
+export interface ChatProjectMode {
+  isGitRepository: boolean;
 }
 
 export interface SavedChatDraft {
@@ -106,7 +140,7 @@ export interface SavedChatDraftPage {
 
 export interface ChatUnlinkedProject {
   id: string;
-  gitCommonDir: string;
+  identityKey: string;
   lastPath: string;
   threadCount: number;
 }
@@ -118,6 +152,8 @@ export interface ChatModel {
   isDefault: boolean;
   reasoningEfforts: string[];
   defaultReasoningEffort: string | null;
+  /** Null means the provider did not return modality capabilities. */
+  inputModalities: string[] | null;
 }
 
 export type ChatResponse = Record<string, unknown>;
@@ -133,21 +169,33 @@ async function invokeChat<T>(command: string, args?: Record<string, unknown>): P
   }
 }
 
-export function listAgentChatThreads(projectPath: string): Promise<ChatThread[]> {
+export function listAgentChatThreads(projectPath: string): Promise<ChatProjectSnapshot> {
   return invokeChat('agent_chat_list', { projectPath });
+}
+
+export function getAgentChatProjectModeCommand(projectPath: string): Promise<ChatProjectMode> {
+  return invokeChat('agent_chat_project_mode', { projectPath });
 }
 
 export function listAgentChatDrafts(
   projectPath: string,
+  expectedProjectId: string,
   checkoutPath: string,
   limit = 50,
   offset = 0
 ): Promise<SavedChatDraftPage> {
-  return invokeChat('agent_chat_list_drafts', { projectPath, checkoutPath, limit, offset });
+  return invokeChat('agent_chat_list_drafts', {
+    projectPath,
+    checkoutPath,
+    expectedProjectId,
+    limit,
+    offset,
+  });
 }
 
 export function saveAgentChatProjectDraftCommand(
   projectPath: string,
+  expectedProjectId: string,
   checkoutPath: string,
   draftId: string,
   draft: { text: string; attachments: ChatAttachment[] },
@@ -155,6 +203,7 @@ export function saveAgentChatProjectDraftCommand(
 ): Promise<SavedChatDraft> {
   return invokeChat('agent_chat_save_project_draft', {
     projectPath,
+    expectedProjectId,
     checkoutPath,
     draftId,
     draft,
@@ -164,26 +213,40 @@ export function saveAgentChatProjectDraftCommand(
 
 export function deleteAgentChatProjectDraftCommand(
   projectPath: string,
+  expectedProjectId: string,
   draftId: string
 ): Promise<void> {
-  return invokeChat('agent_chat_delete_project_draft', { projectPath, draftId });
+  return invokeChat('agent_chat_delete_project_draft', { projectPath, expectedProjectId, draftId });
 }
 
 export function promoteAgentChatDraftCommand(
   projectPath: string,
+  expectedProjectId: string,
   checkoutPath: string,
   draftId: string,
   providerId = 'codex'
 ): Promise<ChatThread> {
-  return invokeChat('agent_chat_promote_draft', { projectPath, checkoutPath, draftId, providerId });
+  return invokeChat('agent_chat_promote_draft', {
+    projectPath,
+    expectedProjectId,
+    checkoutPath,
+    draftId,
+    providerId,
+  });
 }
 
 export function createAgentChatThreadCommand(
   projectPath: string,
+  expectedProjectId: string,
   checkoutPath: string,
   providerId = 'codex'
 ): Promise<ChatThread> {
-  return invokeChat('agent_chat_create', { projectPath, checkoutPath, providerId });
+  return invokeChat('agent_chat_create', {
+    projectPath,
+    expectedProjectId,
+    checkoutPath,
+    providerId,
+  });
 }
 
 export function listAgentChatModels(projectPath: string): Promise<ChatModel[]> {
@@ -192,21 +255,25 @@ export function listAgentChatModels(projectPath: string): Promise<ChatModel[]> {
 
 export function sendAgentChatCommand(
   projectPath: string,
+  expectedProjectId: string,
   threadId: string,
   text: string,
   attachments: ChatAttachment[],
   model: string | null,
   effort: string | null,
-  autoAcceptMode: boolean
+  autoAcceptMode: boolean,
+  sendAttemptId: string
 ): Promise<ChatThread> {
   return invokeChat('agent_chat_send', {
     projectPath,
+    expectedProjectId,
     threadId,
     text,
     attachments,
     model,
     effort,
     autoAcceptMode,
+    sendAttemptId,
   });
 }
 

@@ -49,18 +49,22 @@ export interface AgentChatThreadSettings {
 }
 
 interface PendingSend {
+  attemptId: string;
   text: string;
   attachmentIds: string[];
+  reconciliation?: 'confirmedPresent' | 'confirmedAbsent' | 'ambiguous';
+  providerTurnId?: string | null;
 }
 
 interface SendSafetyState {
   message: string;
   blockedText: string;
+  blockedAttachmentIds: string[];
   reconciled: boolean;
 }
 
 interface PersistedLocalState {
-  version: 4;
+  version: 5;
   projectId: string | null;
   selectedThreadId: string | null;
   selectedDraftId: string | null;
@@ -75,6 +79,8 @@ interface PersistedLocalState {
 }
 
 export interface AgentChatProjectSnapshot {
+  identityVerified: boolean;
+  legacyDraftRecoveryAvailable: boolean;
   threads: ChatThread[];
   savedDrafts: SavedChatDraft[];
   models: ChatModel[];
@@ -123,6 +129,9 @@ interface ProjectRecord {
   listeners: Set<() => void>;
   loadId: number;
   identityVersion: number;
+  identityVerified: boolean;
+  candidateLocalState: PersistedLocalState | null;
+  legacyLocalState: PersistedLocalState | null;
   loadPromise: Promise<void> | null;
   chatVisible: boolean;
   readInFlight: Set<string>;
@@ -146,6 +155,7 @@ let threadListenerPromise: Promise<UnlistenFn> | null = null;
 const recentThreadEvents = new Map<string, Map<string, ChatThread>>();
 const LAST_SETTINGS_KEY_PREFIX = 'shipstudio.agentChat.lastSettings:';
 const LOCAL_STATE_KEY_PREFIX = 'shipstudio.agentChat.localState:';
+const LEGACY_LOCAL_STATE_KEY_PREFIX = 'shipstudio.agentChat.legacyLocalState:';
 const ATTACHMENTS_UNAVAILABLE_ERROR =
   'One or more saved attachments are unavailable. Remove them and attach the files again before sending.';
 const ATTACHMENTS_CHECKING_ERROR = 'Saved attachment availability is still being checked.';
@@ -165,14 +175,18 @@ function localStateKey(projectPath: string): string {
 }
 
 function readPersistedLocalState(projectPath: string): PersistedLocalState | null {
+  return readPersistedLocalStateKey(localStateKey(projectPath));
+}
+
+function readPersistedLocalStateKey(key: string): PersistedLocalState | null {
   try {
-    const stored = localStorage.getItem(localStateKey(projectPath));
+    const stored = localStorage.getItem(key);
     if (!stored) return null;
     const value: unknown = JSON.parse(stored);
     if (
       !value ||
       typeof value !== 'object' ||
-      ![1, 2, 3, 4].includes((value as { version?: number }).version ?? 0)
+      ![1, 2, 3, 4, 5].includes((value as { version?: number }).version ?? 0)
     )
       return null;
     const state = value as Partial<PersistedLocalState>;
@@ -190,7 +204,7 @@ function readPersistedLocalState(projectPath: string): PersistedLocalState | nul
       ])
     );
     return {
-      version: 4,
+      version: 5,
       projectId: typeof state.projectId === 'string' ? state.projectId : null,
       selectedThreadId: typeof state.selectedThreadId === 'string' ? state.selectedThreadId : null,
       selectedDraftId: typeof state.selectedDraftId === 'string' ? state.selectedDraftId : null,
@@ -201,19 +215,33 @@ function readPersistedLocalState(projectPath: string): PersistedLocalState | nul
       drafts: state.drafts ?? {},
       stagedAttachments,
       threadSettings: state.threadSettings ?? {},
-      pendingSends: state.pendingSends ?? {},
+      pendingSends: Object.fromEntries(
+        Object.entries(state.pendingSends ?? {}).map(([id, pending]) => [
+          id,
+          {
+            ...pending,
+            // Earlier local states had no provider-correlatable send ID. Keep
+            // them quarantined as ambiguous rather than guessing a match.
+            attemptId: pending.attemptId ?? '',
+            attachmentIds: pending.attachmentIds ?? [],
+          },
+        ])
+      ),
     };
   } catch {
     return null;
   }
 }
 
-function lastSettingsKey(projectPath: string): string {
-  return `${LAST_SETTINGS_KEY_PREFIX}${encodeURIComponent(projectPath)}`;
+function lastSettingsKey(projectPath: string, projectId: string): string {
+  return `${LAST_SETTINGS_KEY_PREFIX}${encodeURIComponent(projectPath)}:${encodeURIComponent(projectId)}`;
 }
 
-function readLastThreadSettings(projectPath: string): AgentChatThreadSettings | null {
-  const key = lastSettingsKey(projectPath);
+function readLastThreadSettings(
+  projectPath: string,
+  projectId: string
+): AgentChatThreadSettings | null {
+  const key = lastSettingsKey(projectPath, projectId);
   let stored: string | null;
   try {
     stored = localStorage.getItem(key);
@@ -239,12 +267,29 @@ function readLastThreadSettings(projectPath: string): AgentChatThreadSettings | 
       : null;
   } catch {
     return null;
-  } finally {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // Legacy settings stay in memory for this session if cleanup is unavailable.
-    }
+  }
+}
+
+function normalizedThreadSettings(settings: AgentChatThreadSettings): AgentChatThreadSettings {
+  return {
+    modelId: settings.modelId,
+    reasoningEffort: settings.reasoningEffort,
+    autoAcceptMode: settings.autoAcceptMode ?? false,
+  };
+}
+
+function persistLastThreadSettings(
+  projectPath: string,
+  projectId: string,
+  settings: AgentChatThreadSettings
+): void {
+  try {
+    localStorage.setItem(
+      lastSettingsKey(projectPath, projectId),
+      JSON.stringify(normalizedThreadSettings(settings))
+    );
+  } catch {
+    // The current draft and its backend save remain authoritative if storage is unavailable.
   }
 }
 
@@ -292,13 +337,13 @@ function normalizePersistedDraftIds(saved: PersistedLocalState | null): Persiste
 
 function emptySnapshot(
   projectPath: string,
-  saved: PersistedLocalState | null = normalizePersistedDraftIds(
-    readPersistedLocalState(projectPath)
-  )
+  saved: PersistedLocalState | null = null
 ): AgentChatProjectSnapshot {
   const draftId = saved?.selectedDraftId ?? newDraftId();
   const stagedAttachments = saved?.stagedAttachments ?? {};
   return {
+    identityVerified: false,
+    legacyDraftRecoveryAvailable: false,
     threads: [],
     savedDrafts: [],
     models: [],
@@ -320,19 +365,26 @@ function emptySnapshot(
     unlinkedProjects: [],
     threadErrors: {},
     reconciliationRequired: Object.fromEntries(
-      Object.entries(saved?.pendingSends ?? {}).map(([id]) => [
-        id,
-        `The previous send to this conversation was interrupted before its result was saved. Check Codex history before sending again.`,
-      ])
+      Object.entries(saved?.pendingSends ?? {})
+        .filter(([, pending]) => pending.reconciliation !== 'confirmedPresent')
+        .map(([id]) => [
+          id,
+          'The previous send to this conversation was interrupted before its result was saved. Check Codex history before sending again.',
+        ])
     ),
     sendSafety: Object.fromEntries(
       Object.entries(saved?.pendingSends ?? {}).map(([id, pending]) => [
         id,
         {
           message:
-            'This send did not finish before Ship Studio closed. Check Codex history before sending again.',
+            pending.reconciliation === 'confirmedPresent'
+              ? pending.attachmentIds.length > 0
+                ? 'Codex history confirms this prompt text was accepted. It cannot confirm whether the attachments were accepted; edit the prompt or attachment selection before sending again.'
+                : 'Codex history confirms this prompt was accepted. Edit it before sending again to avoid a duplicate.'
+              : 'This send did not finish before Ship Studio closed. Check Codex history before sending again.',
           blockedText: pending.text,
-          reconciled: false,
+          blockedAttachmentIds: pending.attachmentIds,
+          reconciled: pending.reconciliation === 'confirmedPresent',
         },
       ])
     ),
@@ -351,21 +403,27 @@ function ensureRecord(projectPath: string): ProjectRecord {
   let record = projectRecords.get(projectPath);
   if (!record) {
     const saved = normalizePersistedDraftIds(readPersistedLocalState(projectPath));
-    const snapshot = emptySnapshot(projectPath, saved);
+    const savedLegacy = normalizePersistedDraftIds(
+      readPersistedLocalStateKey(legacyLocalStateKey(projectPath))
+    );
+    const snapshot = emptySnapshot(projectPath);
     record = {
       snapshot,
       projectId: saved?.projectId ?? null,
       listeners: new Set(),
       loadId: 0,
       identityVersion: 0,
+      identityVerified: false,
+      candidateLocalState: saved,
+      legacyLocalState: savedLegacy,
       loadPromise: null,
       chatVisible: false,
       readInFlight: new Set(),
       discardedThreadIds: new Set(),
       discardingThreadIds: new Set(),
-      lastThreadSettings: readLastThreadSettings(projectPath),
-      dirtyDrafts: new Set(Object.keys(saved?.drafts ?? {})),
-      dirtySettings: new Set(Object.keys(saved?.threadSettings ?? {})),
+      lastThreadSettings: null,
+      dirtyDrafts: new Set(),
+      dirtySettings: new Set(),
       draftSaveTimers: new Map(),
       persistenceQueues: new Map(),
       draftVersions: new Map(),
@@ -373,7 +431,7 @@ function ensureRecord(projectPath: string): ProjectRecord {
       loadedDraftCheckouts: new Set(),
       draftPageOffsets: new Map(),
       draftPageLoads: new Map(),
-      pendingSends: saved?.pendingSends ?? {},
+      pendingSends: {},
     };
     projectRecords.set(projectPath, record);
   }
@@ -382,20 +440,26 @@ function ensureRecord(projectPath: string): ProjectRecord {
 
 function resetProjectIdentity(projectPath: string, record: ProjectRecord, projectId: string): void {
   const { storageStatus, unlinkedProjects } = record.snapshot;
+  const previousProjectId = record.projectId;
   record.draftSaveTimers.forEach((timer) => window.clearTimeout(timer));
   record.draftSaveTimers.clear();
   try {
     localStorage.removeItem(localStateKey(projectPath));
-    localStorage.removeItem(lastSettingsKey(projectPath));
+    if (previousProjectId) {
+      localStorage.removeItem(lastSettingsKey(projectPath, previousProjectId));
+    }
   } catch {
     // The in-memory snapshot is still reset if local storage cannot be updated.
   }
   record.projectId = projectId;
+  record.identityVerified = false;
+  record.candidateLocalState = null;
   record.identityVersion += 1;
   record.lastThreadSettings = null;
   record.pendingSends = {};
   record.dirtyDrafts.clear();
   record.dirtySettings.clear();
+  record.persistenceQueues.clear();
   record.draftVersions.clear();
   record.settingsVersions.clear();
   record.loadedDraftCheckouts.clear();
@@ -412,8 +476,130 @@ function resetProjectIdentity(projectPath: string, record: ProjectRecord, projec
   record.listeners.forEach((listener) => listener());
 }
 
+function legacyLocalStateKey(projectPath: string): string {
+  return `${LEGACY_LOCAL_STATE_KEY_PREFIX}${encodeURIComponent(projectPath)}`;
+}
+
+function hasLocalComposerState(saved: PersistedLocalState): boolean {
+  return (
+    Object.values(saved.drafts ?? {}).some((draft) => draft.length > 0) ||
+    Object.values(saved.stagedAttachments ?? {}).some((attachments) => attachments.length > 0)
+  );
+}
+
+function restoreVerifiedLocalState(
+  projectPath: string,
+  record: ProjectRecord,
+  saved: PersistedLocalState
+): void {
+  record.pendingSends = saved.pendingSends ?? {};
+  record.dirtyDrafts = new Set(Object.keys(saved.drafts ?? {}));
+  record.dirtySettings = new Set(Object.keys(saved.threadSettings ?? {}));
+  record.lastThreadSettings = record.projectId
+    ? readLastThreadSettings(projectPath, record.projectId)
+    : null;
+  const current = record.snapshot;
+  record.snapshot = {
+    ...emptySnapshot(projectPath, saved),
+    identityVerified: true,
+    models: current.models,
+    storageStatus: current.storageStatus,
+    unlinkedProjects: current.unlinkedProjects,
+    loading: current.loading,
+    loaded: current.loaded,
+    error: current.error,
+  };
+  record.listeners.forEach((listener) => listener());
+}
+
+function quarantineLegacyLocalState(
+  projectPath: string,
+  record: ProjectRecord,
+  saved: PersistedLocalState
+): void {
+  record.legacyLocalState = saved;
+  try {
+    localStorage.setItem(legacyLocalStateKey(projectPath), JSON.stringify(saved));
+    localStorage.removeItem(localStateKey(projectPath));
+  } catch {
+    // Keep the source and in-memory copy if durable quarantine is unavailable.
+  }
+  record.snapshot = {
+    ...record.snapshot,
+    identityVerified: true,
+    legacyDraftRecoveryAvailable: hasLocalComposerState(saved),
+  };
+}
+
+/** Copy quarantined composer content into new drafts only after identity verification. */
+export function recoverLegacyAgentChatDrafts(projectPath: string): string[] {
+  const record = ensureRecord(projectPath);
+  const legacy = record.legacyLocalState;
+  if (!record.identityVerified || !record.projectId || !legacy) return [];
+
+  const sourceIds = [
+    ...new Set([
+      ...Object.keys(legacy.drafts ?? {}),
+      ...Object.keys(legacy.stagedAttachments ?? {}),
+    ]),
+  ].filter(
+    (sourceId) =>
+      (legacy.drafts?.[sourceId] ?? '').length > 0 ||
+      (legacy.stagedAttachments?.[sourceId] ?? []).length > 0
+  );
+  if (sourceIds.length === 0) return [];
+
+  const snapshot = record.snapshot;
+  const ids = sourceIds.map(() => newDraftId());
+  const drafts = { ...snapshot.drafts };
+  const stagedAttachments = { ...snapshot.stagedAttachments };
+  const threadSettings = { ...snapshot.threadSettings };
+  const draftCheckoutPaths = { ...snapshot.draftCheckoutPaths };
+  const activeDraftIdsByCheckout = { ...snapshot.activeDraftIdsByCheckout };
+  sourceIds.forEach((sourceId, index) => {
+    const draftId = ids[index];
+    drafts[draftId] = legacy.drafts?.[sourceId] ?? '';
+    stagedAttachments[draftId] = (legacy.stagedAttachments?.[sourceId] ?? []).map((attachment) => ({
+      ...attachment,
+      available: undefined,
+    }));
+    threadSettings[draftId] =
+      legacy.threadSettings?.[sourceId] ?? defaultThreadSettings(snapshot.models);
+    draftCheckoutPaths[draftId] = projectPath;
+    record.dirtyDrafts.add(draftId);
+    record.dirtySettings.add(draftId);
+    record.draftVersions.set(draftId, 1);
+    record.settingsVersions.set(draftId, 1);
+  });
+  activeDraftIdsByCheckout[projectPath] = ids[0];
+  record.legacyLocalState = null;
+  try {
+    localStorage.removeItem(legacyLocalStateKey(projectPath));
+  } catch {
+    // The recovered composer remains available in memory for this session.
+  }
+  record.snapshot = {
+    ...snapshot,
+    selectedThreadId: null,
+    selectedDraftId: ids[0],
+    selectedCheckoutPath: projectPath,
+    legacyDraftRecoveryAvailable: false,
+    drafts,
+    stagedAttachments,
+    threadSettings,
+    draftCheckoutPaths,
+    activeDraftIdsByCheckout,
+  };
+  record.listeners.forEach((listener) => listener());
+  void reconcileRestoredAttachmentAvailability(projectPath);
+  ids.forEach((draftId) => void saveProjectDraftNow(projectPath, draftId).catch(() => undefined));
+  persistLocalState(projectPath);
+  return ids;
+}
+
 function persistLocalState(projectPath: string): void {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   const snapshot = record.snapshot;
   const unsavedDrafts: Record<string, string> = {};
   const unsavedAttachments: Record<string, ChatAttachment[]> = {};
@@ -436,7 +622,7 @@ function persistLocalState(projectPath: string): void {
     localStorage.setItem(
       localStateKey(projectPath),
       JSON.stringify({
-        version: 4,
+        version: 5,
         projectId: record.projectId,
         selectedThreadId: snapshot.selectedThreadId,
         selectedDraftId: snapshot.selectedDraftId ?? snapshot.activeDraftIdsByCheckout[projectPath],
@@ -510,9 +696,7 @@ export function setAgentChatPanelVisible(projectPath: string, visible: boolean):
 
 function mergeThread(projectPath: string, thread: ChatThread, forceDraft = false): void {
   const record = ensureRecord(projectPath);
-  if (record.projectId && record.projectId !== thread.projectId) return;
-  if (!record.projectId && thread.projectPath !== projectPath) return;
-  if (!record.projectId) record.projectId = thread.projectId;
+  if (!record.identityVerified || record.projectId !== thread.projectId) return;
   if (record.discardedThreadIds.has(thread.id) || record.discardingThreadIds.has(thread.id)) return;
 
   publish(projectPath, (snapshot) => {
@@ -531,7 +715,10 @@ function mergeThread(projectPath: string, thread: ChatThread, forceDraft = false
       JSON.stringify(snapshot.stagedAttachments[thread.id] ?? []) ===
         JSON.stringify(thread.draft?.attachments ?? []);
     if (draftMatches) record.dirtyDrafts.delete(thread.id);
-    const keepLocalDraft = !forceDraft && record.dirtyDrafts.has(thread.id);
+    const sendInFlight = Boolean(record.pendingSends[thread.id]);
+    // Save acknowledgements can clear dirty state before a send resolves; keep
+    // the current composer until that send's own response reconciles it.
+    const keepLocalDraft = !forceDraft && (record.dirtyDrafts.has(thread.id) || sendInFlight);
     const drafts = keepLocalDraft
       ? snapshot.drafts
       : { ...snapshot.drafts, [thread.id]: thread.draft?.text ?? '' };
@@ -544,7 +731,7 @@ function mergeThread(projectPath: string, thread: ChatThread, forceDraft = false
       localSettings?.reasoningEffort === (thread.settings?.reasoningEffort ?? null) &&
       localSettings?.autoAcceptMode === (thread.settings?.autoAcceptMode ?? false);
     if (settingsMatch) record.dirtySettings.delete(thread.id);
-    const keepLocalSettings = record.dirtySettings.has(thread.id);
+    const keepLocalSettings = record.dirtySettings.has(thread.id) || sendInFlight;
     const threadSettings = keepLocalSettings
       ? snapshot.threadSettings
       : {
@@ -697,13 +884,24 @@ async function reconcileRestoredAttachmentAvailability(
   projectPath: string,
   recheckUnowned = true
 ): Promise<void> {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
+  const identityVersion = record.identityVersion;
+  const projectId = record.projectId;
   const unresolved = applyAttachmentAvailability(projectPath, [], 'checking');
   if (!recheckUnowned || unresolved.length === 0) return;
 
   try {
     const checked = await recheckAgentChatAttachmentsCommand(projectPath, unresolved);
+    if (
+      record.identityVersion !== identityVersion ||
+      !record.identityVerified ||
+      record.projectId !== projectId
+    )
+      return;
     applyAttachmentAvailability(projectPath, checked, 'unknown');
   } catch {
+    if (record.identityVersion !== identityVersion) return;
     // Older native builds may not expose recheck yet. Keep these descriptors
     // unknown and gated; a saved-draft owner can still confirm them afterward.
     applyAttachmentAvailability(projectPath, [], 'unknown');
@@ -749,12 +947,8 @@ async function ensureThreadListener(): Promise<void> {
       if (!thread?.projectPath || !thread.id || !Number.isFinite(thread.revision)) return;
       rememberThreadEvent(thread);
       const matchingProjects = [...projectRecords.entries()]
-        .filter(
-          ([projectPath, record]) =>
-            projectPath === thread.projectPath || record.projectId === thread.projectId
-        )
+        .filter(([, record]) => record.identityVerified && record.projectId === thread.projectId)
         .map(([projectPath]) => projectPath);
-      if (matchingProjects.length === 0) matchingProjects.push(thread.projectPath);
       matchingProjects.forEach((projectPath) => mergeThread(projectPath, thread));
     }).catch((error: unknown) => {
       threadListenerPromise = null;
@@ -818,16 +1012,58 @@ export function loadAgentChatProject(projectPath: string, force = false): Promis
         throw threadsResult.reason;
       }
 
-      const listedProjectId = threadsResult.value[0]?.projectId ?? null;
+      const listedProjectId = threadsResult.value.projectId;
+      if (!listedProjectId) {
+        throw new Error('Agent Chat did not return a project identity. Drafts remain locked.');
+      }
+      const candidateBeforeIdentityChange = record.candidateLocalState;
       const identityChanged = Boolean(
         listedProjectId && record.projectId && listedProjectId !== record.projectId
       );
       if (listedProjectId && identityChanged) {
         resetProjectIdentity(projectPath, record, listedProjectId);
-      } else if (listedProjectId && !record.projectId) {
-        record.projectId = listedProjectId;
+        if (candidateBeforeIdentityChange && hasLocalComposerState(candidateBeforeIdentityChange)) {
+          quarantineLegacyLocalState(projectPath, record, candidateBeforeIdentityChange);
+        }
       }
-      for (const thread of threadsResult.value) mergeThread(projectPath, thread);
+      if (!record.identityVerified) {
+        const candidate = record.candidateLocalState;
+        record.projectId = listedProjectId;
+        record.identityVerified = true;
+        record.identityVersion += 1;
+        record.candidateLocalState = null;
+        if (candidate?.projectId === listedProjectId) {
+          restoreVerifiedLocalState(projectPath, record, candidate);
+        } else {
+          if (candidate && candidate.projectId == null && hasLocalComposerState(candidate)) {
+            quarantineLegacyLocalState(projectPath, record, candidate);
+          } else {
+            if (candidate?.projectId) {
+              try {
+                localStorage.removeItem(localStateKey(projectPath));
+                localStorage.removeItem(lastSettingsKey(projectPath, candidate.projectId));
+              } catch {
+                // The active snapshot below is still isolated in memory.
+              }
+            }
+            record.snapshot = { ...record.snapshot, identityVerified: true };
+          }
+          if (record.legacyLocalState) {
+            record.snapshot = {
+              ...record.snapshot,
+              legacyDraftRecoveryAvailable: hasLocalComposerState(record.legacyLocalState),
+            };
+          }
+        }
+      } else if (record.projectId !== listedProjectId) {
+        resetProjectIdentity(projectPath, record, listedProjectId);
+        record.identityVerified = true;
+        record.snapshot = { ...record.snapshot, identityVerified: true };
+      }
+      if (record.legacyLocalState && hasLocalComposerState(record.legacyLocalState)) {
+        record.snapshot = { ...record.snapshot, legacyDraftRecoveryAvailable: true };
+      }
+      for (const thread of threadsResult.value.threads) mergeThread(projectPath, thread);
       if (record.projectId) replayRecentThreadEvents(projectPath, record.projectId);
       void reconcileRestoredAttachmentAvailability(projectPath, false);
 
@@ -935,8 +1171,16 @@ function draftSettingsFor(
 
 function mergeSavedDraft(projectPath: string, savedDraft: SavedChatDraft): void {
   const record = ensureRecord(projectPath);
-  if (record.projectId && savedDraft.projectId !== record.projectId) return;
-  if (!record.projectId) record.projectId = savedDraft.projectId;
+  if (!record.identityVerified || savedDraft.projectId !== record.projectId) return;
+  const snapshot = record.snapshot;
+  if (
+    savedDraft.state === 'draft' &&
+    snapshot.selectedDraftId === savedDraft.draftId &&
+    !record.dirtySettings.has(savedDraft.draftId)
+  ) {
+    record.lastThreadSettings = normalizedThreadSettings(savedDraft.settings);
+    persistLastThreadSettings(projectPath, record.projectId, record.lastThreadSettings);
+  }
   publish(projectPath, (snapshot) => {
     const savedDrafts = [
       ...snapshot.savedDrafts.filter((draft) => draft.draftId !== savedDraft.draftId),
@@ -1000,12 +1244,14 @@ export function loadAgentChatDrafts(
   loadMore = false
 ): Promise<void> {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return Promise.resolve();
   const existingLoad = record.draftPageLoads.get(checkoutPath);
   if (existingLoad) return existingLoad;
   if (!loadMore && record.loadedDraftCheckouts.has(checkoutPath)) return Promise.resolve();
   const offset = loadMore ? (record.draftPageOffsets.get(checkoutPath) ?? null) : 0;
   if (offset === null) return Promise.resolve();
   const identityVersion = record.identityVersion;
+  const projectId = record.projectId;
 
   publish(projectPath, (snapshot) => ({
     ...snapshot,
@@ -1019,8 +1265,13 @@ export function loadAgentChatDrafts(
 
   const loading = (async () => {
     try {
-      const page = await listAgentChatDrafts(projectPath, checkoutPath, 50, offset);
-      if (record.identityVersion !== identityVersion) return;
+      const page = await listAgentChatDrafts(projectPath, projectId, checkoutPath, 50, offset);
+      if (
+        record.identityVersion !== identityVersion ||
+        !record.identityVerified ||
+        record.projectId !== projectId
+      )
+        return;
       page.drafts.forEach((draft) => mergeSavedDraft(projectPath, draft));
       await reconcileRestoredAttachmentAvailability(projectPath);
       record.loadedDraftCheckouts.add(checkoutPath);
@@ -1140,9 +1391,16 @@ function saveProjectDraftNow(
   captured?: DraftSaveCapture
 ): Promise<void> {
   const record = ensureRecord(projectPath);
-  if (record.discardingThreadIds.has(draftId) || record.discardedThreadIds.has(draftId)) {
+  if (
+    !record.identityVerified ||
+    !record.projectId ||
+    record.discardingThreadIds.has(draftId) ||
+    record.discardedThreadIds.has(draftId)
+  ) {
     return Promise.resolve();
   }
+  const projectId = record.projectId;
+  const identityVersion = record.identityVersion;
   const initial = getAgentChatSnapshot(projectPath);
   const checkoutPath = initial.draftCheckoutPaths[draftId];
   if (!checkoutPath) return Promise.resolve();
@@ -1157,7 +1415,14 @@ function saveProjectDraftNow(
   };
 
   return enqueuePersistence(projectPath, draftId, async () => {
-    if (record.discardingThreadIds.has(draftId) || record.discardedThreadIds.has(draftId)) return;
+    if (
+      record.identityVersion !== identityVersion ||
+      !record.identityVerified ||
+      record.projectId !== projectId ||
+      record.discardingThreadIds.has(draftId) ||
+      record.discardedThreadIds.has(draftId)
+    )
+      return;
     const current = getAgentChatSnapshot(projectPath);
     const boundThreadId = current.draftThreadIds[draftId];
     if (boundThreadId && !captured) {
@@ -1179,13 +1444,16 @@ function saveProjectDraftNow(
       const draftVersion = record.draftVersions.get(boundThreadId) ?? 0;
       const settingsVersion = record.settingsVersions.get(boundThreadId) ?? 0;
       try {
+        if (record.identityVersion !== identityVersion || record.projectId !== projectId) return;
         let savedThread = await saveAgentChatDraftCommand(projectPath, boundThreadId, threadDraft);
+        if (record.identityVersion !== identityVersion || record.projectId !== projectId) return;
         mergeThread(projectPath, savedThread);
         savedThread = await saveAgentChatSettingsCommand(
           projectPath,
           boundThreadId,
           threadSettings
         );
+        if (record.identityVersion !== identityVersion || record.projectId !== projectId) return;
         mergeThread(projectPath, savedThread);
         const latest = getAgentChatSnapshot(projectPath);
         const latestDraftMatches =
@@ -1225,6 +1493,7 @@ function saveProjectDraftNow(
         }
         return;
       } catch (error) {
+        if (record.identityVersion !== identityVersion) return;
         publish(projectPath, (snapshot) => ({
           ...snapshot,
           threadErrors: {
@@ -1238,11 +1507,18 @@ function saveProjectDraftNow(
     try {
       const savedDraft = await saveAgentChatProjectDraftCommand(
         projectPath,
+        projectId,
         checkoutPath,
         draftId,
         capturedState.draft,
         capturedState.settings
       );
+      if (
+        record.identityVersion !== identityVersion ||
+        !record.identityVerified ||
+        record.projectId !== projectId
+      )
+        return;
       mergeSavedDraft(projectPath, savedDraft);
       const latest = getAgentChatSnapshot(projectPath);
       const draftMatches =
@@ -1294,6 +1570,7 @@ function saveProjectDraftNow(
         queueDraftSave(projectPath, draftId);
       }
     } catch (error) {
+      if (record.identityVersion !== identityVersion) return;
       publish(projectPath, (snapshot) => ({
         ...snapshot,
         threadErrors: {
@@ -1456,6 +1733,7 @@ function queueSettingsSave(projectPath: string, threadId: string): Promise<void>
 
 function touchDraft(projectPath: string, threadId: string, saveImmediately = false): void {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) return;
   record.draftVersions.set(threadId, (record.draftVersions.get(threadId) ?? 0) + 1);
   record.dirtyDrafts.add(threadId);
@@ -1500,6 +1778,8 @@ async function flushThreadSaves(projectPath: string, threadId: string): Promise<
 }
 
 export function selectAgentChatThread(projectPath: string, threadId: string): void {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   const snapshot = getAgentChatSnapshot(projectPath);
   const thread = snapshot.threads.find((candidate) => candidate.id === threadId);
   if (!thread || thread.status === 'closed') return;
@@ -1528,13 +1808,17 @@ export function selectAgentChatThread(projectPath: string, threadId: string): vo
 
 /** Create a fresh provider-free draft, preserving every older saved draft. */
 export function createAgentChatDraft(projectPath: string, checkoutPath = projectPath): string {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return '';
   const current = getAgentChatSnapshot(projectPath);
   const draftId = newDraftId();
   const selectedId = current.selectedThreadId ?? current.selectedDraftId;
   const selectedThread = current.threads.find((thread) => thread.id === selectedId);
   const selectedSettings = selectedId ? current.threadSettings[selectedId] : null;
   const inheritedSettings =
-    ensureRecord(projectPath).lastThreadSettings ?? defaultThreadSettings(current.models);
+    (selectedId ? current.threadSettings[selectedId] : null) ??
+    record.lastThreadSettings ??
+    defaultThreadSettings(current.models);
   const draftSettings = {
     ...inheritedSettings,
     autoAcceptMode:
@@ -1560,7 +1844,6 @@ export function createAgentChatDraft(projectPath: string, checkoutPath = project
           }
         : snapshot.threadSettings,
   }));
-  const record = ensureRecord(projectPath);
   record.dirtyDrafts.add(draftId);
   record.dirtySettings.add(draftId);
   record.draftVersions.set(draftId, 1);
@@ -1572,6 +1855,8 @@ export function createAgentChatDraft(projectPath: string, checkoutPath = project
 
 /** Select the current editable draft for a checkout, or create one if it has none. */
 export function selectAgentChatDraft(projectPath: string, checkoutPath = projectPath): string {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return '';
   const current = getAgentChatSnapshot(projectPath);
   const activeDraftId = current.activeDraftIdsByCheckout[checkoutPath];
   const canReuse = Boolean(
@@ -1604,12 +1889,18 @@ export function selectAgentChatDraft(projectPath: string, checkoutPath = project
 }
 
 export function selectAgentChatSavedDraft(projectPath: string, draftId: string): void {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   const snapshot = getAgentChatSnapshot(projectPath);
   const savedDraft = snapshot.savedDrafts.find(
     (draft) => draft.draftId === draftId && draft.state === 'draft'
   );
   const checkoutPath = savedDraft?.checkoutPath ?? snapshot.draftCheckoutPaths[draftId];
   if (!checkoutPath || snapshot.draftThreadIds[draftId]) return;
+  if (savedDraft && !record.dirtySettings.has(draftId)) {
+    record.lastThreadSettings = normalizedThreadSettings(savedDraft.settings);
+    persistLastThreadSettings(projectPath, record.projectId, record.lastThreadSettings);
+  }
   publish(projectPath, (current) => ({
     ...current,
     selectedThreadId: null,
@@ -1632,6 +1923,7 @@ export function getAgentChatDraftId(
 
 export function setAgentChatDraft(projectPath: string, threadId: string, draft: string): void {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) return;
   publish(projectPath, (snapshot) => ({
     ...snapshot,
@@ -1646,8 +1938,10 @@ export function setAgentChatThreadSettings(
   settings: AgentChatThreadSettings
 ): void {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) return;
-  record.lastThreadSettings = settings;
+  record.lastThreadSettings = normalizedThreadSettings(settings);
+  persistLastThreadSettings(projectPath, record.projectId, record.lastThreadSettings);
   publish(projectPath, (snapshot) => ({
     ...snapshot,
     threadSettings: { ...snapshot.threadSettings, [threadId]: settings },
@@ -1669,8 +1963,15 @@ export async function createAgentChatThread(
   projectPath: string,
   checkoutPath = projectPath
 ): Promise<ChatThread> {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) {
+    throw new Error('Wait for this project’s Agent Chat identity to load before creating a chat.');
+  }
+  const projectId = record.projectId;
+  const identityVersion = record.identityVersion;
   await ensureThreadListener();
-  const thread = await createAgentChatThreadCommand(projectPath, checkoutPath, 'codex');
+  const thread = await createAgentChatThreadCommand(projectPath, projectId, checkoutPath, 'codex');
+  if (record.identityVersion !== identityVersion || record.projectId !== projectId) return thread;
   mergeThread(projectPath, thread);
   selectAgentChatThread(projectPath, thread.id);
   return thread;
@@ -1699,6 +2000,11 @@ export async function sendAgentChatTurn(
     }));
     throw new Error(message);
   };
+  if (!record.identityVerified || !record.projectId) {
+    rejectSend('Wait for this project’s Agent Chat identity to load before sending.');
+  }
+  const identityVersionAtStart = record.identityVersion;
+  const projectIdAtStart = record.projectId!;
   if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) {
     rejectSend('This conversation is being discarded. Start a new chat to continue.');
   }
@@ -1733,6 +2039,7 @@ export async function sendAgentChatTurn(
     initialThread &&
     (initialThread.resumeStatus === 'unknown' ||
       initialThread.providerStatus === 'unknown' ||
+      initialThread.providerStatus === 'systemError' ||
       initialThread.providerStatus === 'notLoaded')
   ) {
     rejectSend('Check Codex history before continuing this saved conversation.');
@@ -1773,7 +2080,14 @@ export async function sendAgentChatTurn(
   }
   validateModelSettings(initial.models);
   const safety = initial.sendSafety[threadId];
-  if (safety && (!safety.reconciled || safety.blockedText === text)) rejectSend(safety.message);
+  const sameBlockedPrompt = (candidate: SendSafetyState | undefined): boolean =>
+    Boolean(
+      candidate &&
+      candidate.blockedText === text &&
+      candidate.blockedAttachmentIds.length === attachments.length &&
+      candidate.blockedAttachmentIds.every((id, index) => attachments[index]?.id === id)
+    );
+  if (safety && (!safety.reconciled || sameBlockedPrompt(safety))) rejectSend(safety.message);
 
   const draftVersionAtSend = captured?.draftVersion ?? record.draftVersions.get(threadId) ?? 0;
   const settingsVersionAtSend =
@@ -1788,6 +2102,13 @@ export async function sendAgentChatTurn(
   let sendCommandStarted = false;
   try {
     if (!captured) await flushThreadSaves(projectPath, threadId);
+    if (
+      !record.identityVerified ||
+      record.projectId !== projectIdAtStart ||
+      record.identityVersion !== identityVersionAtStart
+    ) {
+      rejectSend('This project changed while Agent Chat was open. Reload before sending.');
+    }
     if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) {
       throw new Error('This conversation is being discarded. Start a new chat to continue.');
     }
@@ -1808,6 +2129,7 @@ export async function sendAgentChatTurn(
     }
     if (
       latestThread?.providerStatus === 'unknown' ||
+      latestThread?.providerStatus === 'systemError' ||
       latestThread?.providerStatus === 'notLoaded'
     ) {
       rejectSend('Check Codex history before continuing this saved conversation.');
@@ -1821,12 +2143,14 @@ export async function sendAgentChatTurn(
       );
     }
     const latestSafety = latest.sendSafety[threadId];
-    if (latestSafety && (!latestSafety.reconciled || latestSafety.blockedText === text)) {
+    if (latestSafety && (!latestSafety.reconciled || sameBlockedPrompt(latestSafety))) {
       rejectSend(latestSafety.message);
     }
     validateModelSettings(latest.models);
 
+    const sendAttemptId = newDraftId();
     record.pendingSends[threadId] = {
+      attemptId: sendAttemptId,
       text,
       attachmentIds: attachments.map((attachment) => attachment.id),
     };
@@ -1834,20 +2158,29 @@ export async function sendAgentChatTurn(
     sendCommandStarted = true;
     const thread = await sendAgentChatCommand(
       projectPath,
+      projectIdAtStart,
       threadId,
       text,
       attachments,
       modelId,
       reasoningEffort,
-      autoAcceptMode
+      autoAcceptMode,
+      sendAttemptId
     );
-    delete record.pendingSends[threadId];
+    if (
+      record.identityVersion !== identityVersionAtStart ||
+      record.projectId !== projectIdAtStart
+    ) {
+      throw new Error('This project changed while Agent Chat was open. Reload before continuing.');
+    }
     if (record.discardedThreadIds.has(threadId)) {
+      delete record.pendingSends[threadId];
       persistLocalState(projectPath);
       return thread;
     }
     const unchangedSinceSend = (record.draftVersions.get(threadId) ?? 0) === draftVersionAtSend;
     mergeThread(projectPath, thread, unchangedSinceSend);
+    delete record.pendingSends[threadId];
     publish(projectPath, (snapshot) => {
       const staged = (snapshot.stagedAttachments[threadId] ?? []).filter(
         (attachment) => !attachments.some((sentAttachment) => sentAttachment.id === attachment.id)
@@ -1886,12 +2219,36 @@ export async function sendAgentChatTurn(
     return thread;
   } catch (error) {
     const message = messageOf(error);
+    if (
+      record.identityVersion !== identityVersionAtStart ||
+      record.projectId !== projectIdAtStart
+    ) {
+      throw error;
+    }
     if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) {
       delete record.pendingSends[threadId];
       persistLocalState(projectPath);
       throw error;
     }
     if (sendCommandStarted) {
+      if ((record.draftVersions.get(threadId) ?? 0) === draftVersionAtSend) {
+        publish(projectPath, (snapshot) => {
+          const existing = snapshot.stagedAttachments[threadId] ?? [];
+          const restored = [...existing];
+          for (const attachment of attachments) {
+            if (!restored.some((candidate) => candidate.id === attachment.id)) {
+              restored.push(attachment);
+            }
+          }
+          return {
+            ...snapshot,
+            drafts: { ...snapshot.drafts, [threadId]: text },
+            stagedAttachments: { ...snapshot.stagedAttachments, [threadId]: restored },
+          };
+        });
+        record.draftVersions.set(threadId, draftVersionAtSend + 1);
+        record.dirtyDrafts.add(threadId);
+      }
       publish(projectPath, (snapshot) => ({
         ...snapshot,
         threadErrors: { ...snapshot.threadErrors, [threadId]: message },
@@ -1901,14 +2258,11 @@ export async function sendAgentChatTurn(
             message:
               'Check Codex history before sending this prompt again. The previous send may have been accepted.',
             blockedText: text,
+            blockedAttachmentIds: attachments.map((attachment) => attachment.id),
             reconciled: false,
           },
         },
       }));
-      record.pendingSends[threadId] = {
-        text,
-        attachmentIds: attachments.map((attachment) => attachment.id),
-      };
     } else {
       publish(projectPath, (snapshot) => ({
         ...snapshot,
@@ -1951,6 +2305,11 @@ export async function sendAgentChatDraftTurn(
   autoAcceptMode: boolean
 ): Promise<ChatThread> {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) {
+    throw new Error('Wait for this project’s Agent Chat identity to load before sending.');
+  }
+  const projectIdAtStart = record.projectId;
+  const identityVersionAtStart = record.identityVersion;
   const initial = getAgentChatSnapshot(projectPath);
   const rejectDraftSend = (message: string): never => {
     publish(projectPath, (snapshot) => ({
@@ -2029,9 +2388,21 @@ export async function sendAgentChatDraftTurn(
   try {
     await ensureThreadListener();
     await saveProjectDraftNow(projectPath, draftId, captured);
+    if (
+      record.identityVersion !== identityVersionAtStart ||
+      record.projectId !== projectIdAtStart ||
+      !record.identityVerified
+    )
+      throw new Error('This project changed while Agent Chat was open. Reload before sending.');
     const thread = await enqueuePersistence(projectPath, draftId, () =>
-      promoteAgentChatDraftCommand(projectPath, checkoutPath, draftId, 'codex')
+      promoteAgentChatDraftCommand(projectPath, projectIdAtStart, checkoutPath, draftId, 'codex')
     );
+    if (
+      record.identityVersion !== identityVersionAtStart ||
+      record.projectId !== projectIdAtStart ||
+      !record.identityVerified
+    )
+      throw new Error('This project changed while Agent Chat was open. Reload before sending.');
     if (thread.projectPath !== projectPath || thread.checkoutPath !== checkoutPath) {
       throw new Error('Codex promoted a draft for a different project or checkout.');
     }
@@ -2094,6 +2465,12 @@ export async function sendAgentChatDraftTurn(
       settingsVersion: settingsVersionAtSend,
     });
   } catch (error) {
+    if (
+      record.identityVersion !== identityVersionAtStart ||
+      record.projectId !== projectIdAtStart
+    ) {
+      throw error;
+    }
     const createdThreadId = getAgentChatSnapshot(projectPath).draftThreadIds[draftId];
     if (createdThreadId && record.discardedThreadIds.has(createdThreadId)) throw error;
     publish(projectPath, (snapshot) => ({
@@ -2290,32 +2667,75 @@ export async function resumeCheckAgentChatThread(
   projectPath: string,
   threadId: string
 ): Promise<ChatThread> {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) {
+    throw new Error('Wait for this project’s Agent Chat identity to load before checking history.');
+  }
+  const identityVersion = record.identityVersion;
+  const projectId = record.projectId;
   try {
     const updated = await resumeCheckAgentChatThreadCommand(projectPath, threadId);
+    if (record.identityVersion !== identityVersion || record.projectId !== projectId)
+      return updated;
     mergeThread(projectPath, updated);
-    const record = ensureRecord(projectPath);
     const pending = record.pendingSends[threadId];
     const providerAvailable = updated.resumeStatus === 'available';
+    const attemptReconciliation = pending?.attemptId
+      ? updated.turns.find((turn) => turn.id === pending.attemptId)?.reconciliation
+      : null;
+    const reconciliation =
+      attemptReconciliation?.attemptId === pending?.attemptId ? attemptReconciliation : null;
+    const outcome = reconciliation?.outcome ?? null;
+    if (pending && outcome === 'confirmedPresent') {
+      record.pendingSends[threadId] = {
+        ...pending,
+        reconciliation: 'confirmedPresent',
+        providerTurnId: reconciliation?.providerTurnId ?? null,
+      };
+    } else if (pending && outcome === 'confirmedAbsent') {
+      delete record.pendingSends[threadId];
+    } else if (pending) {
+      record.pendingSends[threadId] = { ...pending, reconciliation: 'ambiguous' };
+    }
     publish(projectPath, (snapshot) => {
       const sendSafety = { ...snapshot.sendSafety };
       const reconciliationRequired = { ...snapshot.reconciliationRequired };
-      if (pending && providerAvailable) {
+      if (pending && outcome === 'confirmedPresent') {
         sendSafety[threadId] = {
           message:
-            'Codex is available, but this history check cannot confirm whether the previous prompt was accepted. Start a new conversation to avoid a duplicate send.',
+            pending.attachmentIds.length > 0
+              ? 'Codex history confirms this prompt text was accepted. It cannot confirm whether the attachments were accepted; edit the prompt or attachment selection before sending again.'
+              : 'Codex history confirms this prompt was accepted. Edit it before sending again to avoid a duplicate.',
           blockedText: pending.text,
+          blockedAttachmentIds: pending.attachmentIds,
+          reconciled: true,
+        };
+        delete reconciliationRequired[threadId];
+      } else if (pending && outcome === 'confirmedAbsent' && updated.providerStatus === 'idle') {
+        delete sendSafety[threadId];
+        delete reconciliationRequired[threadId];
+      } else if (pending && providerAvailable) {
+        sendSafety[threadId] = {
+          message:
+            'Codex history could not tie this provider item to the saved send attempt. Keep the draft and check history again before continuing.',
+          blockedText: pending.text,
+          blockedAttachmentIds: pending.attachmentIds,
           reconciled: false,
         };
         reconciliationRequired[threadId] = sendSafety[threadId].message;
-      } else if (providerAvailable && !pending) {
+      } else if (providerAvailable && updated.providerStatus === 'idle' && !pending) {
         delete sendSafety[threadId];
         delete reconciliationRequired[threadId];
       } else {
         sendSafety[threadId] = {
-          message: pending
-            ? 'Codex could not confirm this conversation. Keep the draft and start a new conversation before retrying.'
-            : 'Codex could not confirm this conversation. Keep its saved history and start a new conversation to continue.',
+          message:
+            updated.providerStatus === 'systemError'
+              ? 'Codex reports a system error for this saved conversation. Keep the draft and check its history again before continuing.'
+              : pending
+                ? 'Codex could not confirm this conversation. Keep the draft and check its history again before retrying.'
+                : 'Codex could not confirm this conversation. Keep its saved history and check again before continuing.',
           blockedText: pending?.text ?? '',
+          blockedAttachmentIds: pending?.attachmentIds ?? [],
           reconciled: false,
         };
         reconciliationRequired[threadId] = sendSafety[threadId].message;
@@ -2324,18 +2744,24 @@ export async function resumeCheckAgentChatThread(
         ...snapshot,
         sendSafety,
         reconciliationRequired,
-        threadErrors: providerAvailable
-          ? clearThreadError(snapshot.threadErrors, threadId)
-          : {
-              ...snapshot.threadErrors,
-              [threadId]:
-                'Codex history is unavailable for this conversation. The local transcript remains saved.',
-            },
+        threadErrors:
+          providerAvailable && updated.providerStatus === 'idle'
+            ? clearThreadError(snapshot.threadErrors, threadId)
+            : {
+                ...snapshot.threadErrors,
+                [threadId]:
+                  updated.providerStatus === 'active'
+                    ? 'Codex still reports an active saved turn. Wait for it to finish before continuing.'
+                    : updated.providerStatus === 'systemError'
+                      ? 'Codex reports a system error for this saved conversation. Local history remains available.'
+                      : 'Codex history is unavailable for this conversation. The local transcript remains saved.',
+              },
       };
     });
     persistLocalState(projectPath);
     return updated;
   } catch (error) {
+    if (record.identityVersion !== identityVersion || record.projectId !== projectId) throw error;
     publish(projectPath, (snapshot) => ({
       ...snapshot,
       threadErrors: {
@@ -2383,6 +2809,11 @@ export async function relinkUnlinkedAgentChatProject(
 
 export async function deleteAgentChatDraft(projectPath: string, draftId: string): Promise<void> {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) {
+    throw new Error('Wait for this project’s Agent Chat identity to load before deleting a draft.');
+  }
+  const projectId = record.projectId;
+  const identityVersion = record.identityVersion;
   const snapshot = getAgentChatSnapshot(projectPath);
   const savedDraft = snapshot.savedDrafts.find((draft) => draft.draftId === draftId);
   const checkoutPath = savedDraft?.checkoutPath ?? snapshot.draftCheckoutPaths[draftId];
@@ -2402,10 +2833,17 @@ export async function deleteAgentChatDraft(projectPath: string, draftId: string)
   if (timer !== undefined) window.clearTimeout(timer);
   record.draftSaveTimers.delete(draftId);
   await (record.persistenceQueues.get(draftId) ?? Promise.resolve());
+  if (record.identityVersion !== identityVersion || record.projectId !== projectId) {
+    throw new Error('This project changed while Agent Chat was open. Reload before deleting.');
+  }
   try {
-    if (savedDraft) await deleteAgentChatProjectDraftCommand(projectPath, draftId);
+    if (savedDraft) await deleteAgentChatProjectDraftCommand(projectPath, projectId, draftId);
+    if (record.identityVersion !== identityVersion || record.projectId !== projectId) {
+      throw new Error('This project changed while Agent Chat was open. Reload before deleting.');
+    }
   } catch (error) {
     record.discardingThreadIds.delete(draftId);
+    if (record.identityVersion !== identityVersion) throw error;
     publish(projectPath, (current) => ({
       ...current,
       threadErrors: {
@@ -2563,11 +3001,21 @@ export async function stageCapturedAttachment(
   target: AgentChatCaptureTarget,
   path: string
 ): Promise<ChatAttachment | null> {
+  const record = ensureRecord(target.projectPath);
+  if (!record.identityVerified || !record.projectId) return null;
+  const projectId = record.projectId;
+  const identityVersion = record.identityVersion;
   const before = getAgentChatSnapshot(target.projectPath);
   if (!isCaptureTargetAvailable(before, target)) return null;
 
   try {
     const attachment = await stageAgentChatAttachmentCommand(target.projectPath, path);
+    if (
+      record.identityVersion !== identityVersion ||
+      !record.identityVerified ||
+      record.projectId !== projectId
+    )
+      return null;
     let attached = false;
     let destinationId: string | null = null;
     publish(target.projectPath, (snapshot) => {
@@ -2605,6 +3053,7 @@ export function removeStagedAgentChatAttachment(
   attachmentId: string
 ): void {
   const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return;
   if (record.discardingThreadIds.has(threadId) || record.discardedThreadIds.has(threadId)) return;
   publish(projectPath, (snapshot) => {
     const attachments = (snapshot.stagedAttachments[threadId] ?? []).filter(
@@ -2633,6 +3082,8 @@ export function removeStagedAgentChatAttachment(
 
 /** Capture callers should resolve this at initiation, then reuse it after awaits. */
 export function getAgentChatCaptureTarget(projectPath: string): AgentChatCaptureTarget | null {
+  const record = ensureRecord(projectPath);
+  if (!record.identityVerified || !record.projectId) return null;
   const snapshot = getAgentChatSnapshot(projectPath);
   const threadId = snapshot.selectedThreadId;
   if (threadId) {

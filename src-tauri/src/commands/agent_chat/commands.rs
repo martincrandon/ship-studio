@@ -1,4 +1,6 @@
 use super::attachments;
+use super::attachments::AttachmentOwnerScope;
+use super::identity::folder_instance_identity;
 use super::protocol::{
     attachment_user_item, build_turn_input, rpc_result, validate_request_response,
 };
@@ -6,13 +8,15 @@ use super::provider;
 use super::runtime::request;
 use super::service::{AgentChatService, AgentChatStorageStatus};
 use super::types::{
-    ChatAttachment, ChatDraft, ChatItem, ChatModel, ChatSettings, ChatThread, SavedChatDraft,
-    SavedChatDraftPage, MAX_ATTACHMENT_BYTES, MAX_ITEM_TEXT_BYTES,
+    mark_unfinished_turns_interrupted, ChatAttachment, ChatDraft, ChatItem, ChatModel,
+    ChatSettings, ChatThread, SavedChatDraft, SavedChatDraftPage, MAX_ATTACHMENT_BYTES,
+    MAX_ITEM_TEXT_BYTES,
 };
 use super::StoredProject;
 use crate::errors::CommandError;
 use crate::external_command::run_with_timeout;
 use crate::utils::validate_project_path;
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -26,17 +30,46 @@ const MAX_DRAFT_PAGE_SIZE: u32 = 50;
 const MAX_DRAFT_PAGE_OFFSET: u32 = 100_000;
 const CHECKOUT_IDENTITY_MARKER: &str = "shipstudio-agent-chat-checkout-id";
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentChatProjectMode {
+    pub is_git_repository: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentChatProjectSnapshot {
+    pub project_id: String,
+    pub threads: Vec<ChatThread>,
+}
+
 #[tauri::command]
 #[instrument(name = "agent_chat_list", skip(service, project_path))]
 pub async fn agent_chat_list(
     service: State<'_, AgentChatService>,
     project_path: String,
-) -> Result<Vec<ChatThread>, CommandError> {
+) -> Result<AgentChatProjectSnapshot, CommandError> {
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
-    let available_checkouts = list_checkouts(&project).await?;
+    let available_checkouts = list_checkouts(&project, &project_id).await?;
     service.refresh_checkout_statuses(&project_id, &available_checkouts)?;
-    service.list_threads(&project_id)
+    Ok(AgentChatProjectSnapshot {
+        project_id: project_id.clone(),
+        threads: service.list_threads(&project_id)?,
+    })
+}
+
+#[tauri::command]
+#[instrument(name = "agent_chat_project_mode", skip(service, project_path))]
+pub async fn agent_chat_project_mode(
+    service: State<'_, AgentChatService>,
+    project_path: String,
+) -> Result<AgentChatProjectMode, CommandError> {
+    let project = validate_project(&project_path)?;
+    project_identity(&service, &project).await?;
+    Ok(AgentChatProjectMode {
+        is_git_repository: git_common_dir(&project).await?.is_some(),
+    })
 }
 
 #[tauri::command]
@@ -47,6 +80,7 @@ pub async fn agent_chat_list(
 pub async fn agent_chat_list_drafts(
     service: State<'_, AgentChatService>,
     project_path: String,
+    expected_project_id: String,
     checkout_path: String,
     limit: Option<u32>,
     offset: Option<u32>,
@@ -67,8 +101,9 @@ pub async fn agent_chat_list_drafts(
     }
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
-    let checkout = validate_checkout(&project, &checkout_path).await?;
-    let identity = checkout_identity(&checkout).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
+    let checkout = validate_checkout(&project, &checkout_path, &project_id).await?;
+    let identity = checkout_identity(&checkout, Some(&project_id)).await?;
     service.list_saved_drafts(&project_id, &identity, limit, offset)
 }
 
@@ -81,6 +116,7 @@ pub async fn agent_chat_save_project_draft(
     service: State<'_, AgentChatService>,
     app: AppHandle,
     project_path: String,
+    expected_project_id: String,
     checkout_path: String,
     draft_id: String,
     draft: ChatDraft,
@@ -88,10 +124,10 @@ pub async fn agent_chat_save_project_draft(
 ) -> Result<SavedChatDraft, CommandError> {
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
-    let checkout = validate_checkout(&project, &checkout_path).await?;
-    let identity = checkout_identity(&checkout).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
+    let checkout = validate_checkout(&project, &checkout_path, &project_id).await?;
+    let identity = checkout_identity(&checkout, Some(&project_id)).await?;
     validate_draft_id(&draft_id)?;
-    validate_project_draft(&app, &draft, &settings)?;
 
     let lock = service.draft_promotion_lock(&draft_id)?;
     let _guard = lock.lock().await;
@@ -110,6 +146,16 @@ pub async fn agent_chat_save_project_draft(
                         reason: "This draft belongs to a different Git checkout".into(),
                     });
                 }
+                validate_project_draft(
+                    &app,
+                    &project_id,
+                    AttachmentOwnerScope::Thread {
+                        thread_id: &thread.id,
+                        source_draft_id: Some(&draft_id),
+                    },
+                    &draft,
+                    &settings,
+                )?;
                 let updated = service.update_thread(&thread.id, true, |thread| {
                     thread.draft = draft.clone();
                     thread.settings = settings.clone();
@@ -133,21 +179,37 @@ pub async fn agent_chat_save_project_draft(
                     promoted_thread_id: Some(thread.id),
                 })
             }
-            "draft" => service.save_project_draft(&SavedChatDraft {
-                draft_id,
-                project_id,
-                checkout_path: path,
-                checkout_identity: identity,
-                checkout_status: "available".into(),
-                draft,
-                settings,
-                saved_at: 0,
-                state: "draft".into(),
-                promoted_thread_id: None,
-            }),
+            "draft" => {
+                validate_project_draft(
+                    &app,
+                    &project_id,
+                    AttachmentOwnerScope::SavedDraft(&draft_id),
+                    &draft,
+                    &settings,
+                )?;
+                service.save_project_draft(&SavedChatDraft {
+                    draft_id,
+                    project_id,
+                    checkout_path: path,
+                    checkout_identity: identity,
+                    checkout_status: "available".into(),
+                    draft,
+                    settings,
+                    saved_at: 0,
+                    state: "draft".into(),
+                    promoted_thread_id: None,
+                })
+            }
             _ => Err(CommandError::expected("This saved draft was discarded")),
         }
     } else {
+        validate_project_draft(
+            &app,
+            &project_id,
+            AttachmentOwnerScope::SavedDraft(&draft_id),
+            &draft,
+            &settings,
+        )?;
         service.save_project_draft(&SavedChatDraft {
             draft_id,
             project_id,
@@ -168,10 +230,12 @@ pub async fn agent_chat_save_project_draft(
 pub async fn agent_chat_delete_project_draft(
     service: State<'_, AgentChatService>,
     project_path: String,
+    expected_project_id: String,
     draft_id: String,
 ) -> Result<(), CommandError> {
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
     validate_draft_id(&draft_id)?;
     let lock = service.draft_promotion_lock(&draft_id)?;
     let _guard = lock.lock().await;
@@ -187,6 +251,7 @@ pub async fn agent_chat_delete_project_draft(
 pub async fn agent_chat_promote_draft(
     service: State<'_, AgentChatService>,
     project_path: String,
+    expected_project_id: String,
     checkout_path: String,
     draft_id: String,
     provider_id: String,
@@ -199,8 +264,9 @@ pub async fn agent_chat_promote_draft(
     }
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
-    let checkout = validate_checkout(&project, &checkout_path).await?;
-    let identity = checkout_identity(&checkout).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
+    let checkout = validate_checkout(&project, &checkout_path, &project_id).await?;
+    let identity = checkout_identity(&checkout, Some(&project_id)).await?;
     validate_draft_id(&draft_id)?;
 
     let lock = service.draft_promotion_lock(&draft_id)?;
@@ -235,6 +301,9 @@ pub async fn agent_chat_promote_draft(
         title_source: "draft".into(),
         status: "starting".into(),
         turn_id: None,
+        approval_policy: None,
+        sandbox_policy: None,
+        turns: Vec::new(),
         items: Vec::new(),
         requests: Vec::new(),
         draft: saved.draft,
@@ -281,6 +350,7 @@ pub async fn agent_chat_promote_draft(
 pub async fn agent_chat_create(
     service: State<'_, AgentChatService>,
     project_path: String,
+    expected_project_id: String,
     checkout_path: String,
     provider_id: String,
 ) -> Result<ChatThread, CommandError> {
@@ -292,8 +362,9 @@ pub async fn agent_chat_create(
     }
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
-    let checkout = validate_checkout(&project, &checkout_path).await?;
-    let checkout_identity = checkout_identity(&checkout).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
+    let checkout = validate_checkout(&project, &checkout_path, &project_id).await?;
+    let checkout_identity = checkout_identity(&checkout, Some(&project_id)).await?;
     let id = Uuid::new_v4().to_string();
     let thread = ChatThread {
         id: id.clone(),
@@ -310,6 +381,9 @@ pub async fn agent_chat_create(
         title_source: "draft".into(),
         status: "starting".into(),
         turn_id: None,
+        approval_policy: None,
+        sandbox_policy: None,
+        turns: Vec::new(),
         items: Vec::new(),
         requests: Vec::new(),
         draft: ChatDraft::default(),
@@ -359,20 +433,23 @@ pub async fn agent_chat_models(
 }
 
 #[tauri::command]
-#[instrument(name = "agent_chat_send", skip(service, app, project_path, text, attachments, model, effort), fields(auto_accept = auto_accept_mode))]
+#[instrument(name = "agent_chat_send", skip(service, app, project_path, text, attachments, model, effort, send_attempt_id), fields(auto_accept = auto_accept_mode))]
 pub async fn agent_chat_send(
     service: State<'_, AgentChatService>,
     app: AppHandle,
     project_path: String,
+    expected_project_id: String,
     thread_id: String,
     text: String,
     attachments: Vec<ChatAttachment>,
     model: Option<String>,
     effort: Option<String>,
     auto_accept_mode: bool,
+    send_attempt_id: String,
 ) -> Result<ChatThread, CommandError> {
     let project = validate_project(&project_path)?;
     let project_id = project_identity(&service, &project).await?;
+    require_expected_project_identity(&expected_project_id, &project_id)?;
     let thread = thread_for_project(&service, &project_id, &thread_id)?;
     if text.trim().is_empty() && attachments.is_empty() {
         return Err(CommandError::Validation {
@@ -384,6 +461,12 @@ pub async fn agent_chat_send(
         return Err(CommandError::Validation {
             field: "text".into(),
             reason: "Messages must be no longer than 64 KB".into(),
+        });
+    }
+    if send_attempt_id.trim().is_empty() || send_attempt_id.len() > 128 {
+        return Err(CommandError::Validation {
+            field: "sendAttemptId".into(),
+            reason: "The send attempt identifier is invalid".into(),
         });
     }
     if attachments.len() > MAX_ATTACHMENTS_PER_MESSAGE {
@@ -403,25 +486,33 @@ pub async fn agent_chat_send(
             reason: "Attachments in one message must total no more than 100 MB".into(),
         });
     }
-    attachments::validate_staged(&app, &attachments)?;
+    attachments::validate_staged(
+        &app,
+        &project_id,
+        AttachmentOwnerScope::Thread {
+            thread_id: &thread_id,
+            source_draft_id: None,
+        },
+        &attachments,
+    )?;
+    provider::validate_image_attachments(&service, &project, model.as_deref(), &attachments)
+        .await?;
     let provider_thread_id = thread.provider_thread_id.as_deref().ok_or_else(|| {
         CommandError::expected(
             "This chat could not start with Codex. Create a new chat to continue.",
         )
     })?;
-    if service.is_uncertain_turn(&thread_id) {
-        return Err(CommandError::expected(
-            "Codex did not acknowledge the previous turn. It was not retried; interrupt this chat or start a new one.",
-        ));
-    }
     if !matches!(thread.status.as_str(), "idle" | "interrupted" | "error") {
         return Err(CommandError::expected(
             "This chat already has an active turn",
         ));
     }
-    if thread.provider_status == "active" {
+    if matches!(
+        thread.provider_status.as_str(),
+        "active" | "systemError" | "notLoaded"
+    ) {
         return Err(CommandError::expected(
-            "Codex still reports an active saved turn. The prompt was not sent; check again after that turn finishes.",
+            "Codex has not confirmed that this saved conversation is idle. Check its history before sending another message.",
         ));
     }
 
@@ -429,6 +520,7 @@ pub async fn agent_chat_send(
         Ok(checkout) => checkout,
         Err(_) => {
             service.update_thread(&thread_id, true, |thread| {
+                mark_unfinished_turns_interrupted(thread, chrono::Utc::now().timestamp_millis());
                 thread.status = "interrupted".into();
                 thread.checkout_status = "missing".into();
                 thread.turn_id = None;
@@ -448,8 +540,26 @@ pub async fn agent_chat_send(
         match checked_history {
             Ok(history) => {
                 let provider_status = history.status;
+                let reconciliation =
+                    service.reconcile_send_attempt(&thread_id, &history.items, &provider_status);
+                if reconciliation.as_ref().is_some_and(|result| {
+                    matches!(
+                        result.outcome.as_str(),
+                        "confirmedPresent" | "confirmedAbsent"
+                    )
+                }) {
+                    service.clear_uncertain_turn(&thread_id);
+                }
+                service.update_thread(&thread_id, true, |thread| {
+                    if history.approval_policy.is_some() {
+                        thread.approval_policy = history.approval_policy.clone();
+                    }
+                    if history.sandbox_policy.is_some() {
+                        thread.sandbox_policy = history.sandbox_policy.clone();
+                    }
+                });
                 if service
-                    .reconcile_provider_history(&thread_id, history.items)
+                    .reconcile_provider_history(&thread_id, history.items, reconciliation.as_ref())
                     .is_none()
                 {
                     service.ensure_storage()?;
@@ -459,21 +569,32 @@ pub async fn agent_chat_send(
                 }
                 service.ensure_storage()?;
                 service.update_thread(&thread_id, true, |thread| {
-                    thread.resume_status = if provider_status == "unknown" {
-                        "unavailable".into()
-                    } else {
+                    thread.resume_status = if matches!(
+                        provider_status.as_str(),
+                        "idle" | "active" | "systemError"
+                    ) {
                         "available".into()
+                    } else {
+                        "unavailable".into()
                     };
                     thread.provider_status = provider_status.clone();
                     if provider_status == "active" {
+                        mark_unfinished_turns_interrupted(
+                            thread,
+                            chrono::Utc::now().timestamp_millis(),
+                        );
                         thread.status = "interrupted".into();
                         thread.turn_id = None;
                         thread.error = Some(
                             "Codex still reports an active saved turn. Check again after that turn finishes.".into(),
                         );
-                    } else if provider_status == "unknown" {
+                    } else if provider_status == "systemError" {
                         thread.error = Some(
-                            "Codex returned the saved conversation without a usable status. Local history remains available.".into(),
+                            "Codex reports a system error for this saved conversation. Local history remains available.".into(),
+                        );
+                    } else if !matches!(provider_status.as_str(), "idle" | "active") {
+                        thread.error = Some(
+                            "Codex did not confirm a loaded, idle conversation. Local history remains available.".into(),
                         );
                     } else {
                         thread.error = None;
@@ -485,10 +606,10 @@ pub async fn agent_chat_send(
                         "Codex still reports an active saved turn. The prompt was not sent; check again after that turn finishes.",
                     ));
                 }
-                if provider_status == "unknown" {
+                if provider_status != "idle" {
                     service.ensure_storage()?;
                     return Err(CommandError::expected(
-                        "Codex returned the saved conversation without a usable status. The prompt was not sent; local history remains available.",
+                        "Codex did not confirm an idle saved conversation. The prompt was not sent; local history remains available.",
                     ));
                 }
             }
@@ -508,6 +629,84 @@ pub async fn agent_chat_send(
         service.ensure_storage()?;
     }
 
+    let runtime = provider::resume_thread_runtime(
+        &service,
+        &thread_id,
+        &project,
+        &checkout,
+        provider_thread_id,
+    )
+    .await?;
+    let baseline = provider::capture_send_baseline(
+        &service,
+        &thread_id,
+        &runtime,
+        &checkout,
+        provider_thread_id,
+    )
+    .await?;
+    if baseline.status != "idle" {
+        service.update_thread(&thread_id, true, |thread| {
+            thread.provider_status = baseline.status.clone();
+            thread.resume_status = if matches!(
+                baseline.status.as_str(),
+                "idle" | "active" | "systemError"
+            ) {
+                "available".into()
+            } else {
+                "unavailable".into()
+            };
+            thread.error = Some(if baseline.status == "active" {
+                "Codex still reports an active saved turn. The prompt was not sent; check again after that turn finishes.".into()
+            } else {
+                "Codex did not confirm an idle saved conversation. The prompt was not sent.".into()
+            });
+        });
+        service.ensure_storage()?;
+        return Err(CommandError::expected(
+            "Codex did not confirm an idle saved conversation. The prompt was not sent.",
+        ));
+    }
+    let baseline_reconciliation =
+        service.reconcile_send_attempt(&thread_id, &baseline.items, &baseline.status);
+    if baseline_reconciliation.as_ref().is_some_and(|result| {
+        matches!(
+            result.outcome.as_str(),
+            "confirmedPresent" | "confirmedAbsent"
+        )
+    }) {
+        service.clear_uncertain_turn(&thread_id);
+    }
+    if service
+        .reconcile_provider_history(
+            &thread_id,
+            baseline.items.clone(),
+            baseline_reconciliation.as_ref(),
+        )
+        .is_none()
+    {
+        service.ensure_storage()?;
+        return Err(CommandError::expected(
+            "Codex history could not be reconciled with the saved chat",
+        ));
+    }
+    service.update_thread(&thread_id, true, |thread| {
+        if baseline.approval_policy.is_some() {
+            thread.approval_policy = baseline.approval_policy.clone();
+        }
+        if baseline.sandbox_policy.is_some() {
+            thread.sandbox_policy = baseline.sandbox_policy.clone();
+        }
+        thread.provider_status = "idle".into();
+        thread.resume_status = "available".into();
+        if thread.status == "interrupted" || thread.status == "error" {
+            thread.status = "idle".into();
+            thread.error = None;
+        }
+    });
+
+    service.ensure_send_attempt_is_safe(&thread_id, &text, &attachments)?;
+
     let user_item = attachment_user_item(
         Uuid::new_v4().to_string(),
         text.clone(),
@@ -518,8 +717,15 @@ pub async fn agent_chat_send(
         reasoning_effort: effort.clone(),
         auto_accept_mode,
     };
+    let baseline_last_item_id = baseline.items.last().map(|item| item.id.clone());
     if service
-        .claim_turn(&thread_id, user_item, settings)
+        .claim_turn(
+            &thread_id,
+            send_attempt_id.clone(),
+            user_item,
+            settings,
+            baseline_last_item_id,
+        )
         .is_none()
     {
         service.ensure_storage()?;
@@ -527,39 +733,15 @@ pub async fn agent_chat_send(
             "This chat already has an active turn",
         ));
     }
-    let runtime = match provider::resume_thread_runtime(
-        &service,
-        &thread_id,
-        &project,
-        &checkout,
-        provider_thread_id,
-    )
-    .await
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            service.update_thread(&thread_id, true, |thread| {
-                thread.resume_status = "unavailable".into();
-                thread.provider_status = "unknown".into();
-                thread.status = "error".into();
-                thread.turn_id = None;
-                thread.error = Some(super::types::truncate_utf8(&error.to_string(), 512));
-            });
-            service.ensure_storage()?;
-            return Err(error);
-        }
-    };
-    service.update_thread(&thread_id, true, |thread| {
-        thread.resume_status = "available".into();
-        thread.provider_status = "idle".into();
+    service.update_turn_attempt(&thread_id, &send_attempt_id, |turn| {
+        turn.outcome = "sending".into();
     });
-    service.ensure_storage()?;
 
     let mut params = json!({
         "threadId": provider_thread_id,
         "cwd": checkout.to_string_lossy(),
-        "input": build_turn_input(&text, &attachments),
-        "approvalPolicy": if auto_accept_mode { "never" } else { "on-request" }
+        "clientUserMessageId": send_attempt_id.clone(),
+        "input": build_turn_input(&text, &attachments)
     });
     if let Some(model) = model.filter(|model| !model.trim().is_empty()) {
         params["model"] = Value::String(model);
@@ -568,14 +750,7 @@ pub async fn agent_chat_send(
         params["effort"] = Value::String(effort);
     }
 
-    let turn_start = request(
-        &service,
-        &thread_id,
-        &runtime.outbound,
-        "turn/start",
-        params,
-    )
-    .await;
+    let turn_start = request(&service, &thread_id, &runtime, "turn/start", params).await;
     match turn_start {
         Ok(result) => {
             let provider_turn_id = result
@@ -583,6 +758,12 @@ pub async fn agent_chat_send(
                 .and_then(|turn| turn.get("id"))
                 .and_then(Value::as_str)
                 .map(str::to_string);
+            service.update_turn_attempt(&thread_id, &send_attempt_id, |turn| {
+                if matches!(turn.outcome.as_str(), "claimed" | "sending") {
+                    turn.provider_turn_id = provider_turn_id.clone();
+                    turn.outcome = "running".into();
+                }
+            });
             service.update_thread(&thread_id, true, |thread| {
                 if thread.status == "starting" {
                     thread.status = "running".into();
@@ -613,12 +794,33 @@ pub async fn agent_chat_send(
             } else {
                 "Codex did not acknowledge whether this turn started. It will not be retried automatically; interrupt this chat or start a new one.".to_string()
             };
-            if !known_rejection {
+            let finished_at = chrono::Utc::now().timestamp_millis();
+            service.update_turn_attempt(&thread_id, &send_attempt_id, |turn| {
+                if known_rejection {
+                    turn.outcome = "failed".into();
+                    turn.finished_at = Some(finished_at);
+                } else if !observed {
+                    turn.outcome = "uncertain".into();
+                }
+            });
+            if !observed {
                 service.update_thread(&thread_id, true, |thread| {
-                    thread.status = "interrupted".into();
+                    thread.status = if known_rejection {
+                        "error".into()
+                    } else {
+                        "interrupted".into()
+                    };
                     thread.turn_id = None;
-                    thread.resume_status = "unknown".into();
-                    thread.provider_status = "unknown".into();
+                    thread.resume_status = if known_rejection {
+                        "available".into()
+                    } else {
+                        "unknown".into()
+                    };
+                    thread.provider_status = if known_rejection {
+                        "idle".into()
+                    } else {
+                        "unknown".into()
+                    };
                     thread.error = Some(message.clone());
                 });
             }
@@ -648,6 +850,7 @@ pub async fn agent_chat_interrupt(
         service.clear_uncertain_turn(&thread_id);
         service.clear_pending_requests(&thread_id);
         let updated = service.update_thread(&thread_id, true, |thread| {
+                mark_unfinished_turns_interrupted(thread, chrono::Utc::now().timestamp_millis());
                 thread.status = "interrupted".into();
                 thread.turn_id = None;
                 thread.requests.clear();
@@ -687,7 +890,7 @@ pub async fn agent_chat_interrupt(
     let result = request(
         &service,
         &thread_id,
-        &runtime.outbound,
+        &runtime,
         "turn/interrupt",
         json!({ "threadId": provider_thread_id, "turnId": turn_id }),
     )
@@ -751,7 +954,7 @@ pub async fn agent_chat_respond(
         .runtime(&thread_id)
         .ok_or_else(|| CommandError::expected("The Codex process is no longer available"))?;
     let pending = service
-        .take_pending_request(&thread_id, &request_id)
+        .take_pending_request(&thread_id, &request_id, &runtime.generation)
         .ok_or_else(|| CommandError::expected("This Codex request has already been answered"))?;
     if runtime
         .outbound
@@ -761,6 +964,7 @@ pub async fn agent_chat_respond(
     {
         service.update_thread(&thread_id, true, |thread| {
             thread.requests.retain(|request| request.id != request_id);
+            mark_unfinished_turns_interrupted(thread, chrono::Utc::now().timestamp_millis());
             thread.status = "interrupted".into();
             thread.turn_id = None;
             thread.provider_status = "unknown".into();
@@ -828,7 +1032,15 @@ pub async fn agent_chat_save_draft(
             reason: "Draft attachments must total no more than 100 MB".into(),
         });
     }
-    attachments::validate_staged(&app, &draft.attachments)?;
+    attachments::validate_staged(
+        &app,
+        &project_id,
+        AttachmentOwnerScope::Thread {
+            thread_id: &thread_id,
+            source_draft_id: None,
+        },
+        &draft.attachments,
+    )?;
     let updated = service.update_thread(&thread.id, true, |thread| thread.draft = draft);
     updated_thread(
         &service,
@@ -1009,8 +1221,26 @@ pub async fn agent_chat_resume_check(
     match provider::read_thread_history(&service, &project, &checkout, &provider_thread_id).await {
         Ok(history) => {
             let provider_status = history.status;
+            let reconciliation =
+                service.reconcile_send_attempt(&thread_id, &history.items, &provider_status);
+            if reconciliation.as_ref().is_some_and(|result| {
+                matches!(
+                    result.outcome.as_str(),
+                    "confirmedPresent" | "confirmedAbsent"
+                )
+            }) {
+                service.clear_uncertain_turn(&thread_id);
+            }
+            service.update_thread(&thread_id, true, |thread| {
+                if history.approval_policy.is_some() {
+                    thread.approval_policy = history.approval_policy.clone();
+                }
+                if history.sandbox_policy.is_some() {
+                    thread.sandbox_policy = history.sandbox_policy.clone();
+                }
+            });
             if service
-                .reconcile_provider_history(&thread_id, history.items)
+                .reconcile_provider_history(&thread_id, history.items, reconciliation.as_ref())
                 .is_none()
             {
                 service.ensure_storage()?;
@@ -1020,21 +1250,32 @@ pub async fn agent_chat_resume_check(
             }
             service.update_thread(&thread_id, true, |thread| {
                 thread.checkout_status = "available".into();
-                thread.resume_status = if provider_status == "unknown" {
-                    "unavailable".into()
-                } else {
+                thread.resume_status = if matches!(
+                    provider_status.as_str(),
+                    "idle" | "active" | "systemError"
+                ) {
                     "available".into()
+                } else {
+                    "unavailable".into()
                 };
                 thread.provider_status = provider_status.clone();
                 if provider_status == "active" {
+                    mark_unfinished_turns_interrupted(
+                        thread,
+                        chrono::Utc::now().timestamp_millis(),
+                    );
                     thread.status = "interrupted".into();
                     thread.turn_id = None;
                     thread.error = Some(
                         "Codex still reports an active saved turn. Check again after that turn finishes.".into(),
                     );
-                } else if provider_status == "unknown" {
+                } else if provider_status == "systemError" {
                     thread.error = Some(
-                        "Codex returned the saved conversation without a usable status. Local history remains available.".into(),
+                        "Codex reports a system error for this saved conversation. Local history remains available.".into(),
+                    );
+                } else if provider_status != "idle" {
+                    thread.error = Some(
+                        "Codex did not confirm a loaded, idle conversation. Local history remains available.".into(),
                     );
                 } else {
                     thread.error = None;
@@ -1078,8 +1319,8 @@ pub async fn agent_chat_relink_checkout(
             "A checkout cannot be relinked while Codex is working or reports an active turn",
         ));
     }
-    let checkout = validate_checkout(&project, &checkout_path).await?;
-    let checkout_identity = checkout_identity(&checkout).await?;
+    let checkout = validate_checkout(&project, &checkout_path, &project_id).await?;
+    let checkout_identity = checkout_identity(&checkout, Some(&project_id)).await?;
     if let Some(runtime) = service.remove_runtime(&thread_id) {
         runtime.stop("The chat checkout was relinked".into()).await;
     }
@@ -1127,8 +1368,26 @@ pub async fn agent_chat_relink_project(
         reason: "The stored project identity is invalid".into(),
     })?;
     let project = validate_project(&project_path)?;
-    let common_dir = git_common_dir(&project).await?;
-    service.relink_project(&project_id, &common_dir, &project)
+    match git_common_dir(&project).await? {
+        Some(common_dir) => {
+            let identity_key = common_dir.to_string_lossy().into_owned();
+            service.relink_project(&project_id, &identity_key, &project, None)
+        }
+        None => {
+            let identity_key = plain_identity_key(&project)?;
+            let folder_instance_id = folder_instance_identity(&project)?.ok_or_else(|| {
+                CommandError::expected(
+                    "Ship Studio could not verify this folder's stable identity. Make the folder writable for its Agent Chat identity marker, then retry the relink.",
+                )
+            })?;
+            service.relink_project(
+                &project_id,
+                &identity_key,
+                &project,
+                Some(&folder_instance_id),
+            )
+        }
+    }
 }
 
 #[tauri::command]
@@ -1150,6 +1409,7 @@ pub async fn agent_chat_discard(
     let _thread = thread_for_project(&service, &project_id, &thread_id)?;
     if matches!(_thread.status.as_str(), "running" | "waiting" | "starting") {
         let updated = service.update_thread(&thread_id, true, |thread| {
+            mark_unfinished_turns_interrupted(thread, chrono::Utc::now().timestamp_millis());
             thread.status = "interrupted".into();
             thread.turn_id = None;
             thread.requests.clear();
@@ -1180,14 +1440,15 @@ pub async fn agent_chat_discard(
     name = "agent_chat_stage_attachment",
     skip(service, app, project_path, path)
 )]
-pub fn agent_chat_stage_attachment(
+pub async fn agent_chat_stage_attachment(
     service: State<'_, AgentChatService>,
     app: AppHandle,
     project_path: String,
     path: String,
 ) -> Result<ChatAttachment, CommandError> {
-    let _project = validate_project(&project_path)?;
-    service.stage_attachment(&app, &path)
+    let project = validate_project(&project_path)?;
+    let project_id = project_identity(&service, &project).await?;
+    service.stage_attachment(&app, &path, &project_id)
 }
 
 #[tauri::command]
@@ -1195,12 +1456,13 @@ pub fn agent_chat_stage_attachment(
     name = "agent_chat_recheck_attachments",
     skip(service, project_path, attachments)
 )]
-pub fn agent_chat_recheck_attachments(
+pub async fn agent_chat_recheck_attachments(
     service: State<'_, AgentChatService>,
     project_path: String,
     attachments: Vec<ChatAttachment>,
 ) -> Result<Vec<ChatAttachment>, CommandError> {
-    let _project = validate_project(&project_path)?;
+    let project = validate_project(&project_path)?;
+    let project_id = project_identity(&service, &project).await?;
     if attachments.len() > MAX_ATTACHMENTS_PER_MESSAGE {
         return Err(CommandError::Validation {
             field: "attachments".into(),
@@ -1218,7 +1480,7 @@ pub fn agent_chat_recheck_attachments(
             reason: "Attachments in one message must total no more than 100 MB".into(),
         });
     }
-    service.recheck_attachments(&attachments)
+    service.recheck_attachments(&project_id, &attachments)
 }
 
 fn validate_project(project_path: &str) -> Result<PathBuf, CommandError> {
@@ -1232,15 +1494,59 @@ fn validate_project(project_path: &str) -> Result<PathBuf, CommandError> {
     Ok(project)
 }
 
+fn require_expected_project_identity(
+    expected_project_id: &str,
+    actual_project_id: &str,
+) -> Result<(), CommandError> {
+    if expected_project_id == actual_project_id {
+        Ok(())
+    } else {
+        Err(CommandError::expected(
+            "This project changed while Agent Chat was open. Reload the project before continuing.",
+        ))
+    }
+}
+
 async fn project_identity(
     service: &AgentChatService,
     project: &Path,
 ) -> Result<String, CommandError> {
-    let common_dir = git_common_dir(project).await?;
-    service.ensure_project_identity(&common_dir, project)
+    match git_common_dir(project).await? {
+        Some(common_dir) => {
+            let main_checkout = git_main_checkout(project).await?;
+            let project_id =
+                service.ensure_project_identity(&common_dir, project, main_checkout.as_deref())?;
+            if let Some((pending_identity, pending_path)) =
+                service.pending_checkout_binding(&project_id)?
+            {
+                let pending_path = PathBuf::from(pending_path);
+                if let Some(main_checkout) = main_checkout
+                    .as_ref()
+                    .filter(|path| path.as_path() == pending_path.as_path())
+                {
+                    let git_dir = checkout_git_dir(main_checkout).await?;
+                    let actual =
+                        checkout_marker_identity_with_default(&git_dir, Some(&pending_identity))?;
+                    if actual != pending_identity {
+                        tracing::warn!(
+                            project_id = %project_id,
+                            "The main checkout already has a different Agent Chat marker; saved chats remain bound to their prior checkout"
+                        );
+                    }
+                    service.clear_pending_checkout_binding(
+                        &project_id,
+                        &pending_identity,
+                        &pending_path.to_string_lossy(),
+                    )?;
+                }
+            }
+            Ok(project_id)
+        }
+        None => service.ensure_plain_project_identity(project),
+    }
 }
 
-async fn git_common_dir(project: &Path) -> Result<PathBuf, CommandError> {
+async fn git_common_dir(project: &Path) -> Result<Option<PathBuf>, CommandError> {
     let mut git = crate::utils::git_command_in(project)?;
     git.args(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
     let output = run_with_timeout(
@@ -1250,9 +1556,18 @@ async fn git_common_dir(project: &Path) -> Result<PathBuf, CommandError> {
     )
     .await?;
     if !output.status.success() {
-        return Err(CommandError::expected(
-            "The selected project is not an available Git repository",
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.to_lowercase().contains("not a git repository") && !has_git_metadata(project)? {
+            return Ok(None);
+        }
+        return Err(CommandError::expected(format!(
+            "Git could not identify the selected project repository: {}",
+            if stderr.is_empty() {
+                "Git returned an error".to_string()
+            } else {
+                truncate_error(&stderr, 240)
+            }
+        )));
     }
     let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let path = PathBuf::from(value);
@@ -1261,9 +1576,72 @@ async fn git_common_dir(project: &Path) -> Result<PathBuf, CommandError> {
             "Git did not provide a stable repository identity",
         ));
     }
-    dunce::canonicalize(&path).map_err(|error| {
+    Ok(Some(dunce::canonicalize(&path).map_err(|error| {
         crate::utils::classify_fs_error("access the project's Git identity", &path, &error)
-    })
+    })?))
+}
+
+async fn git_main_checkout(project: &Path) -> Result<Option<PathBuf>, CommandError> {
+    let mut git = crate::utils::git_command_in(project)?;
+    git.args(["worktree", "list", "--porcelain"]);
+    let output =
+        run_with_timeout(tokio::process::Command::from(git), "git worktree list", 8).await?;
+    if !output.status.success() {
+        return Err(CommandError::expected(
+            "Git could not identify the repository's main checkout",
+        ));
+    }
+    let output = String::from_utf8_lossy(&output.stdout);
+    let Some(main_path) = output
+        .lines()
+        .find_map(|line| line.strip_prefix("worktree "))
+        .map(PathBuf::from)
+    else {
+        return Ok(None);
+    };
+    match dunce::canonicalize(&main_path) {
+        Ok(main_path) if main_path.is_dir() => Ok(Some(main_path)),
+        Ok(_) => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(crate::utils::classify_fs_error(
+            "access the repository's main checkout",
+            &main_path,
+            &error,
+        )),
+    }
+}
+
+fn has_git_metadata(project: &Path) -> Result<bool, CommandError> {
+    for ancestor in project.ancestors() {
+        let metadata = ancestor.join(".git");
+        match fs::symlink_metadata(&metadata) {
+            Ok(_) => return Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(crate::utils::classify_fs_error(
+                    "inspect project Git metadata",
+                    &metadata,
+                    &error,
+                ));
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn plain_identity_key(project: &Path) -> Result<String, CommandError> {
+    let path = dunce::canonicalize(project).map_err(|error| {
+        crate::utils::classify_fs_error("access the project folder identity", project, &error)
+    })?;
+    Ok(format!("plain:{}", path.to_string_lossy()))
+}
+
+fn truncate_error(value: &str, limit: usize) -> String {
+    let mut end = value.len().min(limit);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 fn validate_settings(settings: &ChatSettings) -> Result<(), CommandError> {
@@ -1292,6 +1670,8 @@ fn validate_settings(settings: &ChatSettings) -> Result<(), CommandError> {
 
 fn validate_project_draft(
     app: &AppHandle,
+    project_id: &str,
+    owner_scope: AttachmentOwnerScope<'_>,
     draft: &ChatDraft,
     settings: &ChatSettings,
 ) -> Result<(), CommandError> {
@@ -1317,7 +1697,7 @@ fn validate_project_draft(
         });
     }
     validate_settings(settings)?;
-    attachments::validate_staged(app, &draft.attachments)
+    attachments::validate_staged(app, project_id, owner_scope, &draft.attachments)
 }
 
 fn validate_draft_id(draft_id: &str) -> Result<(), CommandError> {
@@ -1363,7 +1743,11 @@ fn updated_thread(
         .ok_or_else(|| CommandError::expected(fallback))
 }
 
-async fn validate_checkout(project: &Path, checkout_path: &str) -> Result<PathBuf, CommandError> {
+async fn validate_checkout(
+    project: &Path,
+    checkout_path: &str,
+    project_id: &str,
+) -> Result<PathBuf, CommandError> {
     let checkout = validate_project_path(checkout_path)?;
     if !checkout.is_dir() {
         return Err(CommandError::Validation {
@@ -1373,11 +1757,29 @@ async fn validate_checkout(project: &Path, checkout_path: &str) -> Result<PathBu
     }
     let expected = dunce::canonicalize(&checkout)
         .map_err(|_| CommandError::expected("The selected checkout is unavailable"))?;
-    if !list_checkouts(project).await?.contains_key(&expected) {
-        return Err(CommandError::Validation {
-            field: "checkoutPath".into(),
-            reason: "Choose an existing Git worktree belonging to this project".into(),
-        });
+    match git_common_dir(project).await? {
+        Some(_) => {
+            if !list_checkouts(project, project_id)
+                .await?
+                .contains_key(&expected)
+            {
+                return Err(CommandError::Validation {
+                    field: "checkoutPath".into(),
+                    reason: "Choose an existing Git worktree belonging to this project".into(),
+                });
+            }
+        }
+        None => {
+            let project_root = dunce::canonicalize(project).map_err(|error| {
+                crate::utils::classify_fs_error("access the project folder", project, &error)
+            })?;
+            if expected != project_root {
+                return Err(CommandError::Validation {
+                    field: "checkoutPath".into(),
+                    reason: "Chats in a plain folder run in that project folder".into(),
+                });
+            }
+        }
     }
     Ok(expected)
 }
@@ -1398,7 +1800,8 @@ async fn validate_thread_checkout(
             "This saved chat predates checkout identity tracking. Explicitly relink it to an existing worktree before continuing.",
         ));
     }
-    let checkout = match validate_checkout(project, &thread.checkout_path).await {
+    let checkout = match validate_checkout(project, &thread.checkout_path, &thread.project_id).await
+    {
         Ok(checkout) => checkout,
         Err(_) => {
             mark_checkout_missing(service, &thread.id)?;
@@ -1407,7 +1810,7 @@ async fn validate_thread_checkout(
             ));
         }
     };
-    let actual_identity = checkout_identity(&checkout).await?;
+    let actual_identity = checkout_identity(&checkout, Some(&thread.project_id)).await?;
     if thread.checkout_identity != actual_identity {
         mark_checkout_missing(service, &thread.id)?;
         return Err(CommandError::expected(
@@ -1441,7 +1844,14 @@ fn mark_checkout_missing(service: &AgentChatService, thread_id: &str) -> Result<
 
 async fn list_checkouts(
     project: &Path,
+    project_id: &str,
 ) -> Result<std::collections::HashMap<PathBuf, String>, CommandError> {
+    if git_common_dir(project).await?.is_none() {
+        let root = dunce::canonicalize(project).map_err(|error| {
+            crate::utils::classify_fs_error("access the project folder", project, &error)
+        })?;
+        return Ok([(root, project_id.to_string())].into_iter().collect());
+    }
     let mut git = crate::utils::git_command_in(project)?;
     git.args(["worktree", "list", "--porcelain"]);
     let output =
@@ -1459,13 +1869,26 @@ async fn list_checkouts(
         .collect::<std::collections::HashSet<_>>();
     let mut checkouts = std::collections::HashMap::with_capacity(paths.len());
     for path in paths {
-        let identity = checkout_identity(&path).await?;
+        let identity = checkout_identity(&path, None).await?;
         checkouts.insert(path, identity);
     }
     Ok(checkouts)
 }
 
-async fn checkout_identity(checkout: &Path) -> Result<String, CommandError> {
+async fn checkout_identity(
+    checkout: &Path,
+    plain_identity: Option<&str>,
+) -> Result<String, CommandError> {
+    if git_common_dir(checkout).await?.is_none() {
+        return plain_identity.map(str::to_string).ok_or_else(|| {
+            CommandError::expected("The plain project checkout identity is unavailable")
+        });
+    }
+    let git_dir = checkout_git_dir(checkout).await?;
+    checkout_marker_identity(&git_dir)
+}
+
+async fn checkout_git_dir(checkout: &Path) -> Result<PathBuf, CommandError> {
     let mut git = crate::utils::git_command_in(checkout)?;
     git.args(["rev-parse", "--path-format=absolute", "--git-dir"]);
     let output = run_with_timeout(
@@ -1484,10 +1907,17 @@ async fn checkout_identity(checkout: &Path) -> Result<String, CommandError> {
     let git_dir = dunce::canonicalize(&git_dir).map_err(|error| {
         crate::utils::classify_fs_error("access the checkout's Git metadata", &git_dir, &error)
     })?;
-    checkout_marker_identity(&git_dir)
+    Ok(git_dir)
 }
 
 fn checkout_marker_identity(git_dir: &Path) -> Result<String, CommandError> {
+    checkout_marker_identity_with_default(git_dir, None)
+}
+
+pub(super) fn checkout_marker_identity_with_default(
+    git_dir: &Path,
+    preferred_identity: Option<&str>,
+) -> Result<String, CommandError> {
     let marker = git_dir.join(CHECKOUT_IDENTITY_MARKER);
     match fs::symlink_metadata(&marker) {
         Ok(metadata) if metadata.file_type().is_file() => {
@@ -1508,7 +1938,19 @@ fn checkout_marker_identity(git_dir: &Path) -> Result<String, CommandError> {
         }
     }
 
-    let identity = Uuid::new_v4().to_string();
+    let identity = if let Some(preferred_identity) = preferred_identity {
+        let parsed = Uuid::parse_str(preferred_identity).map_err(|_| {
+            CommandError::expected("The saved Agent Chat checkout identity is invalid")
+        })?;
+        if parsed.to_string() != preferred_identity {
+            return Err(CommandError::expected(
+                "The saved Agent Chat checkout identity is invalid",
+            ));
+        }
+        preferred_identity.to_string()
+    } else {
+        Uuid::new_v4().to_string()
+    };
     let mut file = match OpenOptions::new()
         .write(true)
         .create_new(true)

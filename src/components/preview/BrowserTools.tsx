@@ -93,13 +93,15 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
     } else {
       prompt = formatElementsForAgent(domSnapshot);
     }
+    const result = onSendToAgent(prompt);
+    if (result === false) return;
+
     void trackEvent('browser_tools_sent_to_agent', {
       tab,
       entry_count: entryCount,
       had_data: tab === 'elements' ? domSnapshot !== null : (entryCount ?? 0) > 0,
       char_count: prompt.length,
     });
-    const result = onSendToAgent(prompt);
     const message = promptHandoffSuccessMessage(
       result,
       'Prompt pasted into the agent terminal. Press Enter to send.',

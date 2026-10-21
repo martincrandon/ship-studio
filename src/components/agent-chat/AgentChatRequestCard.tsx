@@ -29,11 +29,6 @@ interface QuestionField {
 
 const PLAIN_DECISIONS = ['accept', 'acceptForSession', 'decline', 'cancel'] as const;
 const PLAIN_DECISION_SET = new Set<string>(PLAIN_DECISIONS);
-const AMENDMENT_DECISIONS = [
-  'acceptWithExecpolicyAmendment',
-  'applyNetworkPolicyAmendment',
-] as const;
-const AMENDMENT_DECISION_SET = new Set<string>(AMENDMENT_DECISIONS);
 
 interface ApprovalDecision {
   id: string;
@@ -99,34 +94,22 @@ function readApprovalDecisions(request: ChatRequest): ApprovalDecision[] {
     const values: ApprovalDecision[] = [];
     const decisions: unknown[] = offered;
     for (const decision of decisions) {
-      if (
-        typeof decision === 'string' &&
-        (PLAIN_DECISION_SET.has(decision) || AMENDMENT_DECISION_SET.has(decision))
-      ) {
+      if (typeof decision === 'string' && PLAIN_DECISION_SET.has(decision)) {
         values.push({
           id: decision,
-          label: amendmentDecisionLabel(decision),
+          label: decisionLabel(decision),
           allowsAction: decision !== 'decline' && decision !== 'cancel',
         });
-        continue;
-      }
-      if (!decision || typeof decision !== 'object') continue;
-      for (const key of Object.keys(decision)) {
-        if (!AMENDMENT_DECISION_SET.has(key)) continue;
-        values.push({ id: key, label: amendmentDecisionLabel(key), allowsAction: true });
       }
     }
-    return values;
+    return values.filter(
+      (decision, index) => values.findIndex((candidate) => candidate.id === decision.id) === index
+    );
   }
-  return [
-    { id: 'accept', label: 'Allow', allowsAction: true },
-    { id: 'decline', label: 'Decline', allowsAction: false },
-  ];
+  return [];
 }
 
-function amendmentDecisionLabel(decision: string): string {
-  if (decision === 'acceptWithExecpolicyAmendment') return 'Allow with policy update';
-  if (decision === 'applyNetworkPolicyAmendment') return 'Allow with network access';
+function decisionLabel(decision: string): string {
   if (decision === 'accept' || decision === 'approved') return 'Allow';
   if (decision === 'acceptForSession' || decision === 'approved_for_session')
     return 'Allow this session';
@@ -196,6 +179,20 @@ export function AgentChatRequestCard({
   const reason = stringParam(request.params, 'reason', 'message');
   const cwd = stringParam(request.params, 'cwd');
   const approvalDecisions = readApprovalDecisions(request);
+  const hasUnsupportedAmendment =
+    request.kind === 'approval' &&
+    Array.isArray(request.params.availableDecisions) &&
+    request.params.availableDecisions.some((decision: unknown) => {
+      if (typeof decision === 'string') {
+        return (
+          decision === 'acceptWithExecpolicyAmendment' || decision === 'applyNetworkPolicyAmendment'
+        );
+      }
+      if (!decision || typeof decision !== 'object') return false;
+      return Object.keys(decision).some(
+        (key) => key === 'acceptWithExecpolicyAmendment' || key === 'applyNetworkPolicyAmendment'
+      );
+    });
   const safeDeclineAvailable = approvalDecisions.some((decision) =>
     ['decline', 'cancel', 'abort'].includes(decision.id)
   );
@@ -226,10 +223,17 @@ export function AgentChatRequestCard({
           {!reason && !command && !cwd && (
             <p>Codex is waiting for approval to continue with this action.</p>
           )}
+          {hasUnsupportedAmendment && (
+            <p>
+              This request includes a policy change that Chat cannot apply. Use an offered decline
+              option or stop the turn.
+            </p>
+          )}
           {approvalDecisions.length === 0 && (
             <p>
-              Codex offered an approval shape this panel cannot answer. Stop this turn to leave the
-              request safely.
+              {hasUnsupportedAmendment
+                ? 'No supported approval decision was offered. Stop this turn to leave the request safely.'
+                : 'Codex did not provide supported approval decisions. Stop this turn to leave the request safely.'}
             </p>
           )}
           {approvalDecisions.length > 0 && !safeDeclineAvailable && (

@@ -33,7 +33,16 @@ import { IconButton } from '@/components/primitives/IconButton';
 import { MenuButton } from '@/components/primitives/MenuButton';
 import { TextArea } from '@/components/primitives/TextField';
 import { useAsyncState } from '@/hooks/useAsyncState';
-import { type ChatAttachment, type ChatItem, type ChatThread } from '@/lib/agentChat';
+import { usePolling } from '@/hooks/usePolling';
+import { asCommandError, formatCommandError } from '@/lib/errors';
+import {
+  getAgentChatProjectModeCommand,
+  type ChatAttachment,
+  type ChatItem,
+  type ChatProjectMode,
+  type ChatThread,
+  type ChatTurnRecord,
+} from '@/lib/agentChat';
 import {
   discardAgentChatThread,
   deleteAgentChatDraft,
@@ -54,6 +63,7 @@ import {
   type AgentChatCaptureTarget,
   relinkAgentChatCheckout,
   relinkUnlinkedAgentChatProject,
+  recoverLegacyAgentChatDrafts,
   resumeCheckAgentChatThread,
 } from '@/lib/agentChatStore';
 import { stageClipboardImage } from '@/lib/clipboard';
@@ -68,9 +78,23 @@ import { AgentChatInbox } from './AgentChatInbox';
 
 export interface AgentChatPanelProps {
   projectPath: string;
+  isActive: boolean;
   autoAcceptMode: boolean;
   worktrees: WorktreeInfo[];
   onCreateWorktree: () => void;
+}
+
+interface ProjectModeAttempt {
+  projectPath: string;
+  generation: number;
+  mode?: ChatProjectMode;
+  error?: string;
+}
+
+interface ProjectModeState {
+  projectPath: string;
+  mode: ChatProjectMode | null;
+  error: string | null;
 }
 
 function threadTitle(thread: ChatThread): string {
@@ -445,7 +469,34 @@ function ChatActivityGroup({
   );
 }
 
-function ChatItemView({ item, timerKey }: { item: ChatItem; timerKey: string }) {
+function policyLabel(policy: unknown): string {
+  if (policy == null) return 'Unknown';
+  if (typeof policy === 'string') return policy;
+  try {
+    return JSON.stringify(policy);
+  } catch {
+    return 'Unknown';
+  }
+}
+
+function turnOutcomeLabel(outcome: ChatTurnRecord['outcome']): string {
+  if (outcome === 'completed') return 'Completed';
+  if (outcome === 'interrupted') return 'Interrupted';
+  if (outcome === 'failed') return 'Failed';
+  if (outcome === 'uncertain') return 'Outcome unknown';
+  if (outcome === 'running') return 'In progress';
+  return 'Send not confirmed';
+}
+
+function ChatItemView({
+  item,
+  timerKey,
+  turnRecord,
+}: {
+  item: ChatItem;
+  timerKey: string;
+  turnRecord?: ChatTurnRecord;
+}) {
   const emptyReasoning = isEmptyReasoning(item);
   const reasoningElapsedMs = useElapsedTimer(emptyReasoning && item.status === 'running', timerKey);
   const isCollapsible =
@@ -529,6 +580,17 @@ function ChatItemView({ item, timerKey }: { item: ChatItem; timerKey: string }) 
       {isUser && item.text && <div className="agent-chat-item__user-body">{body}</div>}
       {!isUser && body}
       {attachments.length > 0 && <div className="agent-chat-item__attachments">{attachments}</div>}
+      {isUser && turnRecord && (
+        <div className="agent-chat-item__turn-meta" role="status">
+          <span>{turnOutcomeLabel(turnRecord.outcome)}</span>
+          {turnRecord.settings.modelId && <span>Model: {turnRecord.settings.modelId}</span>}
+          {turnRecord.settings.reasoningEffort && (
+            <span>Effort: {turnRecord.settings.reasoningEffort}</span>
+          )}
+          <span>Approval: {policyLabel(turnRecord.approvalPolicy)}</span>
+          <span>Sandbox: {policyLabel(turnRecord.sandboxPolicy)}</span>
+        </div>
+      )}
     </article>
   );
 }
@@ -539,6 +601,7 @@ export function AgentChatPanel(props: AgentChatPanelProps) {
 
 function AgentChatPanelContents({
   projectPath,
+  isActive,
   autoAcceptMode,
   worktrees,
   onCreateWorktree,
@@ -562,6 +625,52 @@ function AgentChatPanelContents({
   );
   const getSnapshot = useCallback(() => getAgentChatSnapshot(projectPath), [projectPath]);
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const projectModeGenerationRef = useRef(0);
+  const [projectModeState, setProjectModeState] = useState<ProjectModeState | null>(null);
+  const { execute: executeProjectMode } = useAsyncState<ProjectModeAttempt, [string, number]>(
+    async (requestedPath, generation) => {
+      try {
+        return {
+          projectPath: requestedPath,
+          generation,
+          mode: await getAgentChatProjectModeCommand(requestedPath),
+        };
+      } catch (error) {
+        return {
+          projectPath: requestedPath,
+          generation,
+          error: formatCommandError(asCommandError(error)),
+        };
+      }
+    }
+  );
+  const loadProjectMode = useCallback(
+    async (requestedPath: string) => {
+      const generation = ++projectModeGenerationRef.current;
+      const attempt = await executeProjectMode(requestedPath, generation);
+      if (!attempt || generation !== projectModeGenerationRef.current) {
+        return;
+      }
+      if (attempt.mode) {
+        setProjectModeState({
+          projectPath: requestedPath,
+          mode: attempt.mode,
+          error: null,
+        });
+      } else {
+        setProjectModeState((current) => ({
+          projectPath: requestedPath,
+          mode: current?.projectPath === requestedPath ? current.mode : null,
+          error: attempt.error ?? 'Project mode could not be verified.',
+        }));
+      }
+    },
+    [executeProjectMode]
+  );
+  const currentProjectModeState =
+    projectModeState?.projectPath === projectPath ? projectModeState : null;
+  const projectMode = currentProjectModeState?.mode ?? null;
+  const projectModeError = currentProjectModeState?.error ?? null;
   const selectedThread =
     snapshot.threads.find((thread) => thread.id === snapshot.selectedThreadId) ?? null;
   const completedTurnDurations = useCompletedTurnDurations(snapshot.threads);
@@ -600,6 +709,14 @@ function AgentChatPanelContents({
   const unverifiedAttachments = selectedAttachments.some(
     (attachment) => attachment.available !== true
   );
+  const hasImageAttachments = selectedAttachments.some((attachment) => attachment.kind === 'image');
+  const selectedInputModalities = selectedModel?.inputModalities;
+  const imageInputUnsupported = Boolean(
+    hasImageAttachments &&
+    selectedInputModalities !== null &&
+    selectedInputModalities !== undefined &&
+    !selectedInputModalities.includes('image')
+  );
   const attachmentAvailability = activeId ? snapshot.attachmentAvailability[activeId] : undefined;
   const threadIsActive =
     selectedThread && ['starting', 'running', 'waiting'].includes(selectedThread.status);
@@ -616,22 +733,32 @@ function AgentChatPanelContents({
     (selectedThread.providerStatus === 'active' ||
       selectedThread.resumeStatus === 'unknown' ||
       selectedThread.providerStatus === 'unknown' ||
+      selectedThread.providerStatus === 'systemError' ||
       selectedThread.providerStatus === 'notLoaded' ||
       (sendSafety && !sendSafety.reconciled))
   );
+  const sameBlockedComposer = Boolean(
+    sendSafety &&
+    sendSafety.blockedText === currentDraft &&
+    sendSafety.blockedAttachmentIds.length === selectedAttachments.length &&
+    sendSafety.blockedAttachmentIds.every((id, index) => selectedAttachments[index]?.id === id)
+  );
   const sendDisabled = Boolean(
+    !snapshot.identityVerified ||
     threadIsActive ||
     isSending ||
     modelUnavailable ||
     effortUnavailable ||
+    imageInputUnsupported ||
     unverifiedAttachments ||
     attachmentAvailability === 'checking' ||
     (selectedThread && selectedThread.checkoutStatus !== 'available') ||
     (selectedThread && selectedThread.resumeStatus !== 'available') ||
     selectedThread?.providerStatus === 'active' ||
     selectedThread?.providerStatus === 'unknown' ||
+    selectedThread?.providerStatus === 'systemError' ||
     selectedThread?.providerStatus === 'notLoaded' ||
-    (sendSafety && (!sendSafety.reconciled || sendSafety.blockedText === currentDraft))
+    (sendSafety && (!sendSafety.reconciled || sameBlockedComposer))
   );
 
   const { execute: sendTurn } = useAsyncState<ChatThread, [string, string]>((threadId, text) =>
@@ -690,12 +817,24 @@ function AgentChatPanelContents({
     [string]
   >(async (projectId) => {
     await relinkUnlinkedAgentChatProject(projectPath, projectId);
+    await loadProjectMode(projectPath);
     return true;
   });
 
   useEffect(() => {
+    projectModeGenerationRef.current += 1;
     void loadAgentChatProject(projectPath);
-  }, [projectPath]);
+    void loadProjectMode(projectPath);
+    return () => {
+      projectModeGenerationRef.current += 1;
+    };
+  }, [loadProjectMode, projectPath]);
+
+  usePolling(() => loadProjectMode(projectPath), {
+    intervalMs: 5000,
+    enabled: isActive,
+    name: 'agentChatProjectMode',
+  });
 
   const draftCheckoutPaths = useMemo(
     () => [
@@ -1001,6 +1140,12 @@ function AgentChatPanelContents({
           Default effort.
         </p>
       )}
+      {imageInputUnsupported && (
+        <p className="agent-chat__notice agent-chat__notice--error" role="alert">
+          The selected model does not support image input. Choose a model that advertises image
+          input, or remove the image attachment.
+        </p>
+      )}
       {unavailableAttachments && (
         <p className="agent-chat__notice agent-chat__notice--error" role="alert">
           One or more saved attachments are unavailable. Remove them and attach the files again
@@ -1092,6 +1237,7 @@ function AgentChatPanelContents({
 
       <TextArea
         className="agent-chat__input"
+        disabled={!snapshot.identityVerified}
         value={currentDraft}
         rows={3}
         autoFocus={!selectedThread}
@@ -1121,7 +1267,7 @@ function AgentChatPanelContents({
                 className="agent-chat__setting-trigger"
                 rightIcon={<ChevronIcon size={12} />}
                 aria-label="Model"
-                disabled={!activeId || snapshot.models.length === 0}
+                disabled={!snapshot.identityVerified || !activeId || snapshot.models.length === 0}
                 title={selectedModel?.description ?? undefined}
               >
                 <span>
@@ -1164,7 +1310,11 @@ function AgentChatPanelContents({
                 className="agent-chat__setting-trigger agent-chat__setting-trigger--effort"
                 rightIcon={<ChevronIcon size={12} />}
                 aria-label="Reasoning effort"
-                disabled={!selectedModel || selectedModel.reasoningEfforts.length === 0}
+                disabled={
+                  !snapshot.identityVerified ||
+                  !selectedModel ||
+                  selectedModel.reasoningEfforts.length === 0
+                }
               >
                 <span>
                   {effortUnavailable
@@ -1205,7 +1355,7 @@ function AgentChatPanelContents({
             variant="ghost"
             size="compact"
             className="agent-chat__attach-button"
-            disabled={isStaging}
+            disabled={!snapshot.identityVerified || isStaging}
             onClick={() => void handlePickFiles()}
           />
           <IconButton
@@ -1250,6 +1400,30 @@ function AgentChatPanelContents({
         }}
       />
 
+      {!snapshot.identityVerified && (
+        <div className="agent-chat__recovery" role="status">
+          <strong>Checking this project’s Agent Chat identity</strong>
+          <span>Drafts and attachments stay locked until the project is verified.</span>
+        </div>
+      )}
+
+      {snapshot.legacyDraftRecoveryAvailable && snapshot.identityVerified && (
+        <div className="agent-chat__recovery" role="status">
+          <strong>Older local drafts need review</strong>
+          <span>
+            These drafts were saved before Ship Studio recorded project identity. Recovering copies
+            their text and staged files into new drafts for this project’s root checkout.
+          </span>
+          <Button
+            size="compact"
+            variant="secondary"
+            onClick={() => recoverLegacyAgentChatDrafts(projectPath)}
+          >
+            Recover older drafts
+          </Button>
+        </div>
+      )}
+
       {snapshot.storageStatus && !snapshot.storageStatus.available && (
         <div className="agent-chat__recovery agent-chat__recovery--error" role="alert">
           <strong>Saved Chat storage is unavailable</strong>
@@ -1257,6 +1431,22 @@ function AgentChatPanelContents({
             {snapshot.storageStatus.error ?? 'Ship Studio could not read its Agent Chat database.'}
           </span>
           <span>Your saved conversations were not cleared.</span>
+        </div>
+      )}
+
+      {projectModeError && (
+        <div className="agent-chat__recovery agent-chat__recovery--error" role="alert">
+          <strong>Project mode could not be verified</strong>
+          <span>{projectModeError}</span>
+          <span>Checkout controls are unavailable until the project status can be verified.</span>
+        </div>
+      )}
+
+      {projectMode && !projectModeError && !projectMode.isGitRepository && (
+        <div className="agent-chat__checkout-row">
+          <span className="agent-chat__checkout-note">
+            Chat history is saved by Ship Studio. Git adds version history and worktrees.
+          </span>
         </div>
       )}
 
@@ -1268,8 +1458,8 @@ function AgentChatPanelContents({
             {unlinked.threadCount} saved conversation{unlinked.threadCount === 1 ? '' : 's'}
           </span>
           <span>
-            History is preserved. Link this saved project identity to the open repository only if it
-            is the same project.
+            Conversations and saved drafts remain in Ship Studio storage. Linking a moved plain
+            folder restores its root binding; Git records stay tied to their saved checkout.
           </span>
           <Button
             size="compact"
@@ -1298,23 +1488,31 @@ function AgentChatPanelContents({
                   This conversation is still linked to {selectedThread.checkoutPath}; its checkout
                   is {selectedThread.checkoutStatus}.
                 </span>
-                <CheckoutRelinkMenu
-                  worktrees={availableWorktrees}
-                  projectPath={projectPath}
-                  disabled={
-                    isRelinkingCheckout ||
-                    selectedThread.providerStatus === 'active' ||
-                    ['starting', 'running', 'waiting'].includes(selectedThread.status)
-                  }
-                  onSelect={(path) => void relinkCheckout(selectedThread.id, path)}
-                  onCreateWorktree={handleNewWorktree}
-                />
+                {projectMode && !projectModeError && (
+                  <CheckoutRelinkMenu
+                    worktrees={availableWorktrees}
+                    projectPath={projectPath}
+                    isGitRepo={projectMode.isGitRepository}
+                    disabled={
+                      isRelinkingCheckout ||
+                      selectedThread.providerStatus === 'active' ||
+                      ['starting', 'running', 'waiting'].includes(selectedThread.status)
+                    }
+                    onSelect={(path) => void relinkCheckout(selectedThread.id, path)}
+                    onCreateWorktree={handleNewWorktree}
+                  />
+                )}
               </>
             )}
             {selectedThread.providerStatus === 'active' ? (
               <span>
                 Codex still reports an active turn. Wait for it to finish, then check its status
                 before continuing.
+              </span>
+            ) : selectedThread.providerStatus === 'systemError' ? (
+              <span>
+                Codex reports a system error for this conversation. Its saved transcript remains
+                available, but it is not ready for another prompt.
               </span>
             ) : selectedThread.providerStatus === 'unknown' ||
               selectedThread.providerStatus === 'notLoaded' ? (
@@ -1414,6 +1612,9 @@ function AgentChatPanelContents({
                     key={`${selectedThread.id}:${group.item.id}`}
                     item={group.item}
                     timerKey={`${selectedThread.id}:${group.item.id}`}
+                    turnRecord={selectedThread.turns.find(
+                      (turn) => turn.userItemId === group.item.id
+                    )}
                   />
                 )
               )}
@@ -1489,7 +1690,7 @@ function AgentChatPanelContents({
         </div>
       )}
       {composer}
-      {!selectedThread && (
+      {!selectedThread && projectMode && !projectModeError && projectMode.isGitRepository && (
         <div className="agent-chat__checkout-row">
           <CheckoutSelector
             projectPath={projectPath}
@@ -1620,17 +1821,32 @@ function CheckoutSelector({
 
 function CheckoutRelinkMenu({
   projectPath,
+  isGitRepo,
   worktrees,
   disabled,
   onSelect,
   onCreateWorktree,
 }: {
   projectPath: string;
+  isGitRepo: boolean;
   worktrees: WorktreeInfo[];
   disabled: boolean;
   onSelect: (path: string) => void;
   onCreateWorktree: () => void;
 }) {
+  if (!isGitRepo) {
+    return (
+      <Button
+        size="compact"
+        variant="secondary"
+        disabled={disabled}
+        onClick={() => onSelect(projectPath)}
+      >
+        Relink to this folder
+      </Button>
+    );
+  }
+
   const checkoutPaths = [projectPath, ...worktrees.map((worktree) => worktree.path)].filter(
     (path, index, paths) => paths.indexOf(path) === index
   );

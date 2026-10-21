@@ -45,6 +45,9 @@ function thread(overrides: Partial<ChatThread>): ChatThread {
     titleSource: 'prompt',
     status: 'idle',
     turnId: null,
+    approvalPolicy: null,
+    sandboxPolicy: null,
+    turns: [],
     items: [],
     requests: [],
     draft: { text: '', attachments: [] },
@@ -59,6 +62,10 @@ function thread(overrides: Partial<ChatThread>): ChatThread {
     revision: 4,
     ...overrides,
   };
+}
+
+function projectSnapshot(threads: ChatThread[] = []) {
+  return { projectId: 'harness-agent-chat-project', threads };
 }
 
 const userMessage = {
@@ -283,13 +290,38 @@ function chatScenario(
     commands: {
       ...workspaceCommands,
       list_worktrees: [existingWorktree],
-      agent_chat_list: chatThread ? [chatThread] : [],
+      agent_chat_list: projectSnapshot(chatThread ? [chatThread] : []),
       agent_chat_models: models,
     },
   };
 }
 
 export const agentChatScenarios: Scenario[] = [
+  {
+    ...chatScenario(
+      'agent-chat-plain-folder',
+      'Agent Chat — registered plain folder',
+      'A non-Git folder keeps its durable local composer and shows that Chat history is app-owned while worktree controls are hidden.',
+      null,
+      '.agent-chat__checkout-note'
+    ),
+    commands: {
+      ...workspaceCommands,
+      snapshot_status: {
+        watching: true,
+        can_undo: false,
+        can_redo: false,
+        is_git_repo: false,
+        history_size: 0,
+        cursor: 0,
+        files_changed: [],
+      },
+      agent_chat_project_mode: { isGitRepository: false },
+      list_worktrees: [],
+      agent_chat_list: projectSnapshot(),
+      agent_chat_list_drafts: { drafts: [], nextOffset: null },
+    },
+  },
   chatScenario(
     'agent-chat-empty',
     'Agent Chat — empty project',
@@ -316,7 +348,7 @@ export const agentChatScenarios: Scenario[] = [
     commands: {
       ...workspaceCommands,
       list_worktrees: [existingWorktree],
-      agent_chat_list: [],
+      agent_chat_list: projectSnapshot(),
       agent_chat_list_drafts: {
         drafts: [savedDraftFixture],
         nextOffset: null,
@@ -412,7 +444,12 @@ export const agentChatScenarios: Scenario[] = [
     commands: {
       ...workspaceCommands,
       list_worktrees: [existingWorktree],
-      agent_chat_list: [streamingThread, unreadActiveThread, waitingInboxThread, settledThread],
+      agent_chat_list: projectSnapshot([
+        streamingThread,
+        unreadActiveThread,
+        waitingInboxThread,
+        settledThread,
+      ]),
     },
   },
   {
@@ -435,7 +472,7 @@ export const agentChatScenarios: Scenario[] = [
         active_tab_index: 0,
       },
       list_worktrees: [existingWorktree],
-      agent_chat_list: [streamingThread, waitingInboxThread, settledThread],
+      agent_chat_list: projectSnapshot([streamingThread, waitingInboxThread, settledThread]),
       agent_chat_list_drafts: { drafts: [savedDraftFixture], nextOffset: null },
     },
   },
@@ -451,7 +488,7 @@ export const agentChatScenarios: Scenario[] = [
       { click: '.agent-chat__settled-toggle' },
       { click: `.agent-chat__thread-select[data-thread-id="${settledThread.id}"]` },
     ],
-    commands: { ...workspaceCommands, agent_chat_list: [settledThread] },
+    commands: { ...workspaceCommands, agent_chat_list: projectSnapshot([settledThread]) },
   },
   chatScenario(
     'agent-chat-missing-checkout',
@@ -486,7 +523,7 @@ export const agentChatScenarios: Scenario[] = [
       ...workspaceCommands,
       agent_chat_storage_status: {
         available: false,
-        schemaVersion: 3,
+        schemaVersion: 7,
         error: 'The Agent Chat database could not be opened.',
       },
     },
@@ -495,7 +532,7 @@ export const agentChatScenarios: Scenario[] = [
     ...chatScenario(
       'agent-chat-unlinked-project',
       'Agent Chat — unlinked project recovery',
-      'A stored project identity with an unavailable prior path is offered for explicit relinking to the open repository.',
+      'A stored project identity with an unavailable prior path is offered for explicit relinking to the open folder.',
       null,
       'Link saved conversations here'
     ),
@@ -504,7 +541,7 @@ export const agentChatScenarios: Scenario[] = [
       agent_chat_list_unlinked_projects: [
         {
           id: 'stored-project-harness-id',
-          gitCommonDir: '/old/path/acme-marketing/.git',
+          identityKey: '/old/path/acme-marketing/.git',
           lastPath: '/old/path/acme-marketing',
           threadCount: 3,
         },
