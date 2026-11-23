@@ -12,11 +12,12 @@
 import { useCallback, useState } from 'react';
 import { useShopifyCommands } from '../commands/useShopifyCommands';
 import type { ProjectType } from '../lib/static-server';
+import type { AgentPromptHandoffResult } from '../lib/agentPromptHandoff';
 
 interface UseShopifyThemeParams {
   projectPath: string;
   projectType: ProjectType;
-  onSendToAgent: (prompt: string) => void;
+  onSendToAgent: (prompt: string) => AgentPromptHandoffResult;
   showToast: (message: string, type?: 'success' | 'error') => void;
   /** Restarts the dev server — used after a store is connected/changed. */
   restartDevServer: () => Promise<void>;

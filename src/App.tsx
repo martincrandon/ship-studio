@@ -48,6 +48,7 @@ import { setActiveAccountId, type Account } from './lib/accounts';
 import { markSetupComplete, getDefaultAgentId as fetchDefaultAgentId } from './lib/setup';
 import { initDefaultAgent } from './lib/agent';
 import { sessionRegistry } from './lib/sessionRegistry';
+import { createSelectedAgentHandoff } from './lib/agentPromptHandoff';
 import { useCloseProject } from './hooks/useCloseProject';
 import { useOrphanedWorkspaceGuard } from './hooks/useOrphanedWorkspaceGuard';
 import { useProjectsViewCallbacks } from './hooks/useProjectsViewCallbacks';
@@ -177,6 +178,8 @@ function AppContents({ initialProjectPath }: AppProps) {
   }, []);
   const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const toastsProps = useToast();
+  const { toasts, showToast, dismissToast } = toastsProps;
   const previewRef = useRef<import('./components/preview/Preview').PreviewHandle | null>(null);
   const currentProjectPathRef = useRef<string | null>(null);
 
@@ -336,11 +339,13 @@ function AppContents({ initialProjectPath }: AppProps) {
     clearScreenshotInterval,
   } = useScreenshotManagement({
     previewRef,
+    currentProjectPath: currentProject?.path ?? null,
     // Thumbnail capture must only ever target a port that provably belongs
     // to the current project — null (skip) beats the 3000 fallback here.
     devServerPort: knownDevServerPort,
     pasteToActiveTerminal,
     currentProjectPathRef,
+    showToast,
   });
 
   // Workspace layout
@@ -383,13 +388,6 @@ function AppContents({ initialProjectPath }: AppProps) {
   // even on non-workspace views (loading / onboarding / projects).
   const helpModal = useModal('help');
 
-  // Toast notifications — state lives in the app-root <ToastProvider>, so
-  // `useOptionalToast()` consumers anywhere in the tree share this stack.
-  // `toastsProps` is the memoized context value, still prop-drilled into
-  // WorkspaceView during the transition off `onToast` prop chains.
-  const toastsProps = useToast();
-  const { toasts, showToast, dismissToast } = toastsProps;
-
   // Branch management (state, polling, conflict handlers)
   const {
     currentBranch,
@@ -430,6 +428,11 @@ function AppContents({ initialProjectPath }: AppProps) {
   } = usePlugins(currentProject?.path ?? null, {
     onError: (name, msg) => showToast(`Plugin "${name}": ${msg}`, 'error'),
   });
+
+  const pasteToSelectedAgent = useMemo(
+    () => createSelectedAgentHandoff(currentProjectPathRef, pasteToActiveTerminal, showToast),
+    [pasteToActiveTerminal, showToast, currentProjectPathRef]
+  );
 
   // Project lifecycle (selection, creation, import, publish, compact mode, etc.)
   const {
@@ -480,7 +483,7 @@ function AppContents({ initialProjectPath }: AppProps) {
     isServerStarting,
     restartDevServer,
     clearNeedsInstall,
-    pasteToActiveTerminal,
+    pasteToActiveTerminal: pasteToSelectedAgent,
     terminalTabs,
     activeTerminalTab,
     restoreTerminalTabs,

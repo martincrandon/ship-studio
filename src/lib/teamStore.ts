@@ -193,6 +193,22 @@ export function clearThreadSelection(): void {
   setUi({ selectedThreadIds: [] });
 }
 
+/** Clear a send's selection only if its project and selected rows are still current. */
+export function clearThreadSelectionFor(
+  expectedProjectPath: string,
+  expectedThreadIds: readonly string[]
+): void {
+  if (adoptedPath !== expectedProjectPath) return;
+  const expected = new Set(expectedThreadIds);
+  if (
+    expected.size !== ui.selectedThreadIds.length ||
+    ui.selectedThreadIds.some((id) => !expected.has(id))
+  ) {
+    return;
+  }
+  clearThreadSelection();
+}
+
 /**
  * Drop selections for threads that are no longer there.
  *

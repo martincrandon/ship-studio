@@ -26,13 +26,18 @@ import { Button } from '../primitives/Button';
 import { ResetIcon } from '@/components/icons';
 import { logger } from '../../lib/logger';
 import { asCommandError, formatCommandError } from '../../lib/errors';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 type GateStep = 'checking' | 'cli-missing' | 'store-missing';
 
 interface ShopifySetupProps {
   projectPath: string;
   /** Paste a prompt into the active agent terminal (user still presses Enter). */
-  onSendToAgent?: (prompt: string) => void;
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
   /** CLI + store were already in place — show the preview, server is running. */
   onReady: () => void;
   /** The user just connected a store — show the preview AND start the server. */
@@ -85,8 +90,14 @@ export function ShopifySetup({
   }, [projectPath, attempt]);
 
   const handleAgentSetup = () => {
-    onSendToAgent?.(SHOPIFY_CLI_SETUP_PROMPT);
-    showToast('Prompt pasted — press Enter in the terminal to run it', 'success');
+    if (!onSendToAgent) return;
+    const result = onSendToAgent(SHOPIFY_CLI_SETUP_PROMPT);
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted — press Enter in the terminal to run it',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) showToast(message, 'success');
   };
 
   const handleConnect = async () => {

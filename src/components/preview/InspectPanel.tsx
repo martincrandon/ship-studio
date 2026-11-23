@@ -6,6 +6,7 @@ import { HealthTabPanel, type HealthTabPanelRef } from '../code/HealthTabPanel';
 import { IconButton } from '../primitives/IconButton';
 import { CloseIcon } from '@/components/icons';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 export type InspectTab = 'logs' | 'browser' | 'health';
 
 interface InspectPanelProps {
@@ -14,7 +15,7 @@ interface InspectPanelProps {
   devServerOutput: string;
   devServerOutputVersion: number;
   onClose?: () => void;
-  onSendToAgent?: (text: string) => void;
+  onSendToAgent?: (text: string) => AgentPromptHandoffResult;
   /** Controlled tab. When set, the component is fully controlled. */
   activeTab?: InspectTab;
   onActiveTabChange?: (tab: InspectTab) => void;

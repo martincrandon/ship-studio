@@ -42,6 +42,7 @@
 
   --accent-success: var(--color-green-600);
   --accent-warning: var(--color-orange-600);
+  --accent-info: var(--color-blue-500);
   --accent-error: var(--color-red-error);
   --accent-error-light: var(--color-red-error-light);
   --accent-error-deep: var(--color-red-error-deep);

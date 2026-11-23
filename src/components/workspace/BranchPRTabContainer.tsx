@@ -13,6 +13,7 @@ import { ConnectOverlay } from '../ConnectOverlay';
 import type { BranchInfo, PullRequestInfo } from '../../lib/branches';
 import type { WorktreeInfo } from '../../lib/worktrees';
 import type { IntegrationState } from '../../hooks/useIntegrationStatus';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 
 export interface BranchPRTabContainerProps {
   workspaceTab: 'preview' | 'code' | 'branches' | 'prs';
@@ -38,7 +39,7 @@ export interface BranchPRTabContainerProps {
   handleResolveConflicts: (headBranch?: string, baseBranch?: string) => Promise<void>;
   handleGitHubConnect: () => void;
   /** Paste a prompt into the agent terminal (for merge-conflict hand-off). */
-  onSendToAgent: (prompt: string) => void;
+  onSendToAgent: (prompt: string) => AgentPromptHandoffResult;
   /** Current `git worktree list` for this repository. */
   worktrees: WorktreeInfo[];
   /** Switch the workspace to a worktree path (in-place, session stays hot). */

@@ -2,10 +2,10 @@
  * Merge conflict modal.
  *
  * Shown when a branch switch is blocked because git paused a merge with
- * unresolved conflicts. It voices the situation in plain language and gives two
- * clear ways out: hand it to the agent (copies a fix prompt and pastes it into
- * the agent terminal) or undo the merge (`git merge --abort`). No "publish" or
- * "discard" here, because neither describes what's actually happening.
+ * unresolved conflicts. It voices the situation in plain language and offers
+ * handoff to the selected agent surface (or a clipboard fallback when none is
+ * available) and merge undo (`git merge --abort`). No "publish" or "discard"
+ * here, because neither describes what's happening.
  *
  * @module components/MergeConflictModal
  */
@@ -18,6 +18,11 @@ import { abortMerge } from '../../lib/conflicts';
 import { humanizeGitError } from '../../lib/errors';
 import { useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface MergeConflictModalProps {
   /** Project path for the abort/merge operations. */
@@ -30,8 +35,8 @@ interface MergeConflictModalProps {
   sourceBranch: string | null;
   /** Paths of the files with unresolved conflicts. */
   files: string[];
-  /** Paste the fix prompt into the agent terminal (auto-paste on "Copy & Fix"). */
-  onSendToAgent?: (prompt: string) => void;
+  /** Place the fix prompt in the selected agent surface for explicit review. */
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult | void;
   /** Called after the merge is aborted, to refresh branch state and close. */
   onAborted: () => void;
   /** Close the modal without doing anything. */
@@ -68,10 +73,28 @@ export function MergeConflictModal({
 
   const fixPrompt = buildFixPrompt(currentBranch, sourceBranch, files);
 
-  const handleCopyAndFix = () => {
-    void copy(fixPrompt);
-    onSendToAgent?.(fixPrompt);
-    onToast('Copied and sent to your agent', 'success');
+  const handleCopyAndFix = async () => {
+    if (onSendToAgent) {
+      const result = onSendToAgent(fixPrompt);
+      if (result === false) return;
+
+      const message = promptHandoffSuccessMessage(
+        result,
+        'Prompt pasted into the agent terminal. Press Enter to continue.',
+        CHAT_PROMPT_STAGED_MESSAGE
+      );
+      if (message) onToast(message, 'success');
+      onClose();
+      return;
+    }
+
+    const copied = await copy(fixPrompt);
+    if (!copied) {
+      onToast('Could not copy the prompt to the clipboard.', 'error');
+      return;
+    }
+
+    onToast('Prompt copied to clipboard.', 'success');
     onClose();
   };
 
@@ -133,7 +156,7 @@ export function MergeConflictModal({
         <Button variant="secondary" onClick={() => void handleUndo()} disabled={isAborting}>
           {isAborting ? 'Undoing...' : 'Undo the merge'}
         </Button>
-        <Button variant="primary" onClick={handleCopyAndFix} disabled={isAborting}>
+        <Button variant="primary" onClick={() => void handleCopyAndFix()} disabled={isAborting}>
           Copy &amp; Fix
         </Button>
       </div>

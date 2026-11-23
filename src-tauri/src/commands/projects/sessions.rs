@@ -112,6 +112,7 @@ pub async fn suspend_project_session(project_path: String) -> Result<u32, Comman
 /// a hot background session before moving the folder out from under it.
 /// Returns the number of PTYs killed.
 pub async fn suspend_session_internal(project_path: &str) -> u32 {
+    crate::commands::agent_chat::shutdown_project(project_path).await;
     let killed = kill_project_pty_internal(project_path);
     // Suspending frees the project's resources — the mobile preview (serve-sim
     // daemon + app-build pty_session) lives in registries the PTY sweep above
@@ -140,6 +141,7 @@ pub async fn suspend_session_internal(project_path: &str) -> u32 {
 #[tauri::command]
 #[tracing::instrument]
 pub async fn unregister_project_session(project_path: String) -> Result<(), CommandError> {
+    crate::commands::agent_chat::shutdown_project(&project_path).await;
     state_unregister_session(&project_path);
     // Closing the project tears down its mobile preview (backend-owned session).
     crate::commands::mobile::teardown_mobile_preview(project_path.clone()).await;

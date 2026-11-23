@@ -27,7 +27,7 @@ export interface HandoffFinding {
 }
 
 /** How a "Fix in project" ended. */
-export type HandoffOutcome = 'delivered' | 'no_room' | 'failed';
+export type HandoffOutcome = 'delivered' | 'drafted' | 'no_room' | 'failed';
 
 interface PendingHandoff {
   projectPath: string;
@@ -45,6 +45,24 @@ interface PendingHandoff {
 const TTL_MS = 3 * 60_000;
 
 let pending: PendingHandoff | null = null;
+let revision = 0;
+const listeners = new Set<() => void>();
+
+function notifyHandoffChange(): void {
+  revision += 1;
+  listeners.forEach((listener) => listener());
+}
+
+/** Subscribe to queue changes so an open workspace can handle a new handoff. */
+export function subscribeHandoff(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Snapshot used by React to observe queued handoffs. */
+export function getHandoffRevision(): number {
+  return revision;
+}
 
 /** Queue a prompt to be typed into `projectPath`'s terminal once it exists. */
 export function queueHandoff(
@@ -53,6 +71,7 @@ export function queueHandoff(
   finding: HandoffFinding | null = null
 ): void {
   pending = { projectPath, prompt, queuedAt: Date.now(), finding };
+  notifyHandoffChange();
   logger.info('[Workflows] Queued a fix handoff', { projectPath });
 }
 
@@ -90,11 +109,13 @@ export function peekHandoffFinding(projectPath: string): HandoffFinding | null {
  */
 export function consumeHandoff(): void {
   pending = null;
+  notifyHandoffChange();
 }
 
 /** Drop anything queued. Used when the user navigates away deliberately. */
 export function clearHandoff(): void {
   pending = null;
+  notifyHandoffChange();
 }
 
 /**

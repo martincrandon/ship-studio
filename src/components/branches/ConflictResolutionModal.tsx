@@ -24,6 +24,11 @@ import { Spinner } from '../primitives/Spinner';
 import { useAsyncState } from '../../hooks/useAsyncState';
 import { describeClipboardError, useCopyToClipboard } from '../../hooks/useCopyToClipboard';
 import { useOptionalToast } from '../../contexts/ToastContext';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+  type AgentPromptHandoffResult,
+} from '../../lib/agentPromptHandoff';
 
 interface ConflictResolutionModalProps {
   projectPath: string;
@@ -34,7 +39,7 @@ interface ConflictResolutionModalProps {
    * "Send to Agent" button that hands the whole merge to the agent and closes
    * the modal (leaving the merge in progress for the agent to finish).
    */
-  onSendToAgent?: (prompt: string) => void;
+  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
 }
 
 /** Maximum lines to show before truncating with "and X more lines" */
@@ -232,8 +237,14 @@ Please:
 
 If a resolution is genuinely ambiguous, show me the options and ask before choosing.`;
 
-    onSendToAgent(prompt);
-    onToast?.('Sent to your agent — continue in the terminal', 'success');
+    const result = onSendToAgent(prompt);
+    if (result === false) return;
+    const message = promptHandoffSuccessMessage(
+      result,
+      'Prompt pasted into your agent terminal. Press Enter to send.',
+      CHAT_PROMPT_STAGED_MESSAGE
+    );
+    if (message) onToast?.(message, 'success');
     onClose();
   }, [onSendToAgent, filesData, onToast, onClose]);
 

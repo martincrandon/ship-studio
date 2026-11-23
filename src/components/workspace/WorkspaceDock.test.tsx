@@ -228,6 +228,7 @@ function LinkedPanelWorkspace({
     variables: true,
     editor: false,
     team: true,
+    assets: false,
   });
   const closePanel = (panel: PanelId) =>
     setOpenPanels((current) => ({ ...current, [panel]: false }));
@@ -631,6 +632,8 @@ describe('linked panel projection', () => {
     await act(async () => Promise.resolve());
 
     const focusPreset = LAYOUT_PRESETS.find((preset) => preset.id === 'focus')!;
+    const editorOrder =
+      focusPreset.layout.columns.findIndex((column) => column.kind === 'preview') + 1;
     expect(readProjectLayout(PROJECT)).toEqual(focusPreset.layout);
     expect(screen.getByTestId('agent-open-state')).toHaveTextContent('open');
     expect(screen.getByTestId('navigator-open-state')).toHaveTextContent('closed');
@@ -639,7 +642,7 @@ describe('linked panel projection', () => {
     expect(editorSurface).toHaveClass('dockable-panel__surface--docked');
     expect(
       document.querySelector('[data-rail-panel="editor"]')?.closest('.workspace-dock__column')
-    ).toHaveStyle({ order: '2', width: '300px' });
+    ).toHaveStyle({ order: String(editorOrder), width: '300px' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Select Team' }));
     await act(async () => Promise.resolve());

@@ -38,6 +38,7 @@ import type { BranchInfo } from '../../lib/branches';
 import type { WorktreeInfo } from '../../lib/worktrees';
 import type { AuthTerminalConfig, IntegrationState } from '../../hooks/useIntegrationStatus';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 import { Spinner } from '../primitives/Spinner';
 import { Button } from '../primitives/Button';
 import { ModalFrame } from '../primitives/ModalFrame';
@@ -102,7 +103,7 @@ export interface WorkspaceModalsProps {
   integrations: IntegrationState;
   onSubmitReviewSuccess: () => void;
   onSubmitReviewBranchSwitch?: (branchName: string) => void;
-  onSubmitReviewSendToAgent?: (prompt: string) => void;
+  onSubmitReviewSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
   onSubmitReviewResolveConflicts?: (headBranch: string, baseBranch: string) => void;
   onCloseSubmitReview: () => void;
 
@@ -113,7 +114,7 @@ export interface WorkspaceModalsProps {
     branchName: string;
   } | null;
   onCloseGitError: () => void;
-  onSendToClaude: (prompt: string) => void;
+  onSendToClaude: (prompt: string) => AgentPromptHandoffResult;
   onResolveConflicts: () => void;
 
   // Conflict resolution

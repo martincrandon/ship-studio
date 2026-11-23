@@ -45,7 +45,7 @@ one row, while the export list is checked exactly against the source file.
 | Layer | Definition files | Token count | Sample names |
 | --- | --- | ---: | --- |
 | core | `src/styles/global/fonts.css`<br>`src/styles/global/tokens-core.css` | 115 | `--color-white`, `--color-white-o10`, `--color-white-o15`, `--color-black`, `--color-black-o10`, `--color-black-o15` |
-| semantic | `src/styles/global/tokens-semantic.css` | 130 | `--font-size-micro`, `--font-size-caption`, `--tracking-micro`, `--surface-app`, `--surface-panel`, `--surface-control` |
+| semantic | `src/styles/global/tokens-semantic.css` | 131 | `--font-size-micro`, `--font-size-caption`, `--tracking-micro`, `--surface-app`, `--surface-panel`, `--surface-control` |
 | components | `src/styles/global/tokens-components.css` | 315 | `--size-control-standard`, `--size-control-large`, `--size-control-medium`, `--size-control-compact`, `--workspace-layout-menu-width`, `--workspace-layout-menu-row-height` |
 | compatibility | `src/styles/global/tokens-compatibility.css` | 55 | `--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--bg-deep`, `--bg-hover`, `--text-bright` |
 

@@ -24,6 +24,11 @@ import {
 } from 'react';
 import { usePreviewConnection, SERVER_MAX_RETRIES } from '../../hooks/usePreviewConnection';
 import { useAgentBridge } from '../../hooks/useAgentBridge';
+import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
+import {
+  CHAT_PROMPT_STAGED_MESSAGE,
+  promptHandoffSuccessMessage,
+} from '../../lib/agentPromptHandoff';
 import { AgentActivityOverlay } from './AgentActivityOverlay';
 import { PreviewSizeControl } from './PreviewSizeControl';
 import { PreviewCanvas, type CanvasZoom } from './PreviewCanvas';
@@ -120,6 +125,32 @@ const BreakpointIcon = ({ type }: { type: Breakpoint }) => {
 
 const PREVIEW_BREAKPOINTS = Object.keys(BREAKPOINTS) as Breakpoint[];
 
+type PreviewFixReason = 'server-down' | 'blank-iframe';
+
+interface PreviewFixAnalytics {
+  has_logs: boolean;
+  is_static: boolean;
+  reason: PreviewFixReason;
+  process_gone: boolean;
+}
+
+/** Report preview recovery only after the selected agent surface accepts it. */
+export function completePreviewFixHandoff(
+  result: AgentPromptHandoffResult,
+  analytics: PreviewFixAnalytics,
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+): void {
+  const message = promptHandoffSuccessMessage(
+    result,
+    'Prompt pasted into the agent terminal. Press Enter to send.',
+    CHAT_PROMPT_STAGED_MESSAGE
+  );
+  if (!message) return;
+
+  showToast(message, 'success');
+  void trackEvent('preview_fix_with_agent', { ...analytics });
+}
+
 /** The viewport tab that means "all of them at once". Deliberately not a
  *  breakpoint name, so it cannot collide with one. */
 const CANVAS_TAB = 'canvas';
@@ -204,7 +235,7 @@ interface PreviewProps {
   /** Detected project type; gates the visual editor to Next.js for v1. */
   projectType?: ProjectType;
   /** Callback to send prompt to Claude terminal */
-  onSendToClaude?: (prompt: string) => void;
+  onSendToClaude?: (prompt: string) => AgentPromptHandoffResult;
   /** Plugin components rendered in the preview toolbar */
   previewPlugins?: React.ReactNode;
   /** Whether the dev server logs panel is open */
@@ -1258,7 +1289,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
   // by the watchdog overlay — issue #179, e.g. a Clerk dev-keys redirect loop).
   const handleFixWithAgent = useMemo(() => {
     if (!onSendToClaude) return undefined;
-    return (reason: 'server-down' | 'blank-iframe') => {
+    return (reason: PreviewFixReason) => {
       const logs = isStaticProject
         ? ''
         : stripAnsi(devServerOutput).split('\n').slice(-200).join('\n').trim();
@@ -1318,13 +1349,17 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
           `port ${port} — Ship Studio starts and manages the dev server on that port ` +
           `itself, and a second unmanaged server will fight it.`;
       }
-      onSendToClaude(prompt);
-      void trackEvent('preview_fix_with_agent', {
-        has_logs: !!logs,
-        is_static: isStaticProject,
-        reason,
-        process_gone: serverProcessGone,
-      });
+      const result = onSendToClaude(prompt);
+      completePreviewFixHandoff(
+        result,
+        {
+          has_logs: !!logs,
+          is_static: isStaticProject,
+          reason,
+          process_gone: serverProcessGone,
+        },
+        showToast
+      );
     };
   }, [
     onSendToClaude,
@@ -1333,6 +1368,7 @@ export const Preview = forwardRef<PreviewHandle, PreviewProps>(function Preview(
     port,
     serverProcessGone,
     devServerUnexpectedExit,
+    showToast,
   ]);
 
   const breadcrumbSignature =
