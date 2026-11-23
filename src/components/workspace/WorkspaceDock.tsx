@@ -291,6 +291,7 @@ function WorkspaceDockColumn({
     variables: useDefaultWidth('variables'),
     editor: useDefaultWidth('editor'),
     team: useDefaultWidth('team'),
+    assets: useDefaultWidth('assets'),
   };
   const railColumnRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef(new Map<PanelId, HTMLDivElement>());
