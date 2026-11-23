@@ -34,12 +34,14 @@ import {
   AgentsIcon,
   BellIcon,
   ElementsIcon,
+  ElementLinkIcon,
   FolderOpenIcon,
   HomeIcon,
   ImageIcon,
   PanelLeftIcon,
   VariablesIcon,
   ActivityIcon,
+  WorkspacePanelUnlinkIcon,
 } from '@/components/icons';
 import { IconButton } from '../primitives/IconButton';
 import { MiddleTruncate } from '../primitives/MiddleTruncate';
@@ -86,6 +88,8 @@ export interface WorkspaceHeaderProps {
   variablesPanelVisible: boolean;
   variablesPanelAvailable: boolean;
   onToggleVariablesPanel: () => void;
+  panelLinkingEnabled: boolean;
+  onTogglePanelLinking: () => void;
 
   // Extra dropdown node rendered after Assets in the left cluster. Currently
   // used for the Plugins dropdown. Provided as a
@@ -305,6 +309,8 @@ export function WorkspaceHeader({
   variablesPanelVisible,
   variablesPanelAvailable,
   onToggleVariablesPanel,
+  panelLinkingEnabled,
+  onTogglePanelLinking,
   headerExtras,
   teamPresence,
   layoutMenu,
@@ -528,6 +534,26 @@ export function WorkspaceHeader({
       />
       {teamPresence}
       {headerExtras}
+      <ToggleButton
+        variant="ghost"
+        className="workspace-panel-link-toggle"
+        leftIcon={
+          panelLinkingEnabled ? (
+            <ElementLinkIcon size={16} />
+          ) : (
+            <WorkspacePanelUnlinkIcon size={16} />
+          )
+        }
+        onClick={onTogglePanelLinking}
+        title={
+          panelLinkingEnabled
+            ? 'Allow multiple workspace panels at once'
+            : 'Show one workspace panel at a time'
+        }
+        aria-label="Link workspace panels"
+        pressed={panelLinkingEnabled}
+        data-panel-linking-toggle
+      />
     </div>
   );
   const projectTitle = (

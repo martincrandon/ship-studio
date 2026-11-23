@@ -46,7 +46,7 @@ import {
 import { AssetBrowserProvider, useAssetBrowser } from '../../contexts/AssetBrowserContext';
 import { AssetsDockPanel } from './AssetsPanel';
 import { useLayoutCommands } from '../../commands/useLayoutCommands';
-import { isDocked } from '../../lib/workspaceLayout';
+import { isDocked, type LinkedPanelId } from '../../lib/workspaceLayout';
 import { WorkspaceHeader } from './WorkspaceHeader';
 import { WorkspaceSidebar } from './WorkspaceSidebar';
 import { trackEvent } from '../../lib/analytics';
@@ -520,12 +520,43 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     setWorkspaceTab,
     startDevServer: handleStartDevServer,
   });
+  const { setVisible: setVariablesVisible } = variables;
+  const closeVariablesPanel = useCallback(() => setVariablesVisible(false), [setVariablesVisible]);
   const toggleAgentPanel = useCallback(() => {
     if (!isAgentPanelHidden) {
       setIsPreviewHidden(false);
     }
     setIsAgentPanelHidden(!isAgentPanelHidden);
   }, [isAgentPanelHidden, setIsPreviewHidden]);
+  const closeAgentPanel = useCallback(() => setIsAgentPanelHidden(true), []);
+  const { activePanel, setActivePanel, singlePanelModeEnabled } = dock;
+  const toggleWorkspacePanel = useCallback(
+    (panel: LinkedPanelId, isOpen: boolean, toggle: () => void) => {
+      setActivePanel(panel);
+      if (singlePanelModeEnabled && activePanel !== panel) {
+        if (!isOpen) toggle();
+        return;
+      }
+      toggle();
+    },
+    [activePanel, setActivePanel, singlePanelModeEnabled]
+  );
+  const toggleAgentPanelFromToolbar = useCallback(
+    () => toggleWorkspacePanel('agent', !isAgentPanelHidden, toggleAgentPanel),
+    [isAgentPanelHidden, toggleAgentPanel, toggleWorkspacePanel]
+  );
+  const toggleElementTreeFromToolbar = useCallback(
+    () => toggleWorkspacePanel('navigator', elementTreeVisible, toggleElementTree),
+    [elementTreeVisible, toggleElementTree, toggleWorkspacePanel]
+  );
+  const toggleVariablesPanelFromToolbar = useCallback(
+    () => toggleWorkspacePanel('variables', variables.open, variables.toggle),
+    [toggleWorkspacePanel, variables.open, variables.toggle]
+  );
+  const handleTeamPanelToggle = useCallback(
+    (isOpen: boolean, toggle: () => void) => toggleWorkspacePanel('team', isOpen, toggle),
+    [toggleWorkspacePanel]
+  );
   const handleSelectPreview = useCallback(() => {
     void handleStartDevServer();
   }, [handleStartDevServer]);
@@ -541,8 +572,9 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
   useLayoutCommands();
 
   useWorkspacePanelCommands({
-    isAgentPanelHidden,
-    toggleAgentPanel,
+    isAgentPanelHidden:
+      isAgentPanelHidden || (dock.singlePanelModeEnabled && dock.activePanel !== 'agent'),
+    toggleAgentPanel: toggleAgentPanelFromToolbar,
     agentPanelDocked,
     toggleAgentPanelDocked,
     elementTreeDocked,
@@ -550,8 +582,11 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     variablesPanelDocked,
     toggleVariablesPanelDocked,
     isWebProject,
-    variablesPanelOpen: variables.open,
-    toggleVariablesPanel: variables.toggle,
+    variablesPanelOpen:
+      variables.open && (!dock.singlePanelModeEnabled || dock.activePanel === 'variables'),
+    toggleVariablesPanel: toggleVariablesPanelFromToolbar,
+    panelLinkingEnabled: dock.singlePanelModeEnabled,
+    togglePanelLinking: dock.toggleSinglePanelMode,
     showPreviewLogs,
     togglePreviewLogs,
   });
@@ -677,6 +712,8 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     setIsPreviewHidden,
     setWorkspaceTab,
     startDevServer: handleStartDevServer,
+    onTeamPanelToggle: handleTeamPanelToggle,
+    teamPanelSelected: !dock.singlePanelModeEnabled || dock.activePanel === 'team',
   });
 
   useWorkspaceTerminalShortcuts({
@@ -747,14 +784,19 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
     onOpenAssetsPanel: () => assetsBrowser.toggleManager(isPreviewHidden),
     assetsPanelVisible: assetsBrowser.panelOpen || assetsBrowser.modalOpen,
     isFocusMode: isPreviewHidden,
-    elementTreeVisible: elementTreePanelVisible,
+    elementTreeVisible:
+      elementTreePanelVisible && (!dock.singlePanelModeEnabled || dock.activePanel === 'navigator'),
     elementTreeAvailable,
-    onToggleElementTree: toggleElementTree,
-    agentPanelVisible: !isAgentPanelHidden,
-    onToggleAgentPanel: toggleAgentPanel,
-    variablesPanelVisible: variables.open,
+    onToggleElementTree: toggleElementTreeFromToolbar,
+    agentPanelVisible:
+      !isAgentPanelHidden && (!dock.singlePanelModeEnabled || dock.activePanel === 'agent'),
+    onToggleAgentPanel: toggleAgentPanelFromToolbar,
+    variablesPanelVisible:
+      variables.open && (!dock.singlePanelModeEnabled || dock.activePanel === 'variables'),
     variablesPanelAvailable: isWebProject,
-    onToggleVariablesPanel: variables.toggle,
+    onToggleVariablesPanel: toggleVariablesPanelFromToolbar,
+    panelLinkingEnabled: dock.singlePanelModeEnabled,
+    onTogglePanelLinking: dock.toggleSinglePanelMode,
     layoutMenu: <WorkspaceLayoutMenu />,
     teamPresence: team.presence,
     modes: modesNode,
@@ -998,7 +1040,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                       variablesPanelVisible={variables.open}
                       variablesPanelPinned={variablesPanelDocked}
                       toggleVariablesPanelPinned={toggleVariablesPanelDocked}
-                      closeVariablesPanel={() => variables.setVisible(false)}
+                      closeVariablesPanel={closeVariablesPanel}
                       pluginProject={pluginProject}
                       pluginActions={pluginActions}
                       pluginTheme={pluginTheme}
@@ -1045,6 +1087,7 @@ const WorkspaceViewInner = memo(function WorkspaceViewInner({
                     agentPanelPinned={agentPanelDocked}
                     toggleAgentPanelPinned={toggleAgentPanelDocked}
                     toggleAgentPanel={toggleAgentPanel}
+                    closeAgentPanel={closeAgentPanel}
                     splitPaneTabIds={splitPaneTabIds}
                     splitPaneSizes={splitPaneSizes}
                     isSplitActive={isSplitActive}

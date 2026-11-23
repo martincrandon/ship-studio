@@ -1820,7 +1820,7 @@
       "owner": "Button",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 14
+      "consumerCount": 15
     },
     {
       "name": "--button-text-hover",
@@ -5087,7 +5087,7 @@
       "owner": "global/semantic",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 63
+      "consumerCount": 64
     },
     {
       "name": "--transition-interaction-slow",
@@ -5213,7 +5213,7 @@
       "owner": "global/semantic",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 202
+      "consumerCount": 203
     },
     {
       "name": "--spacing-xs",
@@ -5222,7 +5222,7 @@
       "owner": "global/semantic",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 509
+      "consumerCount": 512
     },
     {
       "name": "--spacing-sm",
@@ -5231,7 +5231,7 @@
       "owner": "global/semantic",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 562
+      "consumerCount": 564
     },
     {
       "name": "--spacing-md",
@@ -5276,7 +5276,7 @@
       "owner": "global/semantic",
       "status": "canonical",
       "pluginStable": false,
-      "consumerCount": 16
+      "consumerCount": 18
     },
     {
       "name": "--radius-control",
