@@ -56,7 +56,6 @@ import { IconButton } from '../primitives/IconButton';
 import { useOptionalToast } from '../../contexts/ToastContext';
 import { humanizeGitError, isMissingUpstreamError, isRecognizedGitFailure } from '../../lib/errors';
 import { logger } from '../../lib/logger';
-import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 
 /** True when a git operation failed because uncommitted changes would be
  *  clobbered by a checkout — git phrases this as "would be overwritten by
@@ -118,7 +117,7 @@ interface BranchesTabProps {
   /** Callback to refresh branch list */
   onRefresh: () => void;
   /** Paste a prompt into the agent terminal (used to hand off a merge conflict). */
-  onSendToAgent?: (prompt: string) => AgentPromptHandoffResult;
+  onSendToAgent?: (prompt: string) => void;
   /** Current `git worktree list` for this repository (main worktree first). */
   worktrees?: WorktreeInfo[];
   /** Switch the workspace to a worktree's path (in-place, session stays hot). */

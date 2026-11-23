@@ -5,7 +5,7 @@
  * owns the terminal pane's layout, split-pane rendering, and footer actions.
  */
 
-import { useEffect, type CSSProperties, type MutableRefObject } from 'react';
+import type { CSSProperties, MutableRefObject } from 'react';
 import { getAgentById, type AgentConfig } from '../../lib/agent';
 import type { LoadedPlugin } from '../../hooks/usePlugins';
 import {
@@ -14,17 +14,9 @@ import {
   type PluginThemeData,
 } from '../../contexts/PluginContext';
 import { sessionRegistry } from '../../lib/sessionRegistry';
-import {
-  createAgentChatDraft,
-  getAgentChatSnapshot,
-  setAgentChatPanelVisible,
-} from '../../lib/agentChatStore';
 import { kbd } from '../../lib/shortcuts';
 import type { Project } from '../../lib/project';
 import type { TerminalTab } from '../../hooks/useTerminalManagement';
-import type { AgentChatWorkspaceProps } from '../../hooks/useAgentChatWorkspace';
-import type { AgentWorkspaceView } from '../../lib/agentChatPreferences';
-import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 import { Terminal } from '../terminal/Terminal';
 import type { AgentStatus, TerminalHandle } from '../terminal/Terminal';
 import { StaleEnvBanner } from '../terminal/StaleEnvBanner';
@@ -37,21 +29,16 @@ import { usePanelDockBinding } from '../../contexts/PanelDockContext';
 import { Spinner } from '../primitives/Spinner';
 import {
   CameraIcon,
-  CommentIcon,
   CloseIcon,
   CropIcon,
   PinIcon,
-  PlusIcon,
   RedoIcon,
   SplitViewIcon,
-  TerminalIcon,
   UndoIcon,
 } from '@/components/icons';
 import { ToolbarDropdown } from './ToolbarDropdown';
 import { TerminalSplitDividers } from './TerminalSplitDividers';
 import { TerminalSplitHeaders } from './TerminalSplitHeaders';
-import { Tabs, TabsList, TabsTab } from '../primitives/Tabs';
-import { AgentChatPanel } from '../agent-chat/AgentChatPanel';
 
 interface TerminalSessionView {
   projectPath: string;
@@ -83,7 +70,7 @@ export interface WorkspaceTerminalPaneProps {
   showHealthLogs: boolean;
   healthOutput: string;
   healthOutputVersion: number;
-  sendToClaude: (text: string) => AgentPromptHandoffResult;
+  sendToClaude: (text: string) => unknown;
   isPreviewHidden: boolean;
   isAgentPanelHidden: boolean;
   agentPanelPinned: boolean;
@@ -114,13 +101,10 @@ export interface WorkspaceTerminalPaneProps {
    */
   isPreviewCaptureAvailable: boolean;
   isCapturing: boolean;
-  isFullPageCapturing: boolean;
   isCropMode: boolean;
   isCropCapturing: boolean;
   setIsCropMode: (mode: boolean) => void;
   handleCaptureScreenshot: () => Promise<void>;
-  handleCaptureFullPage: () => Promise<void>;
-  agentChat: AgentChatWorkspaceProps;
   onNotificationSettings: () => void;
   onSkills: () => void;
   onMcp: () => void;
@@ -184,7 +168,6 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
     isCropCapturing,
     setIsCropMode,
     handleCaptureScreenshot,
-    agentChat,
     onNotificationSettings,
     onSkills,
     onMcp,
@@ -199,19 +182,6 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
   // The rail: which slot this panel's placeholder belongs in, and where to
   // report a drag of the header below.
   const dock = usePanelDockBinding('agent');
-  const isChatView = agentChat.view === 'chat';
-  const isTerminalView = !isChatView;
-  const chatPanelVisible = isChatView && !isAgentPanelHidden;
-  useEffect(() => {
-    setAgentChatPanelVisible(currentProject.path, chatPanelVisible);
-    return () => setAgentChatPanelVisible(currentProject.path, false);
-  }, [chatPanelVisible, currentProject.path]);
-  const canCapturePreview =
-    isPreviewCaptureAvailable && (!isChatView || agentChat.captureAvailable);
-  const captureUnavailableTitle = !isPreviewCaptureAvailable
-    ? 'Open the Preview tab to capture a screenshot'
-    : (agentChat.captureUnavailableReason ?? 'Select a Chat conversation to attach a screenshot');
-  const toolbarAgent = isChatView ? getAgentById('codex') : getActiveTabAgent();
 
   return (
     <DockablePanel
@@ -229,14 +199,12 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
       })}
       surfaceClassName="dockable-panel__surface--agent"
     >
-      <div className={`terminal-pane${isChatView ? ' terminal-pane--chat' : ''}`}>
+      <div className="terminal-pane">
         <div className="workspace-terminal-view">
           <div className="terminal-agent-header panel-heading-pair" data-dockable-drag-handle>
             <span className="terminal-agent-header__identity">
               <span className="panel-heading-pair-title workspace-panel-title">Agent</span>
-              <span className="panel-heading-pair-meta">
-                {isChatView ? 'Codex' : getActiveTabAgent().displayName}
-              </span>
+              <span className="panel-heading-pair-meta">{getActiveTabAgent().displayName}</span>
             </span>
             {!isPreviewHidden && (
               <span className="terminal-agent-header__actions">
@@ -265,77 +233,26 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
               </span>
             )}
           </div>
-          <div className="agent-panel-modebar">
-            <div className="agent-panel-view-control">
-              <Tabs
-                value={agentChat.view}
-                size="compact"
-                mode="navigation"
-                onValueChange={(value) => agentChat.onViewChange(value as AgentWorkspaceView)}
-              >
-                <TabsList aria-label="Agent panel view" className="agent-panel-view-switch">
-                  <TabsTab
-                    value="terminal"
-                    className="button--icon-only"
-                    aria-label="Terminal"
-                    title="Terminal"
-                  >
-                    <TerminalIcon size={16} />
-                  </TabsTab>
-                  <TabsTab
-                    value="chat"
-                    className="button--icon-only"
-                    aria-label="Chat"
-                    title="Chat"
-                  >
-                    <CommentIcon size={16} />
-                  </TabsTab>
-                </TabsList>
-              </Tabs>
-            </div>
-            {isChatView && (
-              <Button
-                size="compact"
-                variant="ghost"
-                className="agent-panel-new-conversation"
-                leftIcon={<PlusIcon size={14} />}
-                aria-label="New conversation"
-                title="New conversation"
-                onClick={() => {
-                  const checkoutPath = getAgentChatSnapshot(
-                    currentProject.path
-                  ).selectedCheckoutPath;
-                  createAgentChatDraft(currentProject.path, checkoutPath);
-                }}
-              >
-                <span className="agent-panel-new-conversation-label">New conversation</span>
-              </Button>
-            )}
-          </div>
           <StaleEnvBanner projectPath={currentProject.path} />
           <div
-            className={`terminal-content${isSplitActive && isTerminalView ? ' split' : ''}`}
+            className={`terminal-content${isSplitActive ? ' split' : ''}`}
             data-education-id="claude-terminal"
           >
-            {isTerminalView &&
-              isSplitActive &&
-              currentProject &&
-              splitPaneTabIds &&
-              splitPaneSizes && (
-                <>
-                  <TerminalSplitHeaders
-                    panes={splitPaneTabIds}
-                    sizes={splitPaneSizes}
-                    tabs={terminalTabs}
-                    tabTitles={tabTitles}
-                    onSelectTab={setSplitPaneTab}
-                    onRemovePane={removeSplitPane}
-                    onAddPane={() => addSplitPane()}
-                    canAddPane={splitPaneTabIds.length < terminalTabs.length}
-                  />
-                  <TerminalSplitDividers sizes={splitPaneSizes} onResize={setSplitPaneSizes} />
-                </>
-              )}
+            {isSplitActive && currentProject && splitPaneTabIds && splitPaneSizes && (
+              <>
+                <TerminalSplitHeaders
+                  panes={splitPaneTabIds}
+                  sizes={splitPaneSizes}
+                  tabs={terminalTabs}
+                  tabTitles={tabTitles}
+                  onSelectTab={setSplitPaneTab}
+                  onRemovePane={removeSplitPane}
+                  onAddPane={() => addSplitPane()}
+                  canAddPane={splitPaneTabIds.length < terminalTabs.length}
+                />
+                <TerminalSplitDividers sizes={splitPaneSizes} onResize={setSplitPaneSizes} />
+              </>
+            )}
             {allSessions.flatMap((session) =>
               session.tabs.map((tab) => {
                 const isCurrentProject = session.projectPath === currentProject.path;
@@ -346,7 +263,6 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                 const inSplitPane = paneIdx >= 0;
                 const isVisible =
                   isCurrentProject &&
-                  isTerminalView &&
                   !showHealthLogs &&
                   (isSplitActive ? inSplitPane : activeTerminalTab === tab.id);
                 const refKey = `${session.projectPath}::${tab.id}`;
@@ -445,18 +361,6 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                 />
               </div>
             )}
-            <div
-              className={`agent-chat-host${isChatView ? '' : ' agent-chat-host--hidden'}`}
-              aria-hidden={!isChatView}
-            >
-              <AgentChatPanel
-                projectPath={currentProject.path}
-                isActive={chatPanelVisible}
-                autoAcceptMode={agentChat.approvalMode}
-                worktrees={agentChat.worktrees}
-                onCreateWorktree={agentChat.onCreateWorktree}
-              />
-            </div>
           </div>
         </div>
 
@@ -493,11 +397,11 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                 <Button
                   variant="ghost"
                   onClick={() => void handleCaptureScreenshot()}
-                  disabled={isCapturing || isCropMode || !canCapturePreview}
+                  disabled={isCapturing || isCropMode || !isPreviewCaptureAvailable}
                   title={
-                    canCapturePreview
-                      ? `Screenshot preview for ${isChatView ? 'Chat' : 'the terminal'} (${kbd('mod', 'shift', 'S')})`
-                      : captureUnavailableTitle
+                    isPreviewCaptureAvailable
+                      ? `Screenshot preview for Claude (${kbd('mod', 'shift', 'S')})`
+                      : 'Open the Preview tab to capture a screenshot'
                   }
                   data-education-id="screenshot-button"
                 >
@@ -515,11 +419,13 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
                   onClick={() => setIsCropMode(!isCropMode)}
                   // Still clickable while crop mode is already on, so a mode
                   // latched before the tab changed can always be switched off.
-                  disabled={isCapturing || isCropCapturing || (!canCapturePreview && !isCropMode)}
+                  disabled={
+                    isCapturing || isCropCapturing || (!isPreviewCaptureAvailable && !isCropMode)
+                  }
                   title={
-                    canCapturePreview || isCropMode
-                      ? `Crop screenshot for ${isChatView ? 'Chat' : 'the terminal'} (${kbd('mod', 'shift', 'C')})`
-                      : captureUnavailableTitle
+                    isPreviewCaptureAvailable || isCropMode
+                      ? `Crop screenshot for Claude (${kbd('mod', 'shift', 'C')})`
+                      : 'Open the Preview tab to crop a screenshot'
                   }
                   data-education-id="crop-button"
                 >
@@ -536,7 +442,7 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
           </div>
 
           <div className="terminal-pane-footer-right">
-            {canSplit && isTerminalView && (
+            {canSplit && (
               <ToggleButton
                 variant="ghost"
                 type="button"
@@ -554,12 +460,12 @@ export function WorkspaceTerminalPane(props: WorkspaceTerminalPaneProps) {
               </ToggleButton>
             )}
             <ToolbarDropdown
-              agent={toolbarAgent}
-              autoAcceptMode={isChatView ? agentChat.approvalMode : autoAcceptMode}
+              agent={getActiveTabAgent()}
+              autoAcceptMode={autoAcceptMode}
               onNotificationSettings={onNotificationSettings}
               onSkills={onSkills}
               onMcp={onMcp}
-              onAutoAcceptToggle={isChatView ? agentChat.onToggleApprovalMode : onAutoAcceptToggle}
+              onAutoAcceptToggle={onAutoAcceptToggle}
               onHelp={onHelp}
               terminalPlugins={terminalPlugins}
               pluginProject={pluginProject}

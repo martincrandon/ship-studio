@@ -18,11 +18,10 @@ import { ResetIcon, EditIcon } from '@/components/icons';
 import { SearchField } from '../primitives/SearchField';
 import { type CodeRevealTarget, type FileTreeNode } from '../../lib/code';
 import { useCommands } from '../../commands/useCommands';
-import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 
 interface CodeTabProps {
   projectPath: string;
-  onSendToAgent?: (text: string) => AgentPromptHandoffResult;
+  onSendToAgent?: (text: string) => void;
   /** Jump-to-code target: open this file and highlight/scroll to the line. */
   revealTarget?: CodeRevealTarget | null;
 }

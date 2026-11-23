@@ -25,18 +25,12 @@ import {
 import { trackEvent } from '../../lib/analytics';
 import { Tabs, TabsList, TabsPanel, TabsTab } from '../primitives/Tabs';
 import { Button } from '../primitives/Button';
-import { useOptionalToast } from '../../contexts/ToastContext';
-import {
-  CHAT_PROMPT_STAGED_MESSAGE,
-  promptHandoffSuccessMessage,
-  type AgentPromptHandoffResult,
-} from '../../lib/agentPromptHandoff';
 
 type InnerTab = 'console' | 'network' | 'elements';
 
 interface BrowserToolsProps {
-  /** Place the currently active tab's serialized content in the selected agent surface. */
-  onSendToAgent?: (text: string) => AgentPromptHandoffResult | void;
+  /** Pipe the currently active tab's serialized content into the agent terminal. */
+  onSendToAgent?: (text: string) => void;
   /** Whether this panel is actually visible (panel open AND Browser tab
    *  selected). BrowserTools stays mounted in a hidden slot, so visibility
    *  must come from the parent — it gates the live DOM subscription. */
@@ -45,7 +39,6 @@ interface BrowserToolsProps {
 
 export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps) {
   const [tab, setTab] = useState<InnerTab>('console');
-  const { showToast } = useOptionalToast();
 
   const consoleEntries = useSyncExternalStore(
     inspectStore.subscribe,
@@ -93,21 +86,13 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
     } else {
       prompt = formatElementsForAgent(domSnapshot);
     }
-    const result = onSendToAgent(prompt);
-    if (result === false) return;
-
     void trackEvent('browser_tools_sent_to_agent', {
       tab,
       entry_count: entryCount,
       had_data: tab === 'elements' ? domSnapshot !== null : (entryCount ?? 0) > 0,
       char_count: prompt.length,
     });
-    const message = promptHandoffSuccessMessage(
-      result,
-      'Prompt pasted into the agent terminal. Press Enter to send.',
-      CHAT_PROMPT_STAGED_MESSAGE
-    );
-    if (message) showToast(message, 'success');
+    onSendToAgent(prompt);
   };
 
   const sendDisabled =
@@ -131,7 +116,7 @@ export function BrowserTools({ onSendToAgent, active = true }: BrowserToolsProps
                 size="compact"
                 onClick={handleSendToAgent}
                 disabled={sendDisabled}
-                title={`Add current ${tab} contents to the selected agent`}
+                title={`Send current ${tab} contents to the active agent`}
               >
                 Send to agent
               </Button>

@@ -20,8 +20,6 @@ interface Params {
   /** Terminals a comment can be handed to. */
   agents: CommentAgent[];
   activeAgentId: number | null;
-  chatSelected?: boolean;
-  showChatDraft?: () => void;
   isWebProject: boolean;
   previewRunning: boolean;
   setIsPreviewHidden: (hidden: boolean) => void;
@@ -35,8 +33,6 @@ export function useWorkspaceComments({
   project,
   agents,
   activeAgentId,
-  chatSelected = false,
-  showChatDraft,
   isWebProject,
   previewRunning,
   setIsPreviewHidden,
@@ -55,8 +51,6 @@ export function useWorkspaceComments({
   const team = useTeamWorkspace(project, {
     agents,
     activeAgentId,
-    chatSelected,
-    showChatDraft,
     pickerHint,
     onPanelToggle: onTeamPanelToggle,
     panelSelected: teamPanelSelected,

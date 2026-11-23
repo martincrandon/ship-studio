@@ -84,7 +84,6 @@ import { basename } from '../lib/paths';
 
 import type { AppView } from '../lib/types';
 import { preferredPortForProject } from '../lib/ports';
-import type { AgentPromptHandoffResult } from '../lib/agentPromptHandoff';
 
 export interface UseProjectLifecycleParams {
   currentProject: Project | null;
@@ -108,7 +107,7 @@ export interface UseProjectLifecycleParams {
   clearNeedsInstall: (projectPath: string) => void;
   // Terminal
   /** Returns false when no terminal is mounted yet. */
-  pasteToActiveTerminal: (text: string) => AgentPromptHandoffResult;
+  pasteToActiveTerminal: (text: string) => boolean;
   terminalTabs: Array<{ id: number; agentId: string; sessionId: string }>;
   activeTerminalTab: number;
   /** Seed a project's tab list from persisted backend state on first open. */
@@ -227,7 +226,7 @@ export function useProjectLifecycle({
   // Send prompt to the agent terminal. Returns false when there is no terminal
   // yet — the workflow handoff retries on that.
   const sendToClaude = useCallback(
-    (prompt: string): AgentPromptHandoffResult => pasteToActiveTerminal(prompt),
+    (prompt: string): boolean => pasteToActiveTerminal(prompt),
     [pasteToActiveTerminal]
   );
 

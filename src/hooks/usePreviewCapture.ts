@@ -10,7 +10,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { getScreenshotableWindows, getWindowScreenshot } from 'tauri-plugin-screenshots-api';
 import { logger } from '../lib/logger';
 import { trackEvent } from '../lib/analytics';
 import { useOptionalToast } from '../contexts/ToastContext';
@@ -77,6 +76,9 @@ export function usePreviewCapture({
 
   // Shared helper: capture the current window and return the temp file path
   const captureWindowScreenshot = useCallback(async (): Promise<string> => {
+    const { getScreenshotableWindows, getWindowScreenshot } =
+      await import('tauri-plugin-screenshots-api');
+
     const windows = await getScreenshotableWindows();
     const ourWindow = windows.find(
       (w) =>

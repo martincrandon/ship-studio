@@ -10,8 +10,8 @@
  * - Unsupported: clear explanation.
  *
  * Anything that involves the AI agent goes through an explicit prompt-review
- * step: the user sees the exact prompt and chooses to copy it or stage it for
- * the selected agent. Nothing runs until they press Enter in Terminal or Send in Chat.
+ * step: the user sees the exact prompt and chooses to copy it or paste it
+ * into the terminal. Nothing runs until they press Enter there.
  *
  * @module components/LanguagesModal
  */
@@ -27,7 +27,6 @@ import { useOptionalToast } from '../../contexts/ToastContext';
 import { GlobeIcon, CloseIcon } from '@/components/icons';
 import { asCommandError, formatCommandError } from '../../lib/errors';
 import { trackEvent } from '../../lib/analytics';
-import { getAgentWorkspaceView } from '../../lib/agentChatPreferences';
 import {
   getI18nStatus,
   setI18nConfig,
@@ -39,16 +38,11 @@ import {
   searchLocales,
   type I18nStatus,
 } from '../../lib/i18n';
-import {
-  CHAT_PROMPT_STAGED_MESSAGE,
-  promptHandoffSuccessMessage,
-  type AgentPromptHandoffResult,
-} from '../../lib/agentPromptHandoff';
 
 interface LanguagesModalProps {
   projectPath: string;
   /** Pastes text into the active agent terminal (user still presses Enter). */
-  onSendToClaude?: (prompt: string) => AgentPromptHandoffResult;
+  onSendToClaude?: (prompt: string) => void;
 }
 
 /** A prompt staged for the user to review before handing to the agent. */
@@ -163,7 +157,6 @@ function AddLanguagePicker({
 export function LanguagesModal({ projectPath, onSendToClaude }: LanguagesModalProps) {
   const { isOpen, close: onClose } = useModal('i18n');
   const { showToast } = useOptionalToast();
-  const chatSelected = getAgentWorkspaceView(projectPath) === 'chat';
   const { copy, isCopied } = useCopyToClipboard();
 
   const {
@@ -324,14 +317,8 @@ export function LanguagesModal({ projectPath, onSendToClaude }: LanguagesModalPr
 
   const handlePasteToTerminal = () => {
     if (!promptReview || !onSendToClaude) return;
-    const result = onSendToClaude(promptReview.prompt);
-    if (result === false) return;
-    const message = promptHandoffSuccessMessage(
-      result,
-      'Prompt pasted — press Enter in the terminal to run it',
-      CHAT_PROMPT_STAGED_MESSAGE
-    );
-    if (message) showToast(message, 'success');
+    onSendToClaude(promptReview.prompt);
+    showToast('Prompt pasted — press Enter in the terminal to run it', 'success');
     setPromptReview(null);
     onClose();
   };
@@ -390,7 +377,7 @@ export function LanguagesModal({ projectPath, onSendToClaude }: LanguagesModalPr
               </Button>
               {onSendToClaude && (
                 <Button variant="primary" onClick={handlePasteToTerminal}>
-                  {chatSelected ? 'Add to Chat draft' : 'Paste into terminal'}
+                  Paste into terminal
                 </Button>
               )}
             </div>

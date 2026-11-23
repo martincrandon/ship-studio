@@ -30,7 +30,7 @@ import { TeamPresence } from '../components/team/TeamPresence';
 import {
   TEAM_SYNC_INTERVAL_MS,
   adopt,
-  clearThreadSelectionFor,
+  clearThreadSelection,
   getSnapshot,
   getUiSnapshot,
   refresh,
@@ -42,7 +42,6 @@ import {
 } from '../lib/teamStore';
 import type { CommentAgent } from '../lib/canvasComments';
 import { formatThreadsForAgent, type TeamThread } from '../lib/team';
-import { getAgentChatCaptureTarget, stagePrompt } from '../lib/agentChatStore';
 
 /**
  * How often the shared clock advances.
@@ -85,8 +84,6 @@ export function useTeamWorkspace(
   handoff?: {
     agents: CommentAgent[];
     activeAgentId?: number | null;
-    chatSelected?: boolean;
-    showChatDraft?: () => void;
     /** Why element picking is unavailable right now, if it is. */
     pickerHint?: string | null;
     /** Routes the toolbar click through the active linked-panel projection. */
@@ -303,46 +300,22 @@ export function useTeamWorkspace(
   // receives did not change when the panel did. Selection is cleared only on a
   // paste that actually landed — a terminal that rejected it leaves the ticks
   // alone so the person can pick another one and try again.
-  const [sendingProjectPath, setSendingProjectPath] = useState<string | null>(null);
-  const sending = sendingProjectPath === projectPath;
+  const [sending, setSending] = useState(false);
   const agents = handoff?.agents ?? [];
   const agent = agents.find((candidate) => candidate.id === handoff?.activeAgentId) ?? agents[0];
-  const chatSelected = handoff?.chatSelected ?? false;
-  const showChatDraft = handoff?.showChatDraft;
 
   const sendToAgent = useCallback(
     async (threads: TeamThread[]) => {
-      if ((!chatSelected && !agent) || threads.length === 0) return;
-      setSendingProjectPath(projectPath);
+      if (!agent || threads.length === 0) return;
+      setSending(true);
       try {
         const prompt = formatThreadsForAgent(projectPath, threads);
-        if (chatSelected) {
-          const target = getAgentChatCaptureTarget(projectPath);
-          if (!target || target.checkoutPath !== projectPath) {
-            throw new Error(
-              'These comments belong to this Preview. Select a Chat conversation using this project’s checkout.'
-            );
-          }
-          if (!stagePrompt(projectPath, prompt)) {
-            throw new Error('The Chat draft is unavailable. Your comments are still pending.');
-          }
-          showChatDraft?.();
-        } else {
-          await agent.send(prompt);
-        }
-        // A terminal paste can resolve after the user has switched projects or
-        // changed the selected comments. Clear only the selection this send
-        // started with, in the project it belongs to.
-        clearThreadSelectionFor(
-          projectPath,
-          threads.map((thread) => thread.id)
-        );
+        await agent.send(prompt);
+        clearThreadSelection();
         showToast(
-          chatSelected
-            ? `${threads.length === 1 ? 'Comment' : 'Comments'} added to Chat. Review them, then press Send.`
-            : threads.length === 1
-              ? 'Comment pasted. Press Enter in the agent terminal to start.'
-              : `${threads.length} comments pasted. Press Enter in the agent terminal to start.`,
+          threads.length === 1
+            ? 'Comment pasted. Press Enter in the agent terminal to start.'
+            : `${threads.length} comments pasted. Press Enter in the agent terminal to start.`,
           'success'
         );
       } catch (error) {
@@ -351,10 +324,10 @@ export function useTeamWorkspace(
           'error'
         );
       } finally {
-        setSendingProjectPath((current) => (current === projectPath ? null : current));
+        setSending(false);
       }
     },
-    [agent, chatSelected, showChatDraft, projectPath, showToast]
+    [agent, projectPath, showToast]
   );
 
   // Returns the nodes rather than the state behind them, so the workspace has
@@ -389,8 +362,8 @@ export function useTeamWorkspace(
         now={now}
         pinned={pinned}
         onTogglePinned={togglePinned}
-        onSendToAgent={chatSelected || agent ? (threads) => void sendToAgent(threads) : undefined}
-        agentLabel={chatSelected ? 'Codex Chat draft' : (agent?.label ?? null)}
+        onSendToAgent={agent ? (threads) => void sendToAgent(threads) : undefined}
+        agentLabel={agent?.label ?? null}
         sending={sending}
         pickerHint={handoff?.pickerHint ?? null}
       />

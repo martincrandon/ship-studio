@@ -17,7 +17,6 @@ import type { LoadedPlugin } from '../../hooks/usePlugins';
 import type { Project } from '../../lib/project';
 import type { ProjectType } from '../../lib/static-server';
 import type { CodeRevealTarget, OpenInCode } from '../../lib/code';
-import type { AgentPromptHandoffResult } from '../../lib/agentPromptHandoff';
 import { BranchPRTabContainer, type BranchPRTabContainerProps } from './BranchPRTabContainer';
 import { CodeTab } from '../code/CodeTab';
 import type { HealthTabPanelRef } from '../code/HealthTabPanel';
@@ -52,7 +51,7 @@ export interface WorkspacePreviewPaneProps {
   handleCropCancel: () => void;
   isBranchSwitching: boolean;
   isRestartingDevServer: boolean;
-  sendToClaude: (text: string) => AgentPromptHandoffResult;
+  sendToClaude: (text: string) => unknown;
   showPreviewLogs: boolean;
   togglePreviewLogs: () => void;
   devServerOutput: string;
